@@ -1,0 +1,59 @@
+// Strecken-Bauplan-Generator (Hilfswerkzeug, kein Test):
+//   node tests/bauplan/generator.js tests/bauplan/wald.json  → JSON { laengen, punkte } für trackCatalog.js
+// Plan: [["G",l]] Gerade, [["K",r,grad]] Bogen (+ = rechts), [["G?"]] zwei Geraden, die die Runde schließen,
+// [["R",r]] Restbogen bis zur Gesamtdrehung ±360°. Start (0,0) Richtung -z. Höhe y aus den Hügeln.
+// + rechts. Start (0,0) Richtung -z. "R" = Restbogen bis Gesamtdrehung ±360.
+const fs = require('fs');
+const cfg = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const plan = cfg.plan;
+
+function laufen(laengen) {
+  // gibt Punkte zurück; laengen = Werte für G? in Reihenfolge
+  let x = 0, z = 0, h = 0;  // h: Richtung als Winkel, dir = (sin h, -cos h); rechts = +h
+  const pts = [[0, 0]];
+  let gi = 0, summe = 0;
+  const gesamt = plan.reduce((a, s) => a + (s[0] === 'K' ? s[2] : 0), 0);
+  for (const s of plan) {
+    let typ = s[0];
+    if (typ === 'G' || typ === 'G?') {
+      const l = typ === 'G' ? s[1] : laengen[gi++];
+      const n = Math.max(1, Math.ceil(l / 35));
+      for (let k = 1; k <= n; k++) pts.push([x + Math.sin(h) * l * k / n, z - Math.cos(h) * l * k / n]);
+      x += Math.sin(h) * l; z -= Math.cos(h) * l;
+    } else {
+      let r = s[1], grad = typ === 'K' ? s[2] : ((Math.sign(gesamt) || 1) * 360 - gesamt);
+      if (typ === 'R' && Math.abs(grad) > 300) grad = grad - Math.sign(grad) * 360;
+      const a = grad * Math.PI / 180, bogen = Math.abs(a) * r;
+      const n = Math.max(2, Math.ceil(bogen / 10));
+      const sg = Math.sign(a);
+      // Mittelpunkt rechts (sg>0) oder links
+      const cx = x + Math.cos(h) * r * sg, cz = z + Math.sin(h) * r * sg;
+      for (let k = 1; k <= n; k++) {
+        const hk = h + a * k / n;
+        pts.push([cx - Math.cos(hk) * r * sg, cz - Math.sin(hk) * r * sg]);
+      }
+      h += a; x = pts[pts.length - 1][0]; z = pts[pts.length - 1][1];
+      summe += grad;
+    }
+  }
+  return { pts, x, z, h };
+}
+const anzahlFrei = plan.filter(s => s[0] === 'G?').length;
+let laengen = [];
+if (anzahlFrei === 2) {
+  const e0 = laufen([0, 0]), e1 = laufen([1, 0]), e2 = laufen([0, 1]);
+  const a = [e1.x - e0.x, e1.z - e0.z], b = [e2.x - e0.x, e2.z - e0.z];
+  const det = a[0] * b[1] - a[1] * b[0];
+  const l1 = (-e0.x * b[1] + e0.z * b[0]) / det, l2 = (a[0] * -e0.z - a[1] * -e0.x) / det;
+  laengen = [l1, l2];
+}
+const erg = laufen(laengen);
+let pts = erg.pts;
+// letzter Punkt == erster -> weg
+if (Math.hypot(pts[pts.length - 1][0], pts[pts.length - 1][1]) < 0.5) pts.pop();
+const huegel = cfg.huegel || [];
+const hoehe = (x, z) => huegel.reduce((s, g) => s + g.h * Math.exp(-((x - g.x) ** 2 + (z - g.z) ** 2) / (2 * g.r * g.r)), 0);
+const r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
+const punkte = pts.map(([x, z]) => [r1(x), r2(hoehe(r1(x), r1(z))), r1(z)]);
+const endH = erg.h * 180 / Math.PI;
+console.log(JSON.stringify({ laengen: laengen.map(r1), endWinkel: r1(endH), schluss: [r1(erg.x), r1(erg.z)], punkte }));

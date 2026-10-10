@@ -1,0 +1,6 @@
+# Node-Binary (122 MB, zu groß für GitHub) – liegt nur im Spielordner auf dem Mac
+server/bin/node-macos-arm64
+tests/out/
+__pycache__/
+*.app/
+.DS_Store

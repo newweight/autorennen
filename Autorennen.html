@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Autorennen</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="src/ui/styles.css">
+</head>
+<body>
+<canvas id="spiel"></canvas>
+<div id="ui">
+  <div id="huds"></div>
+  <div id="trenner"></div>
+  <div id="debug"></div>
+</div>
+
+<!-- Bibliothek (lokal, offline) -->
+<script src="vendor/three.min.js"></script>
+<!-- Spielmodule – Reihenfolge wichtig -->
+<script src="src/config.js"></script>
+<script src="src/audio/engine.js"></script>
+<script src="src/input.js"></script>
+<script src="src/physics/vehicle.js"></script>
+<script src="src/physics/collisions.js"></script>
+<script src="src/cars/carCatalog.js"></script>
+<script src="src/cars/carBuilder.js"></script>
+<script src="src/render/cameras.js"></script>
+<script src="src/track/spline.js"></script>
+<script src="src/track/trackCatalog.js"></script>
+<script src="src/track/trackBuilder.js"></script>
+<script src="src/world/themes.js"></script>
+<script src="src/race/raceManager.js"></script>
+<script src="src/ai/driver.js"></script>
+<script src="src/ui/hud.js"></script>
+<script src="src/ui/menu.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>

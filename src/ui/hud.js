@@ -1,0 +1,237 @@
+// ============================================================
+// HUD: eine Anzeige pro Spieler-Ansicht (Tacho, Runde, Platz, Zeiten,
+// Countdown, Meldungen, Hinweise, Minimap). Reines DOM über dem Canvas.
+// Im Split-Screen gibt es zwei HUDs (links / rechts), je eine Bildhälfte.
+// ============================================================
+(function () {
+  const R = window.Rennspiel;
+
+  /** Sekunden → "1:52.3" (null → "–:––.–"). */
+  function zeitText(sek) {
+    if (sek === null || sek === undefined || !isFinite(sek)) return '–:––.–';
+    const zehntel = Math.max(0, Math.round(sek * 10));
+    const m = Math.floor(zehntel / 600), s = (zehntel % 600) / 10;
+    return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1);
+  }
+  R.zeitText = zeitText;
+
+  // ---------------------------------------------------------- Minimap
+  const MINIMAP_PX = 160;         // Kantenlänge in CSS-Pixeln
+  const MINIMAP_RAND = 12;        // Innenabstand (px)
+  const KI_FARBE = '#a7adb5';
+
+  /**
+   * Minimap: Streckenumriss einmal in ein Offscreen-Canvas zeichnen (je Strecke
+   * und Pixeldichte zwischengespeichert, Split-Screen teilt ihn), dann pro Frame
+   * nur Bild + Punkte. Norden (−z) ist oben, keine Drehung.
+   */
+  class Minimap {
+    constructor(el, strecke) {
+      this.strecke = strecke;
+      this.dpr = Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
+      this.canvas = document.createElement('canvas');
+      this.canvas.className = 'hud-minimap';
+      this.canvas.width = this.canvas.height = Math.round(MINIMAP_PX * this.dpr);
+      el.appendChild(this.canvas);
+      this.ctx = this.canvas.getContext('2d');
+      this.karte = Minimap.vorrendern(strecke, this.canvas.width, this.dpr);
+    }
+
+    /** Umriss + Startlinie vorrendern (Cache je Strecke). */
+    static vorrendern(strecke, groesse, dpr) {
+      const schluessel = strecke.id + ':' + groesse;
+      const cache = Minimap._cache || (Minimap._cache = {});
+      if (cache[schluessel] && cache[schluessel].strecke === strecke) return cache[schluessel];
+      const pk = strecke.spline.punkte;
+      let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+      pk.forEach((p) => { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); });
+      const rand = MINIMAP_RAND * dpr, nutz = groesse - 2 * rand;
+      const mass = nutz / Math.max(x1 - x0, z1 - z0);            // Pixel je Meter
+      const ox = rand + (nutz - (x1 - x0) * mass) / 2 - x0 * mass;
+      const oz = rand + (nutz - (z1 - z0) * mass) / 2 - z0 * mass;
+      const nachPx = (x, z) => [ox + x * mass, oz + z * mass];
+
+      const c = document.createElement('canvas');
+      c.width = c.height = groesse;
+      const g = c.getContext('2d');
+      g.lineJoin = g.lineCap = 'round';
+      const pfad = () => {
+        g.beginPath();
+        pk.forEach((p, i) => { const [x, y] = nachPx(p.x, p.z); if (i) g.lineTo(x, y); else g.moveTo(x, y); });
+        g.closePath();
+      };
+      const breite = Math.max(4 * dpr, strecke.breite * mass);
+      pfad(); g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = breite + 3 * dpr; g.stroke();   // heller Rand
+      pfad(); g.strokeStyle = '#3a3f4a'; g.lineWidth = breite; g.stroke();                        // Fahrbahn
+      // Startlinie: quer zur Fahrbahn, schwarz-weiß
+      const s0 = strecke.spline.punktBei(0), q = breite / mass / 2 + 3;
+      const [ax, ay] = nachPx(s0.x - s0.nx * q, s0.z - s0.nz * q), [bx, by] = nachPx(s0.x + s0.nx * q, s0.z + s0.nz * q);
+      g.lineCap = 'butt';
+      g.strokeStyle = '#fff'; g.lineWidth = 4 * dpr; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
+      g.setLineDash([2 * dpr, 2 * dpr]);
+      g.strokeStyle = '#111'; g.lineWidth = 4 * dpr; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
+      g.setLineDash([]);
+      const eintrag = { strecke, canvas: c, nachPx };
+      cache[schluessel] = eintrag;
+      return eintrag;
+    }
+
+    /** Karte + Punkte für alle Autos zeichnen. */
+    zeichnen(teilnehmer, eigener) {
+      const g = this.ctx, k = this.karte, dpr = this.dpr, farben = R.config.ui.spielerFarben;
+      g.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      g.drawImage(k.canvas, 0, 0);
+      const punkt = (t, r, farbe) => {
+        const v = t.vehicle, [x, y] = k.nachPx(v.x, v.z);
+        g.beginPath(); g.arc(x, y, r * dpr, 0, Math.PI * 2);
+        g.fillStyle = farbe; g.fill();
+        g.lineWidth = 1.5 * dpr; g.strokeStyle = '#10182f'; g.stroke();
+      };
+      // erst KI, dann die anderen Spieler, zuletzt der eigene Punkt (oben, größer)
+      teilnehmer.forEach((t) => { if (!t.istSpieler) punkt(t, 3.5, KI_FARBE); });
+      teilnehmer.forEach((t, i) => { if (t.istSpieler && t !== eigener) punkt(t, 4.5, farben[i] || '#fff'); });
+      if (eigener) {
+        const i = teilnehmer.indexOf(eigener);
+        g.save(); g.shadowColor = 'rgba(255,255,255,0.9)'; g.shadowBlur = 6 * dpr;
+        punkt(eigener, 6.5, farben[i] || '#fff');
+        g.restore();
+      }
+    }
+  }
+  R.Minimap = Minimap;
+
+  /** Text nur setzen, wenn er sich geändert hat (spart DOM-Arbeit). */
+  function setzeText(el, text) {
+    if (el._text !== text) { el._text = text; el.textContent = text; }
+  }
+
+  class Hud {
+    /**
+     * @param {HTMLElement} wurzel  Container für alle HUDs
+     * @param {{rennen:object, teilnehmer:object, fahrzeug:object, nr:number, split:boolean}} opt
+     */
+    constructor(wurzel, opt) {
+      this.rennen = opt.rennen;
+      this.t = opt.teilnehmer;
+      this.f = opt.fahrzeug;
+      this.nr = opt.nr;
+      this.split = !!opt.split;
+      this.bannerTimer = null;
+      this.bannerFest = false;     // Zieleinlauf-Meldung bleibt stehen
+
+      const farbe = R.config.ui.spielerFarben[this.nr] || '#fff';
+      const el = document.createElement('div');
+      el.className = 'hud ' + (this.split ? (this.nr === 0 ? 'links' : 'rechts') : 'voll');
+      el.style.setProperty('--spielerfarbe', farbe);
+      el.innerHTML =
+        '<div class="hud-oben">' +
+          '<div class="chip hud-links">' +
+            (this.split ? '<div class="hud-name"></div>' : '') +
+            '<div class="hud-runde"></div>' +
+          '</div>' +
+          '<div class="chip hud-platz"><b></b><span></span></div>' +
+          '<div class="chip hud-zeiten">' +
+            '<div class="z-aktuell"></div><div class="z-letzte"></div><div class="z-beste"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="hud-countdown"></div>' +
+        '<div class="hud-banner"></div>' +
+        '<div class="hud-hinweis"></div>' +
+        '<div class="hud-tacho"><div class="kmh"><b>0</b><span>km/h</span></div>' +
+          '<div class="balken"><i></i></div></div>';
+      wurzel.appendChild(el);
+      this.el = el;
+      this.minimap = this.rennen.strecke ? new Minimap(el, this.rennen.strecke) : null;
+      const q = (s) => el.querySelector(s);
+      this.eName = q('.hud-name'); this.eRunde = q('.hud-runde');
+      this.ePlatz = q('.hud-platz b'); this.ePlatzVon = q('.hud-platz span');
+      this.eAktuell = q('.z-aktuell'); this.eLetzte = q('.z-letzte'); this.eBeste = q('.z-beste');
+      this.eCountdown = q('.hud-countdown'); this.eBanner = q('.hud-banner'); this.eHinweis = q('.hud-hinweis');
+      this.eKmh = q('.kmh b'); this.eBalken = q('.balken i');
+      if (this.eName) setzeText(this.eName, this.t.name);
+
+      // Meldungen bei Rennereignissen
+      const r = this.rennen;
+      r.bei('runde', (t) => {
+        if (t !== this.t || t.runde >= r.runden) return;
+        this.banner(t.runde + 1 === r.runden ? 'Letzte Runde!' : 'Runde ' + (t.runde + 1) + '!', 2000);
+      });
+      r.bei('ziel', (t) => {
+        if (t !== this.t) return;
+        const platz = t.zielPlatz;
+        this.banner('🏁 Platz ' + platz + '!' , 0, platz === 1 ? 'gold' : '');
+      });
+    }
+
+    /** Kurze Meldung groß in der Bildmitte (ms = 0: bleibt stehen). */
+    banner(text, ms, klasse) {
+      const b = this.eBanner;
+      clearTimeout(this.bannerTimer);
+      b.textContent = text;
+      b.className = 'hud-banner an' + (klasse ? ' ' + klasse : '');
+      this.bannerFest = !ms;
+      if (ms) this.bannerTimer = setTimeout(() => { b.className = 'hud-banner'; }, ms);
+    }
+
+    /** Schriftgröße an die Größe der Ansicht anpassen. */
+    groesse(w, h) {
+      this.el.style.fontSize = Math.max(11, Math.min(w / 40, h / 36)) + 'px';
+    }
+
+    update() {
+      const r = this.rennen, t = this.t, f = this.f, v = f.vehicle;
+
+      // Tacho
+      const kmh = Math.abs(Math.round(v.vLaengs * 3.6));
+      setzeText(this.eKmh, String(kmh));
+      const anteil = Math.min(1, kmh / R.config.ui.tachoMaxKmh);
+      const breite = (anteil * 100).toFixed(0) + '%';
+      if (this.eBalken._b !== breite) {
+        this.eBalken._b = breite;
+        this.eBalken.style.width = breite;
+        this.eBalken.style.background = anteil < 0.5 ? '#3ddc6a' : anteil < 0.8 ? '#ffd23a' : '#ff5a3a';
+      }
+
+      // Runde / Platz / Zeiten
+      const runde = Math.min(r.runden, t.runde + 1);
+      setzeText(this.eRunde, 'Runde ' + runde + '/' + r.runden);
+      setzeText(this.ePlatz, t.imZiel && t.zielPlatz ? t.zielPlatz + '.' : t.platz + '.');
+      setzeText(this.ePlatzVon, 'von ' + r.teilnehmer.length);
+      const aktuell = t.imZiel ? t.zielZeit : r.rundenzeit(t);
+      setzeText(this.eAktuell, '⏱ ' + zeitText(aktuell));
+      const letzte = t.rundenzeiten.length ? t.rundenzeiten[t.rundenzeiten.length - 1] : null;
+      setzeText(this.eLetzte, 'Letzte ' + zeitText(letzte));
+      setzeText(this.eBeste, 'Beste ' + zeitText(t.bestzeit));
+
+      // Countdown 3-2-1-LOS
+      let cd = '';
+      if (r.countdownZahl > 0) cd = String(r.countdownZahl);
+      else if (r.zustand !== 'countdown' && r.zeit < 1.0) cd = 'LOS!';
+      if (this.eCountdown._text !== cd) {
+        setzeText(this.eCountdown, cd);
+        this.eCountdown.classList.remove('puls');
+        void this.eCountdown.offsetWidth;   // Animation neu starten
+        if (cd) this.eCountdown.classList.add('puls');
+      }
+      this.eCountdown.style.display = cd ? '' : 'none';
+
+      // Hinweise
+      let hinweis = '';
+      if (!t.imZiel) {
+        if (f.resetHinweis) hinweis = 'Festgefahren? ' + (this.nr === 0 ? 'R' : 'T') + ' drücken';
+        else if (f.falschHerum) hinweis = '↩ Falsch herum!';
+      }
+      setzeText(this.eHinweis, hinweis);
+      this.eHinweis.style.display = hinweis ? '' : 'none';
+
+      if (this.minimap) this.minimap.zeichnen(r.teilnehmer, t);
+    }
+
+    zerstoeren() {
+      clearTimeout(this.bannerTimer);
+      if (this.el.parentNode) this.el.parentNode.removeChild(this.el);
+    }
+  }
+
+  R.Hud = Hud;
+})();

@@ -1,0 +1,208 @@
+/* ============================================================
+   Autorennen – Oberfläche: Menü, HUD, Ergebnis, Pause
+   Spielerfarben: Spieler 1 blau (#2f8bff), Spieler 2 orange (#ff8a1f)
+   ============================================================ */
+:root { --p1: #2f8bff; --p2: #ff8a1f; --gruen: #2fcf5a; --gelb: #ffd23a; --tafel: rgba(14, 24, 58, .72); }
+
+html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
+  font-family: "Arial Rounded MT Bold", "Avenir Next", -apple-system, "Helvetica Neue", Arial, sans-serif; }
+#spiel { display: block; width: 100vw; height: 100vh; }
+#ui { position: absolute; inset: 0; pointer-events: none; color: #fff; user-select: none; -webkit-user-select: none; }
+kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1em; border-radius: .35em; text-align: center;
+  background: #fff; color: #1a2550; font: inherit; font-weight: 800; box-shadow: 0 .12em 0 #9aa6d6; }
+
+/* ---------- Debug (Taste H) ---------- */
+#debug { position: absolute; left: 12px; bottom: 10px; color: #fff; font: 14px/1.4 monospace; text-shadow: 0 1px 2px #000;
+  white-space: pre-line; display: none; background: rgba(0,0,0,.45); padding: 6px 10px; border-radius: 8px; }
+#debug.an { display: block; }
+
+/* ---------- Split-Screen-Trenner ---------- */
+#trenner { position: absolute; top: 0; bottom: 0; left: 50%; width: 6px; margin-left: -3px; background: #fff; display: none;
+  box-shadow: 0 0 10px rgba(0,0,0,.6); }
+#ui.split #trenner { display: block; }
+#huds { position: absolute; inset: 0; }
+
+/* ============================================================
+   HUD
+   ============================================================ */
+.hud { position: absolute; top: 0; bottom: 0; font-size: 16px; text-shadow: 0 .1em .2em rgba(0,0,0,.7); font-weight: 800; }
+.hud.voll { left: 0; width: 100%; }
+.hud.links { left: 0; width: 50%; }
+.hud.rechts { left: 50%; width: 50%; }
+.hud-oben { position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; align-items: flex-start;
+  padding: .7em .8em; gap: .5em; }
+.hud.links .hud-oben { padding-right: 1.2em; }
+.hud.rechts .hud-oben { padding-left: 1.2em; }
+.hud .chip { background: rgba(14, 24, 58, .62); border-radius: .8em; padding: .35em .8em; border: .15em solid rgba(255,255,255,.25); }
+.hud-links { min-width: 6.5em; }
+.hud-name { font-size: 1.05em; color: var(--spielerfarbe); text-shadow: none; filter: brightness(1.25); }
+.hud-runde { font-size: 1.5em; white-space: nowrap; }
+.hud-platz { text-align: center; line-height: 1; padding-top: .25em; }
+.hud-platz b { display: block; font-size: 3.2em; color: var(--gelb); }
+.hud-platz span { font-size: 1em; opacity: .85; }
+.hud-zeiten { font-size: 1.2em; text-align: right; line-height: 1.3; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hud-zeiten .z-aktuell { font-size: 1.3em; }
+.hud-zeiten .z-letzte, .hud-zeiten .z-beste { font-size: .9em; opacity: .9; }
+
+.hud-countdown { position: absolute; left: 0; right: 0; top: 22%; text-align: center; font-size: 9em; font-weight: 900; line-height: 1;
+  color: #fff; -webkit-text-stroke: .04em #1a2550; text-shadow: 0 .06em .2em rgba(0,0,0,.6); }
+.hud-countdown.puls { animation: puls .9s ease-out; }
+@keyframes puls { 0% { transform: scale(1.7); opacity: 0; } 25% { opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+
+.hud-banner { position: absolute; left: 0; right: 0; top: 30%; text-align: center; font-size: 4.2em; font-weight: 900; color: #fff;
+  -webkit-text-stroke: .03em #1a2550; text-shadow: 0 .06em .2em rgba(0,0,0,.6); opacity: 0; line-height: 1.1; }
+.hud-banner.an { opacity: 1; animation: banner .5s ease-out; }
+.hud-banner.gold { color: var(--gelb); }
+@keyframes banner { 0% { transform: scale(.5); opacity: 0; } 70% { transform: scale(1.1); } 100% { transform: scale(1); } }
+
+.hud-hinweis { position: absolute; left: 50%; bottom: 24%; transform: translateX(-50%); white-space: nowrap; font-size: 2em;
+  background: rgba(255, 70, 50, .88); padding: .25em .8em; border-radius: 1em; border: .08em solid #fff; animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: .6; } }
+
+.hud-tacho { position: absolute; right: 1.2em; bottom: 1em; text-align: right; }
+.hud.links .hud-tacho { right: 1.8em; }
+.hud-tacho .kmh { background: rgba(14, 24, 58, .62); border-radius: .8em .8em 0 0; padding: .1em .7em 0; border: .15em solid rgba(255,255,255,.25); border-bottom: 0; }
+.hud-tacho .kmh b { font-size: 3.8em; line-height: 1.05; font-variant-numeric: tabular-nums; display: inline-block; min-width: 2.2em; }
+.hud-tacho .kmh span { font-size: 1.3em; margin-left: .2em; opacity: .9; }
+.hud-tacho .balken { height: .9em; background: rgba(14, 24, 58, .75); border-radius: 0 0 .8em .8em; overflow: hidden;
+  border: .15em solid rgba(255,255,255,.25); border-top: 0; }
+.hud-tacho .balken i { display: block; height: 100%; width: 0; }
+
+/* Minimap unten links (je Spieler-Ansicht), Norden oben */
+.hud-minimap { position: absolute; left: 1em; bottom: 1em; width: 160px; height: 160px; opacity: .88;
+  background: rgba(14, 24, 58, .42); border-radius: 14px; border: 2px solid rgba(255,255,255,.3); }
+.hud.rechts .hud-minimap { left: 1.6em; }
+
+/* ============================================================
+   Overlays allgemein
+   ============================================================ */
+.overlay { position: absolute; inset: 0; pointer-events: auto; display: flex; flex-direction: column; box-sizing: border-box; }
+
+.knopf { display: inline-block; padding: .55em 1.3em; border-radius: 1.2em; font-weight: 900; font-size: 1.15em; cursor: pointer;
+  background: #ff8a1f; border: .13em solid #fff; box-shadow: 0 .25em 0 rgba(0,0,0,.35); text-align: center; transition: transform .1s; }
+.knopf:hover, .knopf.fokus { transform: scale(1.06); filter: brightness(1.12); }
+.knopf.fokus { outline: .15em solid var(--gelb); outline-offset: .15em; }
+.knopf.gruen { background: var(--gruen); }
+.knopf.blau { background: var(--p1); }
+.knopf.klein { font-size: 1em; padding: .4em 1em; }
+.knopf kbd { font-size: .7em; margin-left: .4em; vertical-align: .1em; }
+
+/* ============================================================
+   Hauptmenü
+   ============================================================ */
+.menue { font-size: clamp(20px, 2.6vh, 28px); padding: 1.4vh 3vw 1.6vh; font-weight: 800;
+  background: radial-gradient(ellipse at center, rgba(10,20,50,.15) 0%, rgba(10,20,50,.55) 100%),
+              linear-gradient(rgba(10,20,50,.5), rgba(10,20,50,0) 35%, rgba(10,20,50,.5)); }
+.m-kopf { display: flex; justify-content: space-between; align-items: center; gap: 1em; flex-wrap: wrap; }
+.m-titel { font-size: 2em; font-weight: 900; letter-spacing: .04em; text-shadow: 0 .08em 0 #d6381f, 0 .16em .2em rgba(0,0,0,.5); }
+.m-schritte { display: flex; align-items: center; gap: .3em; }
+.m-schritt { padding: .25em .8em; border-radius: 1em; background: rgba(255,255,255,.18); cursor: pointer; opacity: .8; }
+.m-schritt b { display: inline-block; width: 1.4em; height: 1.4em; line-height: 1.4em; text-align: center; border-radius: 50%; background: rgba(255,255,255,.3); margin-right: .2em; }
+.m-schritt.aktiv { background: var(--gelb); color: #1a2550; opacity: 1; }
+.m-schritt.aktiv b { background: #1a2550; color: var(--gelb); }
+.m-schritt.fertig b { background: var(--gruen); }
+.m-pfeil { opacity: .6; font-size: 1.2em; }
+.m-inhalt { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+.m-inhalt h1 { margin: 0 0 .5em; font-size: 1.9em; text-shadow: 0 .08em .2em rgba(0,0,0,.6); }
+.m-fuss { display: flex; justify-content: space-between; align-items: center; gap: 1em; }
+.m-nav { display: flex; gap: .8em; min-width: 14em; }
+.m-hinweis { background: rgba(14, 24, 58, .6); padding: .35em 1em; border-radius: 1em; font-size: .9em; text-align: right; }
+.m-hinweis kbd { font-size: .85em; }
+
+.reihe { display: flex; gap: 1.5em; justify-content: center; flex-wrap: wrap; }
+.karte { background: var(--tafel); border: .2em solid rgba(255,255,255,.35); border-radius: 1.1em; padding: .6em; text-align: center;
+  cursor: pointer; transition: transform .12s, border-color .12s; backdrop-filter: blur(4px); position: relative; }
+.karte:hover { transform: scale(1.04); border-color: #fff; }
+.karte.gewaehlt { border-color: var(--gelb); box-shadow: 0 0 0 .15em var(--gelb), 0 0 1.2em rgba(255,210,58,.7); background: rgba(40, 60, 130, .85); }
+.karte.gewaehlt::after { content: '✔'; position: absolute; top: -.5em; right: -.4em; width: 1.5em; height: 1.5em; line-height: 1.5em;
+  border-radius: 50%; background: var(--gelb); color: #1a2550; font-size: .9em; }
+.karten-name { font-size: 1em; font-weight: 900; line-height: 1.15; }
+.karten-sub { font-size: .9em; font-weight: 700; opacity: .92; margin-top: .3em; line-height: 1.25; }
+.karte.gross { width: 11em; padding: 1em .8em; }
+.karte.gross .emoji { font-size: 3.6em; line-height: 1.1; }
+.karte.gross .karten-name { font-size: 1.15em; margin-top: .2em; }
+.karte.strecke { width: 16em; }
+.strecken-bild { height: 6em; border-radius: .7em; margin-bottom: .5em; position: relative; overflow: hidden; }
+.strecken-bild .strasse { position: absolute; left: 50%; bottom: 0; width: 6em; height: 65%; transform: translateX(-50%) perspective(8em) rotateX(40deg);
+  transform-origin: bottom; background: #555; border-left: .3em solid #fff; border-right: .3em solid #fff; }
+
+/* Auto-Auswahl */
+.m-autos { display: flex; gap: 1.6em; justify-content: center; width: 100%; }
+.m-spieler { flex: 1 1 0; min-width: 0; }
+.m-autos:not(.zwei) .m-spieler { flex: 0 1 44em; }
+.m-spieler h2 { margin: 0 0 .3em; font-size: 1.2em; display: flex; align-items: center; gap: .4em; }
+.marke { display: inline-block; width: 1.5em; height: 1.5em; line-height: 1.5em; text-align: center; border-radius: 50%; background: var(--p1); }
+.p2 .marke { background: var(--p2); }
+.raster { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5em; }
+.karte.auto { padding: .35em .4em .45em; min-width: 0; }
+.m-spieler.p1 .karte.auto.gewaehlt { border-color: var(--p1); box-shadow: 0 0 0 .15em var(--p1), 0 0 1em rgba(47,139,255,.8); }
+.m-spieler.p2 .karte.auto.gewaehlt { border-color: var(--p2); box-shadow: 0 0 0 .15em var(--p2), 0 0 1em rgba(255,138,31,.8); }
+.m-spieler .karte.auto.gewaehlt::after { background: var(--p1); color: #fff; }
+.m-spieler.p2 .karte.auto.gewaehlt::after { background: var(--p2); }
+.auto-bild svg { width: 100%; height: auto; display: block; }
+.karte.auto .karten-name { font-size: .8em; min-height: 2.3em; display: flex; align-items: center; justify-content: center; }
+.m-autos:not(.zwei) .karte.auto .karten-name { font-size: .95em; }
+.bar { display: flex; align-items: center; gap: .2em; font-size: .75em; line-height: 1.4; }
+.m-autos:not(.zwei) .bar { font-size: .9em; }
+.bar .spur { flex: 1; height: .6em; background: rgba(255,255,255,.2); border-radius: .3em; overflow: hidden; }
+.bar .spur i { display: block; height: 100%; background: linear-gradient(90deg, #5be37a, #ffd23a); border-radius: .3em; }
+.beschreibung { margin: .5em 0 0; font-size: .85em; font-weight: 700; min-height: 2.6em; max-width: 28em; line-height: 1.25;
+  background: rgba(14, 24, 58, .6); padding: .3em .7em; border-radius: .8em; }
+.legende { margin-top: .6em; font-size: .9em; background: rgba(14, 24, 58, .6); padding: .25em 1em; border-radius: 1em; }
+
+/* Einstellungen */
+.m-start { display: flex; gap: 2em; align-items: stretch; justify-content: center; width: 100%; flex-wrap: wrap; }
+.m-einstellungen { display: flex; flex-direction: column; gap: .5em; width: 34em; max-width: 100%; }
+.zeile { display: flex; align-items: center; justify-content: space-between; gap: .8em; background: var(--tafel);
+  border: .18em solid rgba(255,255,255,.3); border-radius: 1em; padding: .35em .8em; cursor: pointer; }
+.zeile.fokus { border-color: var(--gelb); box-shadow: 0 0 0 .13em var(--gelb); background: rgba(40, 60, 130, .85); }
+.z-label { font-weight: 900; white-space: nowrap; }
+.z-wert { display: flex; align-items: center; gap: .3em; }
+.rund { width: 1.6em; height: 1.6em; line-height: 1.5em; text-align: center; border-radius: 50%; background: var(--p1); font-size: 1.2em; font-weight: 900;
+  border: .1em solid #fff; cursor: pointer; }
+.rund:hover { filter: brightness(1.2); transform: scale(1.1); }
+.zahl { min-width: 1.6em; text-align: center; font-size: 1.5em; font-weight: 900; color: var(--gelb); }
+.extra { font-size: .8em; opacity: .85; min-width: 4.5em; }
+.pille { padding: .15em .6em; border-radius: 1em; background: rgba(255,255,255,.18); border: .12em solid transparent; cursor: pointer; }
+.pille:hover { background: rgba(255,255,255,.3); }
+.pille.aktiv { background: var(--gruen); border-color: #fff; }
+.start-knopf { margin-top: .3em; padding: .45em 1em; border-radius: 1.2em; text-align: center; font-size: 1.5em; font-weight: 900; cursor: pointer;
+  background: linear-gradient(#41e06a, #1fae45); border: .12em solid #fff; box-shadow: 0 .2em 0 rgba(0,0,0,.35); }
+.start-knopf:hover, .start-knopf.fokus { transform: scale(1.04); filter: brightness(1.1); }
+.start-knopf.fokus { outline: .12em solid var(--gelb); outline-offset: .12em; animation: wackel 1s infinite; }
+@keyframes wackel { 50% { transform: scale(1.05); } }
+.tafel { background: var(--tafel); border: .18em solid rgba(255,255,255,.3); border-radius: 1em; padding: .4em 1em .6em; width: 22em; max-width: 100%;
+  font-size: .85em; align-self: flex-start; }
+.tafel h2 { margin: .2em 0 .4em; font-size: 1.2em; }
+.t-zeile { margin-bottom: .5em; line-height: 1.6; }
+.t-zeile b { display: block; }
+.t-zeile.p1 b { color: #7db8ff; } .t-zeile.p2 b { color: #ffb066; }
+.t-zeile.aus { opacity: .45; }
+
+/* ============================================================
+   Ergebnis und Pause
+   ============================================================ */
+.ergebnis { align-items: center; justify-content: center; font-size: clamp(20px, 2.6vh, 28px); font-weight: 800;
+  background: rgba(10, 20, 50, .72); animation: einblenden .6s ease-out 1.2s both; }
+@keyframes einblenden { from { opacity: 0; } to { opacity: 1; } }
+.ergebnis-karte, .pause-karte { background: rgba(14, 24, 58, .92); border: .2em solid #fff; border-radius: 1.4em; padding: .8em 1.6em 1.2em;
+  box-shadow: 0 .5em 2em rgba(0,0,0,.5); max-width: 94vw; }
+.ergebnis-karte h1, .pause-karte h1 { margin: 0 0 .4em; text-align: center; font-size: 2em; color: var(--gelb); }
+.ergebnis table { border-collapse: separate; border-spacing: 0 .3em; width: 100%; }
+.ergebnis th { text-align: left; font-size: .8em; opacity: .75; padding: 0 .8em; }
+.ergebnis td { padding: .35em .8em; background: rgba(255,255,255,.1); }
+.ergebnis td:first-child { border-radius: .7em 0 0 .7em; }
+.ergebnis td:last-child { border-radius: 0 .7em .7em 0; }
+.ergebnis td.platz { font-size: 1.4em; color: var(--gelb); text-align: center; }
+.ergebnis td.zeit { font-variant-numeric: tabular-nums; text-align: right; }
+.ergebnis td.auto { font-size: .85em; white-space: nowrap; }
+.ergebnis td.auto i { display: inline-block; width: .9em; height: .9em; border-radius: 50%; border: .1em solid #fff; margin-right: .4em; vertical-align: -.1em; }
+.ergebnis tr.spieler.p1 td { background: rgba(47,139,255,.45); }
+.ergebnis tr.spieler.p2 td { background: rgba(255,138,31,.5); }
+.ergebnis tr.computer td { opacity: .9; }
+.ergebnis .noch { opacity: .7; font-size: .85em; }
+.ergebnis .knoepfe { display: flex; gap: 1em; justify-content: center; margin-top: .8em; }
+.pause { align-items: center; justify-content: center; font-size: clamp(20px, 2.6vh, 28px); font-weight: 800; background: rgba(10, 20, 50, .5); }
+.pause-karte { display: flex; flex-direction: column; gap: .7em; min-width: 14em; }
+
+.m-autos:not(.zwei) .beschreibung { max-width: none; text-align: center; }

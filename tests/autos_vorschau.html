@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Autos – Vorschau</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  Eigenständige Testseite für den Auto-Katalog (per Doppelklick über file:// nutzbar).
+    autos_vorschau.html                  alle Autos im Raster, von schräg vorne-links-oben
+    autos_vorschau.html?auto=<id>        ein einzelnes Auto groß, dreht sich langsam
+    ...&winkel=<grad>                    feste Ansicht statt Drehung (0 = von vorne, 90 = Seite links,
+                                         180 = von hinten, -90 = Seite rechts; Standard im Raster: 35)
+    ...&hoehe=<grad>                     Kamera-Neigung (Standard 22)
+    ...&extra=1                          zusätzlich ein Demo-SUV (kein Katalogauto)
+    ...&lenkung=<grad>&rollen=<grad>     Räder einschlagen / drehen (Test der userData)
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #cfe8ff; font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; }
+  #bild { display: block; width: 100vw; height: 100vh; }
+  #labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .label { position: absolute; transform: translate(-50%, 0); text-align: center; white-space: nowrap;
+           background: rgba(255,255,255,.88); border-radius: 8px; padding: 3px 10px; font-size: 15px; font-weight: 600; color: #123;
+           box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+  .label small { display: block; font-weight: 400; font-size: 12px; color: #456; }
+  #info { position: absolute; left: 12px; top: 10px; font-size: 13px; color: #123; background: rgba(255,255,255,.7); padding: 4px 10px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<canvas id="bild"></canvas>
+<div id="labels"></div>
+<div id="info"></div>
+
+<script src="../vendor/three.min.js"></script>
+<script src="../src/config.js"></script>
+<script src="../src/cars/carCatalog.js"></script>
+<script src="../src/cars/carBuilder.js"></script>
+<script>
+(function () {
+  const R = window.Rennspiel;
+  const q = new URLSearchParams(location.search);
+  const einzelId = q.get('auto');
+  const rad = (g) => g * Math.PI / 180;
+
+  // --- Autos wählen ---
+  let autos = R.carCatalog.slice();
+  if (q.get('extra') === '1') {
+    autos.push({ id: 'demo-suv', name: 'Demo-SUV', farbeName: 'Orange', farbe: 0xff7a00, karosserie: 'suv',
+      fahrwerte: { laenge: 4.5, breite: 1.88 } });
+  }
+  if (einzelId) autos = autos.filter((a) => a.id === einzelId);
+  if (!autos.length) { document.getElementById('info').textContent = 'Auto nicht gefunden: ' + einzelId; return; }
+
+  // --- Szene ---
+  const canvas = document.getElementById('bild');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  const szene = new THREE.Scene();
+  szene.background = new THREE.Color(0xcfe8ff);
+  szene.add(new THREE.HemisphereLight(0xdfefff, 0x6a7f55, 0.9));
+  const sonne = new THREE.DirectionalLight(0xfff3d6, 1.1);
+  sonne.position.set(-30, 50, -20);
+  szene.add(sonne);
+  const boden = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ color: 0x8aa06c }));
+  boden.rotation.x = -Math.PI / 2;
+  szene.add(boden);
+
+  // --- Anordnung ---
+  const winkelParam = q.get('winkel');
+  const dreht = !!einzelId && winkelParam === null;
+  const grundWinkel = winkelParam !== null ? parseFloat(winkelParam) : 35;   // Kamera-Azimut um das Auto
+  const spalten = einzelId ? 1 : Math.min(4, autos.length);
+  const zeilen = Math.ceil(autos.length / spalten);
+  const abstandX = 6.6, abstandZ = 8;
+  const eintraege = autos.map((a, i) => {
+    const auto = R.carBuilder.bauen(a);
+    const sx = i % spalten, sz = Math.floor(i / spalten);
+    auto.position.set((sx - (spalten - 1) / 2) * abstandX, 0, (sz - (zeilen - 1) / 2) * abstandZ);
+    szene.add(auto);
+    if (q.get('lenkung')) R.carBuilder.lenkeRaeder(auto, rad(parseFloat(q.get('lenkung'))));
+    if (q.get('rollen')) R.carBuilder.dreheRaeder(auto, rad(parseFloat(q.get('rollen'))));
+    if (q.get('bremsen')) R.carBuilder.setzeBremslicht(auto, true);
+    const el = document.createElement('div');
+    el.className = 'label';
+    el.innerHTML = a.name + '<small>' + (a.farbeName || '') + ' · ' + a.karosserie + '</small>';
+    document.getElementById('labels').appendChild(el);
+    return { auto, el };
+  });
+
+  // Kamera: fest bei +z oben; die Autos werden um y gedreht, so dass die Kamera
+  // sie aus dem Azimut "winkel" sieht (0 = von vorne, positiv = von vorne-links).
+  const kamera = new THREE.PerspectiveCamera(einzelId ? 30 : 32, 1, 0.1, 500);
+  const neigung = rad(parseFloat(q.get('hoehe') || (einzelId ? 18 : 24)));
+  function kameraSetzen() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    renderer.setSize(w, h, false);
+    kamera.aspect = w / h;
+    // Abstand so wählen, dass das Raster ins Bild passt
+    const breite = spalten * abstandX + 1, tiefe = zeilen * abstandZ + 1;
+    const halbHoehe = einzelId ? 3.2 : Math.max(tiefe * 0.5 * Math.sin(neigung) + 2.5, breite * 0.5 / kamera.aspect);
+    const dist = einzelId ? 10.5 : halbHoehe / Math.tan(rad(kamera.fov / 2)) * 1.25;
+    kamera.position.set(0, Math.sin(neigung) * dist, Math.cos(neigung) * dist);
+    kamera.lookAt(0, einzelId ? 0.7 : 0, 0);
+    kamera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', kameraSetzen);
+  kameraSetzen();
+
+  const v = new THREE.Vector3();
+  function zeichnen(t) {
+    const az = dreht ? (t / 1000) * 25 : grundWinkel;      // Grad
+    eintraege.forEach((e) => { e.auto.rotation.y = Math.PI - rad(az); });
+    renderer.render(szene, kamera);      // aktualisiert auch die Kamera-Matrizen für project()
+    eintraege.forEach((e) => {
+      // Label unter dem Auto
+      v.copy(e.auto.position); v.y = 0;
+      v.z += (einzelId ? 2.7 : 3.3);
+      v.project(kamera);
+      e.el.style.left = ((v.x * 0.5 + 0.5) * canvas.clientWidth) + 'px';
+      e.el.style.top = ((-v.y * 0.5 + 0.5) * canvas.clientHeight) + 'px';
+    });
+    if (dreht) requestAnimationFrame(zeichnen);
+  }
+  requestAnimationFrame(zeichnen);
+  document.getElementById('info').textContent = einzelId
+    ? autos[0].name + ' – ' + autos[0].karosserie
+    : autos.length + ' Autos · Ansicht ' + grundWinkel + '° · ?auto=<id> für Einzelansicht';
+  window.vorschau = { eintraege, renderer, szene, kamera };
+})();
+</script>
+</body>
+</html>
