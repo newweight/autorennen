@@ -1,5 +1,5 @@
 /* ============================================================
-   Autorennen – Oberfläche: Menü, HUD, Ergebnis, Pause
+   Jonas Hot Steering Wheel – Oberfläche: Menü, HUD, Ergebnis, Pause
    Spielerfarben: Spieler 1 blau (#2f8bff), Spieler 2 orange (#ff8a1f)
    ============================================================ */
 :root { --p1: #2f8bff; --p2: #ff8a1f; --gruen: #2fcf5a; --gelb: #ffd23a; --tafel: rgba(14, 24, 58, .72); }
@@ -35,7 +35,7 @@ kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1
 .hud.rechts .hud-oben { padding-left: 1.2em; }
 .hud .chip { background: rgba(14, 24, 58, .62); border-radius: .8em; padding: .35em .8em; border: .15em solid rgba(255,255,255,.25); }
 .hud-links { min-width: 6.5em; }
-.hud-name { font-size: 1.05em; color: var(--spielerfarbe); text-shadow: none; filter: brightness(1.25); }
+.hud-name { font-size: 1.15em; white-space: nowrap; color: var(--spielerfarbe); text-shadow: none; filter: brightness(1.25); }
 .hud-runde { font-size: 1.5em; white-space: nowrap; }
 .hud-platz { text-align: center; line-height: 1; padding-top: .25em; }
 .hud-platz b { display: block; font-size: 3.2em; color: var(--gelb); }
@@ -51,6 +51,7 @@ kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1
 
 .hud-banner { position: absolute; left: 0; right: 0; top: 30%; text-align: center; font-size: 4.2em; font-weight: 900; color: #fff;
   -webkit-text-stroke: .03em #1a2550; text-shadow: 0 .06em .2em rgba(0,0,0,.6); opacity: 0; line-height: 1.1; }
+.hud-banner .b-name { display: block; font-size: .5em; color: var(--spielerfarbe); filter: brightness(1.3); -webkit-text-stroke: .05em #1a2550; }
 .hud-banner.an { opacity: 1; animation: banner .5s ease-out; }
 .hud-banner.gold { color: var(--gelb); }
 @keyframes banner { 0% { transform: scale(.5); opacity: 0; } 70% { transform: scale(1.1); } 100% { transform: scale(1); } }
@@ -94,7 +95,12 @@ kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1
   background: radial-gradient(ellipse at center, rgba(10,20,50,.15) 0%, rgba(10,20,50,.55) 100%),
               linear-gradient(rgba(10,20,50,.5), rgba(10,20,50,0) 35%, rgba(10,20,50,.5)); }
 .m-kopf { display: flex; justify-content: space-between; align-items: center; gap: 1em; flex-wrap: wrap; }
-.m-titel { font-size: 2em; font-weight: 900; letter-spacing: .04em; text-shadow: 0 .08em 0 #d6381f, 0 .16em .2em rgba(0,0,0,.5); }
+.m-logo { line-height: 1; }
+.m-titel { font-size: 2.1em; font-weight: 900; letter-spacing: .02em; color: var(--gelb); white-space: nowrap;
+  -webkit-text-stroke: .04em #7a1d0c; paint-order: stroke fill;
+  text-shadow: 0 .07em 0 #d6381f, 0 .14em 0 #8f2412, 0 .22em .25em rgba(0,0,0,.5); }
+.m-untertitel { margin-top: .35em; font-size: 1em; font-weight: 900; letter-spacing: .5em; text-transform: uppercase; color: #fff;
+  text-shadow: 0 .1em .2em rgba(0,0,0,.6); padding-left: .2em; }
 .m-schritte { display: flex; align-items: center; gap: .3em; }
 .m-schritt { padding: .25em .8em; border-radius: 1em; background: rgba(255,255,255,.18); cursor: pointer; opacity: .8; }
 .m-schritt b { display: inline-block; width: 1.4em; height: 1.4em; line-height: 1.4em; text-align: center; border-radius: 50%; background: rgba(255,255,255,.3); margin-right: .2em; }
@@ -206,3 +212,23 @@ kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1
 .pause-karte { display: flex; flex-direction: column; gap: .7em; min-width: 14em; }
 
 .m-autos:not(.zwei) .beschreibung { max-width: none; text-align: center; }
+
+/* Fahrer-Auswahl: Karten mit Emoji-Avatar; Solo 6×2, zu zweit je Spieler 3×4 */
+.m-fahrer .raster { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45em; }
+.m-fahrer:not(.zwei) .m-spieler { flex: 0 1 62em; }
+.m-fahrer:not(.zwei) .raster { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .6em; }
+.karte.fahrer { padding: .3em .3em .4em; min-width: 0; }
+.karte.fahrer .avatar { font-size: 1.9em; line-height: 1.15; }
+.karte.fahrer .karten-name { font-size: 1.05em; white-space: nowrap; }
+.m-fahrer:not(.zwei) .karte.fahrer { padding: .7em .3em .8em; }
+.m-fahrer:not(.zwei) .karte.fahrer .avatar { font-size: 3em; }
+.m-fahrer:not(.zwei) .karte.fahrer .karten-name { font-size: 1.15em; }
+.m-spieler.p1 .karte.fahrer.gewaehlt { border-color: var(--p1); box-shadow: 0 0 0 .15em var(--p1), 0 0 1em rgba(47,139,255,.8); }
+.m-spieler.p2 .karte.fahrer.gewaehlt { border-color: var(--p2); box-shadow: 0 0 0 .15em var(--p2), 0 0 1em rgba(255,138,31,.8); }
+.m-spieler .karte.fahrer.gewaehlt::after { background: var(--p1); color: #fff; }
+.m-spieler.p2 .karte.fahrer.gewaehlt::after { background: var(--p2); }
+.karte.fahrer.vergeben { opacity: .4; filter: grayscale(.6); }
+.karte.fahrer .vergeben-marke { position: absolute; top: -.4em; left: -.3em; width: 1.4em; height: 1.4em; line-height: 1.4em; border-radius: 50%;
+  font-size: .8em; background: var(--p1); }
+.karte.fahrer .vergeben-marke.p2 { background: var(--p2); }
+.fahrer-name-gross { font-size: 1.1em; }

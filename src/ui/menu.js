@@ -1,10 +1,11 @@
 // ============================================================
 // Menü, Ergebnis-Tafel und Pause als HTML-Overlay über dem Canvas.
 //
-// Hauptmenü in 4 Schritten (alles per Tastatur UND Maus):
-//   1 Modus  2 Strecke  3 Auto (je Spieler)  4 Einstellungen + Start
+// Hauptmenü in 5 Schritten (alles per Tastatur UND Maus):
+//   1 Modus  2 Strecke  3 Fahrer (je Spieler)  4 Auto (je Spieler)  5 Einstellungen + Start
 // Tasten: Pfeile bzw. WASD bewegen, Enter/Leertaste = weiter, Esc = zurück.
-// Im Auto-Schritt steuert Spieler 1 mit den Pfeilen, Spieler 2 mit WASD.
+// Im Fahrer- und Auto-Schritt steuert Spieler 1 mit den Pfeilen, Spieler 2 mit WASD.
+// Zwei Spieler können nicht denselben Fahrer wählen (der Bewegende springt weiter).
 // Das Menü ändert nur spiel.einstellungen (und speichert sie); gestartet
 // wird mit spiel.rennenStarten().
 // ============================================================
@@ -12,9 +13,11 @@
   const R = window.Rennspiel;
 
   const SPALTEN = 4;                       // Auto-Raster
+  const FAHRER_SPALTEN = { solo: 6, zwei: 3 };   // Fahrer-Raster (12 Karten: 6×2 bzw. je Spieler 3×4)
   const SCHRITTE = [
     { id: 'modus', name: 'Modus' },
     { id: 'strecke', name: 'Strecke' },
+    { id: 'fahrer', name: 'Fahrer' },
     { id: 'auto', name: 'Auto' },
     { id: 'start', name: 'Los!' },
   ];
@@ -132,6 +135,7 @@
 
       if (id === 'modus') {
         this.e.modus = this.e.modus === 'solo' ? 'zwei' : 'solo';
+        this.einstellungenFix();
         this.aenderung();
       } else if (id === 'strecke') {
         const liste = R.trackCatalog, i = liste.findIndex((s) => s.id === this.e.streckeId);
@@ -139,14 +143,14 @@
         this.e.streckeId = n.id;
         this.spiel.menueHintergrund(n.id);
         this.aenderung();
-      } else if (id === 'auto') {
+      } else if (id === 'auto' || id === 'fahrer') {
         const spieler = [];
         if (!this.zwei) spieler.push(0);
         else {
           if (code === P1.links || code === P1.rechts || code === P1.gas || code === P1.bremse) spieler.push(0);
           if (code === P2.links || code === P2.rechts || code === P2.gas || code === P2.bremse) spieler.push(1);
         }
-        spieler.forEach((s) => this.autoBewegen(s, dx, dy));
+        spieler.forEach((s) => (id === 'auto' ? this.autoBewegen(s, dx, dy) : this.fahrerBewegen(s, dx, dy)));
         this.aenderung();
       } else {
         const z = this.zeilen();
@@ -163,6 +167,21 @@
       if (i < 0) i = 0;
       i = dx ? (i + dx + n) % n : (i + dy * SPALTEN + n * 2) % n;
       this.e.autoIds[spieler] = kat[i].id;
+    }
+
+    /** Fahrer-Cursor von Spieler `spieler` bewegen; der Fahrer des anderen Spielers wird übersprungen. */
+    fahrerBewegen(spieler, dx, dy) {
+      const liste = R.config.fahrer, n = liste.length;
+      const spalten = FAHRER_SPALTEN[this.zwei ? 'zwei' : 'solo'];
+      let i = liste.findIndex((f) => f.name === this.e.fahrer[spieler]);
+      if (i < 0) i = 0;
+      const andere = this.zwei ? liste.findIndex((f) => f.name === this.e.fahrer[1 - spieler]) : -1;
+      const schritt = dx || dy * spalten;
+      for (let k = 0; k < n; k++) {
+        i = (i + schritt + n * 4) % n;
+        if (i !== andere) break;
+      }
+      this.e.fahrer[spieler] = liste[i].name;
     }
 
     /** Wert einer Einstellungs-Zeile um dx Schritte ändern. */
@@ -200,6 +219,11 @@
       else if (art === 'modus') { e.modus = p1; this.einstellungenFix(); this.schritt = 1; }
       else if (art === 'strecke') { e.streckeId = p1; this.spiel.menueHintergrund(p1); this.schritt = 2; }
       else if (art === 'auto') e.autoIds[+p1] = p2;
+      else if (art === 'fahrer') {
+        const sp = +p1;
+        e.fahrer[sp] = p2;
+        if (this.zwei && e.fahrer[1 - sp] === p2) this.fahrerBewegen(sp, 1, 0);   // schon vergeben → weiterspringen
+      }
       else if (art === 'stepper') this.zeilenWert(p1, +p2);
       else if (art === 'wert') {
         if (p1 === 'schwierigkeit') e.schwierigkeit = p2;
@@ -210,7 +234,10 @@
       if (R.Audio) R.Audio.menueKlick();
       this.aenderung();
     }
-    einstellungenFix() { this.fokus = Math.min(this.fokus, this.zeilen().length - 1); }
+    einstellungenFix() {
+      this.fokus = Math.min(this.fokus, this.zeilen().length - 1);
+      if (this.zwei) this.e.fahrer = R.fahrerEindeutig(this.e.fahrer);
+    }
 
     // ---------- Darstellung ----------
     zeichnen() {
@@ -222,6 +249,13 @@
       let inhalt = '', hinweis = '', titel = '';
       if (id === 'modus') { titel = 'Wie wollt ihr fahren?'; inhalt = this.htmlModus(); hinweis = '<kbd>←</kbd><kbd>→</kbd> auswählen · <kbd>Enter</kbd> weiter'; }
       if (id === 'strecke') { titel = 'Welche Strecke?'; inhalt = this.htmlStrecke(); hinweis = '<kbd>←</kbd><kbd>→</kbd> auswählen · <kbd>Enter</kbd> weiter · <kbd>Esc</kbd> zurück'; }
+      if (id === 'fahrer') {
+        titel = this.zwei ? 'Wer fährt? Wählt eure Fahrer!' : 'Wer fährt?';
+        inhalt = this.htmlFahrer();
+        hinweis = this.zwei
+          ? 'Spieler 1: <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> · Spieler 2: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · <kbd>Enter</kbd> weiter'
+          : '<kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> auswählen · <kbd>Enter</kbd> weiter · <kbd>Esc</kbd> zurück';
+      }
       if (id === 'auto') {
         titel = this.zwei ? 'Wählt eure Autos!' : 'Welches Auto fährst du?';
         inhalt = this.htmlAuto();
@@ -234,7 +268,8 @@
       const nav = (this.schritt > 0 ? '<div class="knopf klein" data-a="zurueck">◀ Zurück</div>' : '<span></span>') +
         (this.schritt < SCHRITTE.length - 1 ? '<div class="knopf klein gruen" data-a="weiter">Weiter ▶</div>' : '<span></span>');
       this.wurzel.innerHTML =
-        `<div class="m-kopf"><div class="m-titel">🏎️ AUTORENNEN</div><div class="m-schritte">${kopf}</div></div>` +
+        `<div class="m-kopf"><div class="m-logo"><div class="m-titel">🔥 ${R.config.titel} 🏎️</div>` +
+        `<div class="m-untertitel">${R.config.untertitel}</div></div><div class="m-schritte">${kopf}</div></div>` +
         `<div class="m-inhalt"><h1>${titel}</h1>${inhalt}</div>` +
         `<div class="m-fuss"><div class="m-nav">${nav}</div><div class="m-hinweis">${hinweis}</div></div>`;
     }
@@ -260,6 +295,24 @@
       }).join('') + `</div>`;
     }
 
+    htmlFahrer() {
+      const spieler = this.zwei ? [0, 1] : [0];
+      const panels = spieler.map((sp) => {
+        const andere = this.zwei ? this.e.fahrer[1 - sp] : null;
+        const karten = R.config.fahrer.map((f) => {
+          const gewaehlt = f.name === this.e.fahrer[sp], vergeben = f.name === andere;
+          return `<div class="karte fahrer${gewaehlt ? ' gewaehlt' : ''}${vergeben ? ' vergeben' : ''}" data-a="fahrer:${sp}:${f.name}">` +
+            (vergeben ? `<span class="vergeben-marke p${2 - sp}">${2 - sp}</span>` : '') +
+            `<div class="avatar">${f.emoji}</div><div class="karten-name">${f.name}</div></div>`;
+        }).join('');
+        const kopf = this.zwei
+          ? `<h2 class="p${sp + 1}"><span class="marke">${sp + 1}</span> Spieler ${sp + 1}: ${R.fahrerEmoji(this.e.fahrer[sp])} ${this.e.fahrer[sp]}</h2>`
+          : '';
+        return `<div class="m-spieler p${sp + 1}">${kopf}<div class="raster">${karten}</div></div>`;
+      }).join('');
+      return `<div class="m-autos m-fahrer${this.zwei ? ' zwei' : ''}">${panels}</div>`;
+    }
+
     htmlAuto() {
       const spieler = this.zwei ? [0, 1] : [0];
       const panels = spieler.map((sp) => {
@@ -271,7 +324,7 @@
             bar('tempo', '🚀') + bar('start', '⚡') + bar('kurven', '🌀') + `</div>`;
         }).join('');
         const kopf = this.zwei
-          ? `<h2 class="p${sp + 1}"><span class="marke">${sp + 1}</span> Spieler ${sp + 1}</h2>`
+          ? `<h2 class="p${sp + 1}"><span class="marke">${sp + 1}</span> ${R.fahrerEmoji(this.e.fahrer[sp])} ${this.e.fahrer[sp]}</h2>`
           : '';
         return `<div class="m-spieler p${sp + 1}">${kopf}<div class="raster">${karten}</div>` +
           `<p class="beschreibung">${wahl.beschreibung}</p></div>`;
@@ -294,20 +347,21 @@
         Object.keys(liste).map((k) => `<span class="pille${k === aktuell ? ' aktiv' : ''}" data-a="wert:${zeile}:${k}">${liste[k].name}</span>`).join('') +
         `</div></div>`;
       const cfg = R.config;
-      const name1 = this.zwei ? 'Fahrhilfe Spieler 1' : 'Fahrhilfe';
+      const name1 = this.zwei ? 'Fahrhilfe ' + e.fahrer[0] : 'Fahrhilfe';
       let reihen =
         stepper('runden', '🔁', 'Runden', e.runden, e.runden === 1 ? '(kurz)' : '') +
         stepper('gegner', '🤖', 'Computer-Gegner', e.gegner, e.gegner === 0 ? '(keine)' : '') +
         pillen('schwierigkeit', '🎚️', 'Computer-Stärke', cfg.schwierigkeiten, e.schwierigkeit) +
         pillen('hilfe0', '🛟', name1, cfg.fahrhilfen, e.fahrhilfe[0]);
-      if (this.zwei) reihen += pillen('hilfe1', '🛟', 'Fahrhilfe Spieler 2', cfg.fahrhilfen, e.fahrhilfe[1]);
+      if (this.zwei) reihen += pillen('hilfe1', '🛟', 'Fahrhilfe ' + e.fahrer[1], cfg.fahrhilfen, e.fahrhilfe[1]);
       const tonAn = !R.Audio || R.Audio.an;
       const start = `<div class="start-knopf${fk('start')}" data-a="start">🏁 LOS GEHT'S!</div>` +
         `<div class="knopf klein ton" data-a="ton">${tonAn ? '🔊 Ton an' : '🔇 Ton aus'} <kbd>M</kbd></div>`;
       const tafel =
         `<div class="tafel"><h2>🎮 Steuerung</h2>` +
-        `<div class="t-zeile p1"><b>Spieler 1</b><span><kbd>↑</kbd> Gas <kbd>↓</kbd> Bremse <kbd>←</kbd><kbd>→</kbd> Lenken <kbd>R</kbd> zurück auf die Strecke</span></div>` +
-        `<div class="t-zeile p2${this.zwei ? '' : ' aus'}"><b>Spieler 2</b><span><kbd>W</kbd> Gas <kbd>S</kbd> Bremse <kbd>A</kbd><kbd>D</kbd> Lenken <kbd>T</kbd> zurück auf die Strecke</span></div>` +
+        `<div class="t-zeile"><b>Menü: Fahrer &amp; Auto wählen</b><span>Spieler 1 <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd>${this.zwei ? ' · Spieler 2 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>' : ''} · <kbd>Enter</kbd> weiter</span></div>` +
+        `<div class="t-zeile p1"><b>${e.fahrer[0]} (Spieler 1)</b><span><kbd>↑</kbd> Gas <kbd>↓</kbd> Bremse <kbd>←</kbd><kbd>→</kbd> Lenken <kbd>R</kbd> zurück auf die Strecke</span></div>` +
+        `<div class="t-zeile p2${this.zwei ? '' : ' aus'}"><b>${e.fahrer[1]} (Spieler 2)</b><span><kbd>W</kbd> Gas <kbd>S</kbd> Bremse <kbd>A</kbd><kbd>D</kbd> Lenken <kbd>T</kbd> zurück auf die Strecke</span></div>` +
         `<div class="t-zeile"><b>Alle</b><span><kbd>C</kbd> Kamera <kbd>F</kbd> Vollbild <kbd>Esc</kbd> Pause</span></div></div>`;
       return `<div class="m-start"><div class="m-einstellungen">${reihen}${start}</div>${tafel}</div>`;
     }

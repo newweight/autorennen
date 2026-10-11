@@ -24,7 +24,7 @@
     lautstaerke: 0.7,
     maxKi: 3,              // so viele KI-Motoren gleichzeitig hörbar
     maxStimmen: 5,         // 2 Spieler + 3 KI
-    hoerweite: 70,         // m: weiter entfernte KI-Autos sind stumm
+    hoerweite: 60,         // m: weiter entfernte KI-Autos sind stumm (Slot frei, kein Update)
     tauschPuffer: 5,       // m: ein näheres KI-Auto verdrängt erst ab so viel Vorsprung
     fMin: 62, fMax: 380,   // Hz Grundton (Leerlauf ≈ 87 Hz)
     leerlauf: 0.08,        // Drehzahl (0..1) im Stand
@@ -206,6 +206,7 @@
         v = {
           id, spieler, gang: 0, rpm: K.leerlauf, rpmZiel: K.leerlauf, grundton: K.fMin + K.leerlauf * (K.fMax - K.fMin),
           dip: 0, abstand: 0, slot: null, zeit: 0, neu: true, ug: '',
+          lf: 0, lc: 0, ll: -1, lr: -1,     // zuletzt geplante Werte (Frequenz, Filter, Lautstärke, Rauschen)
           stimmung: 1 + ((this._zaehler++ % 5) - 2) * 0.015,
         };
         this._stimmen.set(id, v);
@@ -347,19 +348,22 @@
       if (ug === 'gras') rausch = 0.10; else if (ug === 'sand') rausch = 0.13; else if (ug === 'rand') rausch = 0.03;
       rausch *= Math.min(1, tempo / 12) * pegel;
 
+      // Nur neu planen, wenn sich ein Wert merklich ändert (> 0,5 % bzw. kleiner Absolutwert):
+      // spart AudioParam-Ereignisse – im Leerlauf/bei Vollgas fast keine Aufrufe je Frame.
+      const anders = (a, b, abs) => Math.abs(a - b) > Math.max(abs, Math.abs(b) * 0.005);
       if (v.neu) {
         // frisch zugeteilt: Frequenzen sofort setzen (Pegel blendet weich ein)
         k.oscS.frequency.cancelScheduledValues(t); k.oscS.frequency.setValueAtTime(f, t);
         k.oscQ.frequency.cancelScheduledValues(t); k.oscQ.frequency.setValueAtTime(f * 0.5, t);
         k.filter.frequency.cancelScheduledValues(t); k.filter.frequency.setValueAtTime(cutoff, t);
+        v.lf = f; v.lc = cutoff; v.ll = -1; v.lr = -1;
         v.neu = false;
       } else {
-        k.oscS.frequency.setTargetAtTime(f, t, 0.03);
-        k.oscQ.frequency.setTargetAtTime(f * 0.5, t, 0.03);
-        k.filter.frequency.setTargetAtTime(cutoff, t, 0.04);
+        if (anders(f, v.lf, 0.3)) { v.lf = f; k.oscS.frequency.setTargetAtTime(f, t, 0.03); k.oscQ.frequency.setTargetAtTime(f * 0.5, t, 0.03); }
+        if (anders(cutoff, v.lc, 2)) { v.lc = cutoff; k.filter.frequency.setTargetAtTime(cutoff, t, 0.04); }
       }
-      k.out.gain.setTargetAtTime(laut, t, 0.04);
-      k.rGain.gain.setTargetAtTime(rausch, t, 0.08);
+      if (anders(laut, v.ll, 0.002)) { v.ll = laut; k.out.gain.setTargetAtTime(laut, t, 0.04); }
+      if (anders(rausch, v.lr, 0.002)) { v.lr = rausch; k.rGain.gain.setTargetAtTime(rausch, t, 0.08); }
       if (ug !== v.ug) {
         v.ug = ug;
         k.rFilter.frequency.setTargetAtTime(ug === 'sand' ? 1100 : 650, t, 0.05);

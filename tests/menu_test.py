@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Menü-/Modus-Test (Playwright, headless Chromium):
-a) Menü-Screenshot, b) per Tastatur: zu zweit, Strecke, Autos (P1 Porsche, P2 Multivan), Runden 1, Gegner 2, Start
+a) Menü-Screenshot, b) per Tastatur: zu zweit, Strecke, Fahrer (P1 Senna, P2 versucht Senna -> springt weiter), Autos (P1 Porsche, P2 Multivan), Runden 1, Gegner 2, Start
    -> Split-Screen-Screenshot, c) Autopilot für beide, Schnellvorlauf bis 'ergebnis' -> Ergebnis-Screenshot + Prüfung,
-d) Enter = Nochmal, Esc = Pause, Weiter, Hauptmenü, keine JS-Fehler, Draw-Calls im Split-Screen < 80.
+d) Titel "Jonas Hot Steering Wheel" im Menü, Fahrernamen in HUD/Meldungen/Ergebnis, KI-Namen aus der Restliste; Enter = Nochmal, Esc = Pause, Weiter, Hauptmenü, keine JS-Fehler, Draw-Calls im Split-Screen < 120.
 Aufruf: python3 tests/menu_test.py [ausgabeordner]"""
 import sys, os, json
 from playwright.sync_api import sync_playwright
@@ -30,6 +30,12 @@ with sync_playwright() as p:
     snap = lambda name: page.screenshot(path=os.path.join(out, name))
     # a) Menü
     pruefe('Start im Menü', zustand() == 'menue')
+    titel = page.evaluate("document.querySelector('.m-titel').textContent")
+    pruefe('Titel im Menü sichtbar', 'Jonas Hot Steering Wheel' in titel and page.is_visible('.m-titel')
+           and 'autorennen' in page.inner_text('.m-untertitel').lower(), titel)
+    pruefe('Seitentitel (title)', page.title() == 'Jonas Hot Steering Wheel', page.title())
+    br = page.evaluate("(() => { const r = document.querySelector('.m-titel').getBoundingClientRect(); return [r.left, r.right, innerWidth]; })()")
+    pruefe('Titel passt in die Breite', br[0] >= 0 and br[1] <= br[2], br)
     snap('menu_1_modus.png')
     # b) Tastatur: Modus zu zweit
     taste('ArrowRight'); snap('menu_1b_modus_zwei.png')
@@ -42,6 +48,38 @@ with sync_playwright() as p:
     pruefe('Streckenwahl: Wüste per Pfeiltaste', page.evaluate('Rennspiel.spiel.einstellungen.streckeId') == 'wueste')
     snap('menu_2b_strecke_wueste.png')
     for _ in range(2): taste('ArrowLeft'); page.wait_for_timeout(300)
+    taste('Enter'); page.wait_for_timeout(200)
+    # Fahrer: Standard P1 Jonas, P2 Emmy; P1 wählt Senna, P2 läuft mit WASD auf Senna zu und wird übersprungen
+    fe = lambda: page.evaluate('Rennspiel.spiel.einstellungen.fahrer')
+    pruefe('Fahrer-Schritt aktiv (5 Schritte im Kopf)', page.evaluate("document.querySelector('.m-schritt.aktiv').textContent.includes('Fahrer')")
+           and page.evaluate("document.querySelectorAll('.m-schritt').length") == 5)
+    pruefe('Standard-Fahrer: Spieler 1 Jonas, Spieler 2 Emmy', fe() == ['Jonas', 'Emmy'], fe())
+    karten_f = page.evaluate("document.querySelectorAll('.karte.fahrer').length")
+    pruefe('Fahrer-Schritt: 2 × 12 Karten', karten_f == 24, karten_f)
+    namen_f = [f['name'] for f in page.evaluate('Rennspiel.config.fahrer')]
+    i = 0
+    while fe()[0] != 'Senna' and i < 20: taste('ArrowRight'); i += 1
+    pruefe('P1 wählt Senna (Pfeiltasten)', fe()[0] == 'Senna', fe())
+    i = 0
+    while fe()[1] != 'Schumacher' and i < 20: taste('KeyD'); i += 1
+    taste('KeyD')      # nächster wäre Senna – gehört P1
+    pruefe('P2 versucht Senna -> wird auf anderen gesetzt', fe()[1] not in ('Senna', 'Schumacher') and fe()[1] in namen_f, fe())
+    pruefe('P2 sprang auf Verstappen', fe() == ['Senna', 'Verstappen'], fe())
+    # Zurück-Richtung und senkrecht (3 Spalten): nie derselbe Fahrer
+    ok = True
+    for t in ['KeyA', 'KeyA', 'KeyS', 'KeyW', 'KeyW', 'KeyD', 'KeyD', 'KeyS', 'KeyS', 'KeyS', 'KeyA']:
+        taste(t); ok = ok and fe()[0] != fe()[1]
+    for t in ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowLeft', 'ArrowUp', 'ArrowRight']:
+        taste(t); ok = ok and fe()[0] != fe()[1]
+    pruefe('Nie zwei gleiche Fahrer (Tasten-Marathon)', ok, fe())
+    # zurück auf P1 Senna, P2 Verstappen
+    while fe()[0] != 'Senna': taste('ArrowRight')
+    while fe()[1] != 'Verstappen': taste('KeyD')
+    snap('menu_3a_fahrer_zwei.png')
+    pruefe('Fahrer-Raster überlappt nicht', page.evaluate('''(() => { const r = Array.from(document.querySelectorAll('.karte.fahrer')).map(k => k.getBoundingClientRect());
+      for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length; j++) { const a = r[i], b = r[j];
+        if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) return false; }
+      return r.every(a => a.left >= 0 && a.right <= innerWidth && a.top >= 0 && a.bottom <= innerHeight); })()'''))
     taste('Enter'); page.wait_for_timeout(200)
     # Autos: P1 (Pfeile) auf Porsche (Index 3), P2 (WASD) auf Multivan (Index 1)
     ids = page.evaluate('Rennspiel.carCatalog.map(a => a.id)')
@@ -68,6 +106,8 @@ with sync_playwright() as p:
         taste('Enter'); page.wait_for_timeout(100)
     page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=15000)
     pruefe('Rennen gestartet (zwei Spieler + 2 Computer)', page.evaluate('Rennspiel.spiel.fahrzeuge.length') == 4)
+    hudnamen = page.evaluate("Array.from(document.querySelectorAll('.hud-name')).map(e => e.textContent)")
+    pruefe('HUD-Kopf zeigt Fahrernamen', len(hudnamen) == 2 and 'Senna' in hudnamen[0] and 'Verstappen' in hudnamen[1], hudnamen)
     page.wait_for_timeout(1500)
     snap('menu_5_splitscreen_countdown.png')
     page.keyboard.down('ArrowUp'); page.keyboard.down('KeyW')
@@ -80,7 +120,18 @@ with sync_playwright() as p:
       calls: s.renderer.info.render.calls, dreiecke: s.renderer.info.render.triangles,
       namen: s.rennen.teilnehmer.map(t => t.name), spielerNr: s.fahrzeuge.map(f => f.spielerNr) }; })()''')
     pruefe('Split-Screen: 2 Kameras, 2 HUDs', info['kameras'] == 2 and info['huds'] == 2, info)
-    pruefe('Draw-Calls im Split-Screen < 80', info['calls'] < 80, info['calls'])
+    pruefe('KI-Namen aus der Restliste (Schumacher, Röhrl; nicht Senna/Verstappen)',
+           info['namen'] == ['Senna', 'Verstappen', 'Schumacher', 'Röhrl'], info['namen'])
+    # Schwelle 120 (vorher 80): Deko-Instanzen sind seit Runde 2 in bis zu 3×3 Regionen geteilt (config.grafik.dekoZellen),
+    # damit jede Kamera nur sichtbare Stücke zeichnet. Das kostet ein paar Draw-Calls mehr, spart aber Dreiecke;
+    # ~100 Draw-Calls sind für die M1-GPU unkritisch (CPU-Anteil ≪ 1 ms).
+    pruefe('Draw-Calls im Split-Screen < 120', info['calls'] < 120, info['calls'])
+    # Einmal ALLES zeichnen (Culling kurz aus), damit auch noch nie sichtbare Geometrien hochgeladen sind:
+    # Auto-Geometrien liegen absichtlich dauerhaft im Katalog-Cache. Seit Deko/Autos je Kamera gecullt werden,
+    # würden Autos, die erst im Ergebnis ins Bild kommen, sonst fälschlich als "Leck" zählen.
+    page.evaluate('''(() => { const s = Rennspiel.spiel, alt = [];
+      s.szene.traverse(o => { alt.push([o, o.frustumCulled]); o.frustumCulled = false; });
+      s.zeichnen(); alt.forEach(([o, c]) => { o.frustumCulled = c; }); })()''')
     speicher0 = page.evaluate('(() => { const m = Rennspiel.spiel.renderer.info.memory; return [m.geometries, m.textures]; })()')
 
     # c) Autopilot beide, Vorlauf bis Ergebnis
@@ -95,11 +146,14 @@ with sync_playwright() as p:
     print(json.dumps(zeilen, ensure_ascii=False))
     pruefe('Ergebnis: 4 Zeilen', len(zeilen) == 4, len(zeilen))
     namen = [z[1] for z in zeilen]
-    pruefe('Ergebnis: Spieler 1 und Spieler 2 vorhanden', 'Spieler 1' in namen and 'Spieler 2' in namen, namen)
+    pruefe('Ergebnis: Fahrernamen statt Spieler 1/2, KI als "🤖 Name"',
+           'Senna' in namen and 'Verstappen' in namen and '🤖 Schumacher' in namen and '🤖 Röhrl' in namen
+           and not any('Spieler' in n or 'Computer' in n for n in namen), namen)
+    pruefe('Ergebnis: Auto-Spalte gefüllt', all(z[2] for z in zeilen), [z[2] for z in zeilen])
     def sek(t):
         try: m, s = t.split(':'); return int(m) * 60 + float(s)
         except Exception: return 0
-    spieler_zeilen = [z for z in zeilen if z[1].startswith('Spieler')]
+    spieler_zeilen = [z for z in zeilen if z[1] in ('Senna', 'Verstappen')]
     pruefe('Ergebnis: Zeiten der Spieler > 0', all(sek(z[3]) > 0 and sek(z[4]) > 0 for z in spieler_zeilen), spieler_zeilen)
     plaetze = [z[0] for z in zeilen]
     pruefe('Ergebnis: Plätze 1.–4.', plaetze == ['1.', '2.', '3.', '4.'], plaetze)
@@ -139,6 +193,11 @@ with sync_playwright() as p:
     # Maus im Menü: Solo wählen, bis Start klicken
     page.click('[data-a="modus:solo"]'); page.wait_for_timeout(150)
     page.click('[data-a="strecke:wiese"]'); page.wait_for_timeout(150)
+    page.click('[data-a="fahrer:0:Kerle"]'); page.wait_for_timeout(150)
+    snap('menu_10b_fahrer_solo.png')
+    pruefe('Maus: Fahrer Kerle gewählt, Solo-Raster 12 Karten', page.evaluate('Rennspiel.spiel.einstellungen.fahrer[0]') == 'Kerle'
+           and page.evaluate("document.querySelectorAll('.karte.fahrer').length") == 12)
+    page.click('[data-a="weiter"]'); page.wait_for_timeout(150)
     page.click('[data-a="auto:0:bmw-m4"]'); page.wait_for_timeout(150)
     snap('menu_11_autos_solo.png')
     page.click('[data-a="weiter"]'); page.wait_for_timeout(150)
@@ -148,6 +207,7 @@ with sync_playwright() as p:
     pruefe('Maus: Solo-Rennen gestartet', page.evaluate('Rennspiel.spiel.kameras.length') == 1 and page.evaluate('Rennspiel.spiel.fahrzeuge[0].auto.id') == 'bmw-m4')
     page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=20000)
     page.wait_for_timeout(1500); snap('menu_13_solo_hud.png')
+    pruefe('Solo-HUD zeigt Fahrername Kerle', 'Kerle' in page.evaluate("document.querySelector('.hud-name').textContent"))
     # HUD-Hinweise: "Falsch herum!" und Rundenmeldungen
     page.evaluate("Rennspiel.spiel.fahrzeuge[0].vehicle.heading += Math.PI")
     page.wait_for_timeout(2500)
@@ -162,14 +222,26 @@ with sync_playwright() as p:
         txt = page.evaluate("document.querySelector('.hud-banner').textContent")
         if t >= 1 and not banner: banner.append(txt)
         if t >= 2: banner.append(txt); break
-    pruefe('Meldungen "Runde 2!" und "Letzte Runde!"', banner == ['Runde 2!', 'Letzte Runde!'], banner)
+    pruefe('Meldungen "Kerle Runde 2!" und "Kerle Letzte Runde!"', banner == ['KerleRunde 2!', 'KerleLetzte Runde!'], banner)
     page.evaluate('Rennspiel.spiel.schnellvorlauf(150)')
     page.wait_for_timeout(300)
-    pruefe('Zieleinlauf-Meldung', 'Platz' in page.evaluate("document.querySelector('.hud-banner').textContent"),
+    pruefe('Zieleinlauf-Meldung mit Name', 'Platz' in page.evaluate("document.querySelector('.hud-banner').textContent")
+           and 'Kerle' in page.evaluate("document.querySelector('.hud-banner').textContent"),
            page.evaluate("document.querySelector('.hud-banner').textContent"))
     # Einstellungen werden gespeichert
     gespeichert = page.evaluate('localStorage.getItem(Rennspiel.config.ui.speicherSchluessel)')
     pruefe('Einstellungen in localStorage', gespeichert is not None and 'multivan' in gespeichert, gespeichert)
+    pruefe('Fahrer in localStorage', '"fahrer":["Kerle"' in gespeichert, gespeichert)
+    # Validierung: kaputte / doppelte Fahrer in localStorage
+    page.evaluate('''localStorage.setItem(Rennspiel.config.ui.speicherSchluessel, JSON.stringify({ fahrer: ['Nope', 42] }))''')
+    page.reload(); page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=15000)
+    pruefe('Ungültige Fahrer -> Standard', page.evaluate('Rennspiel.spiel.einstellungen.fahrer') == ['Jonas', 'Emmy'], page.evaluate('Rennspiel.spiel.einstellungen.fahrer'))
+    page.evaluate('''localStorage.setItem(Rennspiel.config.ui.speicherSchluessel, JSON.stringify({ fahrer: ['Sara', 'Sara'] }))''')
+    page.reload(); page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=15000)
+    f2 = page.evaluate('Rennspiel.spiel.einstellungen.fahrer')
+    pruefe('Doppelter Fahrer -> zweiter springt weiter', f2[0] == 'Sara' and f2[1] != 'Sara', f2)
+    page.evaluate("Rennspiel.spiel.rennenStarten({ modus: 'zwei', gegner: 1 })")   # fahrer fehlt -> gespeicherte/Standardwerte
+    pruefe('rennenStarten ohne fahrer-Angabe', page.evaluate('Rennspiel.spiel.rennen.teilnehmer.map(t => t.name)')[0] == 'Sara')
     pruefe('Keine JS-Fehler', not fehler, fehler)
     print(json.dumps({'ok': all(x['ok'] for x in pruefungen), 'fehler': fehler}, ensure_ascii=False))
     browser.close()

@@ -217,7 +217,10 @@
       const pk = this.spline.punkte;
       pk.forEach(p => { mx += p.x; mz += p.z; });
       mx /= pk.length; mz /= pk.length;
-      const geo = new THREE.PlaneGeometry(1600, 1600, 160, 160);
+      // Rasterweite aus config (100 → 16 m Felder, 20.000 Dreiecke statt 51.200 bei 160).
+      // Geprüft: bei 100 bleibt die Straße auf allen Strecken ≥ 2,5 cm über dem Boden, 80 sticht im Wald durch.
+      const raster = (R.config.grafik && R.config.grafik.bodenRaster) || 160;
+      const geo = new THREE.PlaneGeometry(1600, 1600, raster, raster);
       geo.rotateX(-Math.PI / 2);
       const pos = geo.attributes.position;
       const farben = new Float32Array(pos.count * 3);

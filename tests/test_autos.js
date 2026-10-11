@@ -61,5 +61,70 @@ const schnell = Math.min(...zeiten), langsam = Math.max(...zeiten);
 pruefe('Spürbarer Unterschied Schnellster/Langsamster (>= 1.5 s), aber nicht hoffnungslos (<= 2.5-fach)',
   langsam - schnell >= 1.5 && langsam / schnell <= 2.5, schnell.toFixed(2) + ' .. ' + langsam.toFixed(2) + ' s');
 
+
+// --- 3D-Modelle (carBuilder v2) mit Three.js in Node ---
+console.log('\nAuto               Dreiecke  Meshes  L/B/H (m) Modell vs. Katalog');
+const warn = console.warn; console.warn = () => {};           // Hinweis "three.min.js deprecated" unterdrücken
+const R3 = ladeModule(['vendor/three.min.js', 'src/config.js', 'src/cars/carCatalog.js', 'src/cars/carBuilder.js']);
+console.warn = warn;
+for (const a of R3.carCatalog) {
+  const ab = a.abmessungen;
+  pruefe(`${a.id}: abmessungen vollständig`, ab && ['laenge', 'breite', 'hoehe', 'radstand', 'radRadius'].every((k) => typeof ab[k] === 'number'));
+  pruefe(`${a.id}: form-Objekt vorhanden`, a.form && typeof a.form === 'object');
+  const g = R3.carBuilder.bauen(a);
+  const u = g.userData;
+  pruefe(`${a.id}: userData-Felder`, u.raeder.length === 4 && u.vorderraeder.length === 2 && u.lenkObjekte.length === 2
+    && u.bremslichter.length === 2 && u.scheinwerfer.length === 2 && u.autoId === a.id && !!u.bremslichtMaterial);
+  pruefe(`${a.id}: Schattenquad 'schatten'`, g.children.some((c) => c.name === 'schatten'));
+  let tris = 0, meshes = 0;
+  const min = [1e9, 1e9, 1e9], max = [-1e9, -1e9, -1e9];
+  let unterB = 0;                                  // halbe Breite unterhalb 2·r (ohne Spiegel)
+  g.updateMatrixWorld(true);
+  g.traverse((o) => {
+    if (!o.isMesh) return;
+    meshes++;
+    if (o.name === 'schatten') return;
+    const p = o.geometry.attributes.position;
+    tris += p.count / 3;
+    const v = { x: 0, y: 0, z: 0 };
+    const e = o.matrixWorld.elements;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      v.x = e[0] * x + e[4] * y + e[8] * z + e[12]; v.y = e[1] * x + e[5] * y + e[9] * z + e[13]; v.z = e[2] * x + e[6] * y + e[10] * z + e[14];
+      min[0] = Math.min(min[0], v.x); min[1] = Math.min(min[1], v.y); min[2] = Math.min(min[2], v.z);
+      max[0] = Math.max(max[0], v.x); max[1] = Math.max(max[1], v.y); max[2] = Math.max(max[2], v.z);
+      if (v.y < 2 * ab.radRadius) unterB = Math.max(unterB, Math.abs(v.x));
+    }
+  });
+  const L = max[2] - min[2], H = max[1], Bu = 2 * unterB;
+  console.log('  ' + a.id.padEnd(16) + String(tris).padStart(7) + String(meshes).padStart(8) + '   ' +
+    [L, Bu, H].map((x) => x.toFixed(2)).join('/') + '  vs ' + [ab.laenge, ab.breite, ab.hoehe].join('/'));
+  pruefe(`${a.id}: Dreiecke 1.500 .. 8.000`, tris >= 1500 && tris <= 8000, String(tris));
+  pruefe(`${a.id}: höchstens 12 Meshes`, meshes <= 12, String(meshes));
+  const nah = (ist, soll) => Math.abs(ist / soll - 1) <= 0.08;
+  pruefe(`${a.id}: Länge ±8 %`, nah(L, ab.laenge), L.toFixed(3) + ' / ' + ab.laenge);
+  pruefe(`${a.id}: Breite (ohne Spiegel) ±8 %`, nah(Bu, ab.breite), Bu.toFixed(3) + ' / ' + ab.breite);
+  pruefe(`${a.id}: Höhe ±8 %`, nah(H, ab.hoehe), H.toFixed(3) + ' / ' + ab.hoehe);
+  pruefe(`${a.id}: nichts unter dem Boden`, min[1] >= -0.001, min[1].toFixed(3));
+  // Räder: Mittelpunkt auf Höhe radRadius, links/rechts symmetrisch, innerhalb der Karosseriebreite
+  const halter = u.raeder.map((r) => r.parent.position);
+  const rH = ab.radRadiusHinten || ab.radRadius;
+  pruefe(`${a.id}: Radmitte y ≈ radRadius`, halter.every((p, i) => Math.abs(p.y - (i < 2 ? ab.radRadius : rH)) < 0.005),
+    halter.map((p) => p.y.toFixed(3)).join('/'));
+  pruefe(`${a.id}: Räder symmetrisch`, Math.abs(halter[0].x + halter[1].x) < 1e-6 && Math.abs(halter[2].x + halter[3].x) < 1e-6
+    && halter[0].z === halter[1].z && halter[2].z === halter[3].z);
+  pruefe(`${a.id}: Radstand ≈ Katalog`, Math.abs((halter[2].z - halter[0].z) - ab.radstand) < 0.01, (halter[2].z - halter[0].z).toFixed(3));
+  pruefe(`${a.id}: Front bei -z (Scheinwerfer vorne, Rücklichter hinten)`,
+    u.scheinwerfer.every((m) => { m.geometry.computeBoundingBox(); return m.geometry.boundingBox.max.z < 0; })
+    && u.bremslichter.every((m) => { m.geometry.computeBoundingBox(); return m.geometry.boundingBox.min.z > 0; }));
+  // Schnittstellen-Funktionen
+  R3.carBuilder.lenkeRaeder(g, 0.3); R3.carBuilder.dreheRaeder(g, 1.2); R3.carBuilder.setzeBremslicht(g, true);
+  pruefe(`${a.id}: lenken/drehen/bremsen wirken`, u.lenkObjekte[0].rotation.y === 0.3 && u.raeder[3].rotation.x === 1.2
+    && u.bremslichtMaterial.color.getHex() === 0xff3b30);
+}
+pruefe('platzhalterAuto() liefert Group', !!R3.carBuilder.platzhalterAuto().isGroup);
+R3.carBuilder.cacheLeeren();
+pruefe('cacheLeeren() + Neubau klappt', R3.carBuilder.bauen(R3.carCatalog[0]).userData.raeder.length === 4);
+
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');
 process.exit(fehler === 0 ? 0 : 1);

@@ -40,3 +40,47 @@
 - 10.10. 20:55 – Abschnitt 8: KI-Namen im Ergebnis = "Computer n", Starter-App (🚗 Autorennen starten.app,
   Shell-Starter → Chrome), Autorennen starten.command, ANLEITUNG.md, ERWEITERN.md. Alle Tests grün (95 %)
 - Offen: Test auf dem echten Mac (Chrome, Leistung, Tastatur-Ghosting bei 2 Spielern), Klang ungehört
+- 10.10. 21:35 – Alles auf dem Mac: Spiele/🚗 Autorennen starten.app + Spiele/Autorennen/. Start auf dem Mac
+  nicht geprüft (Chrome-Erweiterung darf keine file://-Seiten öffnen, Bildschirm gesperrt). (96 %)
+## Offen (Handgriffe Sebastian)
+1. Doppelklick „🚗 Autorennen starten" im Ordner Spiele (Chrome öffnet sich). Falls macOS die App blockiert:
+   Rechtsklick → Öffnen, oder Autorennen/„Autorennen starten.command" doppelklicken.
+2. Im Spiel F für Vollbild, ein Rennen allein fahren: Ruckelt es? (H zeigt fps; Ziel ≥ 50)
+3. Zu zweit: ↑+← und W+A gleichzeitig halten – lenken beide Autos? (Tastatur-Ghosting)
+4. Ton (Taste M): zu laut/leise/schrill? → Rückmeldung, dann stimme ich engine.js ab.
+
+## Runde 2 (11.10.2026) – Rückmeldung Sebastian
+- "vieles cool", aber: (1) bei zwei Spielern ruckeln die Autos, (2) Modelle detailreicher + näher am Original (ohne Rechteverletzung)
+- Gestartet: Opus-Agent Leistung (Profiler, adaptive Qualität, Split-Screen-Optimierung) + Opus-Agent Automodelle v2
+- 11.10. Automodelle v2 (Opus-Agent) gestartet: Recherche Maße fertig, Sicherung alter Stand im Scratchpad
+- 11.10. – Automodelle v2 fertig (Opus): carCatalog.js mit echten Maßen (abmessungen) + form-Merkmalen je Auto;
+  carBuilder.js neu: Loft-Unterbau mit Radhäusern/Kotflügel-Wölbung, Kabinen-Loft (Fenster/Säulen als Flächenfarben),
+  Anbauteile per flaecheZ() auf gewölbter Front/Heck, 5-Speichen-Felgen. 10 Meshes, 5.000–6.900 Dreiecke je Auto.
+  Vorschau ?ansicht=alle4, Screenshots tests/out/autos_alle4.png + autos_<id>_alle4.png; 3 Iterationen.
+  test_autos.js um 3D-Prüfungen erweitert (Maße ±8 %, Radmitte, Symmetrie, Meshes, Dreiecke) – alle Node-Tests grün.
+- 10.10. 23:55 – Leistung/Ruckeln (Opus, übernommen vom unterbrochenen Vorgänger-Agent). Vorgänger hatte schon: H-Overlay +
+  `Rennspiel.spiel.leistung()`, HUD ≤ 20 Hz + Text nur bei Änderung, Minimap im Offscreen-Canvas, adaptive Qualität mit
+  Hysterese (45/58 fps, 2 s), Split pixelRatio 1,0 / Solo 1,5, Deko-Chunks 3×3 mit boundingSphere, matrixAutoUpdate=false,
+  Audio setTargetAtTime + KI > 60 m stumm, KI ohne filter/map, **Interpolation der Auto-Pose (Mesh + Kamera)**.
+  Neu: tests/interpolation_test.py (Ruckel-Nachweis), Vorher/Nachher-Tabelle in tests/leistung_test.py
+  (Basis tests/leistung_vorher.json = Mac-Stand 20:13), Closures im Frame-Pfad entfernt, HUD style.display nur bei Änderung,
+  menu_test: Draw-Call-Schwelle 80 → 120 (Deko-Chunks), Speicherprüfung lädt vorher alle Geometrien (kein falsches „Leck").
+  **Hauptursache Ruckeln = Physik-Akkumulator ohne Interpolation**: 60-Hz-vsync ± 1,5 ms Jitter, ungünstige Phase →
+  24 % Frames 0 Physikschritte, 24 % 2 Schritte. Tempo-Schwankung je Frame (Variationskoeffizient) 0,66 → 0,05,
+  Zittern Auto relativ zur Kamera 13,4 cm → 0,06 cm je Frame (Kamera ist geglättet, darum ruckeln „die Autos", nicht das Bild).
+  JS-Zeit war nie das Problem: Split Wald 2560×1600 physik+audio+hud 0,42 → 0,24–0,33 ms (Ziel < 8 ms).
+  Split-Screen: Zeichenpuffer −56 % Pixel (pr 1,5 → 1,0), Dreiecke Wald 744k → 610k, Draw-Calls 91 → 114.
+  Alle Tests grün (6× node, menu, rennen, screenshot wald, audio, interpolation, leistung). Mac-Messung steht aus (H-Overlay).
+
+## Runde 3 (11.10.2026) – Titel + Fahrerwahl
+- Spiel heißt „Jonas Hot Steering Wheel“ (Untertitel Autorennen): <title>, Menü-Kopf, ANLEITUNG.md, ERWEITERN.md; Dateinamen unverändert.
+- Neuer Menü-Schritt „Fahrer“ (vor Auto, jetzt 5 Schritte): config.fahrer (12 Namen + Emoji), Standard Jonas/Emmy, Solo 6×2, zu zweit je 3×4,
+  P1 Pfeile / P2 WASD / Maus; gleicher Fahrer nicht möglich (Bewegender springt weiter, Karte „vergeben“ markiert).
+- Namen in HUD (auch Solo), Rundenmeldungen/Zieleinlauf (Name über der Meldung), Ergebnis; Computer = nicht gewählte Fahrer (Vorrang Schumacher, Senna, Verstappen, Röhrl), „🤖 Name“.
+- localStorage `fahrer: [p1, p2]`, einstellungenPruefen validiert; Hilfsfunktionen in config.js (R.fahrerEindeutig, R.fahrerComputerNamen), tests/test_fahrer.js neu.
+- tests/menu_test.py um Fahrer-Schritt/Titel/Namen erweitert, alle Tests grün. Screenshots 1280×800 und 1440×900 geprüft.
+- 11.10. – Runde 2 abgeschlossen: (1) Ruckeln: Ursache Physik-Akkumulator ohne Interpolation (0/2 Schritte je Frame),
+  jetzt interpoliert (Zittern 13,4 cm → 0,06 cm/Frame), dazu pixelRatio 1.0 im Split, adaptive Qualität, HUD 20 Hz,
+  Deko-Chunks, Leistungs-Overlay (H); (2) Automodelle v2 mit echten Maßen (5–7k Dreiecke/Auto, 10 Meshes);
+  (3) Titel "Jonas Hot Steering Wheel", Fahrerwahl (12 Fahrer, KI nimmt Restnamen). Alle Tests grün.
+  Offen: M4/AMG-Front zu flach; Messung auf dem Mac (H-Overlay) fehlt

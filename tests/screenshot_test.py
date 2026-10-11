@@ -46,10 +46,12 @@ DEKO_PRUEFEN = '''(() => { const s = Rennspiel.spiel, sp = s.strecke.spline; let
       if (a < min) { min = a; wo = o.name; } } });
   return { instanzen: n, jeArt, minAbstandZurMitte: +min.toFixed(1), naechsteArt: wo, grenze: s.strecke.breite / 2 + 6 }; })()'''
 
-# Draw-Calls Strecke + Deko: sichtbare Meshes zählen (obere Grenze, unabhängig vom Blickwinkel)
+# Draw-Calls Strecke + Deko: sichtbare Meshes zählen (obere Grenze, unabhängig vom Blickwinkel).
+# In Regionen geteilte InstancedMeshes (userData.stueck > 0) zählen als ein Objekt – je Ansicht wird nur
+# gezeichnet, was im Blickfeld liegt (echte Draw-Calls stehen in drawCalls von ZUSTAND).
 DRAW_CALLS = '''(() => { const s = Rennspiel.spiel; let n = 0; const namen = [];
   s.szene.children.forEach(g => { if (!(g.name.startsWith('Strecke') || g.name.startsWith('Deko'))) return;
-    g.traverse(o => { if ((o.isMesh || o.isInstancedMesh) && o.visible && (!o.isInstancedMesh || o.count > 0)) { n++; namen.push(o.name); } }); });
+    g.traverse(o => { if ((o.isMesh || o.isInstancedMesh) && o.visible && (!o.isInstancedMesh || o.count > 0) && !(o.userData.stueck > 0)) { n++; namen.push(o.name); } }); });
   return { meshes: n, namen }; })()'''
 
 MINIMAP = '''(() => { const c = document.querySelector('.hud-minimap'); if (!c) return null;

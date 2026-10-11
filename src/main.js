@@ -13,6 +13,7 @@
     const c = R.config;
     return {
       modus: 'solo', streckeId: R.trackCatalog[0].id, autoIds: ['troc-cabrio', 'multivan'],
+      fahrer: c.fahrerStandard.slice(),
       runden: c.rennen.rundenStandard, gegner: c.rennen.gegnerStandard,
       schwierigkeit: c.schwierigkeitStandard, fahrhilfe: [c.fahrhilfeStandard, c.fahrhilfeStandard],
     };
@@ -25,10 +26,13 @@
     const autoOk = (id, d) => (R.carCatalog.find(a => a.id === id) ? id : d);
     const ids = Array.isArray(r.autoIds) ? r.autoIds : [];
     const hilfe = Array.isArray(r.fahrhilfe) ? r.fahrhilfe : [];
+    const fa = Array.isArray(r.fahrer) ? r.fahrer : [];
+    const fahrerOk = (n, d) => (R.fahrerSuche(n) ? n : d);
     return {
       modus: r.modus === 'zwei' ? 'zwei' : 'solo',
       streckeId: R.trackCatalog.find(t => t.id === r.streckeId) ? r.streckeId : std.streckeId,
       autoIds: [autoOk(ids[0], std.autoIds[0]), autoOk(ids[1], std.autoIds[1])],
+      fahrer: R.fahrerEindeutig([fahrerOk(fa[0], std.fahrer[0]), fahrerOk(fa[1], std.fahrer[1])]),
       runden: zahl(r.runden, c.rennen.rundenMin, c.rennen.rundenMax, std.runden),
       gegner: zahl(r.gegner, 0, c.rennen.gegnerMax, std.gegner),
       schwierigkeit: c.schwierigkeiten[r.schwierigkeit] ? r.schwierigkeit : std.schwierigkeit,
@@ -49,10 +53,18 @@
       const g = R.config.grafik;
       this.canvas = canvas;
       this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+      // pixelRatio setzt qualitaetAnwenden() (Solo 1,5 / Split 1,0, adaptiv runter/hoch).
+      // setSize(..., false): das Canvas behält seine CSS-Größe (100vw/100vh), nur der Zeichenpuffer ändert sich.
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, g.pixelRatioMax));
       this.renderer.setSize(window.innerWidth, window.innerHeight, false);
       this.renderer.shadowMap.enabled = g.schatten;
       this.renderer.info.autoReset = false;   // Split-Screen: Draw-Calls beider Hälften zählen (reset je Frame)
+      this.qualitaet = { stufe: 0, unten: 0, oben: 0, fpsGlatt: 60, sicht: g.sichtweite, wechsel: 0 };
+      // Leistungsmessung: Ringpuffer der letzten 60 Frames je Block (ms)
+      this._mess = { n: 0, i: 0, physik: new Float64Array(60), audio: new Float64Array(60), hud: new Float64Array(60),
+        grafik: new Float64Array(60), render: new Float64Array(60), gesamt: new Float64Array(60), dt: new Float64Array(60), schritte: new Float64Array(60) };
+      this._hudZeit = -1e9;     // letzte HUD-Aktualisierung (ms, Zeitstempel des Frames)
+      this._frameCb = (t) => this.frame(t);   // einmal anlegen: keine neue Closure je Frame
 
       this.szene = new THREE.Scene();
       this.szene.background = new THREE.Color(0x8fc8ff);
@@ -126,6 +138,7 @@
 
     groesse() {
       const w = window.innerWidth, h = window.innerHeight, g = R.config.grafik;
+      this.qualitaetAnwenden(false);
       this.renderer.setSize(w, h, false);
       const split = this.kameras.length === 2;
       this.kameras.forEach(k => k.groesseSetzen(split ? (w / 2) / h : w / h, split ? g.fovSplitScreen : g.fov));
@@ -138,6 +151,54 @@
       const el = document.documentElement;
       if (!document.fullscreenElement) (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
       else (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    }
+
+    // ---------- Qualität (pixelRatio, Nebel) ----------
+    /** Höchste pixelRatio-Stufe für den aktuellen Modus (Index in qualitaetsStufen). */
+    _startStufe() {
+      const g = R.config.grafik, st = g.qualitaetsStufen;
+      const max = this.kameras.length === 2 ? g.pixelRatioSplit : g.pixelRatioMax;
+      let i = st.findIndex(v => v <= max + 1e-6);
+      return i < 0 ? st.length - 1 : i;
+    }
+
+    /**
+     * pixelRatio und Nebel-Sichtweite aus Modus + adaptiver Stufe setzen.
+     * groesseAuch: danach renderer.setSize aufrufen (Zeichenpuffer neu anlegen).
+     */
+    qualitaetAnwenden(groesseAuch) {
+      const g = R.config.grafik, q = this.qualitaet, st = g.qualitaetsStufen;
+      const i = Math.min(st.length - 1, this._startStufe() + q.stufe);
+      const pr = Math.min(window.devicePixelRatio || 1, st[i]);
+      if (Math.abs(this.renderer.getPixelRatio() - pr) > 1e-6) {
+        this.renderer.setPixelRatio(pr);
+        if (groesseAuch) this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+      }
+      // Nebel: je Stufe −20 % Sichtweite; Kameras zeichnen nichts hinter dem Nebel
+      const sicht = q.sicht * Math.pow(g.nebelJeStufe, q.stufe);
+      if (this.szene.fog) { this.szene.fog.near = sicht * 0.55; this.szene.fog.far = sicht; }
+      this.kameras.forEach(k => k.sichtweiteSetzen(sicht + 20));
+    }
+
+    /**
+     * Adaptive Qualität: fps (geglättet) länger als adaptivSekunden unter fpsUnten → Stufe runter,
+     * länger über fpsOben → Stufe hoch (Hysterese durch die Lücke 45…58 und die Wartezeit).
+     */
+    _qualitaetAnpassen(dt) {
+      const g = R.config.grafik, q = this.qualitaet;
+      if (!g.adaptiv || this.zustand !== 'rennen' || this.pausiert || !(dt > 0) || dt > 0.25) { q.unten = q.oben = 0; return; }
+      q.fpsGlatt += (1 / dt - q.fpsGlatt) * Math.min(1, dt * 4);     // ≈ 0,25 s Glättung
+      const maxStufe = Math.max(0, g.qualitaetsStufen.length - 1 - this._startStufe()) + 1;   // + eine reine Nebel-Stufe
+      if (q.fpsGlatt < g.fpsUnten) { q.unten += dt; q.oben = 0; }
+      else if (q.fpsGlatt > g.fpsOben) { q.oben += dt; q.unten = 0; }
+      else { q.unten = q.oben = 0; }
+      let neu = q.stufe;
+      if (q.unten > g.adaptivSekunden && q.stufe < maxStufe) neu++;
+      else if (q.oben > g.adaptivSekunden && q.stufe > 0) neu--;
+      if (neu !== q.stufe) {
+        q.stufe = neu; q.unten = q.oben = 0; q.wechsel++;
+        this.qualitaetAnwenden(true);
+      }
     }
 
     // ---------- Szene auf- und abbauen ----------
@@ -172,13 +233,16 @@
       const daten = R.trackCatalog.find(t => t.id === trackId) || R.trackCatalog[0];
       const strecke = new R.Strecke(daten);
       this.strecke = strecke;
-      this.szene.add(strecke.bauen());
-      this.szene.add(R.themes.dekoBauen(daten.thema, strecke));
+      // Strecke + Deko bewegen sich nie: Instanzen in Regionen teilen (Culling je Kamera), Matrizen einfrieren
+      this.szene.add(R.themes.statischVorbereiten(strecke.bauen()));
+      this.szene.add(R.themes.statischVorbereiten(R.themes.dekoBauen(daten.thema, strecke)));
       // Thema: Himmel, Nebel, Licht
       const thema = R.themes[daten.thema] || R.themes.wiese;
       const sicht = thema.sichtweite || R.config.grafik.sichtweite;
       this.szene.background = new THREE.Color(thema.himmel);
       this.szene.fog = new THREE.Fog(thema.nebel, sicht * 0.55, sicht);
+      this.qualitaet.sicht = sicht;
+      this.qualitaetAnwenden(true);
       if (this.halbkugelLicht && thema.lichtBoden !== undefined) this.halbkugelLicht.groundColor.setHex(thema.lichtBoden);
       if (this.halbkugelLicht && thema.lichtHimmel !== undefined) this.halbkugelLicht.color.setHex(thema.lichtHimmel);
       if (this.sonne && thema.sonnenFarbe !== undefined) this.sonne.color.setHex(thema.sonnenFarbe);
@@ -218,7 +282,7 @@
       const zwei = e.modus === 'zwei';
       this.pausiert = false;
       this.streckeAufbauen(e.streckeId, {
-        spieler: zwei ? 2 : 1, autoIds: e.autoIds, gegner: e.gegner, runden: e.runden,
+        spieler: zwei ? 2 : 1, autoIds: e.autoIds, fahrer: e.fahrer, gegner: e.gegner, runden: e.runden,
         schwierigkeit: e.schwierigkeit, fahrhilfe: e.fahrhilfe,
       });
       for (let i = 0; i < (zwei ? 2 : 1); i++) this.kameraHinzufuegen(this.fahrzeuge[i]);
@@ -237,6 +301,8 @@
       }
       this.zustand = 'rennen';
       this.uhr.rest = 0;
+      this.qualitaet.stufe = 0; this.qualitaet.unten = this.qualitaet.oben = 0; this.qualitaet.fpsGlatt = 60;
+      this._hudZeit = -1e9;
       this.groesse();
     }
 
@@ -279,6 +345,9 @@
         fahrhilfe: [R.config.fahrhilfeStandard, R.config.fahrhilfeStandard],
       }, optionen);
       const strecke = this.streckeSzeneBauen(trackId);
+      // Namen: Spieler = gewählte Fahrer, Computer = nicht gewählte Fahrer (Schumacher, Senna, ...)
+      const spielerNamen = (opt.fahrer || R.config.fahrerStandard).slice(0, opt.spieler);
+      const computerNamen = R.fahrerComputerNamen(spielerNamen, opt.gegner);
 
       // Fahrzeuge: Spieler zuerst (Startplatz 1, 2), danach die Computerautos.
       // Computer bekommen die Autos, die kein Spieler fährt.
@@ -293,6 +362,7 @@
           : (frei.length ? frei[(i - opt.spieler) % frei.length] : katalog[0]);
         const f = this.fahrzeugHinzufuegen(auto, p.x, p.z, p.heading);
         f.vehicle.y = strecke.hoeheAn(p.x, p.z);
+        this._vorherAngleichen(f);
         f.istSpieler = istSpieler;
         f.spielerNr = istSpieler ? i : -1;   // Tastenbelegung: 0 = Pfeile, 1 = WASD
         f.fahrhilfe = (opt.fahrhilfe || [])[i] || R.config.fahrhilfeStandard;
@@ -301,9 +371,9 @@
         f.resetHinweis = false;
         f.falschHerum = false; f.falschZeit = 0;
         if (!istSpieler) f.driver = new R.Driver(f.vehicle, strecke, {
-          schwierigkeit: opt.schwierigkeit || R.config.schwierigkeitStandard, seed: 1000 + i * 17, name: 'Computer ' + (i - opt.spieler + 1),
+          schwierigkeit: opt.schwierigkeit || R.config.schwierigkeitStandard, seed: 1000 + i * 17, name: computerNamen[i - opt.spieler],
         });
-        return { vehicle: f.vehicle, name: istSpieler ? 'Spieler ' + (i + 1) : 'Computer ' + (i - opt.spieler + 1), istSpieler };
+        return { vehicle: f.vehicle, name: istSpieler ? spielerNamen[i] : computerNamen[i - opt.spieler], istSpieler };
       });
       this.fahrhilfeStufe = opt.fahrhilfe[0] || this.fahrhilfeStufe;
       this.rennen = new R.RaceManager(strecke, teilnehmer, { runden: opt.runden });
@@ -317,13 +387,20 @@
       const mesh = R.carBuilder.bauen(auto);
       this.szene.add(mesh);
       const eintrag = { vehicle, mesh, auto, radwinkel: 0 };
+      // Zustand vor dem letzten Physikschritt + interpolierte Darstellung (Mesh und Kamera nutzen sie).
+      // Ohne Interpolation springt ein Auto bei 0 oder 2 Physikschritten pro Frame sichtbar ("Ruckeln").
+      eintrag.vorher = { x: x, y: 0, z: z, heading, nicken: 0, neigung: 0 };
+      const rz = { x: 0, z: -1 };
+      eintrag.anzeige = { x: x, y: 0, z: z, heading, nicken: 0, neigung: 0,
+        richtung() { rz.x = -Math.sin(this.heading); rz.z = -Math.cos(this.heading); return rz; } };
       this.fahrzeuge.push(eintrag);
       return eintrag;
     }
 
     kameraHinzufuegen(fahrzeug) {
       const k = new R.FahrzeugKamera(window.innerWidth / window.innerHeight);
-      k.folge(fahrzeug.vehicle);
+      k.folge(fahrzeug.vehicle, fahrzeug.anzeige);
+      k.sichtweiteSetzen(this.qualitaet.sicht * Math.pow(R.config.grafik.nebelJeStufe, this.qualitaet.stufe) + 20);
       this.kameras.push(k);
       return k;
     }
@@ -331,12 +408,12 @@
     start() {
       this.laeuft = true;
       this.uhr.letzte = performance.now();
-      requestAnimationFrame((t) => this.frame(t));
+      requestAnimationFrame(this._frameCb);
     }
 
     frame(jetzt) {
       if (!this.laeuft) return;
-      const p = R.config.physik;
+      const p = R.config.physik, m = this._mess, t0 = performance.now();
       let dt = (jetzt - this.uhr.letzte) / 1000;
       this.uhr.letzte = jetzt;
       if (dt > 0.25) dt = 0.25;              // Tab war im Hintergrund
@@ -348,31 +425,70 @@
         this.uhr.rest -= p.schritt;
         schritte++;
       }
-      if (schritte === p.maxSchritteProFrame) this.uhr.rest = 0;
+      // Zu langsam (> maxSchritte·16,7 ms): Rest verwerfen statt nachzuholen → keine Spirale
+      if (schritte === p.maxSchritteProFrame && this.uhr.rest >= p.schritt) this.uhr.rest = 0;
       this.input.frameEnde();
+      const t1 = performance.now();
 
-      // Grafik an Physik angleichen
-      this.fahrzeuge.forEach((f) => {
-        const { vehicle, mesh } = f;
-        mesh.position.set(vehicle.x, vehicle.y, vehicle.z);
+      // Grafik an Physik angleichen: zwischen vorletztem und letztem Physikzustand interpolieren
+      const alpha = aktiv ? Math.min(1, this.uhr.rest / p.schritt) : 1;
+      for (let i = 0; i < this.fahrzeuge.length; i++) {
+        const f = this.fahrzeuge[i], v = f.vehicle, a = f.vorher, d = f.anzeige, mesh = f.mesh;
+        d.x = a.x + (v.x - a.x) * alpha; d.y = a.y + (v.y - a.y) * alpha; d.z = a.z + (v.z - a.z) * alpha;
+        d.heading = a.heading + R.Vehicle.winkelDiff(v.heading, a.heading) * alpha;
+        d.nicken = a.nicken + (v.nicken - a.nicken) * alpha; d.neigung = a.neigung + (v.neigung - a.neigung) * alpha;
+        mesh.position.set(d.x, d.y, d.z);
         // YXZ: erst Heading (Hochachse), dann Nicken (Querachse), dann Wanken (Längsachse) – alles lokal
-        mesh.rotation.set(vehicle.nicken, vehicle.heading, vehicle.neigung, 'YXZ');
+        mesh.rotation.set(d.nicken, d.heading, d.neigung, 'YXZ');
         // Räder rollen und lenken, Bremslicht
-        f.radwinkel -= vehicle.vLaengs * dt / 0.34;   // Rolldrehung (Radradius ≈ 0,34 m)
+        f.radwinkel -= v.vLaengs * dt / 0.34;   // Rolldrehung (Radradius ≈ 0,34 m)
         R.carBuilder.dreheRaeder(mesh, f.radwinkel);
-        R.carBuilder.lenkeRaeder(mesh, -vehicle.lenkung * 0.5);
+        R.carBuilder.lenkeRaeder(mesh, -v.lenkung * 0.5);
         R.carBuilder.setzeBremslicht(mesh, !!f.bremst);
-      });
+      }
       if (this.zustand === 'menue') this.menueKameraFlug(dt);
-      else if (!this.pausiert) this.kameras.forEach(k => k.update(dt));
+      else if (!this.pausiert) for (let i = 0; i < this.kameras.length; i++) this.kameras[i].update(dt);
+      const t2 = performance.now();
       if (R.Audio) this.tonAktualisieren(dt);
+      const t3 = performance.now();
       this.zeichnen();
+      const t4 = performance.now();
 
       // FPS
       this.uhr.frames++; this.uhr.fpsZeit += dt;
       if (this.uhr.fpsZeit >= 1) { this.uhr.fps = this.uhr.frames; this.uhr.frames = 0; this.uhr.fpsZeit = 0; }
-      this.hudAktualisieren();
-      requestAnimationFrame((t) => this.frame(t));
+      // HUD + Minimap höchstens hudHz (Standard 20) mal je Sekunde
+      if (jetzt - this._hudZeit >= 1000 / R.config.grafik.hudHz - 1) { this._hudZeit = jetzt; this.hudAktualisieren(); }
+      const t5 = performance.now();
+      this._qualitaetAnpassen(dt);
+
+      // Messwerte in den Ringpuffer
+      const k = m.i;
+      m.physik[k] = t1 - t0; m.grafik[k] = t2 - t1; m.audio[k] = t3 - t2; m.render[k] = t4 - t3; m.hud[k] = t5 - t4;
+      m.gesamt[k] = t5 - t0; m.dt[k] = dt; m.schritte[k] = schritte;
+      m.i = (k + 1) % 60; if (m.n < 60) m.n++;
+      requestAnimationFrame(this._frameCb);
+    }
+
+    /**
+     * Mittelwerte der letzten 60 Frames (für Tests und das Overlay mit Taste H).
+     * ms je Block: physik, audio, hud (inkl. Minimap), grafik (Autos/Kameras), render (nur CPU-Seite!).
+     */
+    leistung() {
+      const m = this._mess, n = Math.max(1, m.n), mittel = (a) => { let x = 0; for (let i = 0; i < m.n; i++) x += a[i]; return x / n; };
+      const r = this.renderer, info = r.info.render, st = R.config.grafik.qualitaetsStufen;
+      const dt = mittel(m.dt);
+      return {
+        frames: m.n, fps: dt > 0 ? 1 / dt : 0,
+        ms: { physik: mittel(m.physik), audio: mittel(m.audio), hud: mittel(m.hud), grafik: mittel(m.grafik),
+          render: mittel(m.render), gesamt: mittel(m.gesamt) },
+        jsMs: mittel(m.physik) + mittel(m.audio) + mittel(m.hud),
+        schritteJeFrame: mittel(m.schritte),
+        drawCalls: info.calls, dreiecke: info.triangles,
+        pixelRatio: r.getPixelRatio(), aufloesung: this.canvas.width + '×' + this.canvas.height,
+        qualitaet: { stufe: this.qualitaet.stufe, pixelRatioStufe: st[Math.min(st.length - 1, this._startStufe() + this.qualitaet.stufe)],
+          sichtweite: this.szene.fog ? Math.round(this.szene.fog.far) : null, wechsel: this.qualitaet.wechsel, adaptiv: !!R.config.grafik.adaptiv },
+      };
     }
 
     /** Menü-Hintergrund: Kamera fliegt langsam über der Strecke entlang. */
@@ -395,11 +511,16 @@
       const z = r.countdownZahl;
       if (z !== this._tonCd) { this._tonCd = z; if (z > 0) A.countdown(z); }
       let bremst = false;
-      this.fahrzeuge.forEach((f, i) => {
-        const v = f.vehicle; let ab = 0;
+      const fz = this.fahrzeuge;   // Schleifen ohne Closures: läuft jeden Frame
+      for (let i = 0; i < fz.length; i++) {
+        const f = fz[i], v = f.vehicle; let ab = 0;
         if (!f.istSpieler) {
+          // Abstand zum nächsten Spieler; KI > hoerweite (60 m) ist stumm, motorUpdate kehrt dann sofort zurück
           ab = 1e9;
-          this.fahrzeuge.forEach(g => { if (g.istSpieler) ab = Math.min(ab, Math.hypot(g.vehicle.x - v.x, g.vehicle.z - v.z)); });
+          for (let j = 0; j < fz.length; j++) {
+            const g = fz[j];
+            if (g.istSpieler) { const dx = g.vehicle.x - v.x, dz = g.vehicle.z - v.z, a = Math.sqrt(dx * dx + dz * dz); if (a < ab) ab = a; }
+          }
         } else {
           if (f.bremst && v.tempoKmh > 60) bremst = true;
           if (v._anBande && v.tempo > 2) A.bande(Math.min(1, v.tempo / 25));
@@ -407,7 +528,7 @@
         d.tempo = v.tempo; d.vMax = v.daten.vMax; d.gas = v.letzteSteuerung ? v.letzteSteuerung.gas : 0;
         d.untergrund = v.untergrund; d.abstand = ab; d.dt = dt;
         A.motorUpdate(i, d);
-      });
+      }
       A.bremsen(bremst);
     }
 
@@ -422,8 +543,15 @@
       const countdown = !!rennen && !rennen.gasErlaubt;
       // Fortschritt der Spieler für das Gummiband der KI
       const tn = rennen ? rennen.teilnehmer : [];
-      const spielerTn = tn.filter(t => t.istSpieler);
-      const spielerMax = spielerTn.length ? Math.max(...spielerTn.map(t => t.fortschritt)) : null;
+      let spielerMax = null;
+      for (let i = 0; i < tn.length; i++) if (tn[i].istSpieler && (spielerMax === null || tn[i].fortschritt > spielerMax)) spielerMax = tn[i].fortschritt;
+      const umgebung = this._umgebung || (this._umgebung = {});   // wiederverwendet (KI liest nur)
+      // Zustand vor diesem Schritt merken (für die Interpolation beim Zeichnen)
+      for (let i = 0; i < this.fahrzeuge.length; i++) {
+        const v = this.fahrzeuge[i].vehicle, a = this.fahrzeuge[i].vorher;
+        if (!a) continue;
+        a.x = v.x; a.y = v.y; a.z = v.z; a.heading = v.heading; a.nicken = v.nicken; a.neigung = v.neigung;
+      }
 
       this.fahrzeuge.forEach((f, i) => {
         const v = f.vehicle;
@@ -433,10 +561,10 @@
         else if (f.istSpieler && f.spielerNr >= 0 && !f.autopilot) s = this.input.steuerung(f.spielerNr);
         else if (fahrer && rennen) {
           const t = tn[i];
-          s = fahrer.steuerung(dt, {
-            andere: tn.filter(x => x !== t).map(x => ({ vehicle: x.vehicle, fortschritt: x.fortschritt })),
-            spielerFortschrittMax: spielerMax, eigenerFortschritt: t.fortschritt, laeuft: rennen.gasErlaubt,
-          });
+          // andere = alle Teilnehmer (die KI überspringt ihr eigenes Fahrzeug selbst)
+          umgebung.andere = tn; umgebung.spielerFortschrittMax = spielerMax;
+          umgebung.eigenerFortschritt = t.fortschritt; umgebung.laeuft = rennen.gasErlaubt;
+          s = fahrer.steuerung(dt, umgebung);
           if (fahrer.brauchtReset) { this.zuruecksetzen(i); fahrer.zurueckgesetzt(); return; }
         }
         if (countdown) s = { gas: 0, bremse: s.bremse, lenkung: s.lenkung };
@@ -500,6 +628,13 @@
       f.falschHerum = f.falschZeit > 0.6;
     }
 
+    /** Nach einem Sprung (Reset/Teleport): nicht zwischen alter und neuer Stelle interpolieren. */
+    _vorherAngleichen(f) {
+      const v = f.vehicle, a = f.vorher;
+      if (!a) return;
+      a.x = v.x; a.y = v.y; a.z = v.z; a.heading = v.heading; a.nicken = v.nicken; a.neigung = v.neigung;
+    }
+
     /** Reset-Taste von Spieler nr (0 = R, 1 = T). */
     spielerZuruecksetzen(nr) {
       const i = this.fahrzeuge.findIndex(f => f.istSpieler && f.spielerNr === nr);
@@ -528,6 +663,7 @@
       }
       f.vehicle.setzen(pose.x, pose.z, pose.heading);
       f.vehicle.y = this.strecke.hoeheAn(pose.x, pose.z);
+      this._vorherAngleichen(f);
       f.index = -1;
       f.stehZeit = 0; f.resetHinweis = false; f.falschHerum = false; f.falschZeit = 0;
     }
@@ -535,6 +671,9 @@
     zeichnen() {
       const r = this.renderer, w = window.innerWidth, h = window.innerHeight;
       r.info.reset();
+      // Weltmatrizen einmal je Frame (nicht je Ansicht); statische Teile haben matrixAutoUpdate = false
+      this.szene.matrixWorldAutoUpdate = false;
+      this.szene.updateMatrixWorld();
       const ks = this.zustand === 'menue' ? [] : this.kameras;
       if (ks.length < 2) {
         r.setScissorTest(false);
@@ -557,21 +696,29 @@
     hudAktualisieren() {
       this.huds.forEach(hd => hd.update());
       const el = this.debugEl;
-      if (!el || !el.classList.contains('an') || !this.fahrzeuge[0]) return;
-      const v = this.fahrzeuge[0].vehicle;
-      let text = `${v.tempoKmh} km/h | ${this.uhr.fps} fps | Kamera: ${this.kameras[0].modus}` +
-        ` | Fahrhilfe: ${(R.config.fahrhilfen[this.fahrzeuge[0].fahrhilfe] || {}).name}` +
-        ` | Draw-Calls: ${this.renderer.info.render.calls} | Zustand: ${this.zustand}`;
-      const r = this.rennen;
-      if (r) {
-        const t = r.teilnehmer[0];
-        const runde = Math.min(r.runden, t.runde + 1);
-        text += `\nRunde ${runde}/${r.runden} | Platz ${t.platz}/${r.teilnehmer.length}` +
-          ` | Checkpoint ${t.naechsterCheckpoint}/${this.strecke.checkpoints.length}` +
-          ` | Zeit ${R.zeitText(r.rundenzeit(t))}` + (t.bestzeit !== null ? ` | Beste ${R.zeitText(t.bestzeit)}` : '') +
-          ` | ${v.untergrund} | ${r.zustand}`;
+      if (!el || !el.classList.contains('an')) return;
+      // Leistungs-Overlay (Taste H): fps, ms je Block, Draw-Calls, Dreiecke, pixelRatio, Auflösung, Qualitätsstufe
+      const L = this.leistung(), ms = L.ms, z = (x) => x.toFixed(2);
+      let text = `${Math.round(L.fps)} fps | ${z(ms.gesamt)} ms/Frame: physik ${z(ms.physik)} · audio ${z(ms.audio)} · ` +
+        `hud ${z(ms.hud)} · grafik ${z(ms.grafik)} · render ${z(ms.render)}` +
+        `\nDraw-Calls ${L.drawCalls} | Dreiecke ${Math.round(L.dreiecke / 1000)}k | pixelRatio ${L.pixelRatio} | ${L.aufloesung}` +
+        ` | Qualität ${L.qualitaet.stufe === 0 ? 'voll' : '−' + L.qualitaet.stufe}${L.qualitaet.adaptiv ? ' (adaptiv)' : ''}` +
+        ` | Sicht ${L.qualitaet.sichtweite} m | Zustand: ${this.zustand}`;
+      if (this.fahrzeuge[0]) {
+        const v = this.fahrzeuge[0].vehicle;
+        text += `\n${v.tempoKmh} km/h | Kamera: ${this.kameras[0] ? this.kameras[0].modus : '–'}` +
+          ` | Fahrhilfe: ${(R.config.fahrhilfen[this.fahrzeuge[0].fahrhilfe] || {}).name}`;
+        const r = this.rennen;
+        if (r) {
+          const t = r.teilnehmer[0];
+          const runde = Math.min(r.runden, t.runde + 1);
+          text += `\nRunde ${runde}/${r.runden} | Platz ${t.platz}/${r.teilnehmer.length}` +
+            ` | Checkpoint ${t.naechsterCheckpoint}/${this.strecke.checkpoints.length}` +
+            ` | Zeit ${R.zeitText(r.rundenzeit(t))}` + (t.bestzeit !== null ? ` | Beste ${R.zeitText(t.bestzeit)}` : '') +
+            ` | ${v.untergrund} | ${r.zustand}`;
+        }
       }
-      el.textContent = text;
+      if (el._text !== text) { el._text = text; el.textContent = text; }
     }
   }
 

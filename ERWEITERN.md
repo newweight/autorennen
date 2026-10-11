@@ -1,4 +1,6 @@
-# Autorennen erweitern (für Entwickler)
+# Jonas Hot Steering Wheel erweitern (für Entwickler)
+
+(Untertitel „Autorennen“; Dateinamen und Ordner heißen weiterhin Autorennen.)
 
 Alles ist Textdatei, kein Build nötig. Nach dem Ändern: Seite im Browser neu laden (Cmd+R).
 
@@ -29,6 +31,11 @@ tests/                   node tests/test_*.js (Physik, Autos, Strecke, KI, Kolli
 In `src/cars/carCatalog.js` einen Eintrag kopieren und anpassen: `id`, `name`, `farbe`, `karosserie` (einer der Typen oben),
 `fahrwerte` (vMax m/s, beschleunigung, bremsen, wendigkeit, grip, masse, laenge, breite). `node tests/test_autos.js` prüft die Werte.
 Vorschau: `tests/autos_vorschau.html?auto=<id>` im Browser öffnen.
+
+## Neuer Fahrer
+In `src/config.js` unter `fahrer` einen Eintrag `{ name, emoji }` anhängen (Emoji als Avatar, keine Fotos/Logos). Das Menü-Raster passt sich an
+(Solo 6 Spalten, zu zweit je Spieler 3 Spalten – ab 13+ Fahrern wird es eng). `fahrerStandard` = Vorauswahl Spieler 1/2,
+`fahrerComputerVorrang` = Namen, die Computer-Gegner zuerst bekommen.
 
 ## Neue Strecke
 In `src/track/trackCatalog.js` einen Eintrag kopieren: `punkte` = geschlossene Liste [x, y, z] in Fahrtrichtung, Start bei Index 0 auf einer Geraden.

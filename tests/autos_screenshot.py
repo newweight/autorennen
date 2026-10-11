@@ -4,6 +4,9 @@ Aufruf: python3 tests/autos_screenshot.py [ausgabeordner] [auto-id ...]
 Erzeugt:
   autos_uebersicht_<ansicht>.png   alle Autos im Raster (front35, seite, heck, front0)
   autos_<id>_<ansicht>.png         je Auto Einzelansichten (front35, seite, heck)
+  autos_<id>_alle4.png             je Auto 4 Blickwinkel nebeneinander (Front ¾, Seite, Heck ¾, Front)
+  autos_alle4.png                  alle Autos untereinander, je 4 Blickwinkel
+Mit --nur-alle4 werden nur die alle4-Bilder erzeugt (schneller).
 """
 import sys, os, json
 from playwright.sync_api import sync_playwright
@@ -13,7 +16,8 @@ args = sys.argv[1:]
 out = os.path.join(basis, 'tests', 'out')
 if args and os.path.isdir(args[0]) or (args and '/' in args[0]):
     out, args = args[0], args[1:]
-nur_ids = args
+nur_alle4 = '--nur-alle4' in args
+nur_ids = [a for a in args if not a.startswith('--')]
 os.makedirs(out, exist_ok=True)
 seite = 'file://' + os.path.join(basis, 'tests', 'autos_vorschau.html')
 
@@ -25,6 +29,25 @@ with sync_playwright() as p:
     fehler = []
     page.on('pageerror', lambda e: fehler.append(str(e)))
     page.on('console', lambda m: fehler.append('console.' + m.type + ': ' + m.text) if m.type in ('error',) else None)
+
+    # alle4: je Auto 4 Blickwinkel
+    page.set_viewport_size({'width': 1600, 'height': 3200})
+    page.goto(f'{seite}?ansicht=alle4')
+    page.wait_for_timeout(800)
+    page.screenshot(path=os.path.join(out, 'autos_alle4.png'))
+    page.set_viewport_size({'width': 1600, 'height': 400})
+    ids = page.evaluate('() => window.Rennspiel.carCatalog.map(a => a.id)')
+    for i in ids:
+        if nur_ids and i not in nur_ids:
+            continue
+        page.goto(f'{seite}?ansicht=alle4&auto={i}')
+        page.wait_for_timeout(400)
+        page.screenshot(path=os.path.join(out, f'autos_{i}_alle4.png'))
+    page.set_viewport_size({'width': 1600, 'height': 900})
+    if nur_alle4:
+        print(json.dumps({'fehler': fehler}, ensure_ascii=False))
+        browser.close()
+        sys.exit(1 if fehler else 0)
 
     # Übersichten
     for name, w in ANSICHTEN.items():

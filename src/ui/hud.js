@@ -76,7 +76,7 @@
       return eintrag;
     }
 
-    /** Karte + Punkte für alle Autos zeichnen. */
+    /** Karte + Punkte für alle Autos zeichnen (Umriss kommt fertig aus dem Offscreen-Canvas). */
     zeichnen(teilnehmer, eigener) {
       const g = this.ctx, k = this.karte, dpr = this.dpr, farben = R.config.ui.spielerFarben;
       g.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -92,9 +92,11 @@
       teilnehmer.forEach((t, i) => { if (t.istSpieler && t !== eigener) punkt(t, 4.5, farben[i] || '#fff'); });
       if (eigener) {
         const i = teilnehmer.indexOf(eigener);
-        g.save(); g.shadowColor = 'rgba(255,255,255,0.9)'; g.shadowBlur = 6 * dpr;
+        // heller Hof statt shadowBlur (Weichzeichner ist im 2D-Canvas teuer)
+        const v = eigener.vehicle, [x, y] = k.nachPx(v.x, v.z);
+        g.beginPath(); g.arc(x, y, 9.5 * dpr, 0, Math.PI * 2);
+        g.fillStyle = 'rgba(255,255,255,0.45)'; g.fill();
         punkt(eigener, 6.5, farben[i] || '#fff');
-        g.restore();
       }
     }
   }
@@ -103,6 +105,11 @@
   /** Text nur setzen, wenn er sich geändert hat (spart DOM-Arbeit). */
   function setzeText(el, text) {
     if (el._text !== text) { el._text = text; el.textContent = text; }
+  }
+
+  /** Element zeigen/verstecken – style nur bei Änderung anfassen (sonst Style-Neuberechnung). */
+  function setzeAnzeige(el, an) {
+    if (el._an !== an) { el._an = an; el.style.display = an ? '' : 'none'; }
   }
 
   class Hud {
@@ -126,7 +133,7 @@
       el.innerHTML =
         '<div class="hud-oben">' +
           '<div class="chip hud-links">' +
-            (this.split ? '<div class="hud-name"></div>' : '') +
+            '<div class="hud-name"></div>' +
             '<div class="hud-runde"></div>' +
           '</div>' +
           '<div class="chip hud-platz"><b></b><span></span></div>' +
@@ -148,26 +155,30 @@
       this.eAktuell = q('.z-aktuell'); this.eLetzte = q('.z-letzte'); this.eBeste = q('.z-beste');
       this.eCountdown = q('.hud-countdown'); this.eBanner = q('.hud-banner'); this.eHinweis = q('.hud-hinweis');
       this.eKmh = q('.kmh b'); this.eBalken = q('.balken i');
-      if (this.eName) setzeText(this.eName, this.t.name);
+      if (this.eName) setzeText(this.eName, R.fahrerEmoji(this.t.name) + ' ' + this.t.name);
 
       // Meldungen bei Rennereignissen
       const r = this.rennen;
       r.bei('runde', (t) => {
         if (t !== this.t || t.runde >= r.runden) return;
-        this.banner(t.runde + 1 === r.runden ? 'Letzte Runde!' : 'Runde ' + (t.runde + 1) + '!', 2000);
+        this.banner(t.runde + 1 === r.runden ? 'Letzte Runde!' : 'Runde ' + (t.runde + 1) + '!', 2000, '', t.name);
       });
       r.bei('ziel', (t) => {
         if (t !== this.t) return;
         const platz = t.zielPlatz;
-        this.banner('🏁 Platz ' + platz + '!' , 0, platz === 1 ? 'gold' : '');
+        this.banner('🏁 Platz ' + platz + '!', 0, platz === 1 ? 'gold' : '', t.name);
       });
     }
 
-    /** Kurze Meldung groß in der Bildmitte (ms = 0: bleibt stehen). */
-    banner(text, ms, klasse) {
+    /** Kurze Meldung groß in der Bildmitte (ms = 0: bleibt stehen). Mit `name`: Fahrername in kleiner Zeile darüber. */
+    banner(text, ms, klasse, name) {
       const b = this.eBanner;
       clearTimeout(this.bannerTimer);
-      b.textContent = text;
+      if (name) {
+        b.innerHTML = '<span class="b-name"></span>';
+        b.firstChild.textContent = name;
+        b.appendChild(document.createTextNode(text));
+      } else b.textContent = text;
       b.className = 'hud-banner an' + (klasse ? ' ' + klasse : '');
       this.bannerFest = !ms;
       if (ms) this.bannerTimer = setTimeout(() => { b.className = 'hud-banner'; }, ms);
@@ -213,7 +224,7 @@
         void this.eCountdown.offsetWidth;   // Animation neu starten
         if (cd) this.eCountdown.classList.add('puls');
       }
-      this.eCountdown.style.display = cd ? '' : 'none';
+      setzeAnzeige(this.eCountdown, !!cd);
 
       // Hinweise
       let hinweis = '';
@@ -222,7 +233,7 @@
         else if (f.falschHerum) hinweis = '↩ Falsch herum!';
       }
       setzeText(this.eHinweis, hinweis);
-      this.eHinweis.style.display = hinweis ? '' : 'none';
+      setzeAnzeige(this.eHinweis, !!hinweis);
 
       if (this.minimap) this.minimap.zeichnen(r.teilnehmer, t);
     }

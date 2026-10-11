@@ -13,6 +13,10 @@
     ...&hoehe=<grad>                     Kamera-Neigung (Standard 22)
     ...&extra=1                          zusätzlich ein Demo-SUV (kein Katalogauto)
     ...&lenkung=<grad>&rollen=<grad>     Räder einschlagen / drehen (Test der userData)
+    ?ansicht=alle4                       je Auto eine Zeile mit 4 Blickwinkeln
+                                         (Front-Dreiviertel, Seite, Heck-Dreiviertel, Front)
+    ?ansicht=alle4&auto=<id>             nur dieses Auto, 4 große Ansichten nebeneinander
+    ...&bremsen=1                        Bremslichter an
 -->
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #cfe8ff; font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; }
@@ -40,6 +44,73 @@
   const q = new URLSearchParams(location.search);
   const einzelId = q.get('auto');
   const rad = (g) => g * Math.PI / 180;
+
+
+  // ===== Ansicht 'alle4': je Auto 4 Blickwinkel in eigenen Bildausschnitten =====
+  if (q.get('ansicht') === 'alle4') {
+    const canvas = document.getElementById('bild');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(1);
+    renderer.setScissorTest(true);
+    const szene = new THREE.Scene();
+    szene.add(new THREE.HemisphereLight(0xdfefff, 0x6a7f55, 0.9));
+    const sonne = new THREE.DirectionalLight(0xfff3d6, 1.1);
+    sonne.position.set(-30, 50, -20);
+    szene.add(sonne);
+    const boden = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ color: 0x9db27e }));
+    boden.rotation.x = -Math.PI / 2;
+    szene.add(boden);
+    let liste = R.carCatalog.slice();
+    if (einzelId) liste = liste.filter((a) => a.id === einzelId);
+    const autos = liste.map((a) => {
+      const m = R.carBuilder.bauen(a);
+      if (q.get('bremsen')) R.carBuilder.setzeBremslicht(m, true);
+      if (q.get('lenkung')) R.carBuilder.lenkeRaeder(m, rad(parseFloat(q.get('lenkung'))));
+      m.visible = false; szene.add(m); return { a, m };
+    });
+    // Azimut: 0 = von vorne, 90 = linke Seite, 180 = von hinten
+    const BLICKE = [{ n: 'Front ¾', az: 35, h: 16 }, { n: 'Seite', az: 90, h: 6 }, { n: 'Heck ¾', az: 215, h: 16 }, { n: 'Front', az: 0, h: 8 }];
+    const kamera = new THREE.PerspectiveCamera(24, 1, 0.1, 200);
+    const labels = document.getElementById('labels');
+    function zeichnen() {
+      const W = canvas.clientWidth, Hh = canvas.clientHeight;
+      renderer.setSize(W, Hh, false);
+      const zeilen = autos.length, zw = W / 4, zh = Hh / zeilen;
+      labels.innerHTML = '';
+      autos.forEach((e, zi) => {
+        autos.forEach((x) => { x.m.visible = x === e; });
+        BLICKE.forEach((b, si) => {
+          const x0 = si * zw, y0 = Hh - (zi + 1) * zh;
+          renderer.setViewport(x0, y0, zw, zh);
+          renderer.setScissor(x0, y0, zw, zh);
+          renderer.setClearColor(0xcfe8ff);
+          renderer.clear();
+          kamera.aspect = zw / zh;
+          const ab = e.a.abmessungen || e.a.fahrwerte;
+          const az = rad(b.az), hh = rad(b.h);
+          // Abstand so, dass das Auto ~85 % der Ausschnittsbreite füllt
+          const ausdehnung = Math.abs(Math.sin(az)) * ab.laenge * 0.5 + Math.abs(Math.cos(az)) * ab.breite * 0.62 + 0.35;
+          const dist = Math.max(ausdehnung / (Math.tan(rad(kamera.fov / 2)) * kamera.aspect), 2.2 / Math.tan(rad(kamera.fov / 2)));
+          kamera.position.set(-Math.sin(az) * Math.cos(hh) * dist, 0.7 + Math.sin(hh) * dist, -Math.cos(az) * Math.cos(hh) * dist);
+          kamera.lookAt(0, 0.62, 0);
+          kamera.updateProjectionMatrix();
+          renderer.render(szene, kamera);
+          if (si === 0) {
+            const el = document.createElement('div');
+            el.className = 'label';
+            el.style.left = '90px'; el.style.top = (zi * zh + 6) + 'px';
+            el.innerHTML = e.a.name;
+            labels.appendChild(el);
+          }
+        });
+      });
+    }
+    window.addEventListener('resize', zeichnen);
+    zeichnen();
+    window.vorschau = { eintraege: autos.map((e) => ({ auto: e.m })), renderer, szene, kamera, fertig: true };
+    document.getElementById('info').style.display = 'none';
+    return;
+  }
 
   // --- Autos wählen ---
   let autos = R.carCatalog.slice();

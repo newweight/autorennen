@@ -791,7 +791,71 @@
     return gruppe;
   }
 
+  /**
+   * Großes InstancedMesh in Stücke nach Regionen teilen (Raster zellen×zellen über die
+   * Instanz-Positionen). Jedes Stück bekommt seine eigene Begrenzungskugel, damit das
+   * Frustum-Culling je Stück greift – bei zwei Kameras zeichnet jede nur, was sie sieht.
+   * Geometrie und Material werden geteilt. Die Stücke ersetzen das Original im selben
+   * Elternobjekt und tragen denselben Namen (userData.stueck = Nummer).
+   */
+  function instanzenAufteilen(m, zellen) {
+    const g = m.geometry, n = m.count;
+    const triJe = (g.index ? g.index.count : g.attributes.position.count) / 3;
+    if (!m.parent || n < 40 || triJe * n < 8000 || zellen < 2) return [m];
+    const m4 = new THREE.Matrix4(), xs = new Float32Array(n), zs = new Float32Array(n);
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (let i = 0; i < n; i++) {
+      m.getMatrixAt(i, m4);
+      xs[i] = m4.elements[12]; zs[i] = m4.elements[14];
+      x0 = Math.min(x0, xs[i]); x1 = Math.max(x1, xs[i]); z0 = Math.min(z0, zs[i]); z1 = Math.max(z1, zs[i]);
+    }
+    const zelle = (v, lo, hi) => Math.min(zellen - 1, Math.floor((v - lo) / Math.max(1e-6, hi - lo) * zellen));
+    const listen = [];
+    for (let i = 0; i < n; i++) {
+      const k = zelle(xs[i], x0, x1) + zellen * zelle(zs[i], z0, z1);
+      (listen[k] || (listen[k] = [])).push(i);
+    }
+    const eltern = m.parent, stuecke = [], farbe = new THREE.Color();
+    listen.forEach((liste) => {
+      if (!liste || !liste.length) return;
+      const s = new THREE.InstancedMesh(g, m.material, liste.length);
+      liste.forEach((i, j) => {
+        m.getMatrixAt(i, m4); s.setMatrixAt(j, m4);
+        if (m.instanceColor) { m.getColorAt(i, farbe); s.setColorAt(j, farbe); }
+      });
+      s.name = m.name;
+      s.userData = Object.assign({}, m.userData, { stueck: stuecke.length });
+      s.renderOrder = m.renderOrder;
+      s.frustumCulled = true;
+      s.position.copy(m.position); s.quaternion.copy(m.quaternion); s.scale.copy(m.scale);
+      s.instanceMatrix.needsUpdate = true;
+      if (s.instanceColor) s.instanceColor.needsUpdate = true;
+      s.computeBoundingSphere();
+      eltern.add(s);
+      stuecke.push(s);
+    });
+    eltern.remove(m);   // Original wurde nie gezeichnet → keine GPU-Daten; der Rest räumt der GC weg
+    return stuecke;
+  }
+
+  /**
+   * Statische Gruppe (Strecke, Deko) für das Zeichnen vorbereiten:
+   * große InstancedMeshes in Regionen teilen und Matrizen einfrieren
+   * (matrixAutoUpdate = false – sie bewegen sich nie).
+   */
+  function statischVorbereiten(gruppe, zellen) {
+    if (zellen === undefined) zellen = (R.config.grafik && R.config.grafik.dekoZellen) || 1;
+    const gross = [];
+    gruppe.traverse((o) => { if (o.isInstancedMesh) gross.push(o); });
+    gross.forEach((m) => instanzenAufteilen(m, zellen));
+    gruppe.traverse((o) => { o.updateMatrix(); o.matrixAutoUpdate = false; });
+    gruppe.updateMatrixWorld(true);
+    return gruppe;
+  }
+
   themes.dekoBauen = dekoBauen;
+  themes.instanzenAufteilen = instanzenAufteilen;
+  themes.statischVorbereiten = statischVorbereiten;
   themes.zufall = zufall;
   R.themes = themes;
 })();
