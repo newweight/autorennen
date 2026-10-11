@@ -1055,53 +1055,113 @@
   }
 
   // ------------------------------------------------------------
-  // Rad (Reifen + Felge mit 5 Speichen + Bremsscheibe), gecacht
+  // Rad (Runde 6): Reifen mit Profilrillen + Querblöcken und heller Flanke, Felge 3D (Felgenhorn, Bett, Nabe,
+  // 5 Speichen), dahinter Bremsscheibe (der rote Sattel sitzt fest in der Karosserie, siehe bremssattel()).
+  // Formel-Slicks: breit, ohne Rillen, mit Felgenabdeckung. Gecacht je Radgröße; höchstens 600 Dreiecke je Rad.
+  // Lokal: Achse = x, +x = Außenseite (linke Räder werden um y gewendet).
   // ------------------------------------------------------------
-  function radGeometrie(r, w, zoll, felgeFarbe) {
-    const key = [r, w, zoll, felgeFarbe].join('_');
+  const GUMMI = { LAUF: 0x18181a, BLOCK: 0x242427, FLANKE: 0x34353a };
+  const RAD_BLOECKE = 6;
+
+  /** Quader ohne Unterseite (Querblock auf dem Reifen), Länge b in x, Höhe h radial, Tiefe d tangential. */
+  function blockOhneBoden(b, h, d, face) {
+    const f0 = (face === undefined ? 3 : face) * 6;   // Flächen: +x, -x, +y, -y, +z, -z
+    const g = new THREE.BoxGeometry(b, h, d).toNonIndexed();
+    const pos = g.attributes.position.array, nor = g.attributes.normal.array;
+    const keep = (arr) => { const o = []; for (let i = 0; i < arr.length; i++) if (i < f0 * 3 || i >= (f0 + 6) * 3) o.push(arr[i]); return o; };
+    const g2 = new THREE.BufferGeometry();
+    g2.setAttribute('position', new THREE.BufferAttribute(new Float32Array(keep(pos)), 3));
+    g2.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(keep(nor)), 3));
+    g.dispose();
+    return g2;
+  }
+  function lathe(punkte, seg, eckig) {
+    const g = new THREE.LatheGeometry(punkte.map(([a, b]) => new THREE.Vector2(a, b)), seg);
+    g.rotateZ(-Math.PI / 2);                       // Drehachse y -> x
+    if (eckig) g.deleteAttribute('normal');        // Flächennormalen: Rillenwände heben sich ab
+    return g;
+  }
+
+  function radGeometrie(r, w, zoll, felgeFarbe, slick) {
+    const key = [r, w, zoll, felgeFarbe, slick ? 's' : 'n'].join('_');
     if (cache.rad[key]) return cache.rad[key];
     const S = new Sammler();
     const rf = clamp(zoll * 0.0127, r * 0.55, r * 0.8);   // Felgenradius
     const hw = w / 2;
-    // Reifen: geschlossenes Profil, um die Achse gedreht (Lathe um y, dann y -> x)
-    const prof = [
-      [rf * 0.97, hw - 0.012], [r - 0.03, hw], [r - 0.006, hw - 0.025], [r, hw - 0.06], [r, -hw + 0.06],
-      [r - 0.006, -hw + 0.025], [r - 0.03, -hw], [rf * 0.97, -hw + 0.012], [rf * 0.97, hw - 0.012],
-    ].map(([a, b]) => new THREE.Vector2(a, b));
-    const reifen = new THREE.LatheGeometry(prof, 16);
-    reifen.rotateZ(-Math.PI / 2);
-    S.geo(reifen, FARBE.REIFEN);
-    // Felgenbett (dunkel, tief innen) und Bremsscheibe
-    const x0 = hw - 0.012;
+    const x0 = hw - 0.012;                                  // Außenkante der Felge
+    const rb = rf * 0.97;                                   // Wulst (Reifen sitzt auf dem Felgenhorn)
+    if (slick) {
+      // Slick: glatte, breite Lauffläche, kaum Flanke
+      const e = hw - 0.05;
+      S.geo(lathe([[rb, hw - 0.01], [r - 0.045, hw], [r - 0.008, hw - 0.022], [r, e]], 16), GUMMI.FLANKE);
+      S.geo(lathe([[r, e], [r, -e]], 16), GUMMI.LAUF);
+      S.geo(lathe([[r, -e], [r - 0.008, -hw + 0.022], [r - 0.045, -hw], [rb, -hw + 0.01]], 16), GUMMI.FLANKE);
+      // Felgenabdeckung: Scheibe + heller Ring + Mutter
+      const cover = new THREE.CircleGeometry(rf * 0.97, 16); cover.rotateY(Math.PI / 2); cover.translate(x0 - 0.002, 0, 0);
+      S.geo(cover, 0x565c67);
+      const ring = new THREE.RingGeometry(rf * 0.8, rf * 0.97, 16); ring.rotateY(Math.PI / 2); ring.translate(x0 + 0.002, 0, 0);
+      S.geo(ring, 0x9aa0aa);
+      const mutter = new THREE.CylinderGeometry(rf * 0.16, rf * 0.16, 0.035, 6); mutter.rotateZ(-Math.PI / 2); mutter.translate(x0 + 0.004, 0, 0);
+      S.geo(mutter, 0xc9ced6);
+      cache.rad[key] = S.fertig();
+      return cache.rad[key];
+    }
+    // Straßenreifen: Flanke (heller) + Lauffläche mit 2 umlaufenden Rillen
+    const e = hw - 0.045, g1 = e * 0.42, gb = 0.02, tiefe = 0.013;
+    S.geo(lathe([[rb, hw - 0.012], [r - 0.04, hw], [r - 0.006, hw - 0.03]], 16), GUMMI.FLANKE);
+    S.geo(lathe([
+      [r - 0.006, hw - 0.03], [r, e], [r, g1 + gb], [r - tiefe, g1], [r, g1 - gb],
+      [r, -g1 + gb], [r - tiefe, -g1], [r, -g1 - gb], [r, -e], [r - 0.006, -hw + 0.03],
+    ], 16, true), GUMMI.LAUF);
+    S.geo(lathe([[r - 0.006, -hw + 0.03], [r - 0.04, -hw], [rb, -hw + 0.012]], 16), GUMMI.FLANKE);
+    // Querblöcke (flache Boxen) auf der Lauffläche
+    for (let i = 0; i < RAD_BLOECKE; i++) {
+      const bl = blockOhneBoden(e * 1.7, 0.012, 0.05);
+      bl.translate(0, r + 0.001, 0);
+      bl.rotateX(((i + 0.5) / RAD_BLOECKE) * Math.PI * 2);
+      S.geo(bl, GUMMI.BLOCK);
+    }
+    // Felgenbett (dunkel, tief innen) und Bremsscheibe dahinter
     const scheibe = (radius, x, farbe, seg) => {
-      const g = new THREE.CircleGeometry(radius, seg || 14);
+      const g = new THREE.CircleGeometry(radius, seg || 12);
       g.rotateY(Math.PI / 2);
       g.translate(x, 0, 0);
       S.geo(g, farbe);
     };
-    scheibe(rf * 0.98, x0 - 0.1, FARBE.FELGE_INNEN);
-    scheibe(rf * 0.72, x0 - 0.075, FARBE.BREMSE, 14);
-    // Felgenhorn (Ring)
-    const ring = new THREE.RingGeometry(rf * 0.86, rf * 1.0, 16);
+    scheibe(rf * 0.97, x0 - 0.11, FARBE.FELGE_INNEN, 12);
+    scheibe(rf * 0.7, x0 - 0.075, FARBE.BREMSE, 12);
+    // Felgenhorn (Ring, hell) mit dunklem Innenring (Felgenbett)
+    const ring = new THREE.RingGeometry(rf * 0.86, rf * 1.0, 12);
     ring.rotateY(Math.PI / 2);
     ring.translate(x0 - 0.004, 0, 0);
     S.geo(ring, felgeFarbe);
     // Nabe
-    const nabe = new THREE.CylinderGeometry(rf * 0.2, rf * 0.24, 0.05, 10);
+    const nabe = new THREE.CylinderGeometry(rf * 0.2, rf * 0.24, 0.06, 6);
     nabe.rotateZ(-Math.PI / 2);
-    nabe.translate(x0 - 0.03, 0, 0);
+    nabe.translate(x0 - 0.035, 0, 0);
     S.geo(nabe, felgeFarbe);
-    // 5 Speichen
+    // 5 Speichen als Kranz
     for (let i = 0; i < 5; i++) {
       const wnk = (i * 2 * Math.PI) / 5;
       const len = rf * 0.72;
-      const sp = new THREE.BoxGeometry(0.03, len, rf * 0.2);
-      sp.translate(x0 - 0.025, rf * 0.18 + len / 2, 0);
+      const sp = blockOhneBoden(0.03, len, rf * 0.2, 1);   // Innenseite (-x) wird nie gesehen
+      sp.translate(x0 - 0.028, rf * 0.18 + len / 2, 0);
       sp.rotateX(wnk);
       S.geo(sp, felgeFarbe);
     }
     cache.rad[key] = S.fertig();
     return cache.rad[key];
+  }
+
+  /** Roter Bremssattel, fest in der Karosserie (dreht nicht mit dem Rad) – sitzt an der Bremsscheibe, hinten-oben. */
+  function bremssattel(S, a, M) {
+    const rf = clamp((a.vorn ? M.zollV : M.zollH) * 0.0127, a.r * 0.55, a.r * 0.8);
+    const hw = a.w / 2, xs = hw - 0.012 - 0.075;
+    [-1, 1].forEach((s) => {
+      const wnk = 0.9;                                   // Winkel von „oben" nach hinten
+      const ry = a.r + Math.cos(wnk) * rf * 0.55, rz = a.z + Math.sin(wnk) * rf * 0.55;
+      quader(S, 0xc4141b, s * (a.x + xs), ry, rz, 0.075, rf * 0.34, rf * 0.34);
+    });
   }
 
   // ------------------------------------------------------------
@@ -1292,7 +1352,7 @@
         quader(S, FARBE.KUNSTSTOFF, s * (xi - 0.03), a.r, a.z, 0.06, 0.26, 0.14);   // Radträger
       });
     });
-    return raeder.map((a) => Object.assign(a, { geo: radGeometrie(a.r, a.w, a.vorn ? M.zollV : M.zollH, f.felgeFarbe) }));
+    return raeder.map((a) => Object.assign(a, { geo: radGeometrie(a.r, a.w, a.vorn ? M.zollV : M.zollH, f.felgeFarbe, true) }));
   }
 
   // ------------------------------------------------------------
@@ -1360,9 +1420,10 @@
     baueAnbauten(S, K);
     if (M.f.blaulicht && !M.f.cabrio) baueBlaulicht(S, BLAU, K);
     const raeder = achsen(M).map((a) => ({
-      vorn: a.vorn, z: a.zc, r: a.r, w: a.w, x: halbBreite(M, a.zc, 1) - a.w / 2 - 0.015,
-      geo: radGeometrie(a.r, a.w, a.vorn ? M.zollV : M.zollH, M.f.felgeFarbe),
+      vorn: a.vorn, z: a.zc, r: a.r, w: a.w, x: halbBreite(M, a.zc, 1) - a.w / 2 - 0.005,   // Rad steht leicht nach außen
+      geo: radGeometrie(a.r, a.w, a.vorn ? M.zollV : M.zollH, M.f.felgeFarbe, false),
     }));
+    raeder.forEach((a) => bremssattel(S, a, M));
     return { geo: S.fertig(), sw: SW.map((s) => s.fertig()), bl: BL.map((s) => s.fertig()),
       blau: M.f.blaulicht && !M.f.cabrio ? BLAU.map((s) => s.fertig()) : [], raeder, M, schatten: null };
   }

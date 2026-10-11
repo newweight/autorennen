@@ -344,3 +344,71 @@
   Polizei-Schalter (Streifenwagen, 1,5 s Nähe → 10 s Stopp, Schonfrist, Schild schützt), Formel-Renner (wählbar, 280 km/h
   schnell / 196 normal), Streifenwagen-Modell (nicht wählbar). 18 Node-Tests + menu/welten/polizei grün. → Version v6.
   Offen: Dino ohne Abprall; Streifenwagen parkt nur vorwärts; Ghosting zu zweit weiter ungeprüft.
+
+## Runde 6 (11.10.2026) – Planungsphase, siehe PLAN_RUNDE6.md
+- Todo-Liste T1–T17 erfasst; Recherche-Agenten gestartet (Rennspiel-Features, Mehrspieler/Tailscale, Netzwerk-Technik)
+- Vereinbart: erst Vorschläge diskutieren, dann programmieren
+- Recherche fertig (Sonnet ×2): Mario Kart/Hot Wheels/CTR-Mechaniken; Tailscale Funnel + Node/ws-Server als
+  Mehrspieler-Weg (Gäste nur Link). Quellen: tailscale.com/kb/1223/funnel, /kb/1242/tailscale-serve,
+  developers.cloudflare.com (Quick Tunnel), docs.colyseus.io, mariokart.fandom.com (MK8D), wikipedia Hot Wheels Unleashed,
+  playstation.com (CTR). Vorschlagsplan A–E + Q1–Q7 in PLAN_RUNDE6.md – wartet auf Diskussion.
+- 11.10. abends: Beschlüsse Runde 6 (siehe PLAN_RUNDE6.md). Spiele-Ordner jetzt über Mac Studio (iCloud-synchron mit Air)
+  erreichbar; Autorennen-Versionen/v1–v6 spielbar angelegt. W1 gestartet: Opus (Kollisionen/Rempeln/Abseits/Zaun),
+  Sonnet (Reifen, Bronze, Welt Alles, Start-Boost, Sterne).
+- 11.10. Agent Sonnet W1 (Reifen, Bronze, Welt Alles, Start-Boost, Sterne) – fertig. Sicherung vorher: versionen_r6/vor_sonnet_w1/ (src + tests).
+  A1 Reifen (carBuilder.js): radGeometrie(r, w, zoll, felgeFarbe, slick): Reifen = Flanke (heller) + Lauffläche mit 2 umlaufenden Rillen
+  (Flächennormalen) + 6 Querblöcke (Boxen ohne Boden), Felge 3D (Felgenhorn, dunkles Bett, Nabe, 5 Speichen ohne Rückseite),
+  Bremsscheibe dahinter; roter Bremssattel fest in der Karosserie (bremssattel(), dreht nicht mit). Rad steht 1 cm weiter außen
+  (x = Halbbreite − w/2 − 0,005). 598 Dreiecke/Rad (Limit 600); Formel-Slicks: breit, glatt, Felgenabdeckung + Ring + Mutter, 296 Dreiecke.
+  Cache je Radgröße+slick. Audi RS6 (größtes Auto) 7.671 von 8.000 Dreiecken. tests/autos_vorschau.html: ?nah=1|r = Nahbild Vorderrad.
+  Multivan: Bronze 0xa5703c, Dach cremeweiß 0xf3eddc, farbeName „Bronze-Cremeweiß“, generischerName „Bronzefarbener Familienbus“.
+  B4 Welt „Alles": trackCatalog.js hängt je Strecke welten.alles (alle Schichten true, inkl. loopings/kleber/dinos) als letzte Welt an,
+  R.weltInfo.alles = 🎪 Alles („Jede Hindernisart zugleich."); weltName brauchte keine Änderung. Polizei bleibt eigener Schalter.
+  D3 Start-Boost: neues Modul src/race/startBoost.js (R.StartBoost, reine Logik): Gasdruck-Beginn im Fenster −0,25…+0,15 s um LOS → 1,5 s
+  vMax/Beschleunigung ×1,2; früher gedrückt und bei LOS gehalten → „Zu früh! 🐢" (Gas 1 s gesperrt); später → normal. KI würfelt bei LOS
+  (Chance 0,95 − 3,2 × fehler: leicht 15 %, mittel 47 %, unschlagbar 95 %), eigener Zufallsgenerator. main.js: startBoost in streckeAufbauen
+  (nur mit Countdown), Hook vor der Countdown-Sperre in physikSchritt (Autopilot-Hook und Polizei ausgenommen), Faktoren multiplizieren
+  NACH den Pickup-Faktoren (fvm/fbe, Rückschreiben wie gehabt), startBoost.schritt am Ende. Meldungen „Startboost! 🚀" / „Zu früh! 🐢", Ton.
+  D3 Sterne: src/race/sterne.js (R.Sterne): 3 = Platz 1, 2 = Platz 2–3 oder beste Runde < zielRundenzeit der Strecke (×0,9 bei Tempo „schnell"),
+  1 = angekommen; Summe je Fahrername in localStorage rennspiel.sterne.v1 (try/catch, Rückfall im Speicher). main.js rennenFertig (zeile.sterne/
+  sterneGesamt), menu.js: ⭐ hinter dem Spielernamen in der Ergebnistafel, „⭐ n" an der Fahrerkarte (nur > 0); styles.css 2 Regeln.
+  Autorennen.html: 2 neue Script-Tags (startBoost.js, sterne.js nach raceManager.js).
+  Tests: test_autos (Rad-Dreiecke ≤ 600, Slick ≤ 400, Multivan bronze), test_strecke (Welt alles, sollSchanzen/Pickups auch alles),
+  neu test_startboost.js (35 Prüfungen: Fenster/Dauer/Sperre/KI/Sterne/localStorage), neu startboost_test.py (echtes Spiel: Boost 9,9 m/s vs.
+  normal 8,4 vs. zu früh 5,4 nach 2,5 s), menu_test (Welt-Pillen 5/3, Sterne in Ergebnis + localStorage + Fahrerkarte), test_welten_ki läuft mit
+  „alles" automatisch (alle 5 Strecken × 5 Welten grün).
+  Offen/Schwächen: Bremssattel dreht beim Lenken nicht mit; Reifenprofil nur aus der Nähe sichtbar; Boost ist moderat (+18 % Tempo nach 2,5 s);
+  menu_test Fokus-Reihenfolge rot durch Agent A (neue Pille „rempeln"), nicht durch diese Änderungen.
+- 11.10. Agent W1-A (Opus) – fertig: Kollisionen/Rempeln/Abseits/Zaun+Pflanzen (A2–A5), alles als Add-on, Standard „sanft".
+  A3 collisions.autoAuto: Autos = gedrehte Rechtecke (laenge×breite) mit SAT, 2 Teilschritte, Mindestabstand 0,1 m, Sweep über
+  vehicle._kollAlt (Achse, die zuletzt überlappt hat → kein Durchschießen bei 75 m/s frontal), Auto an der Bande zählt beim Trennen 10×
+  so schwer; main.js prüft danach die Bande für verschobene Autos nochmal. Looping: K.loopingAbstand() hält zwei Autos im selben Looping
+  ≥ Länge + 0,1 m Bogenabstand auseinander (hinteres bremst bzw. fährt einen Moment später ein; looping.js unverändert). obbAbstand() für Tests.
+  A4 Einstellung rempeln 'sanft'|'echt' (main.js Standard/Validierung, Menü-Pille „🌀 Rempeln: Sanft/Echt" rechte Spalte, letzte Zeile vor
+  Start). echt: Opfer = wer angefahren wird; seitlich/versetzt → vehicle.drehImpuls (Hebelarm×Stoß/Trägheit×drehFaktor 1,6, ≤ 4,7 rad/s,
+  exp. Abklingen ~1 s ≈ max. 90°, Lenkung 30 %); schräg von hinten 15–45° → Querimpuls 3–6 m/s × Massenverhältnis; < 15° nebeneinander →
+  nur schieben; mittiger Auffahrer → Stoß ohne Drehung. Meldung „Dreher! 🌀". KI ab profi (rang ≥ 4) bei 'echt': Gegner ≤ 6 m voraus,
+  < 1,5 m versetzt → Lenkimpuls 0,35 für 0,35 s, max. 1×/10 s (driver.rempler zählt). Schaden: Auto ab 1 m/s (−5 %), Drehung +3 % im
+  selben Treffer, Bande −3 % (config.schaden.verluste), Pflanze −3 %.
+  A2 config.physik.untergrund gras 60 km/h / Rollw. 4,5, sand 50 km/h / 5,5; vehicle.untergrundMisch (main.js aus dem Seitenabstand) mischt
+  Rand→Gras/Sand über 1 m; Deckel weich (abseitsBremsen). ABWEICHUNG: abseitsAnfahren 8 m/s – darunter wirkt der höhere Rollwiderstand nur
+  anteilig, sonst kam man aus dem Sand kaum noch los (Vollgas aus dem Stand netto 0,9 m/s², KI blieb am Zaun stecken → 3 Resets Wüste).
+  A5 K.pflanzenSammeln(strecke, deko) (main.js streckeSzeneBauen, vor statischVorbereiten): Kreis-Kollider aus den Deko-Instanzen bis
+  grenzeBei(s)+2 m, Radius = Fuß der Geometrie (≤ 0,9 m über Boden, also Stamm statt Krone); fest (Bäume, Tannen, Stümpfe, Felsen, Kakteen,
+  Palmen, Riesenpilze) = wie Säule, Stoß 'baum'; weich (Büsche, Farne, Gestrüpp, Kugelkakteen, Pilze, Heuballen) = Tempo ×0,7. Wiese 78,
+  Wald 276, Wüste 115, Dino 179, Fantasie 0 Kollider; 2–50 ms Aufbau; Draw-Calls unverändert. Aktiv in allen Welten (welten_test-Regression
+  vergleicht Lauf mit/ohne Module → bleibt grün).
+  Tests: test_kollisionen (+20: 4 Szenen × sanft/echt bei 75 m/s nie < 0,1 m, Drehung nur echt, Abdrängen genau +3–6 m/s, Multivan schiebt/dreht
+  Mini stärker, Tempo, Bande-Masse, Looping nebeneinander/dahinter), test_physik (Gras/Sand-Deckel weich, Übergang, Anfahren; Fingerabdruck neu,
+  mit alten Werten + abseitsAnfahren 0 bitgenau Runde 5), test_schaden (neue Schwellen, Drehung, Baum/Busch), zaun_test (echte Deko mit THREE:
+  Baum 60 km/h → Stopp + −3 %, Busch ×0,7, 27 feste Pflanzen nicht durchfahrbar), test_welten_ki (+23 Rennen je Klasse: 7 Stufen gemeinsam,
+  rempeln echt, 2 Runden: 0 Resets, alle im Ziel; Diagnose REMPELN_MODUS/ARTEN/RESET_LOG), menu_test (Fokus + Rempeln-Zeile), neu
+  tests/rempeln_test.py (Wiese, echt, Schaden, 5× profi, 120 s: 3 Dreher, 27 Schaden-Treffer, min. Abstand 0,096 m, Bild
+  tests/out/rempeln_drehung.png angesehen). Alle Node-Tests grün, welten_test wiese + Regression grün, menu_test grün, rennen_test grün.
+  Schwächen: Spieler-Lenkhilfe kennt Pflanzen nicht; in den KI-Rennen trifft die KI nie Bäume (gut), Spieler schon; Querimpuls kommt zum
+  normalen Stoß dazu (bei 75 m/s fliegt das Opfer weit); polizei_test HUD-Countdown-Prüfungen schwanken (Frame-Timing, je Lauf andere Zeile).
+  Sicherung vorher: /home/claude/Autorennen-Sicherung/w1a_vorher, nachher: …/w1a_nachher.
+- 11.10. W1 abgeschlossen (Fable-Prüfung): Kollisionen als Rechtecke ohne Verschmelzung, Rempeln sanft/echt (Drehung,
+  Abdrängen, KI rempelt ab profi), Schaden-Schwellen, Abseits Gras 60/Sand 50 km/h, Zaun −3 %, Pflanzen-Kollider,
+  Reifen/Felgen/Bremsscheiben, Multivan bronze, Welt „Alles", Start-Boost, Sterne. 19 Node-Tests + menu/welten/polizei
+  (Test robuster gemacht) grün. → Version v7 (Autorennen-Versionen/v7_…).

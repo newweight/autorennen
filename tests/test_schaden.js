@@ -69,11 +69,12 @@ pruefe('config.schaden: Standard aus', C && C.standardAn === false);
   const { s } = neu(2, true);
   s.treffer(0, 'bande', 5);
   const zweiter = s.treffer(0, 'bande', 8);
-  pruefe('Abklingzeit: zweiter Treffer direkt danach zählt nicht', zweiter === 0 && s.zustand(0).prozent === 95);
+  // Runde 6: Bande kostet −3 % (config.schaden.verluste.bande)
+  pruefe('Abklingzeit: zweiter Treffer direkt danach zählt nicht', zweiter === 0 && s.zustand(0).prozent === 97);
   warte(s, 0.5);
   pruefe('Abklingzeit: nach 0,5 s noch gesperrt', s.treffer(0, 'auto', 5) === 0);
   warte(s, 0.25);
-  pruefe('Abklingzeit: nach 0,75 s zählt der nächste Treffer', s.treffer(0, 'auto', 5) === 5 && s.zustand(0).prozent === 90);
+  pruefe('Abklingzeit: nach 0,75 s zählt der nächste Treffer', s.treffer(0, 'auto', 5) === 5 && s.zustand(0).prozent === 92);
   pruefe('Abklingzeit gilt je Fahrzeug (Auto 2 sofort)', s.treffer(1, 'auto', 5) === 5);
   // Schleifen an der Bande (60 Schritte mit Stärke 4): höchstens alle 0,7 s ein Abzug
   const { s: s2 } = neu(1, true);
@@ -81,15 +82,24 @@ pruefe('config.schaden: Standard aus', C && C.standardAn === false);
   pruefe('Schleifen 2 s: höchstens 3 Abzüge (kein Dauerabzug)', s2.zustand(0).prozent >= 85, s2.zustand(0).prozent + ' %');
   const { s: s3 } = neu(1, true);
   pruefe('Bande unter 3 m/s zählt nicht', s3.treffer(0, 'bande', 2.9) === 0);
-  pruefe('Auto unter 2 m/s zählt nicht', s3.treffer(0, 'auto', 1.9) === 0);
+  // Runde 6 (W1-A4): Auto↔Auto schon ab 1 m/s (bisher 2)
+  pruefe('Auto unter 1 m/s zählt nicht', s3.treffer(0, 'auto', 0.9) === 0);
   pruefe('Hindernis zählt immer (auch 0,1 m/s)', s3.treffer(0, 'hindernis', 0.1) === 5);
+  { const { s: s5 } = neu(1, true); pruefe('Runde 6: Auto ab 1 m/s zählt (−5 %)', s5.treffer(0, 'auto', 1.0) === 5 && s5.zustand(0).prozent === 95); }
   warte(s3, 0.8);
   pruefe('Brand: −10 %', s3.treffer(0, 'brand', 1) === 10 && s3.zustand(0).prozent === 85);
   // stoesseAuswerten: Listen aus collisions/dynamik
   const { s: s4 } = neu(3, true);
   s4.stoesseAuswerten({ bande: [5, 0, 1], auto: [{ a: 1, b: 2, staerke: 3 }], hindernis: [], dynamik: [] });
-  pruefe('stoesseAuswerten: Bande ≥ 3 + Auto-Stoß zählen für beide', s4.zustand(0).prozent === 95 && s4.zustand(1).prozent === 95 &&
+  pruefe('stoesseAuswerten: Bande ≥ 3 (−3 %) + Auto-Stoß zählen für beide', s4.zustand(0).prozent === 97 && s4.zustand(1).prozent === 95 &&
     s4.zustand(2).prozent === 95);
+  // Runde 6: Rempler mit Drehung +3 % (im selben Treffer), Pflanzen: Baum −3 %, Busch nichts
+  const { s: s6 } = neu(4, true);
+  s6.stoesseAuswerten({ auto: [{ a: 0, b: 1, staerke: 6, dreht: [false, true] }], pflanzen: [{ nr: 2, typ: 'baum', staerke: 8 }, { nr: 3, typ: 'busch', staerke: 5 }] });
+  pruefe('Runde 6: Rempler −5 %, gedrehtes Auto −8 %', s6.zustand(0).prozent === 95 && s6.zustand(1).prozent === 92,
+    s6.zustand(0).prozent + ' / ' + s6.zustand(1).prozent + ' %');
+  pruefe('Runde 6: Baum −3 %, Busch kein Schaden', s6.zustand(2).prozent === 97 && s6.zustand(3).prozent === 100,
+    s6.zustand(2).prozent + ' / ' + s6.zustand(3).prozent + ' %');
   const { s: s5 } = neu(1, true);
   s5.stoesseAuswerten({ hindernis: [{ nr: 0, typ: 'brand', staerke: 2 }] });
   pruefe('stoesseAuswerten: Hindernis-typ brand → −10 %', s5.zustand(0).prozent === 90);

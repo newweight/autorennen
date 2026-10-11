@@ -52,6 +52,7 @@
     hindernisse: { name: 'Hindernisse', emoji: '🚧', beschreibung: 'Öl, Sand, Baustelle, Äste, liegengebliebene Autos und Strohballen.' },
     stunt:       { name: 'Stunt',       emoji: '🛫', beschreibung: 'Dazu Sprungschanzen und enge (1 Spur) oder breite (3 Spuren) Stellen.' },
     verrueckt:   { name: 'Verrückt',    emoji: '🤪', beschreibung: 'Dazu Bälle, Wasserfontänen, Turbo-Felder und Schutzschilde.' },
+    alles:       { name: 'Alles',       emoji: '🎪', beschreibung: 'Jede Hindernisart zugleich.' },
     fantasie:    { name: 'Fantasie',    emoji: '🌈', beschreibung: 'Loopings, Bälle und Wasserfontänen.' },
   };
   // Bausteine: jede Welt baut auf der vorigen auf (Klassisch → Hindernisse → Stunt → Verrückt)
@@ -553,4 +554,11 @@
       ],
     },
   ];
+
+  // Runde 6 (B4): Welt „Alles" je Strecke = alle Schichten zugleich (Polizei bleibt ein eigener Schalter im Menü).
+  // Fantasie: Loopings/Kleber bleiben ohnehin an. Wird als letzte Welt angehängt (Pillen-Reihenfolge im Menü).
+  R.trackCatalog.forEach((t) => {
+    if (!t.welten) return;
+    t.welten.alles = Object.keys(AUS).reduce((o, k) => { o[k] = true; return o; }, {});
+  });
 })();

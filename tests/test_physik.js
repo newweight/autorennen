@@ -240,7 +240,10 @@ function fingerabdruck(umwelt) {
   return [v.x, v.z, v.heading, v.vLaengs, v.vQuer].map(x => x.toPrecision(17)).join(',');
 }
 {
-  const VORHER = '63.569917157452885,-4.4506437793157909,-1.6991742455600745,2.4872273895626793,0.0000000000000000';   // Runde 5 neu
+  // Runde 6 (W1-A2): neu erzeugt nach Gras-Änderung (Rollwiderstand 4,5, Deckel 60 km/h, Anfahrhilfe abseitsAnfahren 8 m/s);
+  // mit den alten Gras-Werten (3,0 / 25 m/s) und abseitsAnfahren 0 ergibt vehicle.js Runde 6 bitgenau den Runde-5-Wert
+  // 63.569917157452885,… (geprüft 11.10.2026)
+  const VORHER = '61.360003321236064,-4.5087142532100648,-1.6787553574715364,2.3244778201556078,0.0000000000000000';
   const ohne = fingerabdruck('ohne');
   pruefe('Ohne umwelt: bitgenau wie vor Runde 4', ohne === VORHER, ohne === VORHER ? '' : ohne);
   pruefe('umwelt undefined / neutral {1,1,Wind 0}: identisch', fingerabdruck(undefined) === ohne &&
@@ -295,6 +298,37 @@ for (const [name, bf] of [['Regen', 0.8], ['Schnee', 0.6]]) {
   const v = new R.Vehicle({}); v.vLaengs = 30;
   v.schritt(dt, gerade, undefined, { gripFaktor: 1, bremsFaktor: 1, windX: 5, windZ: 0 });
   pruefe('vehicle.windSeite: Wind von links = +1', Math.abs(v.windSeite - 1) < 1e-9, v.windSeite.toFixed(3));
+}
+// ---------------- Runde 6 (W1-A2): Abseits Gras 60 / Sand 50 km/h, weicher Deckel, weicher Übergang ----------------
+{
+  const U = R.config.physik.untergrund;
+  pruefe('Gras: vMaxAbs 60 km/h, Rollwiderstand 4,5', Math.abs(U.gras.vMaxAbs * 3.6 - 60) < 1e-9 && U.gras.rollwiderstand === 4.5);
+  pruefe('Sand: vMaxAbs 50 km/h, Rollwiderstand 5,5', Math.abs(U.sand.vMaxAbs * 3.6 - 50) < 1e-9 && U.sand.rollwiderstand === 5.5);
+  for (const [ug, kmh] of [['gras', 60], ['sand', 50]]) {
+    const v = new R.Vehicle({ vMax: 75 }); v.vLaengs = 40; v.untergrund = ug;
+    let maxSprung = 0, vorher = v.vLaengs;
+    for (let i = 0; i < 600; i++) { v.schritt(dt, { gas: 1, bremse: 0, lenkung: 0 }); maxSprung = Math.max(maxSprung, vorher - v.vLaengs); vorher = v.vLaengs; }
+    pruefe(`${ug}: Vollgas pendelt auf ≤ ${kmh} km/h ein`, v.vLaengs * 3.6 <= kmh + 0.01 && v.vLaengs * 3.6 > kmh - 3, (v.vLaengs * 3.6).toFixed(1) + ' km/h');
+    pruefe(`${ug}: weich abgebremst (≤ abseitsBremsen·dt je Schritt, kein Sprung)`, maxSprung <= R.config.physik.abseitsBremsen * dt + 1e-9,
+      'max ' + maxSprung.toFixed(3) + ' m/s je Schritt');
+  }
+  // Übergang: untergrundMisch 0 = Rand-Werte, 1 = Gras, dazwischen gemischt
+  const deckel = (m) => { const v = new R.Vehicle({ vMax: 75 }); v.untergrund = 'gras'; v.untergrundMisch = m; v.vLaengs = 30;
+    for (let i = 0; i < 900; i++) v.schritt(dt, { gas: 1, bremse: 0, lenkung: 0 }); return v.vLaengs; };
+  const d0 = deckel(0), d5 = deckel(0.5), d1 = deckel(1);
+  pruefe('Übergang Rand→Gras weich: Misch 0 > 0,5 > 1 (= Gras-Deckel)', d0 > d5 && d5 > d1 && Math.abs(d1 * 3.6 - 60) < 0.5,
+    [d0, d5, d1].map(x => (x * 3.6).toFixed(0)).join(' / ') + ' km/h');
+  const a = new R.Vehicle({}), b = new R.Vehicle({}); a.untergrund = b.untergrund = 'gras'; b.untergrundMisch = 1;
+  for (let i = 0; i < 300; i++) { a.schritt(dt, { gas: 1, bremse: 0, lenkung: 0.3 }); b.schritt(dt, { gas: 1, bremse: 0, lenkung: 0.3 }); }
+  pruefe('untergrundMisch 1 = ohne Mischung (bitgleich)', a.x === b.x && a.z === b.z && a.vLaengs === b.vLaengs);
+  // Anfahrhilfe: aus dem Stand im Sand/Gras in < 6 s auf 30 km/h (sonst steckt man fest), rückwärts vom Zaun weg möglich
+  for (const ug of ['gras', 'sand']) {
+    const v = new R.Vehicle({}); v.untergrund = ug; let t = 0;
+    while (v.vLaengs < 30 / 3.6 && t < 20) { v.schritt(dt, { gas: 1, bremse: 0, lenkung: 0 }); t += dt; }
+    const r = new R.Vehicle({}); r.untergrund = ug;
+    for (let i = 0; i < 90; i++) r.schritt(dt, { gas: 0, bremse: 1, lenkung: 0 });
+    pruefe(`${ug}: aus dem Stand 30 km/h in < 6 s, rückwärts in 1,5 s ≥ 2 m`, t < 6 && r.z > 2, t.toFixed(1) + ' s, rückwärts ' + r.z.toFixed(1) + ' m');
+  }
 }
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');
 process.exit(fehler ? 1 : 0);

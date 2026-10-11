@@ -185,6 +185,15 @@
   function zeichnen(t) {
     const az = dreht ? (t / 1000) * 25 : grundWinkel;      // Grad
     eintraege.forEach((e) => { e.auto.rotation.y = Math.PI - rad(az); });
+    if (q.get('nah') && eintraege.length) {   // Nahbild: linkes Vorderrad von außen, leicht von vorn
+      const a = eintraege[0].auto; a.updateMatrixWorld(true);
+      const re = q.get('nah') === 'r', rad0 = a.userData.vorderraeder[re ? 1 : 0], c = new THREE.Vector3(); rad0.getWorldPosition(c);
+      const aussen = new THREE.Vector3(re ? 1 : -1, 0, 0).applyQuaternion(a.quaternion);
+      const vorn = new THREE.Vector3(0, 0, -1).applyQuaternion(a.quaternion);
+      kamera.fov = 28; kamera.updateProjectionMatrix();
+      kamera.position.copy(c).addScaledVector(aussen, 1.5).addScaledVector(vorn, 0.55); kamera.position.y += 0.35;
+      kamera.lookAt(c);
+    }
     renderer.render(szene, kamera);      // aktualisiert auch die Kamera-Matrizen für project()
     eintraege.forEach((e) => {
       // Label unter dem Auto

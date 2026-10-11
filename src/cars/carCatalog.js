@@ -62,7 +62,7 @@ window.Rennspiel = window.Rennspiel || {};
       id: 'multivan',
       name: 'VW Multivan 6.1',
       marke: 'Volkswagen', modell: 'Multivan 6.1',
-      farbe: 0xaab4c0, farbe2: 0xf4f6f8, farbeName: 'Silber-Weiß',
+      farbe: 0xa5703c, farbe2: 0xf3eddc, farbeName: 'Bronze-Cremeweiß',   // Bronze-Lack, Dach cremeweiß (Runde 6)
       karosserie: 'van',
       // Quelle Maße: ADAC Autokatalog T6.1 Multivan: 4904 × 1904 × 1970 mm, Radstand 3000; Reifen 215/60 R17 C
       abmessungen: { laenge: 4.904, breite: 1.904, hoehe: 1.970, radstand: 3.000, ueberhangVorn: 0.99,
@@ -83,7 +83,7 @@ window.Rennspiel = window.Rennspiel || {};
         wendigkeit: 1.6, grip: 0.84, masse: 2200, laenge: 4.97, breite: 1.94,
       },
       beschreibung: 'Groß, schwer und kaum aus der Spur zu bringen – der Bus für die ganze Familie.',
-      generischerName: 'Silberner Familienbus',
+      generischerName: 'Bronzefarbener Familienbus',
     },
     {
       id: 'passat',

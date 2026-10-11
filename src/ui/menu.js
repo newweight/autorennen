@@ -121,7 +121,7 @@
     zeilen() {
       const z = ['runden', 'gegner', 'schwierigkeit', 'hilfe0'];
       if (this.zwei) z.push('hilfe1');
-      z.push('jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'start');   // Runde 5: Tempo-Klasse, 5b: Polizei
+      z.push('jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'rempeln', 'start');   // Runde 5: Tempo-Klasse, 5b: Polizei, 6: Rempeln
       return z;
     }
 
@@ -296,6 +296,8 @@
         if (dx) e.tempoKlasse = dx > 0 ? 'schnell' : 'normal';
       } else if (zeile === 'polizei') {
         if (dx) e.polizei = dx > 0;
+      } else if (zeile === 'rempeln') {
+        if (dx) e.rempeln = dx > 0 ? 'echt' : 'sanft';
       }
     }
 
@@ -310,6 +312,7 @@
       else if (zeile === 'schaden') e.schaden = k === 'an';
       else if (zeile === 'tempo' && R.config.tempoKlassen[k]) e.tempoKlasse = k;
       else if (zeile === 'polizei') e.polizei = k === 'an';
+      else if (zeile === 'rempeln') e.rempeln = k === 'echt' ? 'echt' : 'sanft';
     }
 
     weiter() {
@@ -453,9 +456,11 @@
         const andere = this.zwei ? this.e.fahrer[1 - sp] : null;
         const karten = R.config.fahrer.map((f) => {
           const gewaehlt = f.name === this.e.fahrer[sp], vergeben = f.name === andere;
+          const sterneGes = R.Sterne ? R.Sterne.summe(f.name) : 0;   // Runde 6: „⭐ 12" an der Karte
           return `<div class="karte fahrer${gewaehlt ? ' gewaehlt' : ''}${vergeben ? ' vergeben' : ''}" data-a="fahrer:${sp}:${f.name}">` +
             (vergeben ? `<span class="vergeben-marke p${2 - sp}">${2 - sp}</span>` : '') +
-            `<div class="avatar">${f.emoji}</div><div class="karten-name">${f.name}</div></div>`;
+            `<div class="avatar">${f.emoji}</div><div class="karten-name">${f.name}</div>` +
+            (sterneGes > 0 ? `<div class="karten-sterne">⭐ ${sterneGes}</div>` : '') + `</div>`;
         }).join('');
         const kopf = this.zwei
           ? `<h2 class="p${sp + 1}"><span class="marke">${sp + 1}</span> Spieler ${sp + 1}: ${R.fahrerEmoji(this.e.fahrer[sp])} ${this.e.fahrer[sp]}</h2>`
@@ -544,7 +549,11 @@
           e.tempoKlasse === 'schnell' ? 'schnell' : 'normal', 'Normal ≈ 155–190 km/h, leichter zu fahren – Schnell = volle Leistung') +
         // Runde 5b: Polizei (Streifenwagen hält dich 10 s an, wenn er dich einholt)
         pillenL('polizei', '🚓', 'Polizei', [{ k: 'aus', text: 'Aus' }, { k: 'an', text: 'An' }], e.polizei ? 'an' : 'aus',
-          'Ein Streifenwagen jagt dich – holt er dich ein, musst du 10 s anhalten');
+          'Ein Streifenwagen jagt dich – holt er dich ein, musst du 10 s anhalten') +
+        // Runde 6: Rempeln (sanft = nur abprallen, echt = Autos drehen sich / werden abgedrängt); etwas flacher (passt in 1440×900)
+        pillenL('rempeln', '🌀', 'Rempeln', [{ k: 'sanft', text: 'Sanft' }, { k: 'echt', text: 'Echt' }], e.rempeln === 'echt' ? 'echt' : 'sanft',
+          'Sanft: Autos prallen nur ab – Echt: Autos drehen sich oder werden von der Bahn geschubst')
+          .replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele');
       const tonAn = !R.Audio || R.Audio.an;
       const aktionen = `<div class="m-aktionen"><div class="start-knopf${fk('start')}" data-a="start">🏁 LOS GEHT'S!</div>` +
         `<div class="knopf klein ton" data-a="ton">${tonAn ? '🔊 Ton an' : '🔇 Ton aus'} <kbd>M</kbd></div>` +
@@ -582,7 +591,8 @@
         const farbe = z.auto ? HEX(z.auto.farbe) : '#888';
         const zeit = z.zeit !== null ? R.zeitText(z.zeit) : '<span class="noch">unterwegs</span>';
         return `<tr class="${z.istSpieler ? 'spieler p' + (z.spielerNr + 1) : 'computer'}">` +
-          `<td class="platz">${z.platz}.</td><td class="name">${z.istSpieler ? '' : '🤖 '}${z.name}</td>` +
+          `<td class="platz">${z.platz}.</td><td class="name">${z.istSpieler ? '' : '🤖 '}${z.name}` +
+          (z.sterne ? ` <span class="sterne" title="Sterne gesamt: ${z.sterneGesamt}">${R.Sterne ? R.Sterne.text(z.sterne) : '⭐'.repeat(z.sterne)}</span>` : '') + `</td>` +
           `<td class="auto"><i style="background:${farbe}"></i>${z.auto ? z.auto.name : ''}</td>` +
           `<td class="zeit">${zeit}</td><td class="zeit">${z.beste !== null ? R.zeitText(z.beste) : '–'}</td></tr>`;
       }).join('');

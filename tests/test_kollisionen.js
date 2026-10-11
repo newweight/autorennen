@@ -1,7 +1,7 @@
 // Node-Test für Bande, Auto-Auto-Kollisionen und Fahrhilfen: node tests/test_kollisionen.js
 const { ladeModule } = require('./lade');
 const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/physics/collisions.js',
-  'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js']);
+  'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/cars/carCatalog.js', 'src/track/looping.js']);
 const dt = R.config.physik.schritt;
 const K = R.Kollisionen;
 let fehler = 0;
@@ -35,7 +35,9 @@ function fahre(v, s, hilfe) {
   }
   pruefe('Bande hält Auto innerhalb seitenabstandMax + 0,5', maxAbstand <= strecke.seitenabstandMax + 0.5,
     'max ' + maxAbstand.toFixed(2) + ' m');
-  pruefe('An der Bande kein Hängenbleiben (fährt weiter)', endTempo.every(t => t > 1), endTempo.map(t => t.toFixed(1)).join(', ') + ' m/s');
+  // Runde 6: Gras ≤ 60 km/h, Rollwiderstand 4,5 → wer mit Vollgas und ohne Lenken quer an der Bande schleift, kriecht
+  // nur noch (vorher Schwelle 1 m/s); geprüft wird: nicht festgeklemmt
+  pruefe('An der Bande kein Hängenbleiben (fährt weiter)', endTempo.every(t => t > 0.3), endTempo.map(t => t.toFixed(1)).join(', ') + ' m/s');
 }
 // 1b) Bande: Aufprall baut Tempo ab, Heading dreht zur Straße
 {
@@ -159,6 +161,141 @@ for (const stufe of ['wenig', 'viel']) {
   pruefe('Bremshilfe senkt Tempo am Haarnadel-Eingang', viel < ohne - 5 && wenig < ohne && viel < wenig,
     'ohne ' + (ohne * 3.6).toFixed(0) + ', wenig ' + (wenig * 3.6).toFixed(0) + ', viel ' + (viel * 3.6).toFixed(0) +
     ' km/h (Ideallinie ' + (ziel * 3.6).toFixed(0) + ' km/h)');
+}
+// =====================================================================================================
+// Runde 6 (W1-A3/A4): Rechtecke (SAT), keine Verschmelzung bei 75 m/s, Rempeln sanft/echt, Looping-Abstand
+// =====================================================================================================
+const KAT = (id) => R.carCatalog.find(a => a.id === id).fahrwerte;
+const MIND = R.config.kollision.mindestAbstand;
+/** Zwei Autos fahren ohne Strecke; nach jedem autoAuto: Abstand (Rechtecke) messen. */
+function lauf2(a, b, rempeln, schritte, sa, sb) {
+  const leer = { gas: 0, bremse: 0, lenkung: 0 };
+  let minAbst = Infinity, stoesse = [], erstVQ = null, drehMax = [0, 0];
+  for (let i = 0; i < schritte; i++) {
+    a.schritt(dt, sa || leer); b.schritt(dt, sb || leer);
+    const vqA = a.vQuer, vqB = b.vQuer;
+    const st = K.autoAuto([a, b], { rempeln, dt });
+    if (st.length && erstVQ === null) erstVQ = { a: a.vQuer - vqA, b: b.vQuer - vqB, art: st[0].art };
+    stoesse = stoesse.concat(st);
+    minAbst = Math.min(minAbst, K.obbAbstand(a, b));
+    drehMax[0] = Math.max(drehMax[0], Math.abs(a.drehImpuls)); drehMax[1] = Math.max(drehMax[1], Math.abs(b.drehImpuls));
+  }
+  return { minAbst, stoesse, erstVQ, drehMax };
+}
+const H = (grad) => grad * Math.PI / 180;
+/** Rempler b so starten, dass seine Mitte nach T s (relativ zu a, das mit vA geradeaus nach −z fährt) bei (zx, zz) ist. */
+function zielStart(a, b, vA, hB, vB, zx, zz, T) {
+  a.setzen(0, 0, 0); a.vLaengs = vA;
+  const bx = -Math.sin(hB) * vB, bz = -Math.cos(hB) * vB;          // Geschwindigkeit b (Welt)
+  b.setzen(zx - (bx - 0) * T, zz - (bz + vA) * T, hB); b.vLaengs = vB;
+}
+/** Szenen: a = Opfer/erstes Auto, b = zweites. */
+const SCHNELL = { vMax: 80 };   // 75 m/s ohne vMax-Deckel (Standard-Auto: 240 km/h)
+// versetzter Auffahrer (5°, 0,9 m versetzt) → darf drehen (PIT); siehe Test unten
+const SZENEN = {
+  frontal: () => { const a = new R.Vehicle(SCHNELL), b = new R.Vehicle(SCHNELL); a.setzen(0, 0, 0); b.setzen(0.4, -40, Math.PI); a.vLaengs = 75; b.vLaengs = 75; return [a, b]; },
+  seitlich: () => { const a = new R.Vehicle(SCHNELL), b = new R.Vehicle(SCHNELL); a.setzen(0, 0, 0); b.setzen(30, -1.2, H(90)); a.vLaengs = 10; b.vLaengs = 75; return [a, b]; },
+  schraeg: () => { const a = new R.Vehicle(SCHNELL), b = new R.Vehicle(SCHNELL); zielStart(a, b, 30, H(30), 75, 0.6, 3.8, 0.5); return [a, b]; },
+  heckMittig: () => { const a = new R.Vehicle(SCHNELL), b = new R.Vehicle(SCHNELL); a.setzen(0, 0, 0); b.setzen(0, 12, 0); a.vLaengs = 20; b.vLaengs = 75; return [a, b]; },
+  seitFlach: () => { const a = new R.Vehicle(SCHNELL), b = new R.Vehicle(SCHNELL); a.setzen(0, 0, 0); b.setzen(2.6, 0.5, H(5)); a.vLaengs = 30; b.vLaengs = 32; return [a, b]; },
+};
+for (const rempeln of ['sanft', 'echt']) {
+  for (const name of Object.keys(SZENEN)) {
+    const [a, b] = SZENEN[name]();
+    const e = lauf2(a, b, rempeln, 90);
+    pruefe(`[${rempeln}] ${name} 75 m/s: Stoß erkannt, nie Durchdringung (Abstand ≥ ${MIND} m nach jeder Auflösung)`,
+      e.stoesse.length > 0 && e.minAbst >= MIND - 1e-6, 'min. Abstand ' + e.minAbst.toFixed(3) + ' m, Stöße ' + e.stoesse.length +
+      (e.stoesse.length ? ', Stärke ' + e.stoesse[0].staerke.toFixed(1) : ''));
+    if (name === 'frontal') pruefe(`[${rempeln}] frontal: nicht durchgeschossen (Reihenfolge bleibt)`, a.z > b.z, 'a.z ' + a.z.toFixed(1) + ', b.z ' + b.z.toFixed(1));
+    if (rempeln === 'sanft') pruefe(`[sanft] ${name}: keine Drehung`, e.drehMax[0] === 0 && e.drehMax[1] === 0);
+    if (rempeln === 'echt' && name === 'seitlich') pruefe('[echt] seitlicher/versetzter Treffer → Opfer dreht sich (≤ drehMax)',
+      e.drehMax[0] >= R.config.kollision.rempeln.drehMin && e.drehMax[0] <= R.config.kollision.rempeln.drehMax + 1e-9 &&
+      e.stoesse.some(s => s.dreht && s.dreht[0]), 'drehImpuls max ' + e.drehMax[0].toFixed(2) + ' rad/s');
+    if (rempeln === 'echt' && name === 'schraeg') pruefe('[echt] schräg von hinten (30°) → Opfer abgedrängt (Querimpuls ≥ 3 m/s), keine Drehung',
+      e.erstVQ && e.erstVQ.art === 'abdraengen' && Math.abs(e.erstVQ.a) >= 3 - 1e-9 && e.drehMax[0] === 0,
+      e.erstVQ ? e.erstVQ.art + ', ΔvQuer ' + e.erstVQ.a.toFixed(2) + ' m/s' : 'kein Stoß');
+    if (rempeln === 'echt' && name === 'seitFlach') pruefe('[echt] flacher Winkel (5°) nebeneinander → nur schieben, keine Drehung',
+      e.erstVQ && e.erstVQ.art === 'schieben' && e.drehMax[0] === 0 && e.drehMax[1] === 0, e.erstVQ ? e.erstVQ.art : 'kein Stoß');
+    if (rempeln === 'echt' && name === 'heckMittig') pruefe('[echt] mittiger Auffahrer → Stoß ohne Drehung',
+      e.erstVQ && e.erstVQ.art === 'stoss' && e.drehMax[0] === 0 && e.drehMax[1] === 0, e.erstVQ ? e.erstVQ.art : 'kein Stoß');
+  }
+}
+{
+  const a = new R.Vehicle(SCHNELL), b = new R.Vehicle(SCHNELL); a.setzen(0, 0, 0); b.setzen(1.2, 12, H(5)); a.vLaengs = 20; b.vLaengs = 45;
+  const e = lauf2(a, b, 'echt', 60);
+  pruefe('[echt] versetzter Auffahrer (Heckecke) → Opfer dreht sich', e.drehMax[0] >= R.config.kollision.rempeln.drehMin,
+    'drehImpuls ' + e.drehMax[0].toFixed(2) + ' rad/s, ' + (e.erstVQ ? e.erstVQ.art : '-'));
+}
+// Drehung: Auto dreht höchstens ~90° und Lenkung wirkt dabei nur zu 30 %
+{
+  const v = new R.Vehicle({}); v.setzen(0, 0, 0); v.vLaengs = 25; v.drehImpuls = R.config.kollision.rempeln.drehMax;
+  for (let i = 0; i < 120; i++) v.schritt(dt, { gas: 0, bremse: 0, lenkung: 0 });
+  const grad = v.heading * 180 / Math.PI;
+  pruefe('Drehung bei drehMax: klingt in ~1 s ab, dreht ≈ 90° (70–100°)', v.drehImpuls === 0 && grad > 70 && grad < 100, grad.toFixed(0) + '°');
+  const l1 = new R.Vehicle({}), l2 = new R.Vehicle({}); l1.vLaengs = l2.vLaengs = 20; l2.drehImpuls = 1e-6;
+  // l2: winziger Drehimpuls (sofort abgeklungen) → nur der Lenk-Anteil im ersten Schritt zählt
+  l1.lenkung = l2.lenkung = 1;
+  l1.schritt(dt, { gas: 0, bremse: 0, lenkung: 1 }); l2.schritt(dt, { gas: 0, bremse: 0, lenkung: 1 });
+  pruefe('Während der Drehung wirkt die Lenkung nur zu 30 %', Math.abs(l2.heading / l1.heading - 0.3) < 0.02, (l2.heading / l1.heading).toFixed(3));
+}
+// Masse × Tempo: Multivan schiebt Mini stärker als umgekehrt; schneller = stärker
+{
+  function abdraengen(fwOpfer, fwRempler, tempo) {
+    const a = new R.Vehicle(Object.assign({}, fwOpfer, SCHNELL)), b = new R.Vehicle(Object.assign({}, fwRempler, SCHNELL));
+    zielStart(a, b, 30, H(30), tempo, 0.6, 3.8, 0.5);
+    const e = lauf2(a, b, 'echt', 60);
+    return e.erstVQ ? Math.abs(e.erstVQ.a) : 0;
+  }
+  const mvMini = abdraengen(KAT('mini-cooper'), KAT('multivan'), 60), miniMv = abdraengen(KAT('multivan'), KAT('mini-cooper'), 60);
+  pruefe('Multivan schiebt Mini stärker ab als Mini den Multivan', mvMini > miniMv * 1.2, 'Mini ' + mvMini.toFixed(2) + ' m/s, Multivan ' + miniMv.toFixed(2) + ' m/s');
+  // nur der Rempel-Anteil: echt − sanft (gleiche Szene, gleiche Masse) = 3–6 m/s quer
+  const quer = (rempeln) => { const a = new R.Vehicle(SCHNELL), b = new R.Vehicle(SCHNELL); zielStart(a, b, 30, H(30), 60, 0.6, 3.8, 0.5);
+    const e = lauf2(a, b, rempeln, 60); return e.erstVQ ? e.erstVQ.a : 0; };
+  const zusatz = Math.abs(quer('echt') - quer('sanft'));
+  pruefe('Abdrängen: zusätzlicher Querimpuls 3–6 m/s (gleiche Masse)', zusatz >= 3 - 1e-9 && zusatz <= 6 + 1e-9, zusatz.toFixed(2) + ' m/s');
+  const langsam = abdraengen({}, {}, 34), schnell = abdraengen({}, {}, 60);
+  pruefe('Tempo: schnellerer Rempler drängt stärker ab', schnell > langsam, langsam.toFixed(2) + ' → ' + schnell.toFixed(2) + ' m/s');
+  function dreh(fwOpfer, fwRempler) {
+    const a = new R.Vehicle(fwOpfer), b = new R.Vehicle(fwRempler);
+    a.setzen(0, 0, 0); b.setzen(12, -1.0, H(90)); a.vLaengs = 0; b.vLaengs = 12;
+    return lauf2(a, b, 'echt', 90).drehMax[0];
+  }
+  const dMini = dreh(KAT('mini-cooper'), KAT('multivan')), dMv = dreh(KAT('multivan'), KAT('mini-cooper'));
+  pruefe('Seitentreffer: Multivan dreht Mini stärker als Mini den Multivan', dMini > dMv, 'Mini ' + dMini.toFixed(2) + ', Multivan ' + dMv.toFixed(2) + ' rad/s');
+}
+// Auto an der Bande gilt als schwer: das freie Auto weicht aus
+{
+  const a = new R.Vehicle({}), b = new R.Vehicle({}); a.setzen(0, 0, 0); b.setzen(1.5, 0, 0); a._anBande = true;
+  K.autoAuto([a, b]);
+  pruefe('Trennung: Auto an der Bande bleibt fast stehen, das andere weicht aus', Math.abs(a.x) < 0.05 && b.x - 1.5 > 0.3,
+    'a ' + a.x.toFixed(3) + ', b +' + (b.x - 1.5).toFixed(3));
+}
+// Looping: zwei Autos gleichzeitig nebeneinander → keine Durchdringung im Looping, beide schaffen ihn
+{
+  const st = new R.Strecke(R.trackCatalog.find(t => t.id === 'fantasie'));
+  const L = st.loopings[0], sp = st.spline;
+  for (const [name, q2, ds2] of [['nebeneinander', 2.5, 0], ['dicht dahinter', 0, -2]]) {
+    const fz = [0, 1].map((k) => {
+      const v = new R.Vehicle({}), p = sp.punktBei(L.s - 30 + (k ? ds2 : 0)), q = k ? q2 : -2.5 * (ds2 === 0 ? 1 : 0);
+      v.setzen(p.x + p.nx * q, p.z + p.nz * q, R.headingAus(p.tx, p.tz)); v.vLaengs = 32;
+      return { vehicle: v, looping: R.Looping.zustand(), index: -1 };
+    });
+    let minLuecke = Infinity, beideDrin = 0;
+    for (let i = 0; i < 60 * 6; i++) {
+      fz.forEach((f) => { f.index = R.Looping.fahrzeugSchritt(f.looping, f.vehicle, st, { gas: 1, bremse: 0, lenkung: 0 }, dt, f.index).index; });
+      K.loopingAbstand(fz, st);
+      const [l0, l1] = fz.map(f => f.looping);
+      if (l0.aktiv && l1.aktiv && l0.looping === l1.looping) {
+        beideDrin++;
+        minLuecke = Math.min(minLuecke, Math.abs(l0.winkel - l1.winkel) * L.radius);
+      }
+    }
+    const soll = fz[0].vehicle.daten.laenge + R.config.kollision.loopingAbstand;
+    pruefe(`Looping ${name}: Abstand im Looping ≥ Länge + 0,1 m, beide geschafft, kein Sturz`,
+      (beideDrin === 0 || minLuecke >= soll - 1e-6) && fz.every(f => f.looping.geschafft >= 1 && f.looping.gefallen === 0),
+      'gemeinsam im Looping ' + beideDrin + ' Schritte, min. Bogenabstand ' + (minLuecke === Infinity ? '-' : minLuecke.toFixed(2)) + ' m, geschafft ' +
+      fz.map(f => f.looping.geschafft).join('/'));
+  }
 }
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');
 process.exit(fehler ? 1 : 0);

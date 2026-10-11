@@ -16,6 +16,12 @@
 //   Turbo multiplizieren danach weiter auf diese Werte. Ohne Option: Vehicle.klasseStandard (null = Katalogwerte).
 // - Lenkung: Drehrate bei hohem Tempo direkter (arcade-Untergrenze aus config.physik.lenkung), über der
 //   Haftgrenze rutscht das Auto spürbar nach außen und verliert Tempo (Untersteuern statt „nichts passiert").
+//
+// Runde 6 (W1): untergrundMisch (0..1, main.js) – hinter dem Randstreifen mischen Rand und Gras/Sand weich
+// (Rollwiderstand, Haftung, Tempo-Deckel); undefined/1 = rechnet exakt wie vorher.
+// drehImpuls (rad/s, > 0 = heading wächst = nach links): Rempler „echt" (collisions.js) dreht das Auto; die
+// Welt-Geschwindigkeit bleibt dabei erhalten (das Auto rutscht quer), klingt exponentiell in ~1 s ab, Lenkung
+// währenddessen nur config.kollision.rempeln.drehLenkung (30 %) wirksam. 0 = keinerlei Wirkung.
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -63,6 +69,8 @@
       this.nicken = 0;           // optisches Nicken (rad, um die Querachse, > 0 = Bug hoch)
       this.letzteSteuerung = { gas: 0, bremse: 0, lenkung: 0 };
       this.streckeFortschritt = 0; // wird vom Rennmanager gesetzt
+      this.drehImpuls = 0;       // Runde 6: Drehung nach einem Rempler (rad/s), siehe Kopf
+      this.untergrundMisch = undefined;   // Runde 6: 0 = noch Rand, 1 = ganz Gras/Sand (main.js setzt es abseits)
     }
 
     get tempo() { return Math.abs(this.vLaengs); }
@@ -144,7 +152,14 @@
      */
     schritt(dt, s, hilfe, umwelt) {
       const d = this.daten;
-      const ug = R.config.physik.untergrund[this.untergrund] || R.config.physik.untergrund.strasse;
+      let ug = R.config.physik.untergrund[this.untergrund] || R.config.physik.untergrund.strasse;
+      // Runde 6: weicher Übergang Rand → Gras/Sand (nur wenn main.js einen Mischfaktor < 1 gesetzt hat)
+      const misch = this.untergrundMisch;
+      const gemischt = misch !== undefined && misch < 1 && ug.vMaxAbs !== undefined;
+      if (gemischt) {
+        const ur = R.config.physik.untergrund.rand, m = Math.max(0, misch);
+        ug = { grip: ur.grip + (ug.grip - ur.grip) * m, rollwiderstand: ur.rollwiderstand + (ug.rollwiderstand - ur.rollwiderstand) * m };
+      }
       // Runde 4: Wetter wirkt auf die Haftung (auch drehrateMax/querBeschleunigungMax über gripGesamt)
       this.umweltGrip = umwelt && umwelt.gripFaktor !== undefined ? umwelt.gripFaktor : 1;
       const bremsFaktor = umwelt && umwelt.bremsFaktor !== undefined ? umwelt.bremsFaktor : 1;
@@ -193,7 +208,15 @@
         else if (gas === 0) a -= Math.min(6, d.beschleunigung) * 0.8 * bremse;   // rückwärts (nach Stillstand)
       }
       const luft = Math.max(0, (1 - P.kraftAbfall - P.endKraft) * d.beschleunigung - 0.6);
-      let widerstand = 0.6 * ug.rollwiderstand + luft * vRel * vRel;
+      let rw = ug.rollwiderstand;
+      // Runde 6: abseits (Gras/Sand mit Deckel) greift der volle Rollwiderstand erst ab abseitsAnfahren m/s – darunter
+      // gemischt mit dem Randstreifen, damit man aus dem Gras/Sand (auch rückwärts, z. B. vom Zaun weg) wieder anfährt
+      const ugRoh = R.config.physik.untergrund[this.untergrund];
+      if (ugRoh && ugRoh.vMaxAbs !== undefined && P.abseitsAnfahren) {
+        const rr = R.config.physik.untergrund.rand.rollwiderstand, t = Math.min(1, Math.abs(this.vLaengs) / P.abseitsAnfahren);
+        if (rw > rr) rw = rr + (rw - rr) * t;
+      }
+      let widerstand = 0.6 * rw + luft * vRel * vRel;
       // Reifen radieren in der Kurve (Untersteuern kostet Tempo)
       widerstand += P.kurvenWiderstand * Math.abs(this._querBeschl || 0);
       // Runde 5: über der Haftgrenze radieren die Reifen stärker (Untersteuern kostet spürbar Tempo)
@@ -208,6 +231,7 @@
       // Abseits ist das Höchsttempo deutlich niedriger (Gras ≤ 90 km/h, Sand ≤ 79 km/h).
       // Darüber wird kräftig, aber nicht schlagartig abgebremst.
       let vMaxHier = this.vMaxAuf(this.untergrund);
+      if (gemischt) { const vr = this.vMaxAuf('rand'); vMaxHier = vr + (vMaxHier - vr) * Math.max(0, misch); }
       if (windLaengs) vMaxHier *= vMaxWind / d.vMax;          // Runde 4: Wind verschiebt auch den Untergrund-Deckel
       if (vNeu > vMaxHier) vNeu = Math.max(vMaxHier, Math.min(vNeu, vAlt - P.abseitsBremsen * dt));
       vNeu = Math.max(-d.rueckwaertsMax, Math.min(vMaxWind, vNeu));
@@ -221,7 +245,8 @@
       if (this.tempo > 0.2) {
         const drehrateMax = this.drehrateMax();
         const richtungVz = this.vLaengs >= 0 ? 1 : -1;      // rückwärts lenkt spiegelverkehrt
-        const drehrate = this.lenkung * drehrateMax * richtungVz;   // > 0 = Rechtskurve
+        let drehrate = this.lenkung * drehrateMax * richtungVz;   // > 0 = Rechtskurve
+        if (this.drehImpuls) drehrate *= (R.config.kollision && R.config.kollision.rempeln.drehLenkung) || 0.3;   // Runde 6
         this.heading -= drehrate * dt;
         this._querBeschl = drehrate * this.vLaengs;
         // Fliehkraft: das Auto rutscht zur Kurvenaußenseite – proportional zur Querbeschleunigung,
@@ -244,6 +269,15 @@
       if (windSeit && this.vLaengs > 1) {
         this.vQuer += W.seitK * windSeit * this.vLaengs * dt;
         this.heading -= W.gierK * windSeit * this.vLaengs * dt;     // heading kleiner = nach rechts
+      }
+      // Runde 6: Drehung nach einem Rempler – Heading dreht, die Bewegung (Welt) bleibt → das Auto rutscht quer
+      if (this.drehImpuls) {
+        const vw = this.weltGeschwindigkeit();
+        this.heading += this.drehImpuls * dt;
+        this.weltGeschwindigkeitSetzen(vw.x, vw.z);
+        const K = (R.config.kollision && R.config.kollision.rempeln) || {};
+        this.drehImpuls *= Math.exp(-(K.drehAbklingen || 3) * dt);
+        if (Math.abs(this.drehImpuls) < 0.05) this.drehImpuls = 0;
       }
       // Grip baut Drift ab
       const dampf = Math.exp(-(2.5 + 9 * grip) * dt);
@@ -317,6 +351,7 @@
     setzen(x, z, heading) {
       this.x = x; this.z = z; this.heading = heading;
       this.vLaengs = 0; this.vQuer = 0; this.lenkung = 0; this.neigung = 0; this.nicken = 0; this._querBeschl = 0;
+      this.drehImpuls = 0; this._kollAlt = null;   // Runde 6: keine Drehung/kein Sweep über einen Reset hinweg
     }
   }
 

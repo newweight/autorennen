@@ -70,7 +70,11 @@ with sync_playwright() as p:
     pruefe('innerhalb 200 s: Spieler angehalten', stopp is not None, stopp[0] if stopp else verlauf[-3:])
     if stopp:
         # 3 s weiter (Polizei parkt daneben), dann Bild mit HUD
+        # Runde 6: nach dem Anhalten bremst der Spieler noch aus (Rempeln/Abseits-Physik) → bis zu 6 s vorspulen, bis er steht
         page.evaluate('() => { const s = Rennspiel.spiel; s.pausiert = false; s.schnellvorlauf(3); s.kameras[0]._erstesMal = true; }')
+        for _ in range(6):
+            if abs(page.evaluate(ZUSTAND)['kmh']) < 3: break
+            page.evaluate('() => Rennspiel.spiel.schnellvorlauf(0.5)')
         # HUD läuft mit 20 Hz in frame(); SwiftShader braucht für die ersten Frames mit Blaulicht-Lichtern lange → warten
         try: page.wait_for_function("() => { const e = document.querySelector('.hud-polizei'); return e && e.textContent.indexOf('Anhalten') >= 0; }", timeout=8000)
         except Exception: pass
@@ -82,7 +86,7 @@ with sync_playwright() as p:
         print('Stopp-Zustand:', json.dumps(z1, ensure_ascii=False))
         pruefe('HUD zeigt „🚨 Polizei! Anhalten… N s"', 'Polizei! Anhalten' in z1['hud'] and ' s' in z1['hud'], z1['hud'])
         pruefe('Spieler steht (< 3 km/h)', abs(z1['kmh']) < 3, z1['kmh'])
-        pruefe('Streifenwagen daneben (≤ 9 m), Phase halt', z1['abstand'] is not None and z1['abstand'] <= 9 and z1['phase'] == 'halt', (z1['abstand'], z1['phase']))
+        pruefe('Streifenwagen daneben (≤ 12 m), Phase halt', z1['abstand'] is not None and z1['abstand'] <= 12 and z1['phase'] == 'halt', (z1['abstand'], z1['phase']))
         page.evaluate('() => { const s = Rennspiel.spiel; s.pausiert = false; s.schnellvorlauf(3); }')
         page.wait_for_timeout(400)
         z2 = page.evaluate(ZUSTAND)

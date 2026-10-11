@@ -2,7 +2,8 @@
 // Runde 4: Schaden-System („Auto-Gesundheit“) + Grafik der Wracks (liegengebliebene/brennende Autos)
 //
 //   const schaden = new Rennspiel.Schaden(fahrzeuge, { an: true|false });   // fahrzeuge: Vehicles oder { vehicle, mesh }
-//   schaden.treffer(i, art, staerke)   art: 'bande'|'auto'|'hindernis'|'brand'|'ball'|'wasser'|'stroh'
+//   schaden.treffer(i, art, staerke[, zuschlag])   art: 'bande'|'auto'|'hindernis'|'brand'|'ball'|'wasser'|'stroh'|'pflanze'
+//        Runde 6: Verlust je Art aus config.schaden.verluste (bande/pflanze 3 %), sonst trefferVerlust; auto ab 1 m/s.
 //        → verlorene Prozentpunkte (0 = nichts passiert). −5 % je Treffer ab Mindeststärke (config.schaden.mindest),
 //          brand −10 %; je Fahrzeug höchstens ein Treffer je abklingZeit (0,7 s, kein Dauerabzug beim Schleifen).
 //   Bequem: schaden.stoesseAuswerten({ bande:[staerke je Fahrzeug], auto, hindernis, dynamik }) (Listen aus collisions/dynamik)
@@ -167,10 +168,12 @@
      * Treffer für Fahrzeug i. art: bande|auto|hindernis|brand|ball|wasser|stroh, staerke in m/s.
      * @returns {number} verlorene Prozentpunkte (0 = kein Abzug: aus, Abklingzeit, zu schwach, liegengeblieben)
      */
-    treffer(i, art, staerke) {
+    treffer(i, art, staerke, zuschlag) {
       if (!this.zaehlt(i, art, staerke)) return 0;
       const z = this.z[i], C = cfg();
-      const verlust = art === 'brand' ? wert(C.brandVerlust, 10) : wert(C.trefferVerlust, 5);
+      // Runde 6: eigene Verluste je Art (config.schaden.verluste: bande/pflanze −3 %), zuschlag = z. B. Drehung +3
+      const vj = (C.verluste || {})[art];
+      const verlust = (art === 'brand' ? wert(C.brandVerlust, 10) : wert(vj, wert(C.trefferVerlust, 5))) + (zuschlag || 0);
       const vorher = z.punkte;
       z.abkling = wert(C.abklingZeit, 0.7);
       this._punkteSetzen(i, vorher - verlust);
@@ -209,12 +212,19 @@
      * Alle Stöße eines Physikschritts auf einmal auswerten.
      * @param {{bande?:number[], auto?:Array, hindernis?:Array, dynamik?:Array}} st
      *   bande: Aufprallstärke je Fahrzeug (Rückgabe von Kollisionen.bande), auto: autoAuto()-Stöße {a,b,staerke},
-     *   hindernis: Kollisionen.hindernisse()-Stöße {nr,typ,staerke} (typ 'brand' → −10 %), dynamik: {nr,typ,staerke}
+     *   hindernis: Kollisionen.hindernisse()-Stöße {nr,typ,staerke} (typ 'brand' → −10 %), dynamik: {nr,typ,staerke},
+     *   Runde 6: pflanzen: Kollisionen.pflanzen()-Stöße (typ 'baum' → −3 %, 'busch' → nichts), auto[].dreht → +3 %
      */
     stoesseAuswerten(st) {
       if (!this.an || !st) return;
       (st.bande || []).forEach((s, i) => { if (s > 0) this.treffer(i, 'bande', s); });
-      (st.auto || []).forEach((s) => { this.treffer(s.a, 'auto', s.staerke); this.treffer(s.b, 'auto', s.staerke); });
+      // Runde 6: Rempler mit Drehung (s.dreht[0] = a, [1] = b) kostet zusätzlich drehungVerlust (3 %) im selben Treffer
+      const dz = wert(cfg().drehungVerlust, 3);
+      (st.auto || []).forEach((s) => {
+        this.treffer(s.a, 'auto', s.staerke, s.dreht && s.dreht[0] ? dz : 0);
+        this.treffer(s.b, 'auto', s.staerke, s.dreht && s.dreht[1] ? dz : 0);
+      });
+      (st.pflanzen || []).forEach((s) => { if (s.typ === 'baum') this.treffer(s.nr, 'pflanze', s.staerke); });   // Busch: kein Schaden
       (st.hindernis || []).forEach((s) => this.treffer(s.nr, s.typ === 'brand' ? 'brand' : 'hindernis', s.staerke));
       (st.dynamik || []).forEach((s) => this.treffer(s.nr, s.typ === 'wasser' ? 'wasser' : s.typ === 'ball' ? 'ball' : 'stroh', s.staerke));
     }

@@ -240,7 +240,7 @@ with sync_playwright() as p:
     zeilen = page.evaluate('''Array.from(document.querySelectorAll('#ergebnis tbody tr')).map(tr => Array.from(tr.children).map(td => td.textContent.trim()))''')
     print(json.dumps(zeilen, ensure_ascii=False))
     pruefe('Ergebnis: 4 Zeilen', len(zeilen) == 4, len(zeilen))
-    namen = [z[1] for z in zeilen]
+    namen = [z[1].replace('⭐', '').strip() for z in zeilen]   # Runde 6: Sterne stehen hinter dem Namen
     pruefe('Ergebnis: Fahrernamen statt Spieler 1/2, KI als "🤖 Name"',
            'Senna' in namen and 'Verstappen' in namen and '🤖 Schumacher' in namen and '🤖 Röhrl' in namen
            and not any('Spieler' in n or 'Computer' in n for n in namen), namen)
@@ -252,6 +252,12 @@ with sync_playwright() as p:
     pruefe('Ergebnis: Zeiten der Spieler > 0', all(sek(z[3]) > 0 and sek(z[4]) > 0 for z in spieler_zeilen), spieler_zeilen)
     plaetze = [z[0] for z in zeilen]
     pruefe('Ergebnis: Plätze 1.–4.', plaetze == ['1.', '2.', '3.', '4.'], plaetze)
+    # Runde 6 (D3): Sterne – Spieler 1–3 ⭐ (Platz 1 = 3, Platz 2–3 = 2 oder beste Runde unter Zielzeit), KI keine
+    stern = lambda z: z[1].count('⭐')
+    pruefe('Ergebnis: Sterne – jeder Spieler 1–3 ⭐, KI keine', all(1 <= stern(z) <= 3 for z in spieler_zeilen) and all(stern(z) == 0 for z in zeilen if z[1].startswith('🤖')), [stern(z) for z in zeilen])
+    pruefe('Ergebnis: Sieger-Spieler (Platz 1) hat 3 ⭐, Platz 2–3 mindestens 2 ⭐', all((stern(z) == 3) if z[0] == '1.' else (stern(z) >= 2 if z[0] in ('2.', '3.') else True) for z in spieler_zeilen), [(z[0], stern(z)) for z in spieler_zeilen])
+    sg = page.evaluate("JSON.parse(localStorage.getItem('rennspiel.sterne.v1') || '{}')")
+    pruefe('Sterne in localStorage rennspiel.sterne.v1 (Senna, Verstappen) = Summe der Sterne', sg.get('Senna') == stern([z for z in zeilen if z[1].startswith('Senna')][0]) and sg.get('Verstappen') == stern([z for z in zeilen if z[1].startswith('Verstappen')][0]), sg)
     # eingefroren: weiter fahren ändert die Tabelle nicht
     page.evaluate('Rennspiel.spiel.schnellvorlauf(30)')
     zeilen2 = page.evaluate('''Array.from(document.querySelectorAll('#ergebnis tbody tr')).map(tr => Array.from(tr.children).map(td => td.textContent.trim()))''')
@@ -292,7 +298,7 @@ with sync_playwright() as p:
     page.click('[data-a="modus:solo"]'); page.wait_for_timeout(150)
     page.click('[data-a="strecke:wiese"]'); page.wait_for_timeout(300)
     w = texte('.m-welt .pille')
-    pruefe('Welt-Pillen Wiese: 4 (Klassisch, Hindernisse, Stunt, Verrückt)', len(w) == 4 and 'Klassisch' in w[0] and 'Verrückt' in w[3], w)
+    pruefe('Welt-Pillen Wiese: 5 (Klassisch, Hindernisse, Stunt, Verrückt, Alles)', len(w) == 5 and 'Klassisch' in w[0] and 'Verrückt' in w[3] and 'Alles' in w[4] and '🎪' in w[4], w)
     pruefe('Welt Standard: Klassisch aktiv, Standard-Marke, Name in der Erklärung', 'Klassisch' in texte('.m-welt .pille.aktiv')[0] and 'Standard' in w[0]
            and 'Klassisch' in texte('.m-welt .welt-text')[0] and E()['welt'] == '', [texte('.m-welt .welt-text'), E()['welt']])
     page.click('[data-a="welt:stunt"]'); page.wait_for_timeout(300)
@@ -309,7 +315,7 @@ with sync_playwright() as p:
     pruefe('Streckenwechsel setzt Welt auf Standard zurück', E()['streckeId'] == 'wald' and E()['welt'] == '', E())
     page.click('[data-a="welt:verrueckt"]'); page.click('[data-a="strecke:fantasie"]'); page.wait_for_timeout(300)
     w = texte('.m-welt .pille')
-    pruefe('Welt-Pillen Fantasie: 2 (Fantasie Standard, Verrückt), Welt zurückgesetzt', len(w) == 2 and 'Fantasie' in w[0] and 'Verrückt' in w[1] and E()['welt'] == '', [w, E()['welt']])
+    pruefe('Welt-Pillen Fantasie: 3 (Fantasie Standard, Verrückt, Alles), Welt zurückgesetzt', len(w) == 3 and 'Fantasie' in w[0] and 'Verrückt' in w[1] and 'Alles' in w[2] and E()['welt'] == '', [w, E()['welt']])
     snap('menu_r4_strecke_fantasie_welt.png')
     for vw, vh in ((1280, 800), (1440, 900)):
         page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(300)
@@ -327,7 +333,7 @@ with sync_playwright() as p:
     # Einstellungen-Schritt (solo)
     page.click('[data-a="schritt:4"]'); page.wait_for_timeout(300)
     zl = page.evaluate('Rennspiel.spiel.menue.zeilen()')
-    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'start'], zl)
+    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'rempeln', 'start'], zl)
     pj = texte('[data-a="fokus:4"] .pille')
     pruefe('Jahreszeit-Pillen (Wiese): Frühling, Sommer, Herbst, Winter, Zufall; Sommer aktiv', len(pj) == 5 and 'Sommer' in pj[1] and 'Zufall' in pj[4]
            and 'Sommer' in texte('[data-a="fokus:4"] .pille.aktiv')[0], pj)
@@ -392,6 +398,11 @@ with sync_playwright() as p:
     taste('ArrowRight'); an = E()['polizei']; taste('ArrowLeft')
     pruefe('Tastatur: Polizei → = an, ← = aus', an is True and E()['polizei'] is False, [an, E()['polizei']])
     taste('ArrowDown')
+    # Runde 6: Rempeln-Zeile (Standard sanft; → = echt, ← = sanft)
+    pruefe('Tastatur: Rempeln-Zeile, Standard sanft', E().get('rempeln') == 'sanft', E().get('rempeln'))
+    taste('ArrowRight'); r1 = E().get('rempeln'); taste('ArrowLeft')
+    pruefe('Tastatur: Rempeln → = echt, ← = sanft', r1 == 'echt' and E().get('rempeln') == 'sanft', [r1, E().get('rempeln')])
+    taste('ArrowDown')
     pruefe('Tastatur: ↓ erreicht Start (Fokus-Ring), Schaden wieder an', page.locator('.start-knopf.fokus').count() == 1 and E()['schaden'] is True)
     # Layout ohne Überlauf: solo/zwei × Tafel zu/auf × 1280×800 / 1440×900
     LAYOUT = """(() => { const m = document.querySelector('.m-inhalt'), fuss = document.querySelector('.m-fuss').getBoundingClientRect().top;
@@ -435,6 +446,9 @@ with sync_playwright() as p:
     page.click('[data-a="weiter"]'); page.wait_for_timeout(150)      # Runde 4: Klick auf die Karte bleibt im Schritt (darunter: Welt)
     page.click('[data-a="fahrer:0:Kerle"]'); page.wait_for_timeout(150)
     snap('menu_10b_fahrer_solo.png')
+    page.evaluate("Rennspiel.Sterne.gutschreiben('Kerle', 12)"); page.evaluate("Rennspiel.spiel.menue.zeichnen && Rennspiel.spiel.menue.zeichnen()"); page.wait_for_timeout(200)
+    karte = page.evaluate("(() => { const k = document.querySelector('[data-a=\"fahrer:0:Kerle\"]'); return k ? k.textContent.trim() : null; })()")
+    pruefe('Runde 6: Fahrerkarte zeigt „⭐ 12“ (Sterne-Gesamtzahl je Fahrer)', karte is not None and '⭐ 12' in karte, karte)
     pruefe('Maus: Fahrer Kerle gewählt, Solo-Raster 12 Karten', page.evaluate('Rennspiel.spiel.einstellungen.fahrer[0]') == 'Kerle'
            and page.evaluate("document.querySelectorAll('.karte.fahrer').length") == 12)
     page.click('[data-a="weiter"]'); page.wait_for_timeout(150)

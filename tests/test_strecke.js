@@ -301,9 +301,24 @@ if (daten.welten) {
   const namen = Object.keys(daten.welten);
   const STANDARD = { wiese: 'klassisch', wald: 'hindernisse', wueste: 'hindernisse', fantasie: 'fantasie', dino: 'hindernisse' };
   if (STANDARD[daten.id]) pruefe('weltStandard = ' + STANDARD[daten.id], daten.weltStandard === STANDARD[daten.id], daten.weltStandard);
-  const erwNamen = daten.id === 'fantasie' ? ['fantasie', 'verrueckt'] : ['klassisch', 'hindernisse', 'stunt', 'verrueckt'];
+  const erwNamen = (daten.id === 'fantasie' ? ['fantasie', 'verrueckt'] : ['klassisch', 'hindernisse', 'stunt', 'verrueckt']).concat('alles');
   pruefe('Welten: ' + erwNamen.join(', '), JSON.stringify(namen) === JSON.stringify(erwNamen), namen.join(', '));
   pruefe('R.weltInfo kennt alle Welten (Name + Emoji)', namen.every(w => R.weltInfo[w] && R.weltInfo[w].name && R.weltInfo[w].emoji));
+  // Runde 6 (B4): Welt „Alles" = alle Schichten an, vereinigt die Listen aller anderen Welten
+  {
+    const ws = Object.keys(daten.welten).filter(w => w !== 'alles');
+    const al = new R.Strecke(daten, { welt: 'alles' }), a = al.aktiveSchichten;
+    pruefe('Welt alles: weltName akzeptiert, alle Schichten an', R.Strecke.weltName(daten, 'alles') === 'alles' && al.welt === 'alles' &&
+      R.Strecke.SCHICHTEN.every(k => a[k] === true), Object.keys(a).filter(k => !a[k]).join(','));
+    pruefe('Welt alles: R.weltInfo.alles = 🎪 Alles', R.weltInfo.alles && R.weltInfo.alles.name === 'Alles' && R.weltInfo.alles.emoji === '🎪');
+    const unions = ['hindernisse', 'wracks', 'strohballen', 'schanzen', 'boostFelder', 'schilde'].every((l) =>
+      ws.every(w => al[l].length >= new R.Strecke(daten, { welt: w })[l].length));
+    pruefe('Welt alles vereinigt die Schichten (Listen >= jeder andere Welt)', unions);
+    pruefe('Welt alles: Bälle/Wasserstrahlen/Dinos/Loopings wie Katalog', al.daten.baelle.length === (daten.baelle || []).length &&
+      al.daten.wasserstrahlen.length === (daten.wasserstrahlen || []).length && (al.daten.dinos || []).length === (daten.dinos || []).length &&
+      al.loopings.length === (daten.loopings || []).length);
+    pruefe('Welt alles: Länge unverändert', Math.abs(al.laenge - L) < 1e-6);
+  }
   const std = new R.Strecke(daten);
   pruefe('new Strecke(daten) → weltStandard', std.welt === daten.weltStandard, std.welt);
   pruefe('unbekannte Welt → weltStandard', new R.Strecke(daten, { welt: 'gibtsnicht' }).welt === daten.weltStandard);
@@ -445,8 +460,8 @@ if (daten.welten) {
 if (daten.welten) {
   Object.keys(daten.welten).forEach((w) => {
     const st = new R.Strecke(daten, { welt: w }), pk = new R.Pickups(st), sch = R.Schanzen.liste(st);
-    const sollSchanzen = (w === 'stunt' || w === 'verrueckt') && daten.id !== 'fantasie';
-    const sollPickups = w === 'verrueckt';
+    const sollSchanzen = (w === 'stunt' || w === 'verrueckt' || w === 'alles') && daten.id !== 'fantasie';
+    const sollPickups = w === 'verrueckt' || w === 'alles';
     pruefe('Welt ' + w + ': Schanzen ' + (sollSchanzen ? 'da' : 'keine') + ', Turbo/Schild ' + (sollPickups ? 'da' : 'keine'),
       (sch.length > 0) === sollSchanzen && (pk.felder.length > 0) === sollPickups && (pk.kugeln.length > 0) === sollPickups,
       sch.length + ' Schanzen, ' + pk.felder.length + ' Turbo, ' + pk.kugeln.length + ' Schilde');

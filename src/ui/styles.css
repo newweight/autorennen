@@ -262,6 +262,8 @@ kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1
 .karte.fahrer { padding: .3em .3em .4em; min-width: 0; }
 .karte.fahrer .avatar { font-size: 1.9em; line-height: 1.15; }
 .karte.fahrer .karten-name { font-size: 1.05em; white-space: nowrap; }
+.karte.fahrer .karten-sterne { font-size: .8em; line-height: 1.1; color: var(--gelb); white-space: nowrap; }
+.ergebnis td.name .sterne { white-space: nowrap; letter-spacing: -.05em; margin-left: .3em; }
 .m-fahrer:not(.zwei) .karte.fahrer { padding: .7em .3em .8em; }
 .m-fahrer:not(.zwei) .karte.fahrer .avatar { font-size: 3em; }
 .m-fahrer:not(.zwei) .karte.fahrer .karten-name { font-size: 1.15em; }

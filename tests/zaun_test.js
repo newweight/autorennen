@@ -131,5 +131,75 @@ const breitestes = autos.reduce((a, b) => (b.breite * 10 + b.laenge > a.breite *
     durch + ' durchfahren, ' + getroffen + '/' + saeulen.length + ' angefahren');
 }
 
+// ---------- Runde 6 (W1-A5): Pflanzen/Felsen zwischen Straße und Zaun (echte Deko aus themes.js, mit THREE) ----------
+{
+  const R3 = ladeModule(['vendor/three.min.js', 'src/config.js', 'src/physics/vehicle.js', 'src/track/spline.js', 'src/track/trackCatalog.js',
+    'src/track/trackBuilder.js', 'src/track/looping.js', 'src/physics/collisions.js', 'src/physics/schaden.js', 'src/cars/carCatalog.js', 'src/world/themes.js']);
+  const K3 = R3.Kollisionen, P = R3.config.pflanzen;
+  const strecken = {};
+  R3.trackCatalog.forEach((t) => {
+    const st = new R3.Strecke(t);
+    const n = K3.pflanzenSammeln(st, R3.themes.dekoBauen(t.thema, st));
+    strecken[t.id] = st;
+    const zuWeit = st.pflanzenKollider.filter(k => Math.abs(k.seitenabstand) - k.r > st.grenzeBei(k.s) + P.zugabe + 1e-6).length;
+    const fest = st.pflanzenKollider.filter(k => k.art === 'fest').length;
+    pruefe(`${t.id}: Pflanzen-Kollider nur zwischen Straße und Zaun (+${P.zugabe} m)`, zuWeit === 0 && (t.id === 'fantasie' || n > 0),
+      n + ' Kollider (' + fest + ' fest, ' + (n - fest) + ' weich)');
+  });
+  /** Auto 12 m vor dem Kollider (Kurs auf die Mitte), 60 km/h, Vollgas; Schritt wie main.js. */
+  function anfahrt(st, k, schaden) {
+    const v = new R3.Vehicle({}), sp = st.spline;
+    const p = sp.punktBei(k.s - 12), q = Math.max(-st.grenzeBei(k.s) + 2, Math.min(st.grenzeBei(k.s) - 2, k.seitenabstand));
+    const x0 = p.x + p.nx * q, z0 = p.z + p.nz * q;
+    v.setzen(x0, z0, R3.headingAus(k.x - x0, k.z - z0)); v.vLaengs = 60 / 3.6;
+    const sch = schaden ? new R3.Schaden([{ vehicle: v }], { an: true }) : null;
+    const erg = { stoss: null, minAbst: Infinity, vVor: 0, vNach: 0, ende: 0 };
+    let idx = -1;
+    for (let i = 0; i < 120; i++) {
+      const n = st.abfrage(v.x, v.z, idx); idx = n.index; v.untergrund = 'strasse';   // Tempo bleibt 60 km/h bis zum Kontakt
+      v.schritt(dt, { gas: i < 1 ? 0.3 : 0, bremse: 0, lenkung: 0 });
+      K3.bande(v, st);
+      const vor = v.vLaengs;
+      const ps = K3.pflanzen([v], st, { dt });
+      if (sch) { sch.stoesseAuswerten({ pflanzen: ps }); sch.schritt(dt); }
+      const t = ps.find(x => x.typ === (k.art === 'fest' ? 'baum' : 'busch'));
+      if (t && !erg.stoss) { erg.stoss = t; erg.vVor = vor; erg.vNach = v.vLaengs; }
+      // Rechteck-Abstand zur Kreismitte (nächster Punkt der Karosserie)
+      const r = v.richtung(), qq = v.rechts(), dx = k.x - v.x, dz = k.z - v.z;
+      const lx = Math.max(-v.daten.laenge / 2, Math.min(v.daten.laenge / 2, dx * r.x + dz * r.z));
+      const lq = Math.max(-v.daten.breite / 2, Math.min(v.daten.breite / 2, dx * qq.x + dz * qq.z));
+      erg.minAbst = Math.min(erg.minAbst, Math.hypot(dx - r.x * lx - qq.x * lq, dz - r.z * lx - qq.z * lq) - k.r);
+    }
+    erg.ende = v.tempo; erg.prozent = sch ? sch.zustand(0).prozent : 100;
+    return erg;
+  }
+  // Baum: Stopp + −3 % (Schaden an), nicht hindurch
+  const st = strecken.wiese;
+  const baeume = st.pflanzenKollider.filter(k => k.art === 'fest' && Math.abs(k.seitenabstand) < st.grenzeBei(k.s) - 1);
+  const baum = baeume[0];
+  if (baum) {
+    const e = anfahrt(st, baum, true);
+    pruefe('Baum bei 60 km/h: Stoß, Stopp (< 2 m/s), −3 % Schaden, nicht hindurch',
+      e.stoss && e.vNach < 2 && e.prozent === 97 && e.minAbst > -0.1,
+      (e.stoss ? 'Stärke ' + e.stoss.staerke.toFixed(1) + ' m/s, ' : 'kein Stoß, ') + 'danach ' + (e.vNach * 3.6).toFixed(0) + ' km/h, ' +
+      e.prozent + ' %, min. Abstand ' + e.minAbst.toFixed(2) + ' m (' + baum.name + ', r ' + baum.r.toFixed(2) + ')');
+  } else pruefe('Wiese: erreichbarer Baum gefunden', false);
+  const busch = st.pflanzenKollider.find(k => k.art === 'weich' && Math.abs(k.seitenabstand) < st.grenzeBei(k.s) - 1);
+  if (busch) {
+    const e = anfahrt(st, busch, true);
+    pruefe('Busch bei 60 km/h: Tempo × 0,7, kein Schaden, durchfahrbar', e.stoss && Math.abs(e.vNach / e.vVor - P.weichTempo) < 1e-9 && e.prozent === 100,
+      e.stoss ? (e.vVor * 3.6).toFixed(0) + ' → ' + (e.vNach * 3.6).toFixed(0) + ' km/h, ' + e.prozent + ' %' : 'kein Kontakt');
+  } else pruefe('Wiese: erreichbarer Busch gefunden', false);
+  // Alle festen Kollider aller Strecken: frontal mit 60 km/h → nie hindurch
+  let durch = 0, gesamt = 0, schlimm = '';
+  Object.values(strecken).forEach((s2) => s2.pflanzenKollider.forEach((k) => {
+    if (k.art !== 'fest' || Math.abs(k.seitenabstand) > s2.grenzeBei(k.s) - 1) return;
+    gesamt++;
+    const e = anfahrt(s2, k, false);
+    if (e.minAbst < -0.15) { durch++; if (!schlimm) schlimm = s2.id + ' ' + k.name + ' s=' + k.s.toFixed(0) + ' ' + e.minAbst.toFixed(2); }
+  }));
+  pruefe('Alle festen Pflanzen (alle Strecken): kein Auto fährt hindurch (60 km/h)', durch === 0 && gesamt > 20, durch + '/' + gesamt + ' durch ' + schlimm);
+}
+
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');
 process.exit(fehler ? 1 : 0);

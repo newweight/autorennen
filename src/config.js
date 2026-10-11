@@ -133,6 +133,8 @@ Rennspiel.config = {
     kraftAbfall: 0.3,          // Antriebskraft × (1 − kraftAbfall · v/vMax)
     endKraft: 0.2,             // Netto-Beschleunigung bei vMax als Anteil von `beschleunigung` (vMax wird sicher erreicht)
     abseitsBremsen: 22,        // m/s² – so schnell sinkt das Tempo auf den Abseits-Deckel (statt Sprung)
+    abseitsUebergang: 1,       // Runde 6: m – über diese Breite hinter dem Randstreifen mischen Rand und Gras/Sand
+    abseitsAnfahren: 8,        // Runde 6: m/s – darunter wirkt abseits der Rollwiderstand anteilig (Anfahren aus Gras/Sand bleibt möglich)
     // Runde 5 – Lenkgefühl (vehicle.js drehrateMax/schritt):
     // Drehrate (rad/s) nie unter rateVmax bei vMax bzw. rateHalb bei 50 % vMax (linear im Tempo-Anteil), für ein Auto
     // mit Langsam-Drehrate `bezug` (Passat ≈ 1,8); andere Autos × √(Langsam-Drehrate / bezug).
@@ -145,8 +147,11 @@ Rennspiel.config = {
     untergrund: {
       strasse: { grip: 1.0,  rollwiderstand: 1.0 },
       rand:    { grip: 0.85, rollwiderstand: 1.6, vMaxFaktor: 0.8 },        // Randstreifen / Schotter
-      gras:    { grip: 0.6,  rollwiderstand: 3.0, vMaxFaktor: 0.5,  vMaxAbs: 25 },   // max 90 km/h
-      sand:    { grip: 0.5,  rollwiderstand: 3.8, vMaxFaktor: 0.45, vMaxAbs: 22 },   // max 79 km/h
+      // Runde 6 (W1-A2): abseits deutlich langsamer – Gras ≤ 60 km/h, Sand ≤ 50 km/h, Rollwiderstand ×1,5
+      // (vorher gras 3,0 / 25 m/s = 90 km/h, sand 3,8 / 22 m/s = 79 km/h). Übergang Rand→Gras weich über
+      // physik.abseitsUebergang m (vehicle.untergrundMisch, main.js), Randstreifen bleibt mild.
+      gras:    { grip: 0.6,  rollwiderstand: 4.5, vMaxFaktor: 0.5,  vMaxAbs: 60 / 3.6 },   // max 60 km/h
+      sand:    { grip: 0.5,  rollwiderstand: 5.5, vMaxFaktor: 0.45, vMaxAbs: 50 / 3.6 },   // max 50 km/h
       // Hindernisse auf der Fahrbahn (Runde 3, von trackBuilder/collisions zu setzen):
       oel:     { grip: 0.25, rollwiderstand: 1.0, vMaxFaktor: 1.0 },        // rutschig (schlingern), kein Tempodeckel
       sandFleck: { grip: 0.55, rollwiderstand: 6.0, vMaxFaktor: 0.75 },   // Sand auf der Straße (bremst spürbar)
@@ -200,7 +205,12 @@ Rennspiel.config = {
     standardAn: false,
     trefferVerlust: 5,         // Prozentpunkte je Treffer
     brandVerlust: 10,          // Prozentpunkte bei Treffer eines brennenden Wracks
-    mindest: { bande: 3, auto: 2, hindernis: 0, brand: 0, ball: 0, wasser: 0, stroh: 0 },
+    // Runde 6 (W1-A4/A5): auto 2 → 1 m/s; neu pflanze (Baum/Fels zwischen Straße und Zaun)
+    mindest: { bande: 3, auto: 1, hindernis: 0, brand: 0, ball: 0, wasser: 0, stroh: 0, pflanze: 0 },
+    // Runde 6: eigene Verluste je Art (fehlt eine Art: trefferVerlust); drehung = Zuschlag, wenn ein Rempler das
+    // Auto in Drehung versetzt (kommt im selben Treffer dazu → −8 %)
+    verluste: { bande: 3, pflanze: 3 },
+    drehungVerlust: 3,
     abklingZeit: 0.7,
     stufeJe: 20,
     vMaxJeStufe: 0.04, beschleunigungJeStufe: 0.06, gripJeStufe: 0.03,
@@ -208,6 +218,41 @@ Rennspiel.config = {
     liegenZeit: 5, resetProzent: 60,
     blinkTakt: 0.5,
     rauchTeilchen: 36,
+  },
+
+  // --- Runde 6 (W1-A3/A4/A5): Kollisionen Auto↔Auto, Rempeln, Pflanzen (Logik: src/physics/collisions.js) ---
+  // Autos = gedrehte Rechtecke (laenge × breite), Trennung per SAT in `teilschritte` Durchgängen, danach `mindestAbstand` m Luft.
+  // rempeln 'sanft' (Standard) = nur Abstoßung wie bisher; 'echt' = je nach Treffer Drehung / Abdrängen / Nebeneinander-Schieben.
+  kollision: {
+    teilschritte: 2,
+    mindestAbstand: 0.1,       // m Luft nach der Auflösung
+    restitution: 0.3, reibung: 0.3,
+    loopingAbstand: 0.1,       // m Luft zwischen zwei Autos im selben Looping (Bogenlänge)
+    rempeln: {
+      standard: 'sanft',
+      flachGrad: 15,           // < 15° zwischen den Autos: nebeneinander schieben, keine Drehung
+      schraegGrad: 45,         // 15–45° von hinten: Opfer wird abgedrängt (Querimpuls)
+      querMin: 3, querMax: 6,  // m/s Querimpuls beim Abdrängen (× Massenverhältnis)
+      drehMax: 4.7,            // rad/s – klingt in ~1 s ab (exp, drehAbklingen) → höchstens ≈ 90°
+      drehMin: 1.0,            // rad/s – darunter keine Drehung
+      drehFaktor: 1.6,         // Arcade-Verstärkung des Drehimpulses (Hebelarm × Stoß / Trägheitsmoment × drehFaktor)
+      drehAbklingen: 3,        // 1/s
+      drehLenkung: 0.3,        // Lenkung wirkt während der Drehung nur zu 30 %
+      sperrZeit: 0.6,          // s – je Auto höchstens ein Rempel-Effekt
+      mindestTempo: 1,         // m/s Annäherung, ab der ein Rempler wirkt
+      kiAbRang: 4,             // KI ab Stufe profi darf gezielt rempeln
+      kiAbstand: 6, kiVersatz: 1.5, kiPause: 10, kiLenkung: 0.35, kiDauer: 0.35,
+    },
+  },
+  // Pflanzen/Felsen zwischen Straße und Zaun (Kreis-Kollider aus den Deko-Instanzen, nur Physik):
+  // fest → wie eine Säule (Stoß, −3 % bei Schaden an), weich → Tempo × weichTempo (kein Schaden).
+  pflanzen: {
+    fest: ['Baeume', 'Tannen', 'Laubbaeume', 'Baumstuempfe', 'Felsen', 'Kakteen', 'Palmen', 'Riesenpilze', 'Zuckerbaeume'],
+    weich: ['Buesche', 'Farne', 'Gestruepp', 'Riesenfarne', 'Kugelkakteen', 'Pilze', 'Heuballen'],
+    zugabe: 2,                 // m: gesammelt wird bis grenzeBei(s) + zugabe
+    fussHoehe: 0.9,            // m über dem Boden: nur dieser Teil der Geometrie zählt (Stamm statt Krone)
+    rMin: 0.25, rMaxFest: 3, rMaxWeich: 2.5,
+    weichTempo: 0.7, weichSperre: 0.8,
   },
 
   // --- Fantasie-Strecke (Runde 3): Looping, Bälle, Wasserstrahl ---

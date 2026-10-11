@@ -25,6 +25,8 @@
       tempoKlasse: c.tempoKlasseStandard || 'normal',
       // Runde 5b: Polizei (Streifenwagen hält an, world/polizei.js), Standard aus
       polizei: !!(c.polizei && c.polizei.standardAn),
+      // Runde 6 (W1-A4): Rempeln 'sanft' (nur Abstoßung, wie bisher) | 'echt' (Drehen, Abdrängen), Standard sanft
+      rempeln: (c.kollision && c.kollision.rempeln && c.kollision.rempeln.standard) === 'echt' ? 'echt' : 'sanft',
     };
   }
 
@@ -54,6 +56,7 @@
       schaden: r.schaden === true,
       tempoKlasse: c.tempoKlassen && c.tempoKlassen[r.tempoKlasse] ? r.tempoKlasse : std.tempoKlasse,
       polizei: typeof r.polizei === 'boolean' ? r.polizei : std.polizei,
+      rempeln: r.rempeln === 'echt' || r.rempeln === 'sanft' ? r.rempeln : std.rempeln,
     };
   }
 
@@ -272,7 +275,10 @@
       }
       // Strecke + Deko bewegen sich nie: Instanzen in Regionen teilen (Culling je Kamera), Matrizen einfrieren
       this.szene.add(R.themes.statischVorbereiten(strecke.bauen()));
-      this.szene.add(R.themes.statischVorbereiten(R.themes.dekoBauen(daten.thema, strecke, this.wetter ? this.wetter.jahreszeit : undefined)));
+      const deko = R.themes.dekoBauen(daten.thema, strecke, this.wetter ? this.wetter.jahreszeit : undefined);
+      // Runde 6 (W1-A5): Bäume/Felsen/Büsche zwischen Straße und Zaun als Kollider (nur Physik)
+      if (R.Kollisionen.pflanzenSammeln) R.Kollisionen.pflanzenSammeln(strecke, deko);
+      this.szene.add(R.themes.statischVorbereiten(deko));
       // Hindernisse (Öl, Sand, Baustelle, Ast) – eigene Gruppe, die Pylonen ändern sich im Rennen
       this.szene.add(R.themes.statischVorbereiten(strecke.hindernisseBauen(), 1));
       // Fantasie: rollende Bälle und Wasserfontänen (bewegen sich → nicht statisch)
@@ -384,9 +390,15 @@
         runden: r.runden,
         zeilen: r.rangliste.map((t, i) => {
           const f = this.fahrzeuge[t.nr];
+          // Runde 6 (D3): Sterne je Spieler (nur Menschen und Autopilot-Hook), Summe je Fahrer gespeichert
+          let sterne = 0, sterneGesamt = 0;
+          if (t.istSpieler && R.Sterne) {
+            sterne = R.Sterne.bewerten(i + 1, t.imZiel, t.bestzeit, R.Sterne.zielzeit(this.strecke && this.strecke.katalog, this.tempoKlasse));
+            sterneGesamt = R.Sterne.gutschreiben(t.name, sterne);
+          }
           return {
             platz: i + 1, nr: t.nr, name: t.name, istSpieler: t.istSpieler, spielerNr: f.spielerNr, auto: f.auto,
-            zeit: t.imZiel ? t.zielZeit : null, beste: t.bestzeit, runden: t.runde,
+            zeit: t.imZiel ? t.zielZeit : null, beste: t.bestzeit, runden: t.runde, sterne, sterneGesamt,
           };
         }),
       };
@@ -451,6 +463,8 @@
       });
       this.fahrhilfeStufe = opt.fahrhilfe[0] || this.fahrhilfeStufe;
       this.rennen = new R.RaceManager(strecke, teilnehmer, { runden: opt.runden });
+      // Runde 6 (D3): Start-Boost (Gas im Fenster um „LOS"), nur mit Countdown
+      this.startBoost = R.StartBoost && this.rennen.countdownDauer > 0 ? new R.StartBoost(teilnehmer.length) : null;
       // Umgefahrene Pylonen stehen wieder, sobald der Verursacher eine Runde beendet hat
       this.rennen.bei('runde', (t) => strecke.pylonenZurueck(t.nr));
       // Computerfahrer kennen die Hindernisse (falls der Fahrer das unterstützt)
@@ -779,6 +793,8 @@
      *   8. Kollisionen: Bande (auch im Flug) → Auto-Auto (nicht Looping/Flug) → Hindernisse inkl. Wracks und
      *      Dynamik (Bälle, Wasser, Strohballen). Für Hindernisse/Dynamik merkt der Schild vorher Tempo/Drift
      *      (vorTreffern) und nimmt abgefangene Treffer danach zurück (nachTreffern).
+     *      Runde 6: Auto-Auto als Rechtecke (Einstellung rempeln sanft/echt) → Bande nochmal für dabei verschobene
+     *      Autos → Looping-Abstand → Pflanzen (Bäume/Felsen fest, Büsche weich) → Hindernisse.
      *   9. Schaden: Schild fängt zählende Bande/Auto-Treffer ab, dann stoesseAuswerten + schritt
      *      (Liegenbleiben, Abschleppen → zuruecksetzen).
      *  10. Pickups.schritt: Turbo-Felder überfahren, Schild-Kugeln aufsammeln (Meldungen, Töne).
@@ -790,6 +806,7 @@
       const schaden = this.schaden && this.schaden.an ? this.schaden : null;
       const pickups = this.pickups;
       const polizei = this.polizei;      // Runde 5b (null = aus → alles wie vorher)
+      const rempeln = this.einstellungen && this.einstellungen.rempeln === 'echt' ? 'echt' : 'sanft';   // Runde 6
       // Fortschritt der Spieler für das Gummiband der KI
       const tn = rennen ? rennen.teilnehmer : [];
       let spielerMax = null;
@@ -817,10 +834,18 @@
           // andere = alle Teilnehmer (die KI überspringt ihr eigenes Fahrzeug selbst)
           umgebung.andere = polizei ? polizei.andereFuer(tn) : tn; umgebung.spielerFortschrittMax = spielerMax;
           umgebung.eigenerFortschritt = t.fortschritt; umgebung.laeuft = rennen.gasErlaubt;
+          umgebung.rempeln = rempeln;   // Runde 6: KI ab profi darf bei 'echt' gezielt rempeln
           s = fahrer.steuerung(dt, umgebung);
           if (fahrer.brauchtReset) { this.zuruecksetzen(i); fahrer.zurueckgesetzt(); return; }
         }
-        if (countdown) s = { gas: 0, bremse: s.bremse, lenkung: s.lenkung };
+        // --- Runde 6 (D3): Start-Boost bewerten (Gas-Eingabe VOR der Countdown-Sperre), „Zu früh" sperrt das Gas 1 s ---
+        const sb = this.startBoost;
+        if (sb && !f.polizei && !f.autopilot && sb.offen(i)) {
+          const ev = sb.eingabe(i, s.gas, countdown ? -rennen.countdown : rennen.zeit, f.driver ? { fehler: f.driver.fehler } : null);
+          if (ev === 'boost') { this._meldung(i, 'Startboost! 🚀', 1500); if (f.istSpieler) sb.ton('boost'); }
+          else if (ev === 'zufrueh') { this._meldung(i, 'Zu früh! 🐢', 1200); if (f.istSpieler) sb.ton('zufrueh'); }
+        }
+        if (countdown || (sb && sb.gasSperre(i))) s = { gas: 0, bremse: s.bremse, lenkung: s.lenkung };
         // --- Runde 5: Klebestreifen (world/kleber.js): festgeklebt → Eingabe ignorieren; Anlauf-Zustand (track/anlauf.js) ---
         const kz = R.Kleber && strecke && strecke.kleber && strecke.kleber.length ? (f.kleber || (f.kleber = R.Kleber.zustand())) : null;
         if (kz && R.Kleber.gesperrt(kz)) s = { gas: 0, bremse: 0, lenkung: 0 };
@@ -851,6 +876,12 @@
           const n = strecke.abfrage(v.x, v.z, f.index);
           f.index = n.index;
           v.untergrund = kz ? R.Kleber.untergrund(kz, n.untergrund) : n.untergrund;   // Runde 5: Schonzeit nach dem Lösen
+          // Runde 6 (W1-A2): Rand → Gras/Sand weich über abseitsUebergang m (Mischfaktor aus dem Seitenabstand)
+          if (v.untergrund === 'gras' || v.untergrund === 'sand') {
+            const b2 = strecke.breiteBei ? strecke.breiteBei(n.s) / 2 : strecke.breite / 2;
+            const ue = R.config.physik.abseitsUebergang || 1;
+            v.untergrundMisch = Math.max(0, Math.min(1, (Math.abs(n.seitenabstand) - b2 - strecke.randBreite) / ue));
+          } else v.untergrundMisch = undefined;
           f.nah = n;
           const hilfeStufe = R.config.fahrhilfen[f.fahrhilfe] || R.config.fahrhilfen.aus;
           if (f.istSpieler && !f.autopilot && (hilfeStufe.lenkhilfe > 0 || hilfeStufe.bremshilfe > 0)) {
@@ -866,9 +897,11 @@
         // --- 4. Turbo-Faktoren nur für diesen Aufruf (danach exakt zurück) + 5. vehicle.schritt ---
         const xAlt = v.x, zAlt = v.z;
         const fk = pickups ? pickups.faktoren(i) : null, dd = v.daten;
-        const turbo = !!fk && (fk.vMax !== 1 || fk.beschleunigung !== 1);
+        const fs = sb ? sb.faktoren(i) : null;           // Runde 6: Start-Boost multipliziert zusätzlich (beide nacheinander)
+        const fvm = (fk ? fk.vMax : 1) * (fs ? fs.vMax : 1), fbe = (fk ? fk.beschleunigung : 1) * (fs ? fs.beschleunigung : 1);
+        const turbo = fvm !== 1 || fbe !== 1;
         const vm0 = dd.vMax, b0 = dd.beschleunigung;
-        if (turbo) { dd.vMax = vm0 * fk.vMax; dd.beschleunigung = b0 * fk.beschleunigung; }
+        if (turbo) { dd.vMax = vm0 * fvm; dd.beschleunigung = b0 * fbe; }
         v.schritt(dt, s, hilfe, this.wetter ? this.wetter.umwelt() : undefined);
         if (turbo) { dd.vMax = vm0; dd.beschleunigung = b0; }
         f.bremst = v.letzteSteuerung.bremse > 0 && v.vLaengs > 0.5;
@@ -897,7 +930,34 @@
       const bandeSt = this._bandeSt || (this._bandeSt = []);
       bandeSt.length = this.fahrzeuge.length;
       for (let i = 0; i < this.fahrzeuge.length; i++) bandeSt[i] = strecke ? R.Kollisionen.bande(this.fahrzeuge[i].vehicle, strecke) : 0;
-      this.stoesse = R.Kollisionen.autoAuto(this.fahrzeuge, { countdown });
+      // Runde 6: Auto-Auto (Rechtecke, 2 Teilschritte, Mindestabstand); wer dabei bewegt wurde, prüft die Bande
+      // nochmal (ein Auto an der Bande gilt beim Trennen als 10× so schwer → das andere weicht aus)
+      const kxAlt = this._kollX || (this._kollX = []);
+      for (let i = 0; i < this.fahrzeuge.length; i++) { const v = this.fahrzeuge[i].vehicle; kxAlt[2 * i] = v.x; kxAlt[2 * i + 1] = v.z; }
+      this.stoesse = R.Kollisionen.autoAuto(this.fahrzeuge, { countdown, rempeln, dt });
+      if (strecke && this.stoesse.length) {
+        for (let i = 0; i < this.fahrzeuge.length; i++) {
+          const v = this.fahrzeuge[i].vehicle;
+          if (v.x !== kxAlt[2 * i] || v.z !== kxAlt[2 * i + 1]) bandeSt[i] = Math.max(bandeSt[i], R.Kollisionen.bande(v, strecke));
+        }
+      }
+      if (strecke && R.Kollisionen.loopingAbstand) R.Kollisionen.loopingAbstand(this.fahrzeuge, strecke);   // Runde 6
+      for (let k = 0; k < this.stoesse.length; k++) {
+        const st = this.stoesse[k];
+        if (st.dreht) st.dreht.forEach((d, w) => { if (d) this._meldung(w ? st.b : st.a, 'Dreher! 🌀', 900); });
+      }
+      // Runde 6 (W1-A5): Bäume/Felsen (fest) und Büsche (weich) zwischen Straße und Zaun
+      const ps = strecke && R.Kollisionen.pflanzen ? R.Kollisionen.pflanzen(this.fahrzeuge, strecke, { dt, countdown }) : [];
+      for (let k = 0; k < ps.length; k++) {
+        const f = this.fahrzeuge[ps[k].nr];
+        if (!f || !f.istSpieler) continue;
+        if (ps[k].typ === 'baum') {
+          if (R.Audio) R.Audio.kollision(Math.min(12, ps[k].staerke));
+          this.kameras.forEach((kam) => { if (kam.ziel === f.vehicle) kam.wackeln(Math.min(8, Math.max(3, ps[k].staerke))); });
+          this._meldung(ps[k].nr, 'Bumm! 🌳', 900);
+        }
+      }
+      this.pflanzenStoesse = ps;
       // Hindernisse (Pylonen, Bake, Ast, Wracks): Stöße wie Auto-Auto (Ton + Kamerawackeln für Spieler)
       let schild = !!pickups && pickups.vorTreffern(this.fahrzeuge) > 0;
       let hs = strecke ? R.Kollisionen.hindernisse(this.fahrzeuge, strecke, { dt, zeit: this._physikZeit, countdown }) : [];
@@ -950,7 +1010,7 @@
           for (let i = 0; i < bandeSt.length; i++) if (bandeSt[i] > 0) fang(i, 'bande', bandeSt[i]);
           for (let k = 0; k < this.stoesse.length; k++) { const st = this.stoesse[k]; fang(st.a, 'auto', st.staerke); fang(st.b, 'auto', st.staerke); }
         }
-        schaden.stoesseAuswerten({ bande: bandeSt, auto: this.stoesse, hindernis: hs, dynamik: ds || [] });
+        schaden.stoesseAuswerten({ bande: bandeSt, auto: this.stoesse, hindernis: hs, dynamik: ds || [], pflanzen: ps });
         schaden.schritt(dt);
       }
 
@@ -986,6 +1046,7 @@
       });
       if (polizei && rennen) polizei.schritt(dt, rennen.gasErlaubt);   // Runde 5b: Ziel, Nähe, Anhalten, Freigabe
       if (rennen) rennen.schritt(dt);
+      if (this.startBoost && rennen && rennen.gasErlaubt) this.startBoost.schritt(dt);
     }
 
     /** Runde 4: Schanzen-Ereignis eines Fahrzeugs: Meldung, Kamerawackeln + Aufsetz-Geräusch bei der Landung. */

@@ -157,6 +157,9 @@
       this.fehler = st.fehler;
       this.bremsSpaeter = st.bremsSpaeter || 1;
       this.innenSchneiden = st.innenSchneiden || 0;
+      // Runde 6 (W1-A4): gezieltes Rempeln (nur Einstellung rempeln 'echt', ab Stufe profi)
+      this.rang = st.rang || 0;
+      this.rammPause = 0; this.rammRest = 0; this.rammWert = 0; this.rempler = 0;
       // Haftungs-Bonus wirkt in der Physik (vehicle.schritt) – nur für dieses KI-Auto
       vehicle.gripBonus = st.gripBonus || 1;
       // geplante Bremsverzögerung (m/s²) aus der Bremsleistung des Autos
@@ -441,6 +444,31 @@
         if (this.schlenkerRest > 0) {
           this.schlenkerRest -= dt;
           lenkZiel = clamp(lenkZiel + this.schlenkerWert, -1, 1);
+        }
+      }
+      // ---------- Runde 6: gezielt rempeln (rempeln 'echt', ab Stufe profi, höchstens 1× je kiPause s) ----------
+      // Gegner ≤ kiAbstand m voraus und seitlich < kiVersatz m versetzt → kurzer leichter Lenkimpuls zu ihm hin.
+      if (this.rammPause > 0) this.rammPause -= dt;
+      if (this.rammRest > 0) {
+        this.rammRest -= dt;
+        lenkZiel = clamp(lenkZiel + this.rammWert, -1, 1);
+      } else if (u.rempeln === 'echt' && this.rammPause <= 0 && tempo > 8) {
+        const RP = (R.config.kollision && R.config.kollision.rempeln) || {};
+        if (this.rang >= (RP.kiAbRang || 4)) {
+          for (const o of andere) {
+            const ov = o.vehicle;
+            if (!ov || ov === v || ov.imLooping || ov.imFlug) continue;
+            if (Math.hypot(ov.x - v.x, ov.z - v.z) > (RP.kiAbstand || 6) + 3) continue;
+            const on = sp.naechster(ov.x, ov.z, this.index);
+            const voraus = sp.differenzS(on.s, n.s), dq = on.seitenabstand - n.seitenabstand;
+            if (voraus <= 0 || voraus > (RP.kiAbstand || 6) || Math.abs(dq) >= (RP.kiVersatz || 1.5) || Math.abs(dq) < 0.2) continue;
+            this.rammWert = Math.sign(dq) * (RP.kiLenkung || 0.35);   // rechts (+) = Lenkung positiv
+            this.rammRest = RP.kiDauer || 0.35;
+            this.rammPause = RP.kiPause || 10;
+            this.rempler++;
+            lenkZiel = clamp(lenkZiel + this.rammWert, -1, 1);
+            break;
+          }
         }
       }
       this.lenkung += (lenkZiel - this.lenkung) * Math.min(1, LENK_GLAETTUNG * dt);

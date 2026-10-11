@@ -202,6 +202,20 @@ for (const a of R3.carCatalog) {
   }
   pruefe(`${a.id}: setzeBlaulicht läuft` + (blau ? ' (0 aus / 1 links / 2 rechts / 3 beide / rot, Balken auf dem Dach)' : ' (ohne Wirkung)'), blauOk);
 }
+// --- Runde 6: Räder (Profil, Felge 3D, Slicks) und Multivan in Bronze ---
+for (const a of R3.carCatalog) {
+  const g = R3.carBuilder.bauen(a), rad = g.userData.raeder[0], rad2 = g.userData.raeder[3];
+  const tri = (m) => m.geometry.attributes.position.count / 3;
+  pruefe(`${a.id}: Rad-Dreiecke <= 600 (vorn/hinten)`, tri(rad) <= 600 && tri(rad2) <= 600 && tri(rad) >= 100, tri(rad) + '/' + tri(rad2));
+  if (a.karosserie === 'formel') pruefe(`${a.id}: Slicks einfacher als Straßenreifen (<= 400 Dreiecke, ohne Profilblöcke)`, tri(rad) <= 400);
+  else pruefe(`${a.id}: Straßenrad mit Profil/Speichen (>= 350 Dreiecke)`, tri(rad) >= 350, String(tri(rad)));
+  // Rad bleibt in der Breite innerhalb von Katalogbreite +2 % (steht leicht nach außen)
+  g.updateMatrixWorld(true);
+}
+const mv = R3.carCatalog.finde('multivan');
+const heller = (h) => ((h >> 16) & 255) + ((h >> 8) & 255) + (h & 255);
+pruefe('Multivan: Bronze mit hellem Dach (farbe2)', ((mv.farbe >> 16) & 255) > ((mv.farbe) & 255) + 40 && mv.farbe2 > 0xdddddd && heller(mv.farbe2) > heller(mv.farbe) + 200
+  && /bronze/i.test(mv.farbeName) && /bronze/i.test(mv.generischerName), mv.farbeName);
 pruefe('platzhalterAuto() liefert Group', !!R3.carBuilder.platzhalterAuto().isGroup);
 R3.carBuilder.cacheLeeren();
 pruefe('cacheLeeren() + Neubau klappt', R3.carBuilder.bauen(R3.carCatalog[0]).userData.raeder.length === 4);

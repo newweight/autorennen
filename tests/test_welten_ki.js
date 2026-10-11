@@ -108,5 +108,78 @@ for (const daten of R.trackCatalog) {
         (startMinAlle < Infinity ? ', Start-Schanze (Runde 1) ' + (startMinAlle * 3.6).toFixed(0) + ' km/h' : '') + ' | ' : '') + zeilen.join(', '));
   }
 }
+// ---------- Runde 6 (W1-A4/A5): alle 7 Stufen GEMEINSAM je Strecke × Welt, rempeln 'echt', 2 Runden ----------
+// Kollisionen wie main.js: Bande → Auto-Auto (Rechtecke, Rempeln echt) → Bande für verschobene → Looping-Abstand →
+// Pflanzen (echte Deko, mit THREE) → Hindernisse. Prüft: alle im Ziel (keine Endlosschleife), Resets ≤ 1 je Rennen,
+// keine NaN. (Ohne Umgebungsvariable OHNE_REMPELN=1.)
+const ARTEN = {}, MODUS = process.env.REMPELN_MODUS || 'echt';   // Diagnose: REMPELN_MODUS=sanft
+if (!process.env.OHNE_REMPELN) {
+  const R3 = ladeModule(['vendor/three.min.js'].concat(dateien, ['src/world/themes.js']));
+  R3.Vehicle.klasseStandard = KLASSE;
+  const K3 = R3.Kollisionen, LP3 = R3.Looping, S3 = R3.Schanzen;
+  for (const daten of R3.trackCatalog) {
+    if (nurId && daten.id !== nurId) continue;
+    const deko = R3.themes.dekoBauen(daten.thema, new R3.Strecke(daten));   // Deko hängt nur von der Strecke ab
+    for (const welt of Object.keys(daten.welten || { klassisch: 1 })) {
+      const st = new R3.Strecke(daten, { welt });
+      K3.pflanzenSammeln(st, deko);
+      if (K3.wracksEinbauen) K3.wracksEinbauen(st);
+      const starts = st.startpositionen(STUFEN.length);
+      const fz = STUFEN.map((stufe, i) => {
+        const v = new R3.Vehicle({}); v.setzen(starts[i].x, starts[i].z, starts[i].heading);
+        const d = new R3.Driver(v, st, { schwierigkeit: stufe, seed: 11 + i, name: stufe });
+        if (d.hindernisseSetzen) d.hindernisseSetzen(st.hindernisse);
+        return { vehicle: v, driver: d, looping: LP3.zustand(), flug: S3.zustand(), index: -1, resets: 0 };
+      });
+      const rennen = new R3.RaceManager(st, fz.map(f => ({ vehicle: f.vehicle, name: f.driver.name, istSpieler: false })), { runden: 2, countdown: 0 });
+      const tn = rennen.teilnehmer;
+      let schritte = 0, nan = false, stoesse = 0, dreher = 0, baeume = 0, rempler = 0;
+      const umf = { andere: tn, spielerFortschrittMax: null, laeuft: true, rempeln: MODUS };
+      while (!tn.every(t => t.imZiel) && schritte < 60 * 600) {
+        fz.forEach((f, i) => {
+          if (tn[i].imZiel) { f.vehicle.vLaengs *= 0.98; return; }
+          umf.eigenerFortschritt = tn[i].fortschritt;
+          const s = f.driver.steuerung(dt, umf);
+          if (f.driver.brauchtReset) {
+            const n = st.spline.naechster(f.vehicle.x, f.vehicle.z), p = st.spline.punktBei(n.s);
+            if (process.env.RESET_LOG) console.log('  Reset', f.driver.name, 's=' + n.s.toFixed(0), 'q=' + n.seitenabstand.toFixed(1), 't=' + (schritte * dt).toFixed(1),
+              'nah:', fz.filter(g => g !== f && Math.hypot(g.vehicle.x - f.vehicle.x, g.vehicle.z - f.vehicle.z) < 8).map(g => g.driver.name).join(','),
+              'Pflanzen:', (st.pflanzenKollider || []).filter(k => Math.hypot(k.x - f.vehicle.x, k.z - f.vehicle.z) < k.r + 4).map(k => k.name + '/' + k.art).join(','));
+            f.vehicle.setzen(p.x, p.z, R3.headingAus(p.tx, p.tz)); f.driver.zurueckgesetzt(); f.resets++;
+            f.looping = LP3.zustand(); f.flug = S3.zustand(); f.vehicle.imLooping = false; f.vehicle.imFlug = false;
+            return;
+          }
+          let r;
+          if (f.looping.aktiv || f.looping.fallen || !(st.loopings && st.loopings.length)) {
+            r = (f.looping.aktiv || f.looping.fallen) ? LP3.fahrzeugSchritt(f.looping, f.vehicle, st, s, dt, f.index)
+              : S3.fahrzeugSchritt(f.flug, f.vehicle, st, s, dt, f.index);
+          } else r = LP3.fahrzeugSchritt(f.looping, f.vehicle, st, s, dt, f.index);
+          f.index = r.index;
+          if (r.ereignis === 'gefallen') rennen.verfolgungSetzen(i, f.vehicle.x, f.vehicle.z);
+        });
+        fz.forEach(f => K3.bande(f.vehicle, st));
+        const alt = fz.map(f => [f.vehicle.x, f.vehicle.z]);
+        const sts = K3.autoAuto(fz, { rempeln: MODUS, dt });
+        stoesse += sts.length; dreher += sts.filter(x => x.dreht).length; if (process.env.ARTEN) sts.forEach(x => { const k = (x.art || "-") + (x.staerke >= 3 ? "3+" : x.staerke >= 1 ? "1+" : "<1"); ARTEN[k] = (ARTEN[k] || 0) + 1; });
+        fz.forEach((f, i) => { if (f.vehicle.x !== alt[i][0] || f.vehicle.z !== alt[i][1]) K3.bande(f.vehicle, st); });
+        K3.loopingAbstand(fz, st);
+        baeume += K3.pflanzen(fz, st, { dt }).filter(x => x.typ === 'baum').length;
+        K3.hindernisse(fz, st, { dt, zeit: schritte * dt });
+        fz.forEach(f => { if (!Number.isFinite(f.vehicle.x) || !Number.isFinite(f.vehicle.z) || !Number.isFinite(f.vehicle.heading)) nan = true; });
+        rennen.schritt(dt);
+        schritte++;
+      }
+      rempler = fz.reduce((a, f) => a + (f.driver.rempler || 0), 0);
+      const resets = fz.reduce((a, f) => a + f.resets, 0);
+      const ok = tn.every(t => t.imZiel) && resets <= 1 && !nan;
+      pruefe(`[${daten.id}/${welt}] 7 Stufen gemeinsam, rempeln echt, 2 Runden: alle im Ziel, Resets ≤ 1, keine NaN`, ok,
+        'Zeit ' + (schritte * dt).toFixed(0) + ' s, im Ziel ' + tn.filter(t => t.imZiel).length + '/7, Resets ' + resets +
+        ' (' + fz.filter(f => f.resets).map(f => f.driver.name + ' ' + f.resets).join(', ') + '), Stöße ' + stoesse + ', Dreher ' + dreher +
+        ', KI-Rempler ' + rempler + ', Baum-Treffer ' + baeume);
+    }
+  }
+}
+
+if (process.env.ARTEN) console.log(JSON.stringify(ARTEN));
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');
 process.exit(fehler ? 1 : 0);

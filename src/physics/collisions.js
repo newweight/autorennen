@@ -21,6 +21,12 @@
 //          strecke.wracks als Hindernisse an strecke.hindernisse an (feste Kapsel wie die Bake, KI-Daten wie
 //          die Baustelle). hindernisse() meldet Stöße dagegen mit typ 'wrack' / 'brand'.
 //
+// Runde 6 (W1): autoAuto() rechnet mit gedrehten Rechtecken (OBB, laenge × breite) und SAT statt Kapseln, in
+//          config.kollision.teilschritte (2) Durchgängen, mit Mindestabstand 0,1 m und Sweep (Position vor dem Schritt,
+//          vehicle._kollAlt) gegen Durchschießen bei 75 m/s; optional Rempeln 'echt' (Drehen/Abdrängen/Schieben).
+//          loopingAbstand(): zwei Autos im selben Looping halten Abstand (Bogenlänge). pflanzenSammeln()/pflanzen():
+//          Bäume, Felsen, Büsche zwischen Straße und Zaun als Kreis-Kollider (nur Physik, Draw-Calls unverändert).
+//
 // Vorzeichen wie überall: seitenabstand > 0 = rechts der Mitte, Normale (nx, nz) nach rechts.
 // ============================================================
 (function () {
@@ -145,73 +151,436 @@
     };
   }
 
+  // ------------------------------------------------------------------ Runde 6: Auto↔Auto als gedrehte Rechtecke
+
+  function KC() { return (R.config && R.config.kollision) || {}; }
+
+  /** Rechteck (OBB) eines Autos; mit pose = { x, z, h } an einer anderen Stelle (Sweep: Position vor dem Schritt). */
+  function box(v, pose) {
+    const h = pose ? pose.h : v.heading, d = v.daten;
+    return {
+      x: pose ? pose.x : v.x, z: pose ? pose.z : v.z,
+      rx: -Math.sin(h), rz: -Math.cos(h), qx: Math.cos(h), qz: -Math.sin(h),
+      hl: (d.laenge || 4.4) / 2, hb: (d.breite || 1.8) / 2,
+    };
+  }
+  /** Halbe Ausdehnung des Rechtecks längs der Achse (ax, az). */
+  function radiusAuf(b, ax, az) { return b.hl * Math.abs(b.rx * ax + b.rz * az) + b.hb * Math.abs(b.qx * ax + b.qz * az); }
+  /** Überlappung zweier Rechtecke längs einer Achse (> 0 = überlappen, < 0 = Luft) und Mittelpunkt-Abstand d (A→B). */
+  function ueberlappung(a, b, ax, az) {
+    const d = (b.x - a.x) * ax + (b.z - a.z) * az;
+    return { ov: radiusAuf(a, ax, az) + radiusAuf(b, ax, az) - Math.abs(d), d };
+  }
+  function achsen(a, b) { return [[a.rx, a.rz], [a.qx, a.qz], [b.rx, b.rz], [b.qx, b.qz]]; }
+
   /**
-   * Auto-Auto-Kollisionen für alle Paare.
+   * Abstand zweier Autos als Rechtecke (SAT): > 0 = Luft (größte Trennung über die 4 Achsen, untere Schranke des
+   * echten Abstands), < 0 = Durchdringung (kleinste Überlappung). Für Tests (rempeln_test, test_kollisionen).
+   */
+  function obbAbstand(A, B) {
+    const a = box(A), b = box(B);
+    let minOv = Infinity;
+    for (const [ax, az] of achsen(a, b)) minOv = Math.min(minOv, ueberlappung(a, b, ax, az).ov);
+    return -minOv;
+  }
+
+  /** Eckpunkte eines Rechtecks. */
+  function ecken(b) {
+    const l = [];
+    for (const [s, t] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) l.push({ x: b.x + b.rx * b.hl * s + b.qx * b.hb * t, z: b.z + b.rz * b.hl * s + b.qz * b.hb * t });
+    return l;
+  }
+  function innen(b, p, tol) {
+    const dx = p.x - b.x, dz = p.z - b.z;
+    return Math.abs(dx * b.rx + dz * b.rz) <= b.hl + tol && Math.abs(dx * b.qx + dz * b.qz) <= b.hb + tol;
+  }
+  /** Ungefährer Berührpunkt: Mittel der Ecken, die im anderen Rechteck liegen (sonst Mitte zwischen den Autos). */
+  function beruehrpunkt(a, b) {
+    let sx = 0, sz = 0, n = 0;
+    for (const p of ecken(a)) if (innen(b, p, 0.12)) { sx += p.x; sz += p.z; n++; }
+    for (const p of ecken(b)) if (innen(a, p, 0.12)) { sx += p.x; sz += p.z; n++; }
+    return n ? { x: sx / n, z: sz / n } : { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+  }
+
+  /**
+   * Kontakt zweier Autos (SAT). Sweep: waren beide vor dem Schritt (vehicle._kollAlt) noch getrennt, gilt die
+   * Achse, die als letzte überlappt hat (= tatsächliche Aufprallrichtung) – so wird auch bei 75 m/s frontal
+   * nicht seitlich „durchgedrückt". Liefert null (Luft ≥ luft) oder { nx, nz (A→B), tief (m bis Berührung) }.
+   */
+  function kontakt(A, B, luft) {
+    const a = box(A), b = box(B), ax = achsen(a, b);
+    let minOv = Infinity, minI = 0;
+    const ov1 = [];
+    for (let k = 0; k < 4; k++) {
+      const u = ueberlappung(a, b, ax[k][0], ax[k][1]);
+      ov1.push(u);
+      if (u.ov < minOv) { minOv = u.ov; minI = k; }
+    }
+    if (minOv <= -luft) return null;
+    let wahl = minI, vz = ov1[minI].d >= 0 ? 1 : -1;
+    const altA = A._kollAlt, altB = B._kollAlt;
+    if (altA && altB && minOv > 0 &&
+        Math.hypot(A.x - altA.x, A.z - altA.z) < 10 && Math.hypot(B.x - altB.x, B.z - altB.z) < 10) {
+      const a0 = box(A, altA), b0 = box(B, altB);
+      let bestT = -1;
+      for (let k = 0; k < 4; k++) {
+        const u0 = ueberlappung(a0, b0, ax[k][0], ax[k][1]);
+        if (u0.ov >= 0) continue;                       // auf dieser Achse schon vorher überlappt
+        const t = -u0.ov / Math.max(1e-9, ov1[k].ov - u0.ov);
+        if (t > bestT) { bestT = t; wahl = k; vz = u0.d >= 0 ? 1 : -1; }
+      }
+    }
+    const nx = ax[wahl][0] * vz, nz = ax[wahl][1] * vz;
+    // nötige Verschiebung längs n, bis die Rechtecke sich gerade berühren (auch wenn die Mitten schon „vorbei" sind)
+    const d = (b.x - a.x) * nx + (b.z - a.z) * nz;
+    const tief = radiusAuf(a, nx, nz) + radiusAuf(b, nx, nz) - d;
+    return { nx, nz, tief, a, b };
+  }
+
+  /**
+   * Auto-Auto-Kollisionen für alle Paare (Runde 6: gedrehte Rechtecke, SAT, 2 Teilschritte, Mindestabstand,
+   * Sweep gegen Durchschießen; optional Rempeln „echt").
+   * Trennung nach „effektiver Masse" (schneller = schwerer zu verschieben, ein Auto an der Bande gilt als 10× so
+   * schwer → das andere weicht aus), Stoß längs der Normalen (Restitution 0,3), Reibung quer dazu.
+   * rempeln 'echt' (optionen.rempeln): je Treffer genau ein Effekt für das getroffene Auto (Opfer = das, auf das
+   * sich das andere schneller zubewegt), höchstens einmal je sperrZeit:
+   *   Winkel < 15°, seitlich     → nur schieben (nebeneinander), keine Drehung
+   *   Winkel < 15°, Auffahrer    → Drehung nur, wenn versetzt (Hebelarm; mittig: nur Stoß)
+   *   von hinten, 15–45°         → Opfer wird abgedrängt (Querimpuls 3–6 m/s × Massenverhältnis)
+   *   sonst (seitlich/versetzt)  → Drehimpuls aus Hebelarm × Stoß / Trägheitsmoment (vehicle.drehImpuls, ≤ drehMax)
    * @param {Array} fahrzeugListe Vehicles oder Einträge mit .vehicle
-   * @param {{countdown?:boolean}} [optionen] countdown = true → nichts tun (Autos stehen dicht)
-   * @returns {{a:number, b:number, staerke:number}[]} Stöße (Indizes in der Liste, Stärke in m/s)
+   * @param {{countdown?:boolean, rempeln?:'sanft'|'echt', dt?:number}} [optionen] countdown = true → nichts tun
+   * @returns {{a:number, b:number, staerke:number, art?:string, dreht?:boolean[]}[]} Stöße (Indizes, Stärke in m/s)
    */
   function autoAuto(fahrzeugListe, optionen) {
     const stoesse = [];
-    if (optionen && optionen.countdown) return stoesse;
+    const opt = optionen || {};
     const autos = fahrzeugListe.map(f => (f && f.vehicle) ? f.vehicle : f);
     const n = autos.length;
-    const kapseln = autos.map(kapsel);
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        const A = autos[i], B = autos[j], ka = kapseln[i], kb = kapseln[j];
-        // Auto im Looping (track/looping.js) oder im Flug über eine Schanze (track/schanze.js): keine Auto-Auto-Stöße
-        if (A.imLooping || B.imLooping || A.imFlug || B.imFlug) continue;
-        const grenze = ka.rad + kb.rad;
-        // Grobtest: Mittelpunkte weiter auseinander als halbe Längen + Radien
-        const dxg = B.x - A.x, dzg = B.z - A.z;
-        const weit = A.daten.laenge / 2 + B.daten.laenge / 2 + 0.5;
-        if (dxg * dxg + dzg * dzg > weit * weit) continue;
-        // tiefstes Kreispaar suchen
-        let best = null;
-        for (const ca of ka.kreise) {
-          for (const cb of kb.kreise) {
-            const dx = cb.x - ca.x, dz = cb.z - ca.z, d = Math.hypot(dx, dz);
-            if (d < grenze && (!best || grenze - d > best.tief)) best = { dx, dz, d, tief: grenze - d };
-          }
-        }
-        if (!best) continue;
-        // Normale von A nach B
-        let nx, nz;
-        if (best.d > 1e-6) { nx = best.dx / best.d; nz = best.dz / best.d; }
-        else { const l = Math.hypot(dxg, dzg) || 1; nx = dxg / l || 1; nz = dzg / l; }
-
-        // "Effektive Masse": schneller = schwerer zu verschieben (langsames Auto weicht aus)
-        const mA = A.daten.masse * (1 + 0.04 * A.tempo);
-        const mB = B.daten.masse * (1 + 0.04 * B.tempo);
-        const invA = 1 / mA, invB = 1 / mB, invSumme = invA + invB;
-
-        // 1) Trennung nach Masse (leichter wird weiter geschoben), kleiner Zuschlag gegen Kleben
-        const tief = best.tief + 0.01;
-        A.x -= nx * tief * invA / invSumme; A.z -= nz * tief * invA / invSumme;
-        B.x += nx * tief * invB / invSumme; B.z += nz * tief * invB / invSumme;
-
-        // 2) Impuls längs der Normalen
-        const va = A.weltGeschwindigkeit(), vb = B.weltGeschwindigkeit();
-        const rvx = vb.x - va.x, rvz = vb.z - va.z;
-        const vRelN = rvx * nx + rvz * nz;            // < 0 = nähern sich
-        if (vRelN < 0) {
-          const jN = -(1 + RESTITUTION) * vRelN / invSumme;
+    if (opt.countdown) { for (let i = 0; i < n; i++) autos[i]._kollAlt = null; return stoesse; }
+    const C = KC(), RP = C.rempeln || {};
+    const echt = opt.rempeln === 'echt';
+    const dt = opt.dt || 1 / 60;
+    const luft = C.mindestAbstand !== undefined ? C.mindestAbstand : 0.1;
+    const RESTI = C.restitution !== undefined ? C.restitution : RESTITUTION;
+    const REIB = C.reibung !== undefined ? C.reibung : REIBUNG;
+    if (echt) for (let i = 0; i < n; i++) if (autos[i]._rempelSperre > 0) autos[i]._rempelSperre -= dt;
+    const gemeldet = new Map();          // Paar → Stoß (je Paar höchstens einer)
+    const durchgaenge = Math.max(1, C.teilschritte || 2);
+    for (let durch = 0; durch < durchgaenge; durch++) {
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          const A = autos[i], B = autos[j];
+          // Auto im Looping (track/looping.js) oder im Flug über eine Schanze (track/schanze.js): keine Auto-Auto-Stöße
+          if (A.imLooping || B.imLooping || A.imFlug || B.imFlug) continue;
+          const dxg = B.x - A.x, dzg = B.z - A.z;
+          const weit = Math.hypot(A.daten.laenge, A.daten.breite) / 2 + Math.hypot(B.daten.laenge, B.daten.breite) / 2 + luft + 0.05;
+          if (dxg * dxg + dzg * dzg > weit * weit) continue;
+          const k = kontakt(A, B, luft);
+          if (!k) continue;
+          const nx = k.nx, nz = k.nz;
+          // "Effektive Masse": schneller = schwerer zu verschieben (langsames Auto weicht aus); an der Bande ×10
+          const mA = A.daten.masse * (1 + 0.04 * A.tempo) * (A._anBande ? 10 : 1);
+          const mB = B.daten.masse * (1 + 0.04 * B.tempo) * (B._anBande ? 10 : 1);
+          const invA = 1 / mA, invB = 1 / mB, invSumme = invA + invB;
+          // 1) Trennung nach Masse auf Mindestabstand (luft)
+          const tief = k.tief + luft;
+          A.x -= nx * tief * invA / invSumme; A.z -= nz * tief * invA / invSumme;
+          B.x += nx * tief * invB / invSumme; B.z += nz * tief * invB / invSumme;
+          // (auch in der Luft-Zone < luft: nähern sie sich, gibt es den Stoß – sonst „gleiten" langsame Autos nur)
+          // 2) Impuls längs der Normalen (Stoß-Massen ohne Bande-Zuschlag)
+          const sA = 1 / (A.daten.masse * (1 + 0.04 * A.tempo)), sB = 1 / (B.daten.masse * (1 + 0.04 * B.tempo)), sSum = sA + sB;
+          const va = A.weltGeschwindigkeit(), vb = B.weltGeschwindigkeit();
+          const rvx = vb.x - va.x, rvz = vb.z - va.z;
+          const vRelN = rvx * nx + rvz * nz;            // < 0 = nähern sich
+          if (vRelN >= 0) continue;
+          const jN = -(1 + RESTI) * vRelN / sSum;
           // 3) Reibung quer (Tangente)
           const tx = -nz, tz = nx;
           const vRelT = rvx * tx + rvz * tz;
-          let jT = -vRelT / invSumme;
-          jT = Math.max(-REIBUNG * jN, Math.min(REIBUNG * jN, jT));
+          let jT = -vRelT / sSum;
+          jT = Math.max(-REIB * jN, Math.min(REIB * jN, jT));
           const ix = nx * jN + tx * jT, iz = nz * jN + tz * jT;
-          A.weltGeschwindigkeitSetzen(va.x - ix * invA, va.z - iz * invA);
-          B.weltGeschwindigkeitSetzen(vb.x + ix * invB, vb.z + iz * invB);
-          stoesse.push({ a: i, b: j, staerke: -vRelN });
+          const agA = (va.x * nx + va.z * nz) >= -(vb.x * nx + vb.z * nz);   // Rempler = wer schneller auf den anderen zufährt
+          A.weltGeschwindigkeitSetzen(va.x - ix * sA, va.z - iz * sA);
+          B.weltGeschwindigkeitSetzen(vb.x + ix * sB, vb.z + iz * sB);
+          const schluessel = i * 4096 + j;
+          let st = gemeldet.get(schluessel);
+          if (!st) { st = { a: i, b: j, staerke: 0 }; gemeldet.set(schluessel, st); stoesse.push(st); }
+          st.staerke = Math.max(st.staerke, -vRelN);
+          // 4) Rempeln „echt"
+          if (echt && -vRelN >= (RP.mindestTempo || 1)) rempeln(A, B, agA, nx, nz, -vRelN, jN, k, st, RP);
+        }
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      const v = autos[i];
+      const alt = v._kollAlt || (v._kollAlt = {});
+      alt.x = v.x; alt.z = v.z; alt.h = v.heading;
+    }
+    return stoesse;
+  }
+
+  /** Runde 6: Rempel-Effekt (nur 'echt') für das getroffene Auto. n zeigt von A nach B, ann = Annäherung (m/s). */
+  function rempeln(A, B, agA, nx, nz, ann, jN, k, st, RP) {
+    // Opfer = das Auto, auf das sich das andere schneller zubewegt (agA: A ist der Rempler)
+    const G = agA ? A : B, V = agA ? B : A;
+    const sx = agA ? nx : -nx, sz = agA ? nz : -nz;     // Normale vom Rempler zum Opfer
+    if (V._rempelSperre > 0) return;
+    const delta = Math.abs(R.Vehicle.winkelDiff(G.heading, V.heading));   // 0 = gleiche Richtung
+    const rv = V.richtung();
+    const hinten = (G.x - V.x) * rv.x + (G.z - V.z) * rv.z < 0 && delta < Math.PI / 2;
+    const flach = (RP.flachGrad || 15) * Math.PI / 180, schraeg = (RP.schraegGrad || 45) * Math.PI / 180;
+    const mG = G.daten.masse, mV = V.daten.masse;
+    const sperre = RP.sperrZeit || 0.6;
+    // längs = Stoß trifft Heck/Bug (Normale längs zum Opfer) → versetzter Auffahrer kann drehen (Hebelarm unten)
+    const laengs = Math.abs(sx * rv.x + sz * rv.z) > 0.7;
+    if (hinten && delta < flach && !laengs) {
+      st.art = 'schieben';                       // nebeneinander: nur der normale Stoß, keine Drehung
+      return;
+    }
+    if (hinten && delta >= flach && delta <= schraeg) {
+      // abdrängen: Querimpuls auf das Opfer, Richtung = Seite, auf die n zeigt (vom Rempler weg)
+      const q = V.rechts();
+      let seite = Math.sign(sx * q.x + sz * q.z);
+      if (!seite) { const gr = G.richtung(); seite = Math.sign(gr.x * q.x + gr.z * q.z) || 1; }
+      const mv = Math.max(0.5, Math.min(1.5, 2 * mG / (mG + mV)));
+      const qMin = RP.querMin || 3, qMax = RP.querMax || 6;
+      const dv = Math.max(qMin * 0.5, Math.min(qMax * 1.25, Math.max(qMin, Math.min(qMax, qMin + 0.15 * ann)) * mv));
+      V.vQuer += seite * dv;
+      V._rempelSperre = sperre;
+      st.art = 'abdraengen';
+      return;
+    }
+    // drehen: Drehimpuls aus Hebelarm × Stoß (beide Autos, Gegenmoment für den Rempler)
+    const c = beruehrpunkt(k.a, k.b);
+    const dreh = (W, jx, jz) => {
+      const rxw = c.x - W.x, rzw = c.z - W.z;
+      const tau = rzw * jx - rxw * jz;            // y-Komponente von r × J (heading wächst mit +ω)
+      const d = W.daten, I = d.masse * ((d.laenge || 4.4) ** 2 + (d.breite || 1.8) ** 2) / 12;
+      return tau / I * (RP.drehFaktor || 1);
+    };
+    const max = RP.drehMax || 4.7, min = RP.drehMin || 1.2;
+    const wV = dreh(V, sx * jN, sz * jN), wG = dreh(G, -sx * jN, -sz * jN);
+    const dreht = [false, false];
+    if (Math.abs(wV) >= min) {
+      V.drehImpuls = Math.max(-max, Math.min(max, (V.drehImpuls || 0) + wV));
+      V._rempelSperre = sperre;
+      dreht[agA ? 1 : 0] = true;
+    }
+    if (Math.abs(wG) >= min && !(G._rempelSperre > 0)) {
+      G.drehImpuls = Math.max(-max, Math.min(max, (G.drehImpuls || 0) + wG));
+      G._rempelSperre = sperre;
+      dreht[agA ? 0 : 1] = true;
+    }
+    if (dreht[0] || dreht[1]) { st.art = 'drehen'; st.dreht = dreht; }
+    else st.art = 'stoss';
+  }
+
+  /**
+   * Runde 6: zwei Autos im selben Looping dürfen nicht ineinander fahren (Bahn-Bogenlänge = Winkel × Radius).
+   * Das hintere Auto wird auf Abstand (Länge + loopingAbstand) zurückgesetzt und höchstens so schnell wie das vordere;
+   * liegt der Platz noch vor der Einfahrt, fährt es eben erst einen Moment später ein (Auto zurück auf die Straße,
+   * Tempo ≥ vMin, damit die Einfahrt klappt). Ändert nur die Zustände f.looping (track/looping.js bleibt unverändert).
+   * @param {Array} fahrzeugListe Einträge { vehicle, looping }
+   * @param {Strecke} strecke
+   * @returns {number} Anzahl Korrekturen
+   */
+  function loopingAbstand(fahrzeugListe, strecke) {
+    if (!strecke || !strecke.loopings || !strecke.loopings.length) return 0;
+    const drin = [];
+    for (let i = 0; i < fahrzeugListe.length; i++) {
+      const f = fahrzeugListe[i];
+      if (f && f.looping && f.looping.aktiv && f.looping.looping) drin.push(f);
+    }
+    if (drin.length < 2) return 0;
+    const luft = KC().loopingAbstand !== undefined ? KC().loopingAbstand : 0.1;
+    let n = 0;
+    // nach Winkel absteigend: vorderes zuerst, jedes folgende hält Abstand zum davor
+    drin.sort((x, y) => y.looping.winkel - x.looping.winkel);
+    for (let a = 0; a < drin.length; a++) {
+      for (let b = a + 1; b < drin.length; b++) {
+        const F = drin[a], H = drin[b], lv = F.looping, lh = H.looping;
+        if (!lh.aktiv || !lv.aktiv || lh.looping !== lv.looping) continue;
+        const L = lv.looping, r = L.radius;
+        const mind = (F.vehicle.daten.laenge + H.vehicle.daten.laenge) / 2 + luft;
+        const luecke = (lv.winkel - lh.winkel) * r;
+        if (luecke >= mind - 1e-9) continue;
+        n++;
+        const wNeu = lv.winkel - mind / r;
+        if (wNeu >= 0) {
+          lh.winkel = wNeu; lh.winkelVorher = Math.min(lh.winkelVorher, wNeu);
+          lh.v = Math.min(lh.v, Math.max(lv.v, 0.6));
+        } else {
+          // noch kein Platz im Looping: zurück vor die Einfahrt (Bogenlänge −wNeu·r davor), gleich wieder einfahren
+          const v = H.vehicle, sp = strecke.spline;
+          const p = sp.punktBei(L.s + wNeu * r - 0.05), q = lh.qEin || 0;
+          v.x = p.x + p.nx * q; v.z = p.z + p.nz * q; v.heading = R.headingAus(p.tx, p.tz);
+          v.vLaengs = Math.max(L.vMin * 1.02, Math.min(lh.v, Math.max(lv.v, L.vMin * 1.02))); v.vQuer = 0;
+          v.y = strecke.hoeheAn(v.x, v.z);
+          lh.aktiv = false; lh.winkel = 0; lh.winkelVorher = 0; lh.looping = null; v.imLooping = false;
+          v._kollAlt = null;
+        }
+      }
+    }
+    return n;
+  }
+
+  // ------------------------------------------------------------------ Runde 6: Pflanzen/Felsen als Kollider
+
+  /**
+   * Kreis-Kollider aus der Deko (themes.dekoBauen-Gruppe) sammeln: nur Instanzen zwischen Straße und Zaun
+   * (|seitenabstand| < grenzeBei(s) + zugabe). Radius = größter waagrechter Abstand der Geometrie-Punkte im
+   * unteren fussHoehe-m-Bereich (Stamm statt Krone; Kronen hoch oben zählen nicht). Gleiche Stelle mehrerer
+   * Meshes (Stamm + Krone) → ein Kollider. Ergebnis: strecke.pflanzenKollider = [{ x, z, r, art 'fest'|'weich',
+   * name }] + Raster (strecke._pflanzenRaster). Ohne THREE: liest nur instanceMatrix.array und
+   * geometry.attributes.position.array. Draw-Calls unverändert (nur Physik).
+   * @returns {number} Anzahl Kollider
+   */
+  function pflanzenSammeln(strecke, gruppe) {
+    const P = (R.config && R.config.pflanzen) || {};
+    const fest = new Set(P.fest || []), weich = new Set(P.weich || []);
+    const liste = [];
+    strecke.pflanzenKollider = liste;
+    strecke._pflanzenRaster = null;
+    if (!gruppe || !strecke || !strecke.spline) return 0;
+    const meshes = [];
+    const besuche = (o) => {
+      if (o.isInstancedMesh && (fest.has(o.name) || weich.has(o.name))) meshes.push(o);
+      (o.children || []).forEach(besuche);
+    };
+    besuche(gruppe);
+    const sp = strecke.spline, zugabe = P.zugabe !== undefined ? P.zugabe : 2, fuss = P.fussHoehe || 0.9;
+    const boden = (x, z) => (strecke.bodenHoehe ? strecke.bodenHoehe(x, z) : (strecke.hoeheAn ? strecke.hoeheAn(x, z) : 0));
+    const grenze = (s) => (strecke.grenzeBei ? strecke.grenzeBei(s) : strecke.seitenabstandMax);
+    const nachStelle = new Map();
+    // Vorfilter (schnell): grobes Raster der Streckenpunkte – Instanzen weit weg von jedem Punkt gar nicht erst suchen
+    const gMax = (strecke.seitenabstandMax || 30) + zugabe + 6, Z = 25, pr = new Map();
+    sp.punkte.forEach((p) => { const key = Math.floor(p.x / Z) * 100003 + Math.floor(p.z / Z); (pr.get(key) || pr.set(key, []).get(key)).push(p); });
+    const nahGenug = (x, z) => {
+      const cx = Math.floor(x / Z), cz = Math.floor(z / Z), r = Math.ceil(gMax / Z);
+      for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) {
+        const l = pr.get((cx + a) * 100003 + (cz + b));
+        if (l) for (let k = 0; k < l.length; k++) if (Math.abs(l[k].x - x) < gMax && Math.abs(l[k].z - z) < gMax) return true;
+      }
+      return false;
+    };
+    meshes.forEach((m) => {
+      const art = fest.has(m.name) ? 'fest' : 'weich';
+      const pos = m.geometry && m.geometry.attributes && m.geometry.attributes.position;
+      const mat = m.instanceMatrix && m.instanceMatrix.array;
+      if (!pos || !mat) return;
+      const pa = pos.array, pn = pos.count !== undefined ? pos.count : pa.length / 3;
+      const anz = m.count !== undefined ? m.count : mat.length / 16;
+      for (let i = 0; i < anz; i++) {
+        const e = mat, o = i * 16;
+        const x = e[o + 12], z = e[o + 14];
+        if (!nahGenug(x, z)) continue;
+        const nah = sp.naechster(x, z);
+        if (Math.abs(nah.seitenabstand) > grenze(nah.s) + zugabe + 3) continue;   // grob (Radius kommt noch)
+        const yb = boden(x, z);
+        let r = 0;
+        for (let k = 0; k < pn; k++) {
+          const px = pa[k * 3], py = pa[k * 3 + 1], pz = pa[k * 3 + 2];
+          const wy = e[o + 1] * px + e[o + 5] * py + e[o + 9] * pz + e[o + 13];
+          if (wy - yb > fuss) continue;
+          const wx = e[o + 0] * px + e[o + 4] * py + e[o + 8] * pz;
+          const wz = e[o + 2] * px + e[o + 6] * py + e[o + 10] * pz;
+          r = Math.max(r, Math.hypot(wx, wz));
+        }
+        if (r < (P.rMin || 0.25)) continue;
+        r = Math.min(r, art === 'fest' ? (P.rMaxFest || 3) : (P.rMaxWeich || 2.5));
+        if (Math.abs(nah.seitenabstand) - r > grenze(nah.s) + zugabe) continue;
+        const sch = Math.round(x * 5) + ',' + Math.round(z * 5);
+        const alt = nachStelle.get(sch);
+        if (alt) { alt.r = Math.max(alt.r, r); if (art === 'fest') alt.art = 'fest'; continue; }
+        const kol = { x, z, r, art, name: m.name, s: nah.s, seitenabstand: nah.seitenabstand };
+        nachStelle.set(sch, kol);
+        liste.push(kol);
+      }
+    });
+    // Raster (10 m) für die Suche je Schritt
+    const raster = new Map();
+    liste.forEach((k, idx) => {
+      const x0 = Math.floor((k.x - k.r) / 10), x1 = Math.floor((k.x + k.r) / 10);
+      const z0 = Math.floor((k.z - k.r) / 10), z1 = Math.floor((k.z + k.r) / 10);
+      for (let gx = x0; gx <= x1; gx++) for (let gz = z0; gz <= z1; gz++) {
+        const key = gx * 100003 + gz;
+        (raster.get(key) || raster.set(key, []).get(key)).push(idx);
+      }
+    });
+    strecke._pflanzenRaster = raster;
+    return liste.length;
+  }
+
+  /**
+   * Pflanzen-Kollisionen (Runde 6, strecke.pflanzenKollider): fest (Baum, Stamm, Fels, Kaktus, Riesenpilz) = wie
+   * eine Säule (Rechteck-Ecken + Mitte herausschieben, Tempo in den Stamm weg, Rest × 0,8) → Stoß typ 'baum';
+   * weich (Busch, Farn, Gestrüpp) = durchfahren, Tempo × weichTempo, je Auto höchstens einmal je weichSperre s → 'busch'.
+   * Nicht im Looping/Flug/Countdown.
+   * @returns {{nr:number, typ:string, staerke:number}[]}
+   */
+  function pflanzen(fahrzeugListe, strecke, optionen) {
+    const stoesse = [], liste = strecke && strecke.pflanzenKollider, raster = strecke && strecke._pflanzenRaster;
+    const opt = optionen || {};
+    if (!liste || !liste.length || !raster || opt.countdown) return stoesse;
+    const P = (R.config && R.config.pflanzen) || {};
+    const dt = opt.dt || 1 / 60;
+    for (let i = 0; i < fahrzeugListe.length; i++) {
+      const f = fahrzeugListe[i], v = (f && f.vehicle) ? f.vehicle : f;
+      if (v._buschSperre > 0) v._buschSperre -= dt;
+      if (v.imLooping || v.imFlug) continue;
+      const gx = Math.floor(v.x / 10), gz = Math.floor(v.z / 10);
+      let kand = null;
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+        const l = raster.get((gx + a) * 100003 + (gz + b));
+        if (l) kand = kand ? kand.concat(l) : l.slice();
+      }
+      if (!kand) continue;
+      const bx = box(v);
+      const reich = Math.hypot(bx.hl, bx.hb);
+      let staerke = 0, getroffen = false, busch = false;
+      for (const idx of new Set(kand)) {
+        const k = liste[idx];
+        const dx = v.x - k.x, dz = v.z - k.z;
+        if (dx * dx + dz * dz > (reich + k.r) * (reich + k.r)) continue;
+        // nächster Punkt des Rechtecks zum Kreismittelpunkt
+        const lx = (k.x - v.x) * bx.rx + (k.z - v.z) * bx.rz, lq = (k.x - v.x) * bx.qx + (k.z - v.z) * bx.qz;
+        const cx = Math.max(-bx.hl, Math.min(bx.hl, lx)), cq = Math.max(-bx.hb, Math.min(bx.hb, lq));
+        const px = v.x + bx.rx * cx + bx.qx * cq, pz = v.z + bx.rz * cx + bx.qz * cq;
+        let ex = px - k.x, ez = pz - k.z, d = Math.hypot(ex, ez);
+        const drinnen = Math.abs(lx) <= bx.hl && Math.abs(lq) <= bx.hb;
+        if (!drinnen && d >= k.r) continue;
+        if (k.art === 'weich') { busch = true; continue; }
+        // fest: Auto herausschieben (Normale vom Stamm zum Auto)
+        let nx, nz, tief;
+        if (drinnen || d < 1e-6) {
+          // Mitte des Stamms im Auto: kürzester Weg hinaus über die nähere Seite
+          const ueL = bx.hl - Math.abs(lx), ueQ = bx.hb - Math.abs(lq);
+          if (ueL < ueQ) { const s = lx > 0 ? -1 : 1; nx = bx.rx * s; nz = bx.rz * s; tief = ueL + k.r; }
+          else { const s = lq > 0 ? -1 : 1; nx = bx.qx * s; nz = bx.qz * s; tief = ueQ + k.r; }
+        } else { nx = ex / d; nz = ez / d; tief = k.r - d; }
+        v.x += nx * (tief + 0.01); v.z += nz * (tief + 0.01);
+        bx.x = v.x; bx.z = v.z;
+        const vw = v.weltGeschwindigkeit(), vn = vw.x * nx + vw.z * nz;
+        if (vn < 0) {
+          v.weltGeschwindigkeitSetzen((vw.x - nx * vn) * BANDE_PARALLEL, (vw.z - nz * vn) * BANDE_PARALLEL);
+          staerke = Math.max(staerke, -vn);
+        }
+        getroffen = true;
+      }
+      if (getroffen && staerke > 0.5) stoesse.push({ nr: i, typ: 'baum', staerke });
+      if (busch && !(v._buschSperre > 0)) {
+        v._buschSperre = P.weichSperre || 0.8;
+        if (v.tempo > 1) {
+          const staerkeB = v.tempo * 0.3;
+          v.vLaengs *= P.weichTempo !== undefined ? P.weichTempo : 0.7;
+          stoesse.push({ nr: i, typ: 'busch', staerke: staerkeB });
         }
       }
     }
     return stoesse;
   }
-
   /** Nächster Punkt auf der Strecke a→b zu (x, z): { x, z, d (Abstand) }. */
   function segmentPunkt(ax, az, bx, bz, x, z) {
     const sx = bx - ax, sz = bz - az, l2 = sx * sx + sz * sz || 1;
@@ -356,5 +725,6 @@
     return n;
   }
 
-  R.Kollisionen = { bande, autoAuto, kapsel, hindernisse, wracksEinbauen };
+  R.Kollisionen = { bande, autoAuto, kapsel, hindernisse, wracksEinbauen,
+    obbAbstand, loopingAbstand, pflanzenSammeln, pflanzen };   // Runde 6
 })();
