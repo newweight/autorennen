@@ -112,6 +112,7 @@ function perfekteRunde(strecke) {
 }
 
 const tabelle = [];
+const grundMittel = {};   // Runde 6 (W2-E): KI mittel, Standard-Welt, Normal – Vergleich für die XL-Varianten
 for (const daten of R.trackCatalog) {
   if (nurId && daten.id !== nurId) continue;
   // Runde 4: zusätzlich die Stunt-Welt (enge und breite Spuren)
@@ -160,7 +161,26 @@ for (const daten of R.trackCatalog) {
     fmt(unschl) + ' vs ' + fmt(zeile.perfekt) + ' (' + ((unschl / zeile.perfekt - 1) * 100).toFixed(1) + ' %)');
   const mz = MITTEL[daten.id];
   if (mz) pruefe(`[${daten.id}] KI mittel ${mz[0]}–${mz[1]} s/Runde`, zeile.mittel >= mz[0] && zeile.mittel <= mz[1], fmt(zeile.mittel));
+  grundMittel[daten.id] = zeile.mittel;
   tabelle.push(zeile);
+  }
+}
+// Runde 6 (W2-E): Varianten – KI „mittel" (Standard-Welt, Variante xl) braucht ≈ Faktor × Grundzeit (±15 %), Ziel erreicht, abseits < 3 %
+for (const daten of R.trackCatalog) {
+  if (!daten.varianten || (nurId && daten.id !== nurId)) continue;
+  for (const vid of Object.keys(daten.varianten)) {
+    const f = daten.varianten[vid].faktor;
+    const strecke = new R.Strecke(daten, { welt: daten.weltStandard, variante: vid });
+    console.log('\n=== ' + daten.name + ' ' + vid.toUpperCase() + ' (×' + f + ', ' + strecke.laenge.toFixed(0) + ' m) ===');
+    const e = kiRunde(strecke, 'mittel');
+    console.log('KI mittel    Runde 1 ' + fmt(e.r1) + ', Runde 2 ' + fmt(e.r2) + ' | abseits ' + (e.anteil * 100).toFixed(1) + ' %');
+    pruefe(`[${daten.id} ${vid}] mittel: 2 Runden im Ziel, abseits < 3 %, kein Reset`, e.imZiel && e.anteil < 0.03 && !e.reset, (e.anteil * 100).toFixed(1) + ' %');
+    const zf = daten.varianten[vid].zeitFaktor || f;   // Zeit wächst langsamer als die Länge (Kurventempo ∝ √Radius)
+    const soll = grundMittel[daten.id] * zf;
+    pruefe(`[${daten.id} ${vid}] KI mittel ≈ ${zf} × Grundzeit (±15 %; Länge ×${f})`, Math.abs(e.r2 / soll - 1) <= 0.15, fmt(e.r2) + ' vs ' + fmt(soll) + ' (Grundzeit ' + fmt(grundMittel[daten.id]) + ')');
+    pruefe(`[${daten.id} ${vid}] zielRundenzeit (${strecke.katalog.zielRundenzeit} s) = ${zf} × ${daten.zielRundenzeit}`, strecke.katalog.zielRundenzeit === Math.round(daten.zielRundenzeit * zf));
+    if (strecke.loopings.length) pruefe(`[${daten.id} ${vid}] mittel: alle Loopings geschafft (${2 * strecke.loopings.length}×), 0 Stürze`,
+      e.loop.geschafft === 2 * strecke.loopings.length && e.loop.gefallen === 0 && e.loop.zuLangsam === 0, JSON.stringify(e.loop));
   }
 }
 console.log('\nRunde 2 (fliegend), Standard-Auto 240 km/h, Tempo-Klasse ' + KLASSE + ' (vMax ' + (new R.Vehicle({}).daten.vMax * 3.6).toFixed(0) + ' km/h)');

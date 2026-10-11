@@ -412,3 +412,86 @@
   Abdrängen, KI rempelt ab profi), Schaden-Schwellen, Abseits Gras 60/Sand 50 km/h, Zaun −3 %, Pflanzen-Kollider,
   Reifen/Felgen/Bremsscheiben, Multivan bronze, Welt „Alles", Start-Boost, Sterne. 19 Node-Tests + menu/welten/polizei
   (Test robuster gemacht) grün. → Version v7 (Autorennen-Versionen/v7_…).
+- W2 gestartet: C Dino-Ausbau + Rehe/Bären (Opus), D Tag/Dämmerung/Nacht (Opus), E XL-Varianten Wüste ×1,6 / Fantasie ×2 (Sonnet)
+- 11.10. Agent W2-E (Sonnet) – XL-Streckenvarianten Wüste ×1,6 / Fantasie ×2 – fertig (Add-on, Standard unverändert „Normal").
+  trackBuilder.js: neue statische R.Strecke.varianteAnwenden(daten, id) → skalierte KOPIE (Katalog bleibt): Kontrollpunkte x/z und Hügel x/z/r um den
+  Schwerpunkt × Faktor (y und Hügelhöhe bleiben → Steigung sinkt), alle Listen-Felder s/s0/s1 generisch × Faktor (Hindernisse, Tunnel, Brücken,
+  Loopings, Bälle, Wasser, Kleber, Schanzen, Boost, Schilde, Wracks, Strohballen, Spuren, Dinos/Tiere – jede Liste ohne Namensliste, d. h. auch Agent-C-Felder),
+  absolut bleiben Looping-Radius, Schanzenlänge, Anlauf, checkpointAbstand (→ 26→41 bzw. 12→23 Checkpoints). Konstruktor: new R.Strecke(daten, { welt, variante });
+  strecke.variante, strecke.katalog = skalierte Kopie (Sterne lesen darüber die skalierte zielRundenzeit).
+  trackCatalog.js: `varianten: { xl: { name, faktor, zeitFaktor, beschreibung } }` bei wueste (1,6) und fantasie (2).
+  WICHTIG zielRundenzeit: Rundenzeit wächst NICHT linear mit der Länge (Kurventempo ∝ √Radius, längere Geraden): gemessen KI mittel Wüste ×1,32–1,41,
+  Fantasie ×1,40–1,50 (schnell/normal). Darum zielRundenzeit × zeitFaktor (Wüste 1,37 → 171 s, Fantasie 1,45 → 102 s), nicht × Faktor (125→200 / 70→140 wären zu locker für ⭐).
+  Längen: Wüste XL 5.329 m, Fantasie XL 2.777 m. KI mittel XL: Wüste 136,6 s (schnell) / 160,4 s (normal), Fantasie 82,9 / 93,2 s. Loopings: alle 7 Stufen schaffen alle.
+  main.js: Einstellung `variante` ('' = Normal; einstellungenPruefen string; streckeSzeneBauen gibt nur gültige Varianten an die Strecke).
+  menu.js: Zeile „📏 Variante: Normal / XL" (class m-variante, getrennt von .m-welt) unter der Welt-Zeile, nur bei Strecken mit varianten; Pillen klickbar
+  (data-a="variante:xl"), Taste V schaltet Normal↔XL im Strecken-Schritt; ↑↓ = weiter Welt, ←→ = Strecke (unverändert); Streckenwechsel setzt Variante zurück.
+  Tests: test_strecke (neuer Block Varianten: Länge, Katalog unverändert, alle s-Felder × Faktor + innerhalb, Orte skaliert, Loopings/Anlauf, Checkpoints, Steigung ≤ 8 %),
+  test_rundenzeit (KI mittel XL ≈ zeitFaktor × Grundzeit ±15 %), test_welten_ki (XL in Welt „alles", 7 Stufen), neu tests/xl_screenshot.py (Übersicht + Nahbilder, angesehen:
+  Straße proportional, Loopings auf der Straße, Tunnel/Brücke an der richtigen Stelle), menu_test (Varianten-Zeile).
+  Offen: Deko-/Leistung bei Wüste XL (5,3 km) auf dem Mac ungemessen; XL-Hintergrund im Menü baut die große Strecke (kurz verzögert).
+- 11.10. Agent W2-D (Opus) – Tageszeit Tag/Dämmerung/Nacht – fertig. Sicherung: /home/claude/Autorennen-Sicherung/w2d_vorher, …/w2d_nachher.
+  config.tageszeit (tag = keine Werte → Licht bitgleich; daemmerung/nacht mit Themen-Ausnahmen wueste/fantasie), Einstellung `tageszeit`
+  (main.js Standard/Validierung). wetter.js: opt.tageszeit → w.tz/tageszeitEmoji/nacht; anwenden: Sonne (Dämmerung orange 0,7, 11°;
+  Nacht Mondlicht 0,16), Halbkugel absolut × Jahreszeit/Wetter-Faktor (Dämmerung 0,8 warm, Nacht 0,25 kühl-blau), Himmel/Nebel der
+  Tageszeit, Wetter-Mischfarben mit wetterHell abgedunkelt (Nacht+Regen dunkel), Himmelskuppel mit Verlauf (1 DC), Sterne (Points, 1 DC),
+  Mond statt Sonne, Wolken rosa/dunkel, Partikel Richtung Nebelfarbe; nachts Mittellinie emissiv, Randsteine heller, Fantasie-Ballons
+  MeshBasic (leuchten farbig). themes.js: laternen: true (Wiese, Wald; Alpen später), laternenBauen(): alle 60 m abwechselnd links/rechts,
+  2,2 m hinter dem Randstein (nicht Tunnel/Brücke/Säulen/Trichter), 3 InstancedMeshes (Mast, Kopf leuchtend, Lichtfleck additiv);
+  Masten als strecke.saeulen (Kollision). main.js: Laternen + nachts immer _tunnelLichterAnlegen; L.nacht: alle 5 Lichter immer
+  visible (aus = intensity 0, kein Shader-Neuübersetzen), Spots dauerhaft an den Spielerautos, 3 Punktlichter = Tunnellampen im Tunnel,
+  sonst die 3 nächsten Laternen (≤ 90 m, zu irgendeiner Kamera); Tunnel-Logik tagsüber unverändert. carBuilder.setzeLicht(auto, an):
+  Scheinwerfer weiß ohne Nebel, Rücklicht 0xe0201a / Bremse 0xff6a50 (alle Autos ab Dämmerung, nur Material). HUD 🌇/🌙 vor dem
+  Wetter-Symbol. Overlay H: „Lichter: Spot n · Punkt n" (spiel.lichterZaehlen(), auch in leistung().lichter). Menü: Pille „🌗 Tageszeit"
+  unten in der LINKEN Spalte (rechts kein Platz bei 1440×900 zu zweit), Fokus nach Fahrhilfe → menu_test-Indizes +1 angepasst.
+  Messung: Nacht +5 Draw-Calls (Kuppel, Sterne, 3 Laternen-Meshes), ohne Laternen +2, Dämmerung +1; Lichter max. Spot 2 · Punkt 3.
+  Tests: test_wetter +17 (u. a. Tag für 53 Thema×Jahreszeit×Wetter numerisch identisch), neu tests/tageszeit_screenshot.py (80 Prüfungen:
+  Tag-Licht bitgleich mit Referenz tests/tageszeit_tag_referenz.json aus dem Stand vorher, 8 Bilder tests/out/tageszeit/ in 2 Iterationen
+  angesehen – Dämmerung danach aufgehellt, Lichtfleck kräftiger; Nacht-Rennen Wiese/Wald 200 s ohne KI-Resets), menu_test grün,
+  welten_test wiese + Regression bitgleich grün. test_strecke: 3 FEHL bei dino (Lava/Dinos – Agent C, nicht W2-D).
+  Schwächen: Lichtfleck liegt flach (auf Kuppen/Querneigung teils halb im Boden); Dämmerung bleibt eher dunkel (Asphalt);
+  Polizei-Blaulichter kommen nachts zum Budget dazu (2 Punktlichter je Streifenwagen, wie bisher).
+- 11.10. W2 Teil 1 fertig: Tag/Dämmerung/Nacht (alle Strecken, Sterne/Mond/Scheinwerfer/Laternen), XL Wüste ×1,6 / Fantasie ×2.
+  Sebastian: W2 ZU ENDE (Dino-Ausbau) vor W3. Start: C1 Dino-Strecke neu + Lava + Vulkan (Opus), parallel Doku (Sonnet);
+  danach C2 Dinos/Tiere/Meteoriten/Flugsaurier (Opus). Sicherung vorher: /home/claude/Autorennen-Sicherung/w2c_vorher
+- 11.10. Agent W2-C1 (Opus) – C4 Berg/2 Tunnel, C2 Lava, C3 Vulkanausbruch – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w2c1_vorher,
+  nachher: …/w2c1_nachher. Ausgangslage: Vorgänger (abgebrochen) hatte C1–C6 weitgehend gebaut, alle Tests grün; geprüft und behalten
+  (Meteoriten/Flugsaurier/Tiere = funktionierende Add-ons mit Tests, nicht entfernt).
+  C4: Grundriss BLEIBT (bewusst, nix kaputtmachen): erfüllt bereits 2.753 m, Radius ≥ 30, Höhen ±14 m, Steigung ≤ 8 %; Berg-Massiv (themes.js)
+  über s 2318–2655, Tunnel 1 2345–2405 (60 m gerade), Tunnel 2 2490–2630 (140 m, endet in der 90°-Kurve R 44 m), 85 m Schlucht dazwischen.
+  bauplan/dino.json: Block runde6_C4 (Tunnel/Berg/Lava, Generator-Ausgabe unverändert). Vulkan-Kulisse größer (610/860 statt 470/700).
+  trackBuilder.varianteAnwenden: skaliert jetzt auch Einzel-Objekte mit s/s0/s1 (dino berg, flugsaurier) – vorher wären sie bei einer
+  Dino-Variante unskaliert geblieben.
+  C2: Lava-Zungen + neu 7 flackernde Flammen je Zunge (LatheGeometry, InstancedMesh, +1 Draw-Call → 34 von 45).
+  C3/KI: Krater haben jetzt s0/s1 (weich); dynamik.hindernisVersion zählt Krater-Wechsel → main.js ruft driver/autopilot/polizeiFahrer
+  .hindernisseSetzen neu auf (geprüft: zur Laufzeit wiederholbar, Liste wird kopiert). Bomben zielen vor den Führenden PLUS dessen Fahrweg
+  während des Flugs (geglättetes Tempo), Einschläge eines Ausbruchs ≥ 30 m auseinander (config bombenAbstandS), sonst landet die Bombe
+  neben der Fahrbahn. Lavabomben größer (3,0), Rauchspur kräftiger. Himmel-Rot auch bei Dämmerung/Nacht: Himmelskuppel-Materialfarbe
+  wird temporär getönt und danach auf Weiß zurückgesetzt (Licht-Funktionen der Tageszeit unverändert).
+  Tests: test_dynamik +4 (hindernisVersion/hindernisseSetzen, Krater weg nach 20 s, Einschlag-Abstand, Vorlauf zum fahrenden Führenden;
+  2 Messfehler behoben: abgeschnittene Steh-Zeit am Laufende, Krater früherer Läufe auf gemeinsamer Strecke), test_hindernisse (Krater s0/s1),
+  test_strecke +6 (Dino-Test-Variante ×1,3: nichts verloren, berg/flugsaurier skaliert, 2 Tunnel), test_welten_ki (KI bekommt Krater zur
+  Laufzeit; neue Prüfung profi+ trifft ≤ 25 % der Krater), screenshot_test (Himmel-Messfeld unter der Meldung, neues Bild 45a_tunnel1_innen).
+  Bilder angesehen (2 Iterationen: Flammen erst additiv = weiße Spitzen → Lathe-Flammen deckend): 40/40b Lava, 41/41b Ausbruch, 42 Krater,
+  45/45a Tunnel innen, 46 Berg; tests/out/w2c1/ Ausbruch bei Tag/Dämmerung/Nacht + Lava-Flammen.
+  Schwächen: nachts wirkt das Rot fast nur im Nebel/Horizont (Kuppel dunkel, Faktor kann nicht aufhellen); ferne Bomben bleiben kleine
+  Punkte; Flammen eher gelblich.
+- 11.10. Agent W2-C2 (Opus) – C1 Dinos, Rehe/Bären, Prüfung C5 Meteoriten / C6 Flugsaurier – fertig. Sicherung vorher:
+  /home/claude/Autorennen-Sicherung/w2c2_vorher, nachher: …/w2c2_nachher. Ausgangslage: Vorgänger hatte fast alles gebaut (4 Dino-Stellen,
+  Tiere im Wald, Meteoriten, Flugsaurier, grasende Rehe in dynamik.js statt themes.js – bewusst dort gelassen, laufen auch in Klassisch).
+  Geändert gegen die Vorgaben: (1) Dinos: 30 % ALLER Dinos bleiben MITTEN auf der Straße (|q| ≤ 40 % halbe Breite) 1–3 s stehen und kehren um
+  (vorher 30 % der Steher ≈ 18 %), übrige 50 % bleiben 1–3 s stehen; Brüllen je Stelle alle 15–30 s (vorher nur zufällig beim Stehen), Kopf hoch +
+  Atemwolke; eigener Zufall dinoRnd → deterministisch je Seed (config.dino: umkehrChance, stehenChance 0,5, bruellenMin/Max/Dauer).
+  (2) Flugsaurier: Takt lief nur zwischen den Anflügen → Start-zu-Start war 40 s + Flugdauer; jetzt genau 40 s (Timer läuft immer).
+  (3) Reh/Bär maßstäblich: Reh ×0,62 (Kopf 1,28 m, Sprung 0,6 m), Bär ×0,87 (1,52 m) und heller braun (war fast schwarz); Kollisionskreise angepasst.
+  (4) Töne: neu rehRuf (Reh bleibt stehen/getroffen), Bär brummt auch beim Betreten der Straße (Ereignisse 'rehRuf'/'brummen', main.js-Hooks).
+  C5 Meteoriten geprüft = Vorgabe erfüllt (2 Stellen, 2 s Schatten + Pfeifen, Einschlag 15 m neben der Fahrbahn, 3–5 Brocken, je Runde einmal).
+  varianteAnwenden skaliert `tiere` generisch (Test-Variante ×1,4 geprüft, Katalog unverändert).
+  Tests: test_dynamik +12 (Umkehr mitten 30 % Langlauf 3 Seeds 30,9 %, Brüllen 15–30 s je Stelle, Protokoll deterministisch je Seed,
+  Flugsaurier Start-zu-Start 40 s, Wald Welten/Töne/Variante), test_welten_ki: Wald jetzt ALLE Welten (klassisch…alles) 0 Resets, Dino alle Welten
+  0 Resets; screenshot_test: 47b Dino Umkehr, 47c Dino brüllt, 48c Reh schaut, Größenprüfung (Reh 1,05–1,4 / Bär 1,35–1,7 m), Draw-Calls Wald
+  inkl. Dynamik 25 + 8 = 33 ≤ 45. Bilder in 2 Iterationen angesehen (1.: Reh 2 m groß, Bär schwarz, Brüllen kaum sichtbar → korrigiert).
+  Schwächen: Umkehren ist auf Standbildern schwer zu erkennen (nur Richtung); Reh-Kopfdrehung beim Schauen aus Fahrersicht klein.
+- 11.10. W2 abgeschlossen (Fable-Prüfung): Tageszeit, XL, Dino-Ausbau komplett (Lava, Vulkanausbruch mit Kratern, 2 Tunnel,
+  Meteoriten, Flugsaurier, Dinos ×2 mit Verhalten), Rehe/Bären im Wald, Doku v8. 19 Node-Tests grün. → Version v8.
+  Schwäche: Flugsaurier aus Fahrersicht sehr klein (Polierrunde). Nächster Schritt: W3 (Pokal, Garage/Münzen, Ölfalle, Elimination).

@@ -45,6 +45,8 @@
   };
   const LICHT_AUS = 0xa31414;      // Rücklicht normal
   const LICHT_AN = 0xff3b30;       // Rücklicht beim Bremsen
+  const LICHT_NACHT = 0xe0201a;    // Runde 6: Rücklicht mit Fahrlicht (Dämmerung/Nacht)
+  const LICHT_NACHT_BREMSE = 0xff6a50;   // Runde 6: Bremslicht mit Fahrlicht (heller, leicht orange)
   const SCHEINWERFER = 0xfff6c8;
   const BLAULICHT = { aus: { blau: 0x1c2f63, rot: 0x5a1c1c }, an: { blau: 0x3f8cff, rot: 0xff2b2b } };
 
@@ -1495,10 +1497,30 @@
     return g;
   }
 
-  /** Bremslichter an/aus (heller beim Bremsen). */
+  /** Bremslichter an/aus (heller beim Bremsen). Runde 6: mit eingeschaltetem Licht (setzeLicht) leuchtend rot. */
   function setzeBremslicht(auto, an) {
     const m = auto.userData.bremslichtMaterial;
-    if (m) m.color.setHex(an ? LICHT_AN : LICHT_AUS);
+    if (m) m.color.setHex(an ? (auto.userData.lichtAn ? LICHT_NACHT_BREMSE : LICHT_AN) : (auto.userData.lichtAn ? LICHT_NACHT : LICHT_AUS));
+  }
+
+  /** Runde 6: Scheinwerfer-Material „Licht an" (weiß, ohne Nebel → leuchtet auch in der Ferne). */
+  function scheinwerferAnMaterial() {
+    if (!cache.material.scheinwerferAn) cache.material.scheinwerferAn = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
+    return cache.material.scheinwerferAn;
+  }
+
+  /**
+   * Runde 6 (Dämmerung/Nacht): Fahrlicht an/aus – Scheinwerfer leuchten weiß (ohne Nebel), Rücklichter hellrot
+   * (Bremsen noch heller). Kein echtes Licht (das setzt main.js nur für Spielerautos). an = false → genau wie vorher.
+   */
+  function setzeLicht(auto, an) {
+    if (!auto || !auto.userData) return;
+    const ud = auto.userData;
+    ud.lichtAn = !!an;
+    (ud.scheinwerfer || []).forEach((m) => { m.material = an ? scheinwerferAnMaterial() : scheinwerferMaterial(); });
+    const bm = ud.bremslichtMaterial;
+    if (bm && bm.fog !== !an) { bm.fog = !an; bm.needsUpdate = true; }
+    setzeBremslicht(auto, false);
   }
 
   /**
@@ -1559,5 +1581,5 @@
     return g;
   }
 
-  R.carBuilder = { bauen, platzhalterAuto, setzeBremslicht, setzeBlaulicht, lenkeRaeder, dreheRaeder, cacheLeeren, TYP_STANDARD };
+  R.carBuilder = { bauen, platzhalterAuto, setzeBremslicht, setzeLicht, setzeBlaulicht, lenkeRaeder, dreheRaeder, cacheLeeren, TYP_STANDARD };
 })();

@@ -20,7 +20,8 @@ const ERWARTUNG = {
   // Fantasie (Runde 3): kürzer, 2 Loopings auf langen Geraden, nur 1–2 Hindernisse
   fantasie: { kurven: [4, 12], geraden: { min: 150, anzahl: [2, 3] }, hoehe: 10, laenge: [1300, 1500], hindernisse: [1, 2] },
   // Runde 5b: Dino (mittel) 2.300–2.800 m, Hügel kräftig, 1 Schikane + 1 Haarnadel, lange Gerade (≥ 500 m) mit Schanze
-  dino:   { kurven: [16, 30], geraden: { min: 150, anzahl: [2, 4] }, hoehe: 14, hoeheMin: 18, laenge: [2300, 2800], haarnadeln: 1, langeGerade: 500 },
+  dino:   { kurven: [16, 30], geraden: { min: 150, anzahl: [2, 4] }, hoehe: 14, hoeheMin: 18, laenge: [2300, 2800], haarnadeln: 1, langeGerade: 500,
+            hindernisse: [5, 6] },   // Runde 6 (W2-C): + 2 Lava-Zungen
 };
 const STEIGUNG_MAX = 0.08;
 const nurId = process.argv[2];
@@ -216,7 +217,7 @@ if (erw.haarnadeln !== undefined) pruefe(erw.haarnadeln + ' Haarnadel(n)', haarn
 // ---------- Hindernisse (Runde 3) ----------
 {
   const ANZAHL = { wiese: { sand: 1, ast: 1, baustelle: 1 }, wald: { oel: 1, ast: 1, baustelle: 1, sand: 1 },
-    wueste: { sand: 2, oel: 1, baustelle: 1 }, fantasie: { oel: 1, ast: 1 }, dino: { sand: 1, baustelle: 1, ast: 1, oel: 1 } }[daten.id];
+    wueste: { sand: 2, oel: 1, baustelle: 1 }, fantasie: { oel: 1, ast: 1 }, dino: { sand: 1, baustelle: 1, ast: 1, oel: 1, lava: 2 } }[daten.id];
   const hs = strecke.hindernisse, b2 = strecke.breite / 2, hz = erw.hindernisse || [3, 5];
   pruefe(hz[0] + '–' + hz[1] + ' Hindernisse', hs.length >= hz[0] && hs.length <= hz[1], hs.map(h => h.typ + '@' + Math.round(h.s)).join(', '));
   if (ANZAHL) {
@@ -386,14 +387,43 @@ if (daten.welten) {
   liste('baelle', () => 3, () => 0);
   liste('wasserstrahlen', () => 3, e => e.seitenabstand);
   liste('dinos', () => 4, () => 0);
+  liste('meteoriten', () => 4, () => 0);   // Runde 6 (W2-C): Brocken rollen quer über die Straße
+  liste('tiere', () => 4, () => 0);        // Runde 6 (W2-C): Rehe/Bären (Wald)
   // Runde 5b: laufende Dinos nur Dino-Strecke (2 Stellen), nur ab Welt Hindernisse (Klassisch: nur Deko-Dinos)
   if (daten.id === 'dino') {
-    pruefe('dinos: 1–3 Stellen (von ±1, intervall/tempo > 0, art dreihorn/langhals)', daten.dinos.length >= 1 && daten.dinos.length <= 3 &&
+    pruefe('dinos: 4–5 Stellen (Runde 6: doppelt so viele; von ±1, intervall/tempo > 0, art dreihorn/langhals)', daten.dinos.length >= 4 && daten.dinos.length <= 5 &&
       daten.dinos.every(e => (e.von === 1 || e.von === -1) && e.intervall > 0 && e.tempo > 0 && ['dreihorn', 'langhals'].includes(e.art)));
     pruefe('dinos: Welt klassisch aus, hindernisse/stunt/verrueckt an', !daten.welten.klassisch.dinos &&
       ['hindernisse', 'stunt', 'verrueckt'].every(w => daten.welten[w].dinos) && new R.Strecke(daten, { welt: 'klassisch' }).dinos.length === 0 &&
       new R.Strecke(daten, { welt: 'hindernisse' }).dinos.length === daten.dinos.length);
     pruefe('Brücke art stamm, Tunnel art hoehle, strohOptik fels', strecke.bruecken[0].art === 'stamm' && strecke.tunnel[0].art === 'hoehle' && daten.strohOptik === 'fels');
+    // ---------- Runde 6 (W2-C) ----------
+    const [t1, t2] = strecke.tunnel;
+    pruefe('C4: 2 Tunnel – Tunnel 1 kurz (60 m), Tunnel 2 lang (140 m)', strecke.tunnel.length === 2 && Math.abs(t1.laenge - 60) < 1 && Math.abs(t2.laenge - 140) < 1,
+      strecke.tunnel.map(t => t.s0 + '–' + t.s1).join(', '));
+    let kurveT2 = 0;
+    for (let s = t2.s0; s < t2.s1; s += 2) kurveT2 += Math.abs(sp.punktBei(s).kruemmung) * 2;
+    pruefe('C4: Tunnel 2 mit Kurve (≥ 45° Richtungsänderung im Tunnel)', kurveT2 * 180 / Math.PI >= 45, (kurveT2 * 180 / Math.PI).toFixed(0) + '°');
+    pruefe('C4: beide Tunnel im selben Berg-Massiv (berg s0..s1 umfasst beide, Schlucht dazwischen ≥ 40 m)',
+      daten.berg && daten.berg.s0 < t1.s0 && daten.berg.s1 > t2.s1 && t2.s0 - t1.s1 >= 40, JSON.stringify(daten.berg));
+    pruefe('C4: Tunnel nicht am Start/Ziel (≥ 60 m)', strecke.tunnel.every(t => Math.abs(sp.differenzS(t.s0, 0)) >= 60 && Math.abs(sp.differenzS(t.s1, 0)) >= 60));
+    const lav = strecke.hindernisse.filter(h => h.typ === 'lava');
+    pruefe('C2: 2 Lava-Zungen über die halbe Fahrbahn (Seite frei), KI-Daten hart (gefahr 1, halbbreite, seite)', lav.length === 2 && lav.every(h =>
+      h.hart && h.gefahr === 1 && h.seite === Math.sign(h.seitenabstand) && h.halbbreite > 2 && h.flaeche &&
+      Math.min(Math.abs(h.flaeche.q0), Math.abs(h.flaeche.q1)) < 0.5 && Math.max(Math.abs(h.flaeche.q0), Math.abs(h.flaeche.q1)) > strecke.breite / 2), lav.map(h => h.s + '/' + h.seite).join(', '));
+    pruefe('C2: Lava nur ab Welt Hindernisse', new R.Strecke(daten, { welt: 'klassisch' }).hindernisse.every(h => h.typ !== 'lava'));
+    pruefe('C5: 2 Meteoriten-Stellen (von ±1)', (daten.meteoriten || []).length === 2 && daten.meteoriten.every(m => m.von === 1 || m.von === -1));
+    const fl = daten.flugsaurier;
+    let flGerade = !!fl;
+    if (fl) for (let s = fl.s0; s <= fl.s1; s += 4) if (Math.abs(sp.punktBei(s).kruemmung) > 1 / 500) flGerade = false;
+    pruefe('C6: Flugsaurier-Bereich auf der langen Geraden (≥ 400 m, kein Tunnel)', flGerade && fl.s1 - fl.s0 >= 400 &&
+      !strecke.tunnel.some(t => t.s1 > fl.s0 && t.s0 < fl.s1), fl ? fl.s0 + '–' + fl.s1 : '-');
+    pruefe('C3: Vulkanausbruch eingeschaltet', !!(daten.vulkan && daten.vulkan.ausbruch));
+  }
+  if (daten.id === 'wald') {
+    const ti = daten.tiere || [];
+    pruefe('Wald: Rehe + Bären (2–6 Stellen, art reh/baer, von ±1, intervall/tempo > 0)', ti.length >= 2 && ti.length <= 6 &&
+      ti.some(t => t.art === 'reh') && ti.some(t => t.art === 'baer') && ti.every(t => ['reh', 'baer'].includes(t.art) && (t.von === 1 || t.von === -1) && t.intervall > 0 && t.tempo > 0));
   }
   (daten.wracks || []).forEach(e => pruefe('wracks@' + e.s + ': brennt bool, autoId gesetzt', typeof e.brennt === 'boolean' && typeof e.autoId === 'string'));
   (daten.strohballen || []).forEach(e => pruefe('strohballen@' + e.s + ': von ±1, intervall/tempo > 0', (e.von === 1 || e.von === -1) && e.intervall > 0 && e.tempo > 0));
@@ -623,6 +653,123 @@ const dt = 1 / 60;
     rennen.teilnehmer.map(t => t.platz).join(','));
 }
 
+}
+
+// ---------- Runde 6 (W2-E): Streckenvarianten (XL) ----------
+for (const daten of R.trackCatalog) {
+  if (!daten.varianten) continue;
+  if (nurId && daten.id !== nurId) continue;
+  for (const vid of Object.keys(daten.varianten)) {
+    const f = daten.varianten[vid].faktor;
+    praefix = '[' + daten.id + ' ' + vid + '] ';
+    console.log('\n=== ' + daten.name + ' ' + daten.varianten[vid].name + ' (×' + f + ') ===');
+    const basis = new R.Strecke(daten, { welt: 'alles' });
+    const st = new R.Strecke(daten, { welt: 'alles', variante: vid });
+    const sp = st.spline, L = st.laenge, L0 = basis.laenge;
+    const roh = JSON.stringify(daten);
+    pruefe('strecke.variante = ' + vid + ', Normal = ""', st.variante === vid && basis.variante === '' && new R.Strecke(daten, { variante: 'gibtsnicht' }).variante === '');
+    pruefe('Länge ≈ ' + f + ' × Normal (±2 %)', Math.abs(L / L0 - f) < 0.02 * f, L0.toFixed(0) + ' → ' + L.toFixed(0) + ' m');
+    pruefe('Katalog unverändert (Kopie)', JSON.stringify(daten) === roh && st.katalog !== daten && basis.katalog === daten);
+    const zf = daten.varianten[vid].zeitFaktor || f;
+    pruefe('zielRundenzeit × zeitFaktor ' + zf, st.katalog.zielRundenzeit === Math.round(daten.zielRundenzeit * zf) && basis.katalog.zielRundenzeit === daten.zielRundenzeit,
+      daten.zielRundenzeit + ' → ' + st.katalog.zielRundenzeit + ' s');
+    let minR = Infinity, minR0 = Infinity, maxSteig = 0;
+    basis.spline.punkte.forEach((p) => { minR0 = Math.min(minR0, 1 / Math.max(1e-9, Math.abs(p.kruemmung))); });
+    sp.punkte.forEach((p, i) => {
+      minR = Math.min(minR, 1 / Math.max(1e-9, Math.abs(p.kruemmung)));
+      const q = sp.punkte[(i + 1) % sp.anzahl];
+      maxSteig = Math.max(maxSteig, Math.abs(q.y - p.y) / Math.max(1e-6, Math.hypot(q.x - p.x, q.z - p.z)));
+    });
+    pruefe('Mindestradius wächst mit (0,7…1,1 × ' + f + ' × Normal, ≥ 25 m)', minR >= 25 && minR / minR0 > 0.7 * f && minR / minR0 < 1.1 * f, minR0.toFixed(0) + ' → ' + minR.toFixed(0) + ' m');
+    pruefe('Steigung ≤ 8 %', maxSteig <= STEIGUNG_MAX, (maxSteig * 100).toFixed(2) + ' %');
+    let minAbst = Infinity;
+    for (let i = 0; i < sp.anzahl; i += 2) for (let j = i + 1; j < sp.anzahl; j += 2) {
+      if (Math.abs(sp.differenzS(sp.punkte[i].s, sp.punkte[j].s)) < 150) continue;
+      minAbst = Math.min(minAbst, Math.hypot(sp.punkte[i].x - sp.punkte[j].x, sp.punkte[i].z - sp.punkte[j].z));
+    }
+    pruefe('Abstand nicht benachbarter Teile ≥ 40 m', minAbst >= 40, minAbst.toFixed(0) + ' m');
+    pruefe('Mittellinie auf dem (skalierten) Gelände', sp.punkte.every(p => Math.abs(p.y - st.gelaendeHoehe(p.x, p.z)) < 0.05));
+    // alle s-Felder: ×f und innerhalb [0, L]
+    let anz = 0, ok = true, info = '';
+    Object.keys(daten).forEach((k) => {
+      if (k === 'punkte' || k === 'huegel' || k === 'varianten' || !Array.isArray(daten[k])) return;
+      daten[k].forEach((e, i) => {
+        const n = st.katalog[k][i];
+        ['s', 's0', 's1'].forEach((sk) => {
+          if (typeof e[sk] !== 'number') return;
+          anz++;
+          const gut = Math.abs(n[sk] - e[sk] * f) < 0.011 && n[sk] >= 0 && n[sk] <= L + 1e-6;
+          if (!gut) { ok = false; info = k + '[' + i + '].' + sk + ' ' + e[sk] + ' → ' + n[sk]; }
+        });
+        Object.keys(e).forEach((fk) => { if (!['s', 's0', 's1'].includes(fk) && n[fk] !== e[fk]) { ok = false; info = k + '[' + i + '].' + fk + ' verändert'; } });
+      });
+    });
+    pruefe('alle s-Felder (' + anz + ') × ' + f + ', innerhalb der Strecke, übrige Felder unverändert', ok && anz > 10, info || anz + ' Werte');
+    // Lage: Tunnel/Brücken/Loopings sitzen an der um den Schwerpunkt skalierten Stelle
+    let cx = 0, cz = 0; daten.punkte.forEach(p => { cx += p[0]; cz += p[2]; }); cx /= daten.punkte.length; cz /= daten.punkte.length;
+    const orte = [];
+    st.tunnel.forEach((t, i) => orte.push([basis.tunnel[i].m, t.m, 'Tunnel']));
+    st.bruecken.forEach((t, i) => orte.push([basis.bruecken[i].m, t.m, 'Brücke']));
+    st.loopings.forEach((l, i) => orte.push([basis.spline.punktBei(basis.loopings[i].s), sp.punktBei(l.s), 'Looping']));
+    orte.forEach(([a, b, was]) => {
+      const soll = { x: cx + (a.x - cx) * f, z: cz + (a.z - cz) * f };
+      const d = Math.hypot(b.x - soll.x, b.z - soll.z);
+      pruefe(was + ' sitzt an der skalierten Stelle (< ' + Math.max(8, 0.01 * L).toFixed(0) + ' m)', d < Math.max(8, 0.01 * L), d.toFixed(1) + ' m');
+    });
+    // Loopings: Radius bleibt, Gerade mit Anlauf
+    const gerade = (s0, s1) => { for (let s = s0; s <= s1; s += 2) if (Math.abs(sp.punktBei(s).kruemmung) > 1 / 500) return false; return true; };
+    st.loopings.forEach((l) => {
+      const name = 'Looping@' + Math.round(l.s);
+      pruefe(name + ': Radius 12 m (bleibt), vMin ≈ 87 km/h', l.radius === 12 && Math.abs(l.vMin * 3.6 - 87.3) < 0.5);
+      pruefe(name + ': Gerade mit ≥ 120 m Anlauf', gerade(l.s - 120, l.s + l.versatz + 20));
+    });
+    // Schanzen/Boost/Schilde/Bälle/Wasser: auf der Straße
+    const aufStrasse = (s, q) => { const p = sp.punktBei(s); return st.untergrundAn(p.x + p.nx * q, p.z + p.nz * q) === 'strasse'; };
+    let strOk = true, strInfo = '';
+    ['boostFelder', 'schilde', 'baelle', 'wasserstrahlen', 'schanzen'].forEach((k) => (st.katalog[k] || []).forEach((e) => {
+      if (!aufStrasse(e.s, e.seitenabstand || 0)) { strOk = false; strInfo = k + '@' + e.s; }
+    }));
+    pruefe('Schanzen, Turbo, Schilde, Bälle, Wasser liegen auf der Straße', strOk, strInfo);
+    (st.katalog.schanzen || []).forEach(e => pruefe('Schanze@' + e.s + ': Länge bleibt 10 m, Gerade', e.laenge === 10 && gerade(e.s - 10, e.s + 60)));
+    pruefe('Checkpoints: Abstand bleibt ' + st.katalog.checkpointAbstand + ' m → ≈ ' + f + '× mehr',
+      Math.abs(st.checkpoints.length / basis.checkpoints.length - f) < 0.2 * f, basis.checkpoints.length + ' → ' + st.checkpoints.length);
+    pruefe('Hindernisse berechnet (gleiche Anzahl wie Normal)', st.hindernisse.length === basis.hindernisse.length, st.hindernisse.length);
+    pruefe('Spuren: Anzahl gleich, Abschnitte × ' + f, st.spuren.length === basis.spuren.length &&
+      st.spuren.every((e, i) => Math.abs(e.s0 - basis.spuren[i].s0 * f) < 0.5));
+    pruefe('Bande in Brücke/Tunnel eng', st.bruecken.concat(st.tunnel).every(b => Math.abs(st.grenzeBei(b.mitte) - st.grenzeEng) < 1e-6));
+  }
+}
+// ---------- W2-C1: Varianten-Kompatibilität Dino – varianteAnwenden verliert nichts (Listen UND Einzel-Objekte berg/flugsaurier) ----------
+{
+  praefix = '[dino ×1,3 Test-Variante] ';
+  const dino = R.trackCatalog.find(t => t.id === 'dino'), f = 1.3;
+  const daten = Object.assign({}, dino, { varianten: { test: { name: 'Test', faktor: f } } });
+  const k = R.Strecke.varianteAnwenden(daten, 'test');
+  pruefe('alle Felder vorhanden (nichts verloren)', Object.keys(daten).every(x => x in k), Object.keys(daten).filter(x => !(x in k)).join(', '));
+  let anz = 0, ok = true, info = '';
+  const vergleich = (e, n, wo) => {
+    ['s', 's0', 's1'].forEach((sk) => {
+      if (typeof e[sk] !== 'number') return;
+      anz++;
+      if (Math.abs(n[sk] - e[sk] * f) > 0.011) { ok = false; info = wo + '.' + sk + ' ' + e[sk] + ' → ' + n[sk]; }
+    });
+    Object.keys(e).forEach((fk) => { if (!['s', 's0', 's1'].includes(fk) && JSON.stringify(n[fk]) !== JSON.stringify(e[fk])) { ok = false; info = wo + '.' + fk + ' verändert'; } });
+  };
+  Object.keys(daten).forEach((x) => {
+    if (['punkte', 'huegel', 'varianten', 'welten'].includes(x)) return;
+    const e = daten[x];
+    if (Array.isArray(e)) { if (!Array.isArray(k[x]) || k[x].length !== e.length) { ok = false; info = x + ' Länge'; return; } e.forEach((el, i) => { if (el && typeof el === 'object') vergleich(el, k[x][i], x + '[' + i + ']'); }); }
+    else if (e && typeof e === 'object') vergleich(e, k[x], x);
+  });
+  pruefe('alle s-Felder (' + anz + ', auch berg/flugsaurier) × ' + f + ', übrige Werte unverändert', ok && anz > 30, info || anz + ' Werte');
+  pruefe('berg und flugsaurier mitskaliert', Math.abs(k.berg.s0 - dino.berg.s0 * f) < 0.02 && Math.abs(k.flugsaurier.s1 - dino.flugsaurier.s1 * f) < 0.02 &&
+    k.flugsaurier.intervall === dino.flugsaurier.intervall);
+  pruefe('Welten/Vulkan/Optik unverändert übernommen', k.welten === dino.welten && k.vulkan === dino.vulkan && k.strohOptik === dino.strohOptik);
+  const st = new R.Strecke(daten, { welt: 'alles', variante: 'test' }), basis = new R.Strecke(dino, { welt: 'alles' });
+  pruefe('Strecke baut: 2 Tunnel (60/140 m × f), Lava 2, Hindernisse gleich viele', st.tunnel.length === 2 && Math.abs(st.tunnel[0].laenge - 60 * f) < 1 &&
+    Math.abs(st.tunnel[1].laenge - 140 * f) < 1 && st.hindernisse.filter(h => h.typ === 'lava').length === 2 && st.hindernisse.length === basis.hindernisse.length,
+    st.tunnel.map(t => t.laenge.toFixed(0)).join('/'));
+  pruefe('Katalog-Original unverändert', dino.berg.s0 === 2318 && dino.tunnel[0].s0 === 2345 && !dino.varianten);
 }
 praefix = '';
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');

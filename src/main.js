@@ -20,13 +20,15 @@
       runden: c.rennen.rundenStandard, gegner: c.rennen.gegnerStandard,
       schwierigkeit: c.schwierigkeitStandard, fahrhilfe: [c.fahrhilfeStandard, c.fahrhilfeStandard],
       // Runde 4: Welt je Strecke ('' = Standard der Strecke), Jahreszeit/Wetter/Wind, Schaden (Standard = wie bisher)
-      welt: '', jahreszeit: 'sommer', wetter: 'klar', windStaerke: 0, windRichtung: 'zufall', schaden: false,
+      welt: '', variante: '', jahreszeit: 'sommer', wetter: 'klar', windStaerke: 0, windRichtung: 'zufall', schaden: false,
       // Runde 5: Tempo-Klasse 'normal' (≈ 155–190 km/h) | 'schnell' (Katalog 220–270 km/h), Spieler und KI gleich
       tempoKlasse: c.tempoKlasseStandard || 'normal',
       // Runde 5b: Polizei (Streifenwagen hält an, world/polizei.js), Standard aus
       polizei: !!(c.polizei && c.polizei.standardAn),
       // Runde 6 (W1-A4): Rempeln 'sanft' (nur Abstoßung, wie bisher) | 'echt' (Drehen, Abdrängen), Standard sanft
       rempeln: (c.kollision && c.kollision.rempeln && c.kollision.rempeln.standard) === 'echt' ? 'echt' : 'sanft',
+      // Runde 6 (W2-D): Tageszeit 'tag' (Standard, Licht wie bisher) | 'daemmerung' | 'nacht'
+      tageszeit: c.tageszeit && c.tageszeit[c.tageszeitStandard] ? c.tageszeitStandard : 'tag',
     };
   }
 
@@ -49,6 +51,7 @@
       schwierigkeit: c.schwierigkeiten[r.schwierigkeit] ? r.schwierigkeit : std.schwierigkeit,
       fahrhilfe: [0, 1].map(i => (c.fahrhilfen[hilfe[i]] ? hilfe[i] : std.fahrhilfe[i])),
       welt: typeof r.welt === 'string' ? r.welt : '',          // gültig für die Strecke? → streckeSzeneBauen prüft
+      variante: typeof r.variante === 'string' ? r.variante : '',   // Runde 6: Streckenvariante ('' = Normal, z. B. 'xl')
       jahreszeit: (c.jahreszeiten && c.jahreszeiten[r.jahreszeit]) || r.jahreszeit === 'zufall' ? r.jahreszeit : 'sommer',
       wetter: (c.wetter && c.wetter[r.wetter]) || r.wetter === 'zufall' ? r.wetter : 'klar',
       windStaerke: r.windStaerke === 'zufall' ? 'zufall' : zahl(r.windStaerke, 0, 5, 0),
@@ -57,6 +60,7 @@
       tempoKlasse: c.tempoKlassen && c.tempoKlassen[r.tempoKlasse] ? r.tempoKlasse : std.tempoKlasse,
       polizei: typeof r.polizei === 'boolean' ? r.polizei : std.polizei,
       rempeln: r.rempeln === 'echt' || r.rempeln === 'sanft' ? r.rempeln : std.rempeln,
+      tageszeit: c.tageszeit && c.tageszeit[r.tageszeit] ? r.tageszeit : std.tageszeit,
     };
   }
 
@@ -249,6 +253,7 @@
       this.fahrzeuge = []; this.kameras = [];
       this.tunnelLichter = null;
       this.dynamik = null;
+      this._himmelBasis = null; if (R.themes) R.themes.vulkanGlut = 0;   // Runde 6 (W2-C)
       if (this.wetter) { this.wetter.zerstoeren(); this.wetter = null; }
       this.rennen = null; this.strecke = null; this.ergebnis = null;
       this.stoesse = [];
@@ -261,7 +266,8 @@
       // Runde 4: Welt (Schichten) je Strecke – ungültige/leere Welt → Standard der Strecke
       const e = this.einstellungen || {};
       const welt = R.Strecke.weltName ? R.Strecke.weltName(daten, e.welt) : (daten.weltStandard || undefined);
-      const strecke = new R.Strecke(daten, { welt });
+      const variante = e.variante && daten.varianten && daten.varianten[e.variante] ? e.variante : '';   // Runde 6: ungültig → Normal
+      const strecke = new R.Strecke(daten, { welt, variante });
       this.strecke = strecke;
       // Runde 4: Wetter/Jahreszeit/Wind (Standard Sommer/klar/0 = wie bisher)
       this.wetter = null;
@@ -270,7 +276,7 @@
         this.wetter = new R.Wetter(this.szene, {
           jahreszeit: e.jahreszeit || 'sommer', wetter: e.wetter || 'klar',
           wind: { staerke: e.windStaerke === undefined ? 0 : e.windStaerke, richtung: e.windRichtung === undefined ? 'zufall' : e.windRichtung },
-          thema: daten.thema, seed: this._wetterSeed, strecke,
+          thema: daten.thema, seed: this._wetterSeed, strecke, tageszeit: e.tageszeit || 'tag',
         });
       }
       // Strecke + Deko bewegen sich nie: Instanzen in Regionen teilen (Culling je Kamera), Matrizen einfrieren
@@ -287,8 +293,10 @@
       const strohDa = !!(strecke.strohballen && strecke.strohballen.length) && !(strecke.aktiveSchichten && strecke.aktiveSchichten.strohballen === false);
       const dd = strecke.daten || daten;     // nach Welt gefiltert (Wiese Klassisch: keine Bälle, obwohl der Katalog welche hat)
       if (R.Dynamik && ((dd.baelle && dd.baelle.length) || (dd.wasserstrahlen && dd.wasserstrahlen.length) || strohDa ||
-          (strecke.dinos && strecke.dinos.length))) {     // Runde 5b: laufende Dinos
+          (strecke.dinos && strecke.dinos.length) ||      // Runde 5b: laufende Dinos
+          (R.Dynamik.braucht && R.Dynamik.braucht(strecke)))) {   // Runde 6 (W2-C): Tiere, Vulkan, Meteoriten, Flugsaurier
         this.dynamik = new R.Dynamik(strecke, { seed: 4242 });
+        this._hindernisVersion = 0;                        // W2-C1
         this.szene.add(this.dynamik.bauen());
       }
       // Runde 4: Turbo-Felder + Schild-Kugeln (Welt „Verrückt"); die Feld-Grafik baut strecke.bauen() schon
@@ -317,7 +325,18 @@
         this.wetter.partikelBauen(1);
       }
       this._lichtBasis = { himmel: this.halbkugelLicht.intensity, sonne: this.sonne.intensity };
-      if (strecke.tunnel.length) this._tunnelLichterAnlegen();
+      // Runde 6 (W2-D): Tageszeit – nachts Straßenlaternen (Themen mit laternen: true, Masten als Säulen) und
+      // dauerhaft echte Scheinwerfer (dieselben Lichter wie im Tunnel, auch auf Strecken ohne Tunnel)
+      const tz = this.wetter && this.wetter.tz;
+      this.tageszeitDaten = tz || null;
+      this.laternenLampen = null;
+      if (tz && tz.laternen && thema.laternen && R.themes.laternenBauen) {
+        const lb = R.themes.laternenBauen(strecke, thema, tz.laterne);
+        this.szene.add(R.themes.statischVorbereiten(lb.gruppe, 1));
+        this.laternenLampen = lb.lampen;
+        strecke.saeulen = (strecke.saeulen || []).concat(lb.masten);
+      }
+      if (strecke.tunnel.length || (tz && tz.echteScheinwerfer)) this._tunnelLichterAnlegen();
       return strecke;
     }
 
@@ -518,6 +537,8 @@
       const vehicle = new R.Vehicle(auto.fahrwerte, { tempoKlasse: this.tempoKlasse || R.config.tempoKlasseStandard || 'normal' });
       vehicle.setzen(x, z, heading);
       const mesh = R.carBuilder.bauen(auto);
+      // Runde 6: Dämmerung/Nacht – alle Autos mit leuchtenden Scheinwerfern/Rücklichtern (nur Material, kein Licht)
+      if (this.tageszeitDaten && this.tageszeitDaten.autoLicht && R.carBuilder.setzeLicht) R.carBuilder.setzeLicht(mesh, true);
       this.szene.add(mesh);
       const eintrag = { vehicle, mesh, auto, radwinkel: 0 };
       // Looping-Zustand je Fahrzeug (track/looping.js): { aktiv, winkel, v, … }
@@ -613,6 +634,7 @@
       if (this.strecke) this.strecke.hindernisseAnimieren(this._physikZeit || 0);
       if (this.wetter) this.wetter.update(dt, this.zustand === 'menue' ? [this.menueKamera] : this.kameras);
       if (this.dynamik) this.dynamik.animieren();
+      if (this.dynamik) this._dinoFrame(dt);    // Runde 6 (W2-C): Himmel beim Vulkanausbruch, Kamera-Duck (Flugsaurier)
       // Runde 4: Turbo-Pfeile/Schild-Kugeln/Hülle/Flammen; Schaden-Rauch + Warnblinker (NACH setzeBremslicht oben)
       if (this.pickups) this.pickups.animieren(this._physikZeit || 0, this.fahrzeuge);
       if (this.schaden && this.schaden.an) this.schaden.update(this.pausiert || this.zustand === 'menue' ? 0 : dt);
@@ -658,7 +680,19 @@
         pixelRatio: r.getPixelRatio(), aufloesung: this.canvas.width + '×' + this.canvas.height,
         qualitaet: { stufe: this.qualitaet.stufe, pixelRatioStufe: st[Math.min(st.length - 1, this._startStufe() + this.qualitaet.stufe)],
           sichtweite: this.szene.fog ? Math.round(this.szene.fog.far) : null, wechsel: this.qualitaet.wechsel, adaptiv: !!R.config.grafik.adaptiv },
+        lichter: this.lichterZaehlen(),      // Runde 6
       };
+    }
+
+    /** Runde 6: aktive Lichter in der Szene zählen (sichtbar, Intensität > 0; auch an Autos hängende Blaulichter). */
+    lichterZaehlen() {
+      const z = { spot: 0, punkt: 0, richtung: 0, halbkugel: 0, tageszeit: (this.einstellungen && this.einstellungen.tageszeit) || 'tag' };
+      this.szene.traverseVisible((o) => {
+        if (!o.isLight || !(o.intensity > 0)) return;
+        if (o.isSpotLight) z.spot++; else if (o.isPointLight) z.punkt++;
+        else if (o.isDirectionalLight) z.richtung++; else if (o.isHemisphereLight) z.halbkugel++;
+      });
+      return z;
     }
 
     /** Menü-Hintergrund: Kamera fliegt langsam über der Strecke entlang. */
@@ -746,6 +780,84 @@
     _fahrzeugVon(vehicle) {
       for (let i = 0; i < this.fahrzeuge.length; i++) if (this.fahrzeuge[i].vehicle === vehicle) return this.fahrzeuge[i];
       return null;
+    }
+
+    /** Runde 6 (W2-C): kleinster Abstand (m) eines Spieler-Autos zu (x, z) – Infinity ohne Spieler. */
+    _spielerAbstand(x, z) {
+      let d = Infinity;
+      for (const f of this.fahrzeuge) if (f.istSpieler) d = Math.min(d, Math.hypot(f.vehicle.x - x, f.vehicle.z - z));
+      return d;
+    }
+
+    /**
+     * Runde 6 (W2-C): Ereignisse der Dino-/Tier-Dynamik: Töne (nur in Hörweite eines Spielers), Meldungen,
+     * Kamerawackeln (Brüllen < 30 m, Einschlag < 60 m), Kamera-Duck beim Flugsaurier.
+     */
+    _dinoEreignisse(liste) {
+      const C = R.config.dino || {}, A = R.Audio, CV = C.vulkan || {}, CM = C.meteor || {};
+      const wackeln = (x, z, radius, staerke) => this.kameras.forEach((kam) => {
+        const v = kam.ziel; if (!v) return;
+        const d = Math.hypot(v.x - x, v.z - z);
+        if (d < radius) kam.wackeln(staerke * (0.4 + 0.6 * (1 - d / radius)));
+      });
+      for (const e of liste) {
+        const d = e.x !== undefined ? this._spielerAbstand(e.x, e.z) : 0;
+        if (e.typ === 'bruellen') {
+          if (A && A.dinoBruellen && d < 120) A.dinoBruellen(Math.max(0.25, 1 - d / 120), e.art);
+          wackeln(e.x, e.z, C.bruellenRadius || 30, C.bruellenWackeln || 2.5);
+        } else if (e.typ === 'grollen') {
+          if (A && A.grollen) A.grollen(e.dauer || 3);
+          this.fahrzeuge.forEach((f, i) => this._meldung(i, '🌋 Der Vulkan bricht aus!', 2600));
+          this.kameras.forEach((kam) => kam.wackeln(1.2));
+        } else if (e.typ === 'bombe') {
+          if (A && A.pfeifen && d < 220) A.pfeifen(e.dauer || 2.6, Math.max(0.3, 1 - d / 220));
+        } else if (e.typ === 'einschlag') {
+          if (A && A.einschlag && d < 300) A.einschlag(Math.max(0.25, 1 - d / 300));
+          const r = e.art === 'meteor' ? (CM.wackelRadius || 60) : (CV.wackelRadius || 60);
+          wackeln(e.x, e.z, r, e.art === 'meteor' ? (CM.wackeln || 4) : (CV.wackeln || 5));
+        } else if (e.typ === 'meteorWarnung') {
+          if (A && A.pfeifen && d < 260) A.pfeifen(e.dauer || 2, Math.max(0.35, 1 - d / 260));
+          this.fahrzeuge.forEach((f, i) => { if (f.istSpieler && Math.hypot(f.vehicle.x - e.x, f.vehicle.z - e.z) < 260) this._meldung(i, '☄️ Meteorit!', 1800); });
+        } else if (e.typ === 'brummen') {        // W2-C2: Bär betritt die Straße
+          if (A && A.baerBrummen && d < 70) A.baerBrummen(Math.max(0.3, 1 - d / 70));
+        } else if (e.typ === 'rehRuf') {         // W2-C2: Reh bleibt stehen und schaut
+          if (A && A.rehRuf && d < 60) A.rehRuf(Math.max(0.3, 1 - d / 60));
+        } else if (e.typ === 'schrei') {
+          if (A && A.flugsaurierSchrei && d < 150) A.flugsaurierSchrei(Math.max(0.4, 1 - d / 150));
+        } else if (e.typ === 'duck') {
+          const f = this.fahrzeuge[e.nr];
+          if (f) this.kameras.forEach((kam) => { if (kam.ziel === f.vehicle) { kam._duckZeit = 0.7; kam._duckStaerke = e.staerke || 0.45; } });
+          if (f && f.istSpieler) this._meldung(e.nr, 'Flugsaurier! 🦅', 1200);
+        }
+      }
+    }
+
+    /** Runde 6 (W2-C): je Frame – Himmel/Nebel rötlich bei Vulkanglut, Kamera kurz ducken (nach kameras.update). */
+    _dinoFrame(dt) {
+      const glut = this.dynamik.vulkanGlut || 0, sz = this.szene, CV = (R.config.dino && R.config.dino.vulkan) || {};
+      if (glut > 0 && sz.background && sz.background.isColor) {
+        if (!this._himmelBasis) this._himmelBasis = { bg: sz.background.clone(), nebel: sz.fog ? sz.fog.color.clone() : null };
+        const rot = this._himmelRot || (this._himmelRot = new THREE.Color(CV.himmelRot !== undefined ? CV.himmelRot : 0x8a3a24));
+        const a = glut * (CV.himmelAnteil !== undefined ? CV.himmelAnteil : 0.55);
+        sz.background.copy(this._himmelBasis.bg).lerp(rot, a);
+        if (sz.fog && this._himmelBasis.nebel) sz.fog.color.copy(this._himmelBasis.nebel).lerp(rot, a * 0.8);
+        // W2-C1: Dämmerung/Nacht zeichnen eine Himmelskuppel (verdeckt background) → deren Materialfarbe (Faktor) mit tönen
+        const ku = this.wetter && this.wetter._kuppel;
+        if (ku && ku.material && ku.material.color) ku.material.color.setRGB(1, 1 - 0.45 * a, 1 - 0.6 * a);
+      } else if (this._himmelBasis) {
+        if (sz.background && sz.background.isColor) sz.background.copy(this._himmelBasis.bg);
+        if (sz.fog && this._himmelBasis.nebel) sz.fog.color.copy(this._himmelBasis.nebel);
+        const ku = this.wetter && this.wetter._kuppel;
+        if (ku && ku.material && ku.material.color) ku.material.color.setRGB(1, 1, 1);
+        this._himmelBasis = null;
+      }
+      if (this.pausiert) return;
+      for (const kam of this.kameras) {
+        if (!(kam._duckZeit > 0)) continue;
+        const u = 1 - kam._duckZeit / 0.7;
+        if (kam.kamera) kam.kamera.position.y -= (kam._duckStaerke || 0.45) * Math.sin(Math.PI * u);
+        kam._duckZeit -= dt;
+      }
     }
 
     /** HUD-Meldung (oben) für das Spielerauto i (nur Spieler haben ein HUD). */
@@ -967,16 +1079,34 @@
         if (!f || !f.istSpieler) continue;
         if (R.Audio && hs[k].staerke >= 1.5) R.Audio.kollision(Math.min(12, hs[k].staerke));
         if (hs[k].staerke >= 3) this.kameras.forEach((kam) => { if (kam.ziel === f.vehicle) kam.wackeln(Math.min(8, hs[k].staerke)); });
-        if (hs[k].typ === 'brand') this._meldung(hs[k].nr, 'Heiß! 🔥', 1000);
+        if (hs[k].typ === 'brand') this._meldung(hs[k].nr, hs[k].lava ? 'Lava! Heiß! 🔥' : 'Heiß! 🔥', 1000);
+        if (hs[k].typ === 'krater') this._meldung(hs[k].nr, 'Krater! 🕳️', 1000);   // Runde 6 (W2-C)
       }
+      // Runde 6 (W2-C): Lava-Kontakt qualmt (alle Autos)
+      if (this.dynamik && this.dynamik.rauchAn) for (let k = 0; k < hs.length; k++) if (hs[k].lava) this.dynamik.rauchAn(hs[k].x, strecke.hoeheAn(hs[k].x, hs[k].z) + 0.4, hs[k].z, 8, 0x9a9490, 0.9);
       this.hindernisStoesse = hs;
       // Fantasie: Bälle und Wasserstrahlen, Runde 4: Strohballen (nur wenn das Rennen läuft)
       let ds = null;
       if (this.dynamik && rennen && rennen.gasErlaubt) {
         let fuehrend = spielerMax;
         if (fuehrend === null) for (let i = 0; i < tn.length; i++) if (fuehrend === null || tn[i].fortschritt > fuehrend) fuehrend = tn[i].fortschritt;
-        const e = this.dynamik.schritt(dt, { fortschritt: fuehrend === null ? 0 : fuehrend, runden: rennen.runden });
+        // Runde 6 (W2-C): Autos für den Flugsaurier (vorderstes Spieler-Auto)
+        const autos = this._dynAutos || (this._dynAutos = []);
+        autos.length = this.fahrzeuge.length;
+        for (let i = 0; i < this.fahrzeuge.length; i++) {
+          const f = this.fahrzeuge[i];
+          autos[i] = f.polizei ? null : { vehicle: f.vehicle, istSpieler: !!f.istSpieler, fortschritt: tn[i] ? tn[i].fortschritt : 0 };
+        }
+        const e = this.dynamik.schritt(dt, { fortschritt: fuehrend === null ? 0 : fuehrend, runden: rennen.runden, autos });
         if (e.baelleKommen) this.fahrzeuge.forEach((f, i) => this._meldung(i, '⚠️ Bälle kommen!', 2500));
+        if (e.ereignisse && e.ereignisse.length) this._dinoEreignisse(e.ereignisse);
+        // W2-C1: Krater entstanden/verschwunden → Computerfahrer (KI, Autopilot, Polizei) kennen die neue Liste
+        if ((this.dynamik.hindernisVersion || 0) !== (this._hindernisVersion || 0)) {
+          this._hindernisVersion = this.dynamik.hindernisVersion || 0;
+          for (const f of this.fahrzeuge) for (const d of [f.driver, f.autopilot, f.polizeiFahrer]) {
+            if (d && typeof d.hindernisseSetzen === 'function') d.hindernisseSetzen(this.strecke.hindernisse);
+          }
+        }
         schild = !!pickups && pickups.vorTreffern(this.fahrzeuge) > 0;
         ds = this.dynamik.kollisionen(this.fahrzeuge);
         if (schild) ds = pickups.nachTreffern(this.fahrzeuge, ds);
@@ -986,8 +1116,10 @@
           if (R.Audio) R.Audio.kollision(Math.min(12, ds[k].staerke));
           this.kameras.forEach((kam) => { if (kam.ziel === f.vehicle) kam.wackeln(Math.min(8, Math.max(4, ds[k].staerke))); });
           // Runde 5b: Dino (Dino-Strecke) und Felsbrocken (Strohballen mit Felsoptik)
-          const T = { ball: 'Bumm! ⚽', stroh: 'Stroh! 🌾', dino: 'Dino! 🦕', fels: 'Steinschlag! 🪨' };
+          const T = { ball: 'Bumm! ⚽', stroh: 'Stroh! 🌾', dino: 'Dino! 🦕', fels: 'Steinschlag! 🪨', reh: 'Reh! 🦌', baer: 'Bär! 🐻' };
           this._meldung(ds[k].nr, T[ds[k].typ] || 'Platsch! 💦', 1000);
+          if (ds[k].brummen && R.Audio && R.Audio.baerBrummen) R.Audio.baerBrummen(1);   // Runde 6 (W2-C)
+          if (ds[k].typ === 'reh' && R.Audio && R.Audio.rehRuf) R.Audio.rehRuf(1);         // W2-C2
         }
         this.dynamikStoesse = ds;
       }
@@ -1172,7 +1304,7 @@
       // Nicht direkt vor/in eine Baustelle, einen Ast oder ein Wrack setzen: dann auf die freie Fahrbahnhälfte
       const nr = sp.naechster(pose.x, pose.z);
       for (const h of this.strecke.hindernisse) {
-        if (!h.seite || (h.typ !== 'baustelle' && h.typ !== 'ast' && h.typ !== 'wrack' && h.typ !== 'brand')) continue;
+        if (!h.seite || (h.typ !== 'baustelle' && h.typ !== 'ast' && h.typ !== 'wrack' && h.typ !== 'brand' && h.typ !== 'lava')) continue;
         const d = sp.differenzS(nr.s, h.s0);
         if (d > -30 && d < h.laenge + 2) {
           const b = this.strecke.breiteBei ? this.strecke.breiteBei(nr.s) : this.strecke.breite;   // Runde 4: Spuren
@@ -1239,7 +1371,21 @@
         this.szene.add(s); this.szene.add(s.target); L.spots.push(s);
       }
       L.kamIndex = [-1, -1, -1]; L.dunkel = [0, 0, 0];
+      // Runde 6 (W2-D): Nacht – Scheinwerfer dauerhaft an, Punktlichter an den nächsten Straßenlaternen (außerhalb
+      // des Tunnels). Lichter bleiben immer sichtbar (visible = true, unbenutzt: intensity 0) → Lichterzahl konstant,
+      // kein Shader-Neuübersetzen. Budget bleibt 3 Punkt- + 2 Spotlichter.
+      const tz = this.tageszeitDaten;
+      L.nacht = !!(tz && tz.echteScheinwerfer);
+      L.laterne = L.nacht ? Object.assign({ farbe: 0xffd08a, licht: 70, reichweite: 28, abfall: 1.5, punktlichter: 3 }, tz.laterne) : null;
+      if (L.nacht) L.punkte.concat(L.spots).forEach((l) => { l.userData.basis = l.intensity; l.visible = true; l.intensity = 0; });
       this.tunnelLichter = L;
+    }
+
+    /** Runde 6: Licht schalten – tagsüber visible, nachts immer sichtbar und über die Intensität (0 = aus). */
+    _lichtSchalten(l, an) {
+      if (!this.tunnelLichter.nacht) { l.visible = an; return; }
+      l.visible = true;
+      l.intensity = an ? l.userData.basis : 0;
     }
 
     /** Shader einmal mit eingeschalteten Tunnel-Lichtern übersetzen (kein Ruckler bei der ersten Einfahrt). */
@@ -1248,7 +1394,7 @@
       if (!L || !this.renderer.compile) return;
       L.punkte.concat(L.spots).forEach(l => { l.visible = true; });
       try { this.renderer.compile(this.szene, this.kameras[0] ? this.kameras[0].kamera : this.menueKamera); } catch (e) { /* egal */ }
-      L.punkte.concat(L.spots).forEach(l => { l.visible = false; });
+      L.punkte.concat(L.spots).forEach(l => { l.visible = !!L.nacht; });     // Runde 6: nachts bleiben sie sichtbar
     }
 
     /** Je Frame: Spots an die Spielerautos, Punktlichter an die nächsten Lampen, Dunkel-Faktor je Kamera. */
@@ -1278,18 +1424,37 @@
         nah.sort((a, b) => ((a.x - refX) ** 2 + (a.z - refZ) ** 2) - ((b.x - refX) ** 2 + (b.z - refZ) ** 2));
         for (let i = 0; i < 3; i++) {
           const l = L.punkte[i], la = nah[i];
-          l.visible = !!la;
+          if (L.nacht) this._punktlichtArt(l, false);
+          this._lichtSchalten(l, !!la);
           if (la) l.position.set(la.x, la.y, la.z);
         }
-      } else for (let i = 0; i < 3; i++) L.punkte[i].visible = false;
-      // Scheinwerfer: nur Spielerautos, nur im Tunnel (± 8 m)
+      } else if (L.nacht && this.laternenLampen && this.laternenLampen.length) {
+        // Runde 6: Nacht außerhalb des Tunnels – Punktlichter an die nächsten Straßenlaternen (zu irgendeiner Kamera)
+        const lampen2 = this.laternenLampen, nah = this._lampenNah || (this._lampenNah = []);
+        nah.length = 0;
+        for (let i = 0; i < lampen2.length; i++) {
+          const la = lampen2[i];
+          let d = Infinity;
+          for (let k = 0; k < kams.length; k++) { const c = kams[k].position; d = Math.min(d, (la.x - c.x) ** 2 + (la.z - c.z) ** 2); }
+          la._d = d; nah.push(la);
+        }
+        nah.sort((a, b) => a._d - b._d);
+        const anz = Math.min(3, L.laterne.punktlichter || 3);
+        for (let i = 0; i < 3; i++) {
+          const l = L.punkte[i], la = i < anz && nah[i] && nah[i]._d < 90 * 90 ? nah[i] : null;
+          this._punktlichtArt(l, true);
+          this._lichtSchalten(l, !!la);
+          if (la) l.position.set(la.x, la.y, la.z);
+        }
+      } else for (let i = 0; i < 3; i++) this._lichtSchalten(L.punkte[i], false);
+      // Scheinwerfer: nur Spielerautos, nur im Tunnel (± 8 m); Runde 6: nachts immer
       const spieler = this._spielerListe || (this._spielerListe = []);
       spieler.length = 0;
       for (let i = 0; i < this.fahrzeuge.length; i++) if (this.fahrzeuge[i].istSpieler) spieler.push(this.fahrzeuge[i]);
       for (let k = 0; k < 2; k++) {
         const s = L.spots[k], f = spieler.length === 1 ? spieler[0] : spieler[k];
-        const an = !!f && this.zustand !== 'menue' && !!f.nah && st.imTunnel(f.nah.s, 8);
-        s.visible = an;
+        const an = !!f && this.zustand !== 'menue' && !!f.nah && (L.nacht || st.imTunnel(f.nah.s, 8));
+        this._lichtSchalten(s, an);
         if (!an) continue;
         const d = f.anzeige, r = d.richtung(), seite = spieler.length === 1 ? (k === 0 ? -0.7 : 0.7) : 0;
         const rx = -r.z, rz = r.x;            // rechts
@@ -1297,6 +1462,15 @@
         s.target.position.set(d.x + r.x * 24 + rx * seite * 2, d.y - 0.4, d.z + r.z * 24 + rz * seite * 2);
         s.target.updateMatrixWorld();
       }
+    }
+
+    /** Runde 6: Punktlicht als Straßenlaterne (laterne = true) oder Tunnellampe (wie bisher) einstellen. */
+    _punktlichtArt(l, laterne) {
+      if (l.userData.laterne === laterne) return;
+      l.userData.laterne = laterne;
+      const T = this.tunnelLichter.laterne;
+      if (laterne) { l.color.setHex(T.farbe); l.userData.basis = T.licht; l.distance = T.reichweite; l.decay = T.abfall; }
+      else { l.color.setHex(0xffd8a0); l.userData.basis = 18; l.distance = 20; l.decay = 1.6; }
     }
 
     /** Himmels- und Sonnenlicht für Ansicht i dimmen, wenn deren Kamera im Tunnel ist (i = -1: Menü). */
@@ -1319,7 +1493,9 @@
         `hud ${z(ms.hud)} · grafik ${z(ms.grafik)} · render ${z(ms.render)}` +
         `\nDraw-Calls ${L.drawCalls} | Dreiecke ${Math.round(L.dreiecke / 1000)}k | pixelRatio ${L.pixelRatio} | ${L.aufloesung}` +
         ` | Qualität ${L.qualitaet.stufe === 0 ? 'voll' : '−' + L.qualitaet.stufe}${L.qualitaet.adaptiv ? ' (adaptiv)' : ''}` +
-        ` | Sicht ${L.qualitaet.sichtweite} m | Zustand: ${this.zustand}`;
+        ` | Sicht ${L.qualitaet.sichtweite} m | Zustand: ${this.zustand}` +
+        // Runde 6: aktive Lichter (sichtbar und Intensität > 0) – Budget Spot ≤ 2, Punkt ≤ 3 (+ Polizei-Blaulicht)
+        ` | Lichter: Spot ${L.lichter.spot} · Punkt ${L.lichter.punkt}${L.lichter.tageszeit !== 'tag' ? ' (' + L.lichter.tageszeit + ')' : ''}`;
       if (this.fahrzeuge[0]) {
         const v = this.fahrzeuge[0].vehicle;
         text += `\n${v.tempoKmh} km/h | Kamera: ${this.kameras[0] ? this.kameras[0].modus : '–'}` +

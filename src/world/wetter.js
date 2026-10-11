@@ -11,7 +11,10 @@
 //   w.windFuer(vehicle)                     { seitlich, laengs, staerke } relativ zum Auto (−1..1, Stufe/5) → HUD
 //   w.zerstoeren()                          alles aus der Szene nehmen, Ton aus
 //
-// Reine Helfer ohne Three.js (Node-Tests): Wetter.erlaubt, Wetter.aufloesen, Wetter.umweltAus,
+// Runde 6 (W2-D): opt.tageszeit 'tag' (Standard, alles wie bisher) | 'daemmerung' | 'nacht' (config.tageszeit):
+//   w.tz (Daten oder null), w.tageszeitEmoji, w.nacht; anwenden() setzt Sonne/Halbkugel/Himmel/Nebel der Tageszeit,
+//   baut Himmelskuppel (+1 Draw-Call) und nachts Sterne (+1) + Mond (statt Sonne), Mittellinie/Randsteine/Ballons leuchten.
+// Reine Helfer ohne Three.js (Node-Tests): Wetter.tageszeitDaten, Wetter.tageszeitName, Wetter.erlaubt, Wetter.aufloesen, Wetter.umweltAus,
 // Wetter.windRelativ, Wetter.jahreszeitDaten.
 // Standard (Sommer, klar, Wind 0): anwenden() ändert nichts Sichtbares außer ein paar Wolken + Sonne
 // am Himmel (Wald/Wiese/Fantasie); umwelt() ist neutral (Faktoren 1, kein Wind).
@@ -66,6 +69,25 @@
     const d = jahreszeitDaten(themaName, jz);
     const liste = (themaName === 'wueste' ? d.wetterWueste : d.wetter) || ['klar'];
     return liste.filter(w => R.config.wetter[w]);
+  }
+
+  /**
+   * Runde 6 (W2-D): Tageszeit-Daten für ein Thema (Themen-Ausnahmen eingemischt, sonne/halbkugel je Feld).
+   * 'tag' (Standard) und Ungültiges → null = Licht exakt wie bisher.
+   */
+  function tageszeitDaten(themaName, tz) {
+    const T = R.config.tageszeit;
+    if (!T || !tz || tz === 'tag' || !T[tz]) return null;
+    const basis = T[tz], aus = themaName && basis[themaName];
+    if (!aus) return basis;
+    const d = Object.assign({}, basis, aus);
+    ['sonne', 'halbkugel', 'laterne'].forEach((k) => { if (basis[k] && aus[k]) d[k] = Object.assign({}, basis[k], aus[k]); });
+    return d;
+  }
+  /** Gültiger Tageszeit-Schlüssel ('tag' | 'daemmerung' | 'nacht'). */
+  function tageszeitName(tz) {
+    const T = R.config.tageszeit;
+    return T && T[tz] ? tz : (R.config.tageszeitStandard || 'tag');
   }
 
   /**
@@ -176,10 +198,17 @@
       this._zeit = 0;
       this._wolkenVersatz = { x: 0, z: 0 };
       this._seed = opt.seed === undefined ? 4711 : opt.seed;
+      // Runde 6 (W2-D): Tageszeit (null = Tag = wie bisher)
+      this.tageszeit = tageszeitName(opt.tageszeit);
+      this.tz = tageszeitDaten(a.thema, this.tageszeit);
     }
 
     /** Für das Menü/HUD: Emoji des Wetters ('' bei klar). */
     get emoji() { return this.daten.emoji || ''; }
+    /** Runde 6: Emoji der Tageszeit ('' bei Tag, 🌇 Dämmerung, 🌙 Nacht). */
+    get tageszeitEmoji() { return (this.tz && this.tz.emoji) || ''; }
+    /** Runde 6: Nacht? (echte Scheinwerfer, Laternen) */
+    get nacht() { return this.tageszeit === 'nacht'; }
 
     // ---------- Physik ----------
     /** Umwelt für vehicle.schritt (immer dasselbe Objekt, keine Allokation). */
@@ -208,10 +237,12 @@
           if (o.isDirectionalLight && !licht.sonne) licht.sonne = o;
         });
       }
-      // Himmel + Nebel
-      const himmel = misch(misch(thema.himmel, jz.himmelMisch), w.himmelMisch);
-      const nebel = misch(misch(thema.nebel, jz.nebelMisch), w.nebelFarbe);
-      const sicht = (thema.sichtweite || R.config.grafik.sichtweite) * (jz.sichtweiteFaktor || 1) * (w.sichtweiteFaktor || 1);
+      // Himmel + Nebel (Runde 6: Tageszeit T ersetzt Themenfarben; Wetter-Mischfarben werden mit T.wetterHell abgedunkelt)
+      const T = this.tz, dm = this._dunkelMisch.bind(this);
+      const himmel = T ? misch(misch(T.himmel[2], dm(jz.himmelMisch)), dm(w.himmelMisch)) : misch(misch(thema.himmel, jz.himmelMisch), w.himmelMisch);
+      const nebel = T ? misch(misch(T.nebel, dm(jz.nebelMisch)), dm(w.nebelFarbe)) : misch(misch(thema.nebel, jz.nebelMisch), w.nebelFarbe);
+      let sicht = (thema.sichtweite || R.config.grafik.sichtweite) * (jz.sichtweiteFaktor || 1) * (w.sichtweiteFaktor || 1);
+      if (T) sicht *= T.sichtweiteFaktor || 1;
       this.sicht = sicht;
       if (sz) {
         sz.background = new THREE.Color(himmel);
@@ -235,6 +266,18 @@
         hk.intensity *= faktor;
         if (jz.bodenMisch) hk.groundColor.setHex(misch(hk.groundColor.getHex(), jz.bodenMisch));
       }
+      // Runde 6: Tageszeit – Sonne tief/orange (Dämmerung) bzw. schwaches Mondlicht (Nacht), Halbkugel absolut × faktor
+      if (T && so) {
+        so.color.setHex(T.sonne.farbe);
+        so.intensity = T.sonne.intensitaet * faktor;
+        const b = so.userData.basisPos, flach = Math.hypot(b.x, b.z), lang = b.length(), h = T.sonne.hoehe * Math.PI / 180;
+        so.position.set(b.x / flach * Math.cos(h) * lang, Math.sin(h) * lang, b.z / flach * Math.cos(h) * lang);
+      }
+      if (T && hk) {
+        hk.color.setHex(T.halbkugel.himmel);
+        hk.groundColor.setHex(misch(T.halbkugel.boden, dm(jz.bodenMisch)));
+        hk.intensity = T.halbkugel.intensitaet * faktor;
+      }
       this._sonnenRichtung = so ? so.position.clone().normalize() : new THREE.Vector3(0.5, 0.75, 0.3).normalize();
       // Boden, Senke (Brücken), Randsteine einfärben (je Mesh nur einmal)
       if (sz && (jz.bodenMisch || jz.randSchnee)) {
@@ -247,8 +290,34 @@
           }
         });
       }
+      if (sz && T) this._tageszeitLeuchten(sz, T);
       if (sz) this._himmelBauen(thema);
       return { sicht, nebelNah: this.nebelNahAnteil };
+    }
+
+    /** Runde 6: Mischfarbe [farbe, anteil] mit der Tageszeit-Helligkeit abdunkeln (Regen-Grau nachts dunkel). */
+    _dunkelMisch(m) {
+      const T = this.tz;
+      return T && m ? [mischHex(m[0], 0x000000, 1 - (T.wetterHell === undefined ? 1 : T.wetterHell)), m[1]] : m;
+    }
+
+    /**
+     * Runde 6 (Nacht): Mittellinie leuchtet, Randsteine etwas heller (Strecke bleibt lesbar), Fantasie-Ballons
+     * leuchten in ihren Farben (MeshBasic statt Phong, ohne Nebel). Je Material nur einmal.
+     */
+    _tageszeitLeuchten(sz, T) {
+      const ersatz = new Map();
+      sz.traverse((o) => {
+        if (!o.isMesh || !o.material || o.userData.tzLeuchtet) return;
+        const m = o.material;
+        if (T.markierung && o.name === 'Mittellinie' && m.emissive) { m.emissive.setHex(T.markierung); o.userData.tzLeuchtet = true; }
+        else if (T.randstein && o.name === 'Randsteine' && m.emissive) { m.emissive.setHex(T.randstein); o.userData.tzLeuchtet = true; }
+        else if (T.ballonsLeuchten && o.name === 'Ballons' && m.isMeshPhongMaterial) {
+          if (!ersatz.has(m)) ersatz.set(m, new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }));
+          o.material = ersatz.get(m); o.userData.tzLeuchtet = true;
+        }
+      });
+      ersatz.forEach((neu, alt) => alt.dispose());
     }
 
     /** Wolken (InstancedMesh aus Kugeln) + Sonne (Scheibe mit Halo, additiv). */
@@ -278,8 +347,12 @@
       }
       // Regenwolken: grau, zur Nebelfarbe hin gemischt (sie stehen hinter dem Nebel, sonst wirken sie wie Felsen)
       const nebelHex = this.szene.fog ? this.szene.fog.color.getHex() : 0xb0b8c0;
-      const farbe = decke ? mischHex(0xa4abb4, nebelHex, 0.45) : 0xffffff;
-      const mat = new THREE.MeshLambertMaterial({ color: farbe, emissive: decke ? mischHex(0x50565e, nebelHex, 0.35) : 0x9a9fa6, fog: false });
+      let farbe = decke ? mischHex(0xa4abb4, nebelHex, 0.45) : 0xffffff;
+      let eigen = decke ? mischHex(0x50565e, nebelHex, 0.35) : 0x9a9fa6;
+      const T = this.tz;     // Runde 6: Dämmerung rosa, Nacht dunkel; Regenwolken mit der Tageszeit abgedunkelt
+      if (T && T.wolken && !decke) { farbe = T.wolken[0]; eigen = T.wolken[1]; }
+      else if (T && decke) { const d = 1 - (T.wetterHell || 1); farbe = mischHex(farbe, 0x000000, d); eigen = mischHex(eigen, 0x000000, d); }
+      const mat = new THREE.MeshLambertMaterial({ color: farbe, emissive: eigen, fog: false });
       const geo = new THREE.IcosahedronGeometry(1, 1);
       const wolken = new THREE.InstancedMesh(geo, mat, Math.max(1, kugeln.length));
       wolken.count = kugeln.length;
@@ -294,9 +367,13 @@
       this._wolken = wolken;
       this._wolkenMatrizen(0);
       // ---- Sonne: helle Scheibe + weicher Halo, nur ohne Wolkendecke ----
+      // Runde 6: Nacht = Mond (kleiner, kühl), Dämmerung = große orange Sonne; Tag unverändert
+      const mond = !!(T && T.mond), abend = !!(T && T.sonnenScheibe);
       if (!decke) {
-        const seg = 40, rS = 9, rH = 46, pos = [0, 0, 0], col = [1, 1, 0.94], idx = [];
-        const innen = [1, 0.97, 0.86], rand = [0.55, 0.47, 0.3];
+        const seg = 40, rS = mond ? 6 : (abend ? 11 : 9), rH = mond ? 34 : (abend ? 60 : 46), pos = [0, 0, 0], idx = [];
+        const col = mond ? [0.96, 0.97, 1] : (abend ? T.sonnenScheibe.slice() : [1, 1, 0.94]);
+        const innen = mond ? [0.86, 0.9, 0.98] : (abend ? T.sonnenScheibe.slice() : [1, 0.97, 0.86]);
+        const rand = mond ? [0.2, 0.25, 0.36] : (abend ? [0.62, 0.3, 0.14] : [0.55, 0.47, 0.3]);
         for (let i = 0; i < seg; i++) {
           const a = i / seg * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
           pos.push(c * rS, s * rS, 0); col.push(...innen);             // 1 + 3i: Scheibenrand
@@ -324,24 +401,76 @@
         const hoehe = Math.min(Math.asin(klemme(d.y, -1, 1)), 24 * Math.PI / 180);
         this._sonnenDir = new THREE.Vector3(d.x / flach * Math.cos(hoehe), Math.sin(hoehe), d.z / flach * Math.cos(hoehe));
         sonne.onBeforeRender = (r, s, kamera) => this._amHimmel(sonne, kamera, 300, this._sonnenDir);
+        sonne.name = mond ? 'Mond' : 'Sonne';
         gruppe.add(sonne);
         this._sonne = sonne;
       }
-      this._hv = { p: new THREE.Vector3(), s: new THREE.Vector3(), q: new THREE.Quaternion() };
+      if (T) this._tageszeitHimmel(gruppe, T, decke);
+      this._hv ={ p: new THREE.Vector3(), s: new THREE.Vector3(), q: new THREE.Quaternion() };
       this._himmel = gruppe;
       this.szene.add(gruppe);
+    }
+
+    /**
+     * Runde 6: Himmelskuppel mit Farbverlauf (oben → Mitte → Horizont → Nebel, 1 Draw-Call, ganz zuerst gezeichnet)
+     * und nachts Sterne (Points, 1 Draw-Call, nicht bei Wolkendecke). Beide hängen wie Wolken an der Kamera.
+     */
+    _tageszeitHimmel(gruppe, T, decke) {
+      const w = this.daten, jz = this.jz, dm = this._dunkelMisch.bind(this);
+      const f = (hex) => misch(misch(hex, dm(jz.himmelMisch)), dm(w.himmelMisch));
+      const oben = new THREE.Color(f(T.himmel[0])), mitte = new THREE.Color(f(T.himmel[1])), horiz = new THREE.Color(f(T.himmel[2]));
+      const nebel = new THREE.Color(this.szene.fog ? this.szene.fog.color.getHex() : T.nebel);
+      const geo = new THREE.SphereGeometry(1, 32, 16), p = geo.attributes.position, col = new Float32Array(p.count * 3), c = new THREE.Color();
+      for (let i = 0; i < p.count; i++) {
+        const y = p.getY(i);
+        if (y <= 0) c.copy(nebel);
+        else if (y < 0.1) c.copy(nebel).lerp(horiz, y / 0.1);
+        else if (y < 0.35) c.copy(horiz).lerp(mitte, (y - 0.1) / 0.25);
+        else c.copy(mitte).lerp(oben, Math.min(1, (y - 0.35) / 0.5));
+        col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      const kuppel = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false,
+        depthWrite: false, depthTest: false }));
+      kuppel.name = 'Himmelskuppel';
+      kuppel.frustumCulled = false; kuppel.matrixAutoUpdate = false; kuppel.renderOrder = -10;
+      kuppel.onBeforeRender = (r, s, kamera) => this._amHimmel(kuppel, kamera, 300, null, 0.95);
+      gruppe.add(kuppel);
+      this._kuppel = kuppel;
+      if (!T.sterne || decke) return;
+      const rnd = zufall((this._seed * 53 + 11) >>> 0), n = T.sterne;
+      const pos = new Float32Array(n * 3), sc = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        const a = rnd() * Math.PI * 2, y = 0.06 + Math.pow(rnd(), 0.8) * 0.94, r = Math.sqrt(1 - y * y);
+        pos[i * 3] = Math.cos(a) * r; pos[i * 3 + 1] = y; pos[i * 3 + 2] = Math.sin(a) * r;
+        const h = 0.45 + rnd() * 0.55, blau = rnd() < 0.3 ? 1 : 0.9;
+        sc[i * 3] = h * (blau < 1 ? 1 : 0.85); sc[i * 3 + 1] = h * 0.93; sc[i * 3 + 2] = h;
+      }
+      const sg = new THREE.BufferGeometry();
+      sg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      sg.setAttribute('color', new THREE.BufferAttribute(sc, 3));
+      const sterne = new THREE.Points(sg, new THREE.PointsMaterial({ size: 2.4, sizeAttenuation: false, vertexColors: true,
+        map: punktTextur(), transparent: true, alphaTest: 0.05, depthWrite: false, fog: false }));
+      sterne.name = 'Sterne';
+      sterne.frustumCulled = false; sterne.matrixAutoUpdate = false; sterne.renderOrder = -9;
+      sterne.onBeforeRender = (r, s, kamera) => this._amHimmel(sterne, kamera, 300, null, 0.93);
+      gruppe.add(sterne);
     }
 
     /**
      * Objekt an die gerade zeichnende Kamera hängen und auf deren Far-Plane skalieren (onBeforeRender).
      * richtung gesetzt: Billboard in dieser Richtung (Sonne); sonst kamerazentriert ohne Drehung (Wolken).
      */
-    _amHimmel(obj, kamera, reichweite, richtung) {
+    _amHimmel(obj, kamera, reichweite, richtung, radius) {
       const h = this._hv, k = Math.min(1, Math.max(0.05, (kamera.far - 15) / reichweite));
       if (richtung) {
         h.p.copy(richtung).multiplyScalar(reichweite * 0.97 * k).add(kamera.position);
         h.s.set(k, k, k);
         obj.matrixWorld.compose(h.p, kamera.quaternion, h.s);
+      } else if (radius) {      // Runde 6: Einheitskugel (Kuppel, Sterne) auf radius × reichweite skalieren
+        const r = reichweite * radius * k;
+        h.q.identity(); h.s.set(r, r, r);
+        obj.matrixWorld.compose(kamera.position, h.q, h.s);
       } else {
         h.q.identity(); h.s.set(k, k, k);
         obj.matrixWorld.compose(kamera.position, h.q, h.s);
@@ -398,12 +527,14 @@
         }
         let obj;
         const geo = new THREE.BufferGeometry();
+        // Runde 6: Dämmerung/Nacht – Niederschlag Richtung Nebelfarbe (nachts dunkler, im Scheinwerfer trotzdem sichtbar)
+        const T = this.tz, pf = T && T.partikelMisch && this.szene.fog ? mischHex(p.farbe, this.szene.fog.color.getHex(), T.partikelMisch) : p.farbe;
         if (p.art === 'striche') {
           geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 6), 3));
-          obj = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: p.farbe, transparent: true, opacity: 0.62, depthWrite: false }));
+          obj = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: pf, transparent: true, opacity: 0.62, depthWrite: false }));
         } else {
           geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
-          obj = new THREE.Points(geo, new THREE.PointsMaterial({ color: p.farbe, size: p.groesse, map: punktTextur(),
+          obj = new THREE.Points(geo, new THREE.PointsMaterial({ color: pf, size: p.groesse, map: punktTextur(),
             transparent: true, depthWrite: false, alphaTest: 0.05, sizeAttenuation: true, opacity: p.art === 'sand' ? 0.75 : 0.95 }));
         }
         geo.attributes.position.setUsage(THREE.DynamicDrawUsage);
@@ -545,6 +676,8 @@
   Wetter.windRelativ = windRelativ;
   Wetter.jahreszeitDaten = jahreszeitDaten;
   Wetter.mischHex = mischHex;
+  Wetter.tageszeitDaten = tageszeitDaten;     // Runde 6
+  Wetter.tageszeitName = tageszeitName;
   Wetter.LAYER_BASIS = LAYER_BASIS;
   R.Wetter = Wetter;
 })();

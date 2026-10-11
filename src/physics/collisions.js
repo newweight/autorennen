@@ -581,6 +581,56 @@
     }
     return stoesse;
   }
+  /**
+   * Runde 6 (W2-C): Flächen-Hindernisse (h.flaeche, trackBuilder): Kapsel-Kreise im Straßen-Rahmen bei h.s.
+   *   lava:   Kontakt → Auto steht config.dino.lava.stopp s (vehicle._lavaStopp), danach frei s Schonzeit und erst nach
+   *           dem Verlassen der Zunge wieder scharf (vehicle._lavaIn);
+   *           Stoß typ 'brand' + lava: true (Schaden −10 % wie ein brennendes Wrack, Meldung „Heiß!"), staerke = Tempo.
+   *   krater: Kontakt → Tempo × config.dino.krater.tempoFaktor (−50 %), einmal je Krater und Auto, Stoß typ 'krater'
+   *           (Schaden −5 % über 'hindernis'). Krater mit h.weg sind verschwunden.
+   */
+  function flaecheTreffer(v, i, h, k, stoesse) {
+    if (h.weg) return;
+    const gx = v.x - h.x, gz = v.z - h.z, gr = h.radius + v.daten.laenge;
+    if (gx * gx + gz * gz > gr * gr) return;
+    const F = h.flaeche, ka = kapsel(v);
+    let drin = false;
+    for (const c of ka.kreise) {
+      if (F.rund) {
+        const dx = c.x - h.x, dz = c.z - h.z, rr = F.rund + ka.rad * 0.4;
+        if (dx * dx + dz * dz < rr * rr) { drin = true; break; }
+        continue;
+      }
+      const dx = c.x - h.px, dz = c.z - h.pz, l = dx * h.tx + dz * h.tz, q = dx * h.nx + dz * h.nz;
+      const m = ka.rad * 0.4;   // Rad muss ein Stück hinein
+      if (Math.abs(l) < F.hl + m && q > F.q0 - m && q < F.q1 + m) { drin = true; break; }
+    }
+    if (h.typ === 'lava' && !drin && v._lavaIn === h) v._lavaIn = null;   // Zunge verlassen → wieder scharf
+    if (!drin) return;
+    const CD = (R.config && R.config.dino) || {};
+    if (h.typ === 'lava') {
+      // erst wieder, wenn das Auto die Zunge verlassen hat (Wegfahren nach dem Stopp kostet nichts)
+      if (v._lavaStopp > 0 || v._lavaFrei > 0 || v._lavaIn === h) return;
+      v._lavaIn = h;
+      const CL = CD.lava || {};
+      const staerke = Math.max(2, v.tempo);
+      v._lavaStopp = CL.stopp !== undefined ? CL.stopp : 1;
+      v.vLaengs = 0; v.vQuer = 0;
+      stoesse.push({ nr: i, typ: 'brand', lava: true, staerke, hindernis: k, x: v.x, z: v.z });
+      return;
+    }
+    // Krater
+    if (!h.getroffen) h.getroffen = new Set();
+    if (h.getroffen.has(i)) return;
+    h.getroffen.add(i);
+    const CK = CD.krater || {};
+    const staerke = Math.max(2, v.tempo * 0.5);
+    v.vLaengs *= (CK.tempoFaktor !== undefined ? CK.tempoFaktor : 0.5);
+    v.vQuer *= 0.6;
+    v.huepfer = 1.6;
+    stoesse.push({ nr: i, typ: 'krater', staerke, hindernis: k });
+  }
+
   /** Nächster Punkt auf der Strecke a→b zu (x, z): { x, z, d (Abstand) }. */
   function segmentPunkt(ax, az, bx, bz, x, z) {
     const sx = bx - ax, sz = bz - az, l2 = sx * sx + sz * sz || 1;
@@ -608,13 +658,21 @@
     if (!liste || !liste.length || opt.countdown) return stoesse;
     const C = (R.config && R.config.hindernisse) || {};
     const CB = C.baustelle || {}, CA = C.ast || {};
+    const CL = ((R.config && R.config.dino) || {}).lava || {};
     const dt = opt.dt || 1 / 60, zeit = opt.zeit || 0;
     for (let i = 0; i < fahrzeugListe.length; i++) {
       const f = fahrzeugListe[i], v = (f && f.vehicle) ? f.vehicle : f;
       if (v._astSperre > 0) v._astSperre -= dt;
+      // Runde 6 (W2-C): Lava hält das Auto stopp s fest (wie Kleber), danach frei s Schonzeit zum Wegfahren
+      if (v._lavaFrei > 0) v._lavaFrei -= dt;
+      if (v._lavaStopp > 0) {
+        v._lavaStopp -= dt; v.vLaengs = 0; v.vQuer = 0;
+        if (v._lavaStopp <= 0) v._lavaFrei = (CL.frei !== undefined ? CL.frei : 2.5);
+      }
       if (v.imLooping || v.imFlug) continue;           // im Looping / im Flug über der Straße
       for (let k = 0; k < liste.length; k++) {
         const h = liste[k];
+        if (h.flaeche) { flaecheTreffer(v, i, h, k, stoesse); continue; }   // Runde 6: Lava / Krater
         if (!h.segmente && !h.pylonen) continue;
         const gx = v.x - h.x, gz = v.z - h.z, gr = h.radius + v.daten.laenge;
         if (gx * gx + gz * gz > gr * gr) continue;

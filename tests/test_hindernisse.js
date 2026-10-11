@@ -228,5 +228,55 @@ for (const daten of R.trackCatalog) {
   pruefe('ohne wracksEinbauen: strecke.hindernisse ohne Wracks (bisheriges Verhalten)', !st0.hindernisse.some(h => h.typ === 'wrack' || h.typ === 'brand'));
 }
 
+// ---------- Runde 6 (W2-C): Lava (1 s Stopp + Schonzeit, Stoß 'brand' → −10 %) und Krater (−50 %, einmal je Auto) ----------
+{
+  const CD = R.config.dino;
+  const daten = R.trackCatalog.find(t => t.id === 'dino');
+  const st = new R.Strecke(daten, { welt: 'hindernisse' }), sp = st.spline;
+  const lava = st.hindernisse.find(h => h.typ === 'lava');
+  pruefe('Lava: Typ vorhanden, KI-Struktur (hart, gefahr 1, halbbreite, seite, s0/s1)', !!lava && lava.hart && lava.gefahr === 1 &&
+    lava.halbbreite > 2 && (lava.seite === 1 || lava.seite === -1) && lava.s0 !== undefined && lava.s1 !== undefined);
+  // Auto fährt mittig durch die belegte Hälfte
+  const fahrt = (q, v0, sek) => {
+    const a = new R.Vehicle(AUTO), p0 = sp.punktBei(lava.s - 20);
+    a.setzen(p0.x + p0.nx * q, p0.z + p0.nz * q, R.headingAus(p0.tx, p0.tz)); a.vLaengs = v0;
+    const st0 = []; let gestanden = 0, idx;
+    for (let t = 0; t < sek; t += DT) {
+      a.schritt(DT, { gas: 0.6, bremse: 0, lenkung: 0 });
+      const n = sp.naechster(a.x, a.z, idx); idx = n.index;
+      const tp = sp.punktBei(n.s); a.heading = R.headingAus(tp.tx, tp.tz);
+      R.Kollisionen.hindernisse([a], st, { dt: DT, zeit: t }).forEach(x => st0.push(x));
+      if (a.vLaengs === 0) gestanden += DT;
+    }
+    return { a, stoesse: st0, gestanden };
+  };
+  const r = fahrt(lava.seitenabstand, 20, 6);
+  const lt = r.stoesse.filter(x => x.lava);
+  pruefe('Lava: Kontakt → genau 1 Stoß (typ brand, lava) → Schaden −10 % (brandVerlust)', lt.length === 1 && lt[0].typ === 'brand' &&
+    R.config.schaden.brandVerlust === 10, JSON.stringify(lt.map(x => x.typ)));
+  pruefe('Lava: ≈ 1 s festgehalten (Tempo 0)', Math.abs(r.gestanden - CD.lava.stopp) < 0.1, r.gestanden.toFixed(2) + ' s');
+  pruefe('Lava: danach wieder frei (fährt weiter über die Zunge hinaus)', sp.differenzS(sp.naechster(r.a.x, r.a.z).s, lava.s1) > 5 && r.a.vLaengs > 3,
+    'v ' + r.a.vLaengs.toFixed(1) + ' m/s');
+  const frei = fahrt(-lava.seite * st.breite / 4, 20, 3);
+  pruefe('Lava: freie Fahrbahnhälfte ohne Kontakt', frei.stoesse.filter(x => x.lava).length === 0 && frei.gestanden === 0);
+  // Schaden-Zuordnung wie in schaden.js (typ brand → brandVerlust)
+  pruefe('Krater: config (−50 %, 20 s)', CD.krater.tempoFaktor === 0.5 && CD.krater.dauer === 20);
+  // Krater dynamisch anlegen (wie dynamik.js) und durchfahren
+  const s = 1500, k = st._hindernisseBerechnen([{ typ: 'krater', s, seitenabstand: 1, radius: CD.krater.radius }])[0];
+  k.nr = st.hindernisse.length; st.hindernisse.push(k);
+  // W2-C1: Krater mit s0/s1 (± radius) → die KI weicht nach dem Einschlag weich aus (nicht hart, kein h.seite → Reset ignoriert ihn)
+  pruefe('Krater: Fläche rund, s0/s1 = s ± radius, weich (KI kennt ihn nach dem Einschlag)', k.flaeche && k.flaeche.rund > 2 &&
+    Math.abs(sp.differenzS(k.s1, k.s0) - 2 * CD.krater.radius) < 1e-6 && !k.hart && !k.seite);
+  const a = new R.Vehicle(AUTO), p = sp.punktBei(s);
+  a.setzen(p.x + p.nx * 1, p.z + p.nz * 1, R.headingAus(p.tx, p.tz)); a.vLaengs = 30;
+  const tr = R.Kollisionen.hindernisse([a], st, { dt: DT, zeit: 0 });
+  pruefe('Krater: Kontakt → Tempo −50 %, Stoß typ krater (→ Schaden −5 % über hindernis)', tr.length === 1 && tr[0].typ === 'krater' &&
+    Math.abs(a.vLaengs - 15) < 1e-9, a.vLaengs.toFixed(1));
+  pruefe('Krater: kein zweiter Treffer desselben Autos', R.Kollisionen.hindernisse([a], st, { dt: DT, zeit: 0.1 }).filter(x => x.typ === 'krater').length === 0);
+  k.weg = true;
+  const b = new R.Vehicle(AUTO); b.setzen(a.x, a.z, a.heading); b.vLaengs = 30;
+  pruefe('Krater weg → kein Treffer mehr', R.Kollisionen.hindernisse([b], st, { dt: DT, zeit: 0 }).length === 0 && b.vLaengs === 30);
+}
+
 console.log(fehler ? `\n${fehler} FEHLER` : '\nALLE TESTS OK');
 process.exit(fehler ? 1 : 0);

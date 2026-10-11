@@ -108,6 +108,27 @@ for (const daten of R.trackCatalog) {
         (startMinAlle < Infinity ? ', Start-Schanze (Runde 1) ' + (startMinAlle * 3.6).toFixed(0) + ' km/h' : '') + ' | ' : '') + zeilen.join(', '));
   }
 }
+// ---------- Runde 6 (W2-E): Streckenvarianten (XL) in Welt „alles“ (1 Welt reicht): 7 Stufen × 2 Runden, Loopings/Schanzen ----------
+for (const daten of R.trackCatalog) {
+  if (!daten.varianten || (nurId && daten.id !== nurId)) continue;
+  for (const vid of Object.keys(daten.varianten)) {
+    const st = new R.Strecke(daten, { welt: 'alles', variante: vid });
+    const nSch = S.liste(st).length, nLoop = st.loopings.length;
+    const zeilen = [];
+    let allesOk = true, sprungMinAlle = Infinity, startMinAlle = Infinity;
+    for (const stufe of STUFEN) {
+      const e = kiFahrt(st, stufe);
+      sprungMinAlle = Math.min(sprungMinAlle, e.sprungMin); startMinAlle = Math.min(startMinAlle, e.startSprung);
+      const ok = e.imZiel && !e.reset && e.anteil < 0.03 &&
+        (!nSch || (e.spruenge >= 2 * nSch && e.sprungMin >= SPRUNG_MIN && e.startSprung >= START_MIN)) &&
+        (!nLoop || (e.loop.geschafft === 2 * nLoop && e.loop.gefallen === 0 && e.loop.zuLangsam === 0));
+      if (!ok) { allesOk = false; zeilen.push(stufe + ': ' + JSON.stringify(e)); }
+      else zeilen.push(stufe + ' ' + (e.r2 ? e.r2.toFixed(1) + ' s' : '-'));
+    }
+    pruefe(`[${daten.id}/alles ${vid}] 7 Stufen × 2 Runden: im Ziel, kein Reset, abseits < 3 %` +
+      (nSch ? `, ${nSch} Schanzen je Runde mit ≥ 90 km/h` : '') + (nLoop ? `, ${nLoop} Loopings ohne Sturz` : ''), allesOk, zeilen.join(', '));
+  }
+}
 // ---------- Runde 6 (W1-A4/A5): alle 7 Stufen GEMEINSAM je Strecke × Welt, rempeln 'echt', 2 Runden ----------
 // Kollisionen wie main.js: Bande → Auto-Auto (Rechtecke, Rempeln echt) → Bande für verschobene → Looping-Abstand →
 // Pflanzen (echte Deko, mit THREE) → Hindernisse. Prüft: alle im Ziel (keine Endlosschleife), Resets ≤ 1 je Rennen,
@@ -178,6 +199,66 @@ if (!process.env.OHNE_REMPELN) {
         ', KI-Rempler ' + rempler + ', Baum-Treffer ' + baeume);
     }
   }
+}
+
+// ---------- Runde 6 (W2-C): Dino (alle Welten) + Wald mit Tieren – KI allein MIT Dynamik (Dinos stehen/kehren um, Tiere,
+// Meteoriten-Felsbrocken, Vulkan-Krater, Flugsaurier) und Hindernis-Kollisionen (Lava, Krater): 0 Resets, Lava gemieden ----------
+const kraterSumme = {}, kraterAnzahl = {};
+if (!process.env.OHNE_DYNAMIK) {
+  const R4 = ladeModule(dateien.concat(['src/world/dynamik.js']));
+  R4.Vehicle.klasseStandard = KLASSE;
+  const LP4 = R4.Looping, S4 = R4.Schanzen;
+  for (const daten of R4.trackCatalog) {
+    if (!['dino', 'wald'].includes(daten.id) || (nurId && daten.id !== nurId)) continue;
+    const welten = Object.keys(daten.welten);    // W2-C2: auch Wald in allen Welten (Tiere ab Hindernisse)
+    for (const welt of welten) {
+      const zeilen = [];
+      let allesOk = true;
+      for (const stufe of STUFEN) {
+        const st = new R4.Strecke(daten, { welt });
+        const start = st.startpositionen(1)[0], v = new R4.Vehicle({});
+        v.setzen(start.x, start.z, start.heading); v.y = st.hoeheAn(v.x, v.z);
+        const rennen = new R4.RaceManager(st, [{ vehicle: v, name: 'KI', istSpieler: false }], { runden: 2, countdown: 0 });
+        const d = new R4.Driver(v, st, { schwierigkeit: stufe, seed: 11, name: 'KI' });
+        if (d.hindernisseSetzen) d.hindernisseSetzen(st.hindernisse);
+        const dyn = new R4.Dynamik(st, { seed: 4242 });
+        const t = rennen.teilnehmer[0], lp = LP4.zustand(), fz = S4.zustand(), autos = [{ vehicle: v, istSpieler: false, fortschritt: 0 }];
+        let index = -1, reset = false, lava = 0, krater = 0, dynTreffer = 0, ereig = 0, zeit = 0, hv = dyn.hindernisVersion || 0, kraterNeu = 0;
+        for (let k = 0; k < 60 * 500 && !t.imZiel; k++) {
+          const s = d.steuerung(dt, { andere: [], spielerFortschrittMax: null, eigenerFortschritt: t.fortschritt, laeuft: true });
+          if (d.brauchtReset) { reset = true; break; }
+          let r;
+          if (lp.aktiv || lp.fallen) r = LP4.fahrzeugSchritt(lp, v, st, s, dt, index);
+          else r = S4.fahrzeugSchritt(fz, v, st, s, dt, index);
+          index = r.index;
+          autos[0].fortschritt = t.fortschritt;
+          ereig += dyn.schritt(dt, { fortschritt: t.fortschritt, runden: 2, autos }).ereignisse.length;
+          // W2-C1: wie main.js – nach Einschlag/Ablauf eines Kraters kennt die KI die neue Hindernisliste
+          if (dyn.hindernisVersion !== hv) { hv = dyn.hindernisVersion; kraterNeu++; d.hindernisseSetzen(st.hindernisse); }
+          dynTreffer += dyn.kollisionen([v]).length;
+          const hs = R4.Kollisionen.hindernisse([v], st, { dt, zeit });
+          lava += hs.filter(x => x.lava).length; krater += hs.filter(x => x.typ === 'krater').length;
+          if (!v.imFlug) v.y = st.hoeheAn(v.x, v.z);
+          rennen.schritt(dt);
+          zeit += dt;
+        }
+        const ok = t.imZiel && !reset && lava === 0;
+        if (!ok) allesOk = false;
+        zeilen.push(stufe + (ok ? ' ' + (t.rundenzeiten[1] || 0).toFixed(1) + ' s' : ' FEHL(imZiel ' + t.imZiel + ', reset ' + reset + ', lava ' + lava + ')') +
+          ' [Treffer ' + dynTreffer + ', Krater ' + krater + '/' + Math.ceil(kraterNeu / 2) + ', Ereignisse ' + ereig + ']');
+        kraterSumme[stufe] = (kraterSumme[stufe] || 0) + krater; kraterAnzahl[stufe] = (kraterAnzahl[stufe] || 0) + Math.ceil(kraterNeu / 2);
+      }
+      pruefe(`[${daten.id}/${welt}] W2-C mit Dynamik: 7 Stufen × 2 Runden im Ziel, 0 Resets, Lava gemieden`, allesOk, zeilen.join(', '));
+    }
+  }
+}
+
+// W2-C1: Die KI kennt Krater nach dem Einschlag (hindernisseSetzen zur Laufzeit) → ab profi höchstens jeder 4. Krater getroffen
+if (!process.env.OHNE_DYNAMIK && (!nurId || nurId === 'dino')) {
+  const profiPlus = ['profi', 'meister', 'legende', 'unschlagbar'];
+  const tr = profiPlus.reduce((a, k) => a + (kraterSumme[k] || 0), 0), an = profiPlus.reduce((a, k) => a + (kraterAnzahl[k] || 0), 0);
+  pruefe('[dino] W2-C1: KI profi+ weicht Kratern aus (Treffer ≤ 25 % der Krater auf der Fahrbahn)', an > 0 && tr <= an * 0.25,
+    'Treffer ' + tr + ' bei ' + an + ' Kratern; je Stufe ' + JSON.stringify(kraterSumme));
 }
 
 if (process.env.ARTEN) console.log(JSON.stringify(ARTEN));

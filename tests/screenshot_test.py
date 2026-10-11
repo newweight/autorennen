@@ -375,6 +375,236 @@ def dino_bilder(page, snap):
     return erg
 
 
+# Physik synchron vorspulen, bis die Bedingung (JS-Ausdruck mit s = Rennspiel.spiel) gilt – höchstens sek Sekunden
+VORSPULEN_BIS = '''([bed, sek]) => { const s = Rennspiel.spiel, f = new Function('s', 'return ' + bed);
+  for (let t = 0; t < sek; t += 1 / 60) { s.physikSchritt(1 / 60); if (f(s)) return +t.toFixed(2); } return null; }'''
+DYN_FRIEREN = '''(() => { const dy = Rennspiel.spiel.dynamik; if (!dy._schrittW2) { dy._schrittW2 = dy.schritt; dy.schritt = function () { return { ereignisse: [] }; }; } })()'''
+DYN_WEITER = '''(() => { const dy = Rennspiel.spiel.dynamik; if (dy._schrittW2) { dy.schritt = dy._schrittW2; delete dy._schrittW2; } })()'''
+KAMERA_LOS = '(() => { const s = Rennspiel.spiel, k = s.kameras[0]; delete k.update; k._erstesMal = true; })()'
+
+
+def dino_w2c_bilder(page, snap):
+    """Runde 6 (W2-C): Lava-Zunge, Ausbruch (Himmel rot + Bomben), Krater, Meteorit-Schatten + Einschlag,
+    Flugsaurier über dem Auto, Tunnel 2 innen, Berg-Massiv, stehender Dino. Liefert Messwerte."""
+    erg = {}
+    page.evaluate(KI_WEG)
+    info = page.evaluate('''(() => { const s = Rennspiel.spiel, st = s.strecke, dy = s.dynamik;
+      let berg = 0; s.szene.traverse(o => { if (o.name === 'Bergmassiv') berg++; });
+      return { lava: st.hindernisse.filter(h => h.typ === 'lava').map(h => ({ s: h.s, seite: h.seite })), tunnel: st.tunnel.map(t => [t.s0, t.s1]),
+        berg, dinoStellen: dy.dinoStellen.length, vulkan: !!dy.vulkan, meteore: dy.meteorStellen.length, flug: !!dy.flugsaurier }; })()''')
+    erg['info'] = info
+    # 40: Lava-Zunge aus Fahrersicht (Auto auf der freien Hälfte)
+    if info['lava']:
+        l = info['lava'][0]
+        page.evaluate(AUTO_NACH_SQ, [l['s'] - 24, -l['seite'] * 2.5]); page.wait_for_timeout(1400)
+        snap('40_lava_zunge.png')
+        blick = page.evaluate(KAMERA_BEI_S, [l['s'], 16, 7, 6])
+        page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(900)
+        snap('40b_lava_oben.png')
+        page.evaluate(KAMERA_LOS)
+        # Lava-Kontakt: Auto auf die Lava-Hälfte, rollt hinein → 1 s Stopp, Meldung „Lava!"
+        page.evaluate(AUTO_NACH_SQ, [l['s'] - 12, l['seite'] * 3.2])
+        page.evaluate('(() => { Rennspiel.spiel.fahrzeuge[0].vehicle.vLaengs = 12; })()')
+        page.evaluate(VORSPULEN_BIS, ['(s.huds[0].meldungText || "").startsWith("Lava")', 3])
+        erg['lavaKontakt'] = page.evaluate('''(() => { const s = Rennspiel.spiel, v = s.fahrzeuge[0].vehicle;
+          return { meldung: s.huds[0].meldungText || '', stopp: +(v._lavaStopp || 0).toFixed(2), kmh: Math.round(v.vLaengs * 3.6), rauch: s.dynamik.puffs.length }; })()''')
+        page.wait_for_timeout(250)
+        snap('40c_lava_kontakt.png')
+    # 41: Vulkanausbruch – Auto auf der langen Geraden, Ausbruch sofort auslösen, nach dem Grollen Bomben im Flug
+    page.evaluate(AUTO_NACH_SQ, [700, 0])
+    # Führender = Auto an s 700 (der Rennfortschritt springt beim Versetzen nicht mit)
+    page.evaluate('''(() => { const dy = Rennspiel.spiel.dynamik; dy._schrittEcht = dy.schritt;
+      dy.schritt = function (dt, info) { info.fortschritt = 700; return dy._schrittEcht.call(dy, dt, info); }; })()''')
+    page.evaluate('''(() => { const dy = Rennspiel.spiel.dynamik; dy.vulkan.naechster = 0; dy.vulkan.phase = 'ruhe'; })()''')
+    erg['ausbruchNach'] = page.evaluate(VORSPULEN_BIS, ['s.dynamik.bomben.length >= 3 && s.dynamik.bomben[0].t > 1.9', 9])
+    page.evaluate(DYN_FRIEREN)
+    page.wait_for_timeout(500)
+    erg['ausbruch'] = page.evaluate('''(() => { const s = Rennspiel.spiel, dy = s.dynamik, bg = s.szene.background;
+      return { glut: +dy.vulkanGlut.toFixed(2), bomben: dy.bomben.length, himmel: [bg.r, bg.g, bg.b].map(x => +x.toFixed(2)), meldung: s.huds[0].meldungText || '',
+        hoehen: dy.bomben.map(b => +(b.y - b.y1).toFixed(1)), zielS: dy.bomben.map(b => Math.round(b.s)) }; })()''')
+    page.wait_for_timeout(2600)     # Meldung ausblenden lassen (verdeckt sonst den Horizont mit den Bomben)
+    bild41 = page.screenshot(path=os.path.join(page._ausgabe, '41_ausbruch.png')) if hasattr(page, '_ausgabe') else None
+    if bild41 is None:
+        snap('41_ausbruch.png')
+    else:
+        # Himmel im Bild (oben, zwischen Platz-Anzeige und Uhr): rötlich?
+        st_ = ImageStat.Stat(Image.open(io.BytesIO(bild41)).convert('RGB').crop((int(0.42 * 1280), int(0.30 * 800), int(0.58 * 1280), int(0.355 * 800))))   # W2-C1: unter der Meldung
+        erg['ausbruch']['himmelBild'] = [round(x) for x in st_.mean]
+    # von oben-seitlich auf die Bomben schauen
+    blick = page.evaluate('''(() => { const s = Rennspiel.spiel, dy = s.dynamik, b = dy.bomben[0], v = s.fahrzeuge[0].vehicle;
+      return b ? [v.x, v.y + 14, v.z, b.x, b.y, b.z, true] : [v.x, v.y + 10, v.z, v.x + 50, v.y, v.z, true]; })()''')
+    page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(800)
+    snap('41b_bomben.png')
+    page.evaluate(KAMERA_LOS)
+    page.evaluate(DYN_WEITER)
+    page.evaluate(VORSPULEN_BIS, ['s.dynamik.bomben.length === 0 && s.strecke.hindernisse.some(h => h.typ === "krater")', 6])
+    k = page.evaluate('''(() => { const st = Rennspiel.spiel.strecke, h = st.hindernisse.find(x => x.typ === 'krater'); return h ? { s: h.s, q: h.seitenabstand } : null; })()''')
+    erg['krater'] = k
+    page.evaluate('(() => { const dy = Rennspiel.spiel.dynamik; if (dy._schrittEcht) { dy.schritt = dy._schrittEcht; delete dy._schrittEcht; } })()')
+    if k:
+        page.evaluate(DYN_FRIEREN)
+        page.evaluate(AUTO_NACH_SQ, [k['s'] - 18, k['q'] * 0.3]); page.wait_for_timeout(1300)
+        snap('42_krater.png')
+        page.evaluate(DYN_WEITER)
+        # Krater anfahren: Tempo −50 %, Meldung
+        page.evaluate(AUTO_NACH_SQ, [k['s'] - 7, k['q']])
+        page.evaluate('(() => { Rennspiel.spiel.fahrzeuge[0].vehicle.vLaengs = 20; })()')
+        page.evaluate(VORSPULEN_BIS, ['(s.huds[0].meldungText || "").startsWith("Krater")', 2])
+        erg['kraterKontakt'] = page.evaluate('''(() => { const s = Rennspiel.spiel, v = s.fahrzeuge[0].vehicle;
+          return { meldung: s.huds[0].meldungText || '', kmh: Math.round(v.vLaengs * 3.6) }; })()''')
+    # 43: Meteorit – Flug anhalten, wenn der Schatten auf der Straße liegt
+    page.evaluate(DYN_WEITER)
+    m = page.evaluate('''(() => { const s = Rennspiel.spiel, dy = s.dynamik, m = dy.meteorStellen[0]; m.phase = 'flug'; m.zeit = 0; return { s: m.s, von: m.von }; })()''')
+    page.evaluate(AUTO_NACH_SQ, [m['s'] - 40, 0])
+    page.evaluate(VORSPULEN_BIS, ['!!s.dynamik.meteorStellen[0].schatten && Math.abs(s.strecke.spline.naechster(s.dynamik.meteorStellen[0].schatten.x, s.dynamik.meteorStellen[0].schatten.z).seitenabstand) < 2', 3])
+    page.evaluate(DYN_FRIEREN)
+    blick = page.evaluate('''(() => { const s = Rennspiel.spiel, m = s.dynamik.meteorStellen[0], v = s.fahrzeuge[0].vehicle;
+      const sc = m.schatten || { x: m.x, z: m.z, y: m.y }; return [v.x, v.y + 7, v.z, (sc.x * 2 + m.pos.x) / 3, (sc.y * 2 + m.pos.y) / 3, (sc.z * 2 + m.pos.z) / 3, true]; })()''')
+    page.evaluate(KAMERA_FREI, blick)
+    erg['meteor'] = page.evaluate('''(() => { const s = Rennspiel.spiel, m = s.dynamik.meteorStellen[0];
+      return { schatten: m.schatten ? { r: +m.schatten.r.toFixed(1), q: +s.strecke.spline.naechster(m.schatten.x, m.schatten.z).seitenabstand.toFixed(1) } : null,
+        hoehe: m.pos ? +(m.pos.y - m.y).toFixed(0) : null }; })()''')
+    page.wait_for_timeout(800)
+    snap('43_meteor_schatten.png')
+    page.evaluate(KAMERA_LOS)
+    page.evaluate(DYN_WEITER)
+    page.evaluate(VORSPULEN_BIS, ['s.dynamik.meteorStellen[0].stroh.ballen.length >= 3', 3])
+    page.evaluate('Rennspiel.spiel.schnellvorlauf(0.9)')
+    page.evaluate(DYN_FRIEREN)
+    erg['meteorBrocken'] = page.evaluate('Rennspiel.spiel.dynamik.meteorStellen[0].stroh.ballen.length')
+    blick = page.evaluate('''(() => { const s = Rennspiel.spiel, st = s.strecke, m = s.dynamik.meteorStellen[0], p = st.spline.punktBei(m.s);
+      return [p.x - p.tx * 30 - p.nx * m.von * 12, st.hoeheAn(p.x, p.z) + 9, p.z - p.tz * 30 - p.nz * m.von * 12, m.x, m.y + 2, m.z, true]; })()''')
+    page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(800)
+    snap('43b_meteor_einschlag.png')
+    page.evaluate(KAMERA_LOS)
+    page.evaluate(DYN_WEITER)
+    # 44: Flugsaurier – Auto steht auf der Geraden, Anflug auslösen, einfrieren wenn er über dem Auto ist
+    page.evaluate(AUTO_NACH_SQ, [760, 2])
+    page.evaluate('''(() => { const F = Rennspiel.spiel.dynamik.flugsaurier; F.aktiv = false; F.timer = 0; F.minUeberAuto = Infinity; })()''')
+    page.evaluate(VORSPULEN_BIS, ['s.dynamik.flugsaurier.aktiv && s.dynamik.flugsaurier.d < 9', 12])
+    page.evaluate(DYN_FRIEREN)
+    erg['flugsaurier'] = page.evaluate('''(() => { const s = Rennspiel.spiel, F = s.dynamik.flugsaurier, v = s.fahrzeuge[0].vehicle;
+      return { aktiv: F.aktiv, d: +F.d.toFixed(1), ueberAuto: +(F.y - v.y).toFixed(2), meldung: s.huds[0].meldungText || '' }; })()''')
+    page.wait_for_timeout(500)
+    snap('44_flugsaurier.png')
+    blick = page.evaluate('''(() => { const s = Rennspiel.spiel, st = s.strecke, F = s.dynamik.flugsaurier, v = s.fahrzeuge[0].vehicle, p = st.spline.punktBei(st.spline.naechster(v.x, v.z).s);
+      return [v.x + p.nx * 16 - p.tx * 6, v.y + 3, v.z + p.nz * 16 - p.tz * 6, v.x, v.y + 2, v.z, true]; })()''')
+    page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(800)
+    snap('44b_flugsaurier_seite.png')
+    page.evaluate(KAMERA_LOS)
+    page.evaluate(DYN_WEITER)
+    page.evaluate(VORSPULEN_BIS, ['!s.dynamik.flugsaurier.aktiv', 12])
+    erg['flugsaurier']['minUeberAuto'] = page.evaluate('+Rennspiel.spiel.dynamik.flugsaurier.minUeberAuto.toFixed(3)')
+    # 45: Tunnel 2 innen (in der Kurve) + 46: Berg-Massiv von außen
+    if len(info['tunnel']) >= 2:
+        t2 = info['tunnel'][1]
+        page.evaluate(AUTO_NACH_SQ, [t2[0] + 85, 0]); page.wait_for_timeout(1500)
+        snap('45_tunnel2_innen.png')
+        page.evaluate(AUTO_NACH_SQ, [info['tunnel'][0][0] + 25, 0]); page.wait_for_timeout(1500)   # W2-C1
+        snap('45a_tunnel1_innen.png')
+        page.evaluate(AUTO_NACH_SQ, [info['tunnel'][0][1] + 30, 0]); page.wait_for_timeout(1400)
+        snap('45b_schlucht.png')
+        blick = page.evaluate('''([a, b]) => { const st = Rennspiel.spiel.strecke, sp = st.spline, m = sp.punktBei((a + b) / 2), p0 = sp.punktBei(a - 120);
+          return [p0.x - p0.nx * 60, st.hoeheAn(p0.x, p0.z) + 45, p0.z - p0.nz * 60, m.x, st.hoeheAn(m.x, m.z) + 15, m.z, true]; }''', [info['tunnel'][0][0], t2[1]])
+        page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(900)
+        snap('46_bergmassiv.png')
+        page.evaluate(KAMERA_LOS)
+        page.evaluate(AUTO_NACH_SQ, [info['tunnel'][0][0] - 45, 0]); page.wait_for_timeout(1400)
+        snap('46b_portal_tunnel1.png')
+    # 47: stehender Dino mit gesenktem Kopf auf der Straße
+    page.evaluate(DYN_FRIEREN)
+    d = page.evaluate('''(() => { const s = Rennspiel.spiel, dy = s.dynamik, st = dy.dinoStellen[2] || dy.dinoStellen[0];
+      st.dinos.length = 0; st.timer = 0; dy._erg = { ereignisse: [] }; dy._dinoSchritt(1 / 60); st.timer = 1e9;
+      const dn = st.dinos[0]; dn.q = -2 * st.von; dn.zustand = 'steht'; dn.kopf = 1; dn.stehRest = 99; dy._dinoWelt(dn); dy.animieren();
+      return { s: dn.s }; })()''')
+    page.evaluate(AUTO_NACH_SQ, [d['s'] - 26, 2]); page.wait_for_timeout(1300)
+    snap('47_dino_steht.png')
+    # W2-C2: Dino kehrt mitten auf der Straße um (steht quer, dreht sich zurück) – Seitenblick; dann brüllend (Kopf hoch)
+    page.evaluate('''(() => { const dy = Rennspiel.spiel.dynamik, st = dy.dinoStellen[2] || dy.dinoStellen[0], dn = st.dinos[0];
+      dn.q = 0.6; dn.umkehren = true; dn.umgekehrt = true; dn.zustand = 'laeuft'; dn.vq = st.von * st.tempo; dn.kopf = 0.3; dn.phase = 0.8;
+      dy._dinoWelt(dn); dy.animieren(); })()''')
+    blick = page.evaluate('''(() => { const s = Rennspiel.spiel, st = s.strecke, dn = (s.dynamik.dinoStellen[2] || s.dynamik.dinoStellen[0]).dinos[0], p = st.spline.punktBei(dn.s);
+      return [dn.x - p.tx * 16 + p.nx * 6, dn.y + 4, dn.z - p.tz * 16 + p.nz * 6, dn.x, dn.y + 2, dn.z, true]; })()''')
+    page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(800)
+    snap('47b_dino_umkehr.png')
+    erg['umkehr'] = page.evaluate('''(() => { const dn = (Rennspiel.spiel.dynamik.dinoStellen[2] || Rennspiel.spiel.dynamik.dinoStellen[0]).dinos[0];
+      return { q: +dn.q.toFixed(2), vq: +dn.vq.toFixed(2), umgekehrt: dn.umgekehrt }; })()''')
+    page.evaluate('''(() => { const dy = Rennspiel.spiel.dynamik, dn = (dy.dinoStellen[2] || dy.dinoStellen[0]).dinos[0];
+      dn.zustand = 'steht'; dn.bruellt = 1.2; dn.kopf = -1.4; dn.stehRest = 99;
+      for (let k = 0; k < 4; k++) { dy._schrittW2.call(dy, 1 / 15, { fortschritt: 0, runden: 3, autos: [] }); dn.bruellt = Math.max(dn.bruellt, 0.6); dn.kopf = -1.4; }
+      dy.animieren(); })()''')
+    page.wait_for_timeout(500)
+    snap('47c_dino_bruellt.png')
+    page.evaluate(KAMERA_LOS)
+    page.evaluate('''(() => { const st = Rennspiel.spiel.dynamik.dinoStellen[2] || Rennspiel.spiel.dynamik.dinoStellen[0]; st.dinos.length = 0; st.timer = 3; })()''')
+    page.evaluate(DYN_WEITER)
+    return erg
+
+
+def wald_tiere_bilder(page, snap):
+    """Runde 6 (W2-C): Reh und Bär auf der Straße, grasende Rehe, Reh-Treffer. Liefert Messwerte."""
+    erg = {}
+    page.evaluate(KI_WEG)
+    info = page.evaluate('''(() => { const dy = Rennspiel.spiel.dynamik; return dy ? { stellen: dy.tierStellen.map(t => ({ art: t.art, s: t.s, von: t.von })),
+      grasend: dy.grasendeRehe.map(r => ({ s: r.s, q: r.q })) } : null; })()''')
+    erg['info'] = info
+    if not info:
+        return erg
+    # W2-C2: Größen aus den (skalierten) Modellen: Reh Kopf/Ohren ~1,2 m, Bär ~1,5 m; Draw-Calls inkl. Dynamik-Gruppe (obere Grenze)
+    erg['groesse'] = page.evaluate('''(() => { const T = Rennspiel.spiel.dynamik._tierM && Rennspiel.spiel.dynamik._tierM.T; if (!T) return null;
+      const bb = (g) => { g.computeBoundingBox(); return g.boundingBox; };
+      return { reh: +(T.reh.kopfPunkt[1] + bb(T.reh.kopf).max.y).toFixed(2), rehRuecken: +bb(T.reh.koerper).max.y.toFixed(2),
+        rehLaenge: +(bb(T.reh.koerper).max.x - bb(T.reh.koerper).min.x).toFixed(2),
+        baer: +bb(T.baer.koerper).max.y.toFixed(2), baerLaenge: +(bb(T.baer.koerper).max.x - bb(T.baer.koerper).min.x).toFixed(2) }; })()''')
+    erg['drawCallsDynamik'] = page.evaluate('''(() => { let n = 0; const namen = [];
+      Rennspiel.spiel.szene.children.forEach(g => { if (g.name !== 'Dynamik') return;
+        g.traverse(o => { if ((o.isMesh || o.isInstancedMesh) && o.visible) { n++; namen.push(o.name); } }); });
+      return { meshes: n, namen }; })()''')
+    page.evaluate(DYN_FRIEREN)
+    for art in ('reh', 'baer'):
+        nr = next((i for i, t in enumerate(info['stellen']) if t['art'] == art), None)
+        if nr is None: continue
+        d = page.evaluate('''(nr) => { const s = Rennspiel.spiel, dy = s.dynamik, st = dy.tierStellen[nr];
+          st.tiere.length = 0; st.timer = 0; st.zaehler = 1; dy._tierSchritt(1 / 60); st.timer = 1e9;
+          const t = st.tiere[0]; t.q = 1.5 * st.von; t.phase = 0.5; t.beinPhase = 0.6; t.sprung = t.art === 'reh' ? 0.6 : 0.05; t.zustand = 'laeuft';
+          dy._tierWelt(t); dy.animieren(); return { s: t.s, art: t.art, geweih: t.geweih }; }''', nr)
+        page.evaluate(AUTO_NACH_SQ, [d['s'] - 18, -2]); page.wait_for_timeout(1300)
+        snap('48_' + art + '_strasse.png')
+        blick = page.evaluate('''(nr) => { const s = Rennspiel.spiel, st = s.strecke, t = s.dynamik.tierStellen[nr].tiere[0], p = st.spline.punktBei(t.s);
+          return [t.x - p.tx * 7 + p.nx * 4, t.y + 2, t.z - p.tz * 7 + p.nz * 4, t.x, t.y + 0.9, t.z, true]; }''', nr)
+        page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(800)
+        snap('48b_' + art + '_nah.png')
+        page.evaluate(KAMERA_LOS)
+        erg[art] = d
+        if art == 'reh':
+            # W2-C2: Reh bleibt mitten auf der Straße stehen und schaut zum Auto (Kopf zur Seite)
+            page.evaluate('''(nr) => { const dy = Rennspiel.spiel.dynamik, t = dy.tierStellen[nr].tiere[0];
+              t.q = 0.5 * Math.sign(t.q || 1); t.zustand = 'schaut'; t.kopfDreh = 1; t.sprung = 0; t.schauRest = 99; t.beinPhase = 0; dy._tierWelt(t); dy.animieren(); }''', nr)
+            page.evaluate(AUTO_NACH_SQ, [d['s'] - 8, 1.5]); page.wait_for_timeout(1200)
+            snap('48c_reh_schaut.png')
+    if info['grasend']:
+        r = info['grasend'][0]
+        blick = page.evaluate('''(r) => { const st = Rennspiel.spiel.strecke, sp = st.spline, p = sp.punktBei(r.s - 10), q = sp.punktBei(r.s);
+          const x = q.x + q.nx * r.q, z = q.z + q.nz * r.q; return [p.x, st.hoeheAn(p.x, p.z) + 2.2, p.z, x, st.hoeheAn(x, z) + 0.6, z, true]; }''', r)
+        page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(900)
+        snap('50_rehe_grasen.png')
+        page.evaluate(KAMERA_LOS)
+    # Bär-Treffer: Auto fährt hinein → −60 %, Meldung „Bär!"
+    nr = next((i for i, t in enumerate(info['stellen']) if t['art'] == 'baer'), None)
+    if nr is not None:
+        page.evaluate(DYN_WEITER)
+        s0 = page.evaluate('''(nr) => { const dy = Rennspiel.spiel.dynamik, st = dy.tierStellen[nr], t = st.tiere[0];
+          t.q = 0; t.vq = 0.001; dy._tierWelt(t); t.getroffen.clear(); return t.s; }''', nr)
+        page.evaluate(AUTO_NACH_SQ, [s0 - 12, 0])
+        page.evaluate('(() => { Rennspiel.spiel.fahrzeuge[0].vehicle.vLaengs = 25; })()')
+        page.evaluate(VORSPULEN_BIS, ['(s.huds[0].meldungText || "").startsWith("Bär")', 2])
+        erg['baerTreffer'] = page.evaluate('''(() => { const s = Rennspiel.spiel, v = s.fahrzeuge[0].vehicle; return { meldung: s.huds[0].meldungText || '', kmh: Math.round(v.vLaengs * 3.6) }; })()''')
+        page.wait_for_timeout(200)
+        snap('49_baer_treffer.png')
+    page.evaluate(DYN_WEITER)
+    return erg
+
+
 def lauf(browser, sid, out):
     os.makedirs(out, exist_ok=True)
     page = browser.new_page(viewport={'width': 1280, 'height': 800})
@@ -386,6 +616,7 @@ def lauf(browser, sid, out):
     page.evaluate("(id) => Rennspiel.spiel.rennenStarten({ modus: 'solo', streckeId: id, autoIds: ['troc-cabrio', 'multivan'], runden: 3, gegner: 3, schwierigkeit: 'mittel', fahrhilfe: ['wenig', 'wenig'] })", sid)
     page.wait_for_timeout(1000)
     snap = lambda name: page.screenshot(path=os.path.join(out, name))
+    page._ausgabe = out
     snap('01_start.png')
     z = {'strecke': sid, 'start': page.evaluate(ZUSTAND)}
     z['drawCallsStreckeDeko'] = page.evaluate(DRAW_CALLS)
@@ -447,6 +678,9 @@ def lauf(browser, sid, out):
         z['fantasie'] = fantasie_bilder(page, snap)
     if sid == 'dino':
         z['dino'] = dino_bilder(page, snap)
+        z['w2c'] = dino_w2c_bilder(page, snap)      # Runde 6 (W2-C)
+    if sid == 'wald':
+        z['tiere'] = wald_tiere_bilder(page, snap)  # Runde 6 (W2-C)
     if sid == 'wueste':
         # Stelle der Strecke, die der Oase am nächsten liegt
         s_oase = page.evaluate('''(() => { const s = Rennspiel.spiel; let w = null;
@@ -484,7 +718,7 @@ def lauf(browser, sid, out):
     pruefe('Deko ≥ breite/2 + 6 m von der Mitte', d['minAbstandZurMitte'] >= d['grenze'] - 0.05,
            f"{d['minAbstandZurMitte']} m ({d['naechsteArt']}), Grenze {d['grenze']} m, {d['instanzen']} Instanzen")
     dc = z['drawCallsStreckeDeko']
-    pruefe('Draw-Calls Strecke + Deko + Hindernisse ≤ 40 (ohne Wrack-Autos)', dc['meshes'] <= 40, str(dc['meshes']) + ' (+ ' + str(dc['wracks']) + ' Wrack-Meshes)')
+    pruefe('Draw-Calls Strecke + Deko + Hindernisse ≤ 45 (ohne Wrack-Autos)', dc['meshes'] <= 45, str(dc['meshes']) + ' (+ ' + str(dc['wracks']) + ' Wrack-Meshes)')
     el = z['elemente']
     pruefe('höchstens 3 Punkt- + 2 Spotlichter', el['lichter']['punkt'] <= 3 and el['lichter']['spot'] <= 2, el['lichter'])
     for t in el['tunnel']:
@@ -518,9 +752,38 @@ def lauf(browser, sid, out):
                abs(dz['vulkanPixel']['x']) < 0.9 and -1 < dz['vulkanPixel']['y'] < 1 and dz['vulkanPixel']['z'] <= 1, dz['vulkanPixel'])
         pruefe('Dino: Lavasee neben der Strecke', dz['info']['lava'] is not None, dz['info']['lava'])
         pruefe('Dino: 6–10 Deko-Dinos', 6 <= dz['info']['dekoDinos'] <= 10, dz['info']['dekoDinos'])
-        pruefe('Dino: laufende Dinos (2 Stellen) + Felsbrocken in Welt Hindernisse', len(dz['info']['dinoStellen']) == 2 and dz['info']['fels'], dz['info'])
+        pruefe('Dino: laufende Dinos (≥ 4 Stellen, Runde 6) + Felsbrocken in Welt Hindernisse', len(dz['info']['dinoStellen']) >= 4 and dz['info']['fels'], dz['info'])
         pruefe('Dino-Treffer: Tempo −60 % (25 → 10 m/s = 36 km/h), Meldung „Dino!", Dino bleibt', abs(dz['treffer']['kmhNachher'] - 36) <= 3 and
                dz['treffer']['meldung'].startswith('Dino') and dz['treffer']['dinoDa'], dz['treffer'])
+    if z.get('w2c'):
+        w = z['w2c']
+        pruefe('W2-C: Berg-Massiv, 2 Tunnel, Vulkan/Meteoriten/Flugsaurier aktiv', w['info']['berg'] == 1 and len(w['info']['tunnel']) == 2 and
+               w['info']['vulkan'] and w['info']['meteore'] == 2 and w['info']['flug'], w['info'])
+        if w.get('lavaKontakt'):
+            pruefe('W2-C: Lava-Kontakt → Stopp, Meldung „Lava!", Rauch', w['lavaKontakt']['meldung'].startswith('Lava') and w['lavaKontakt']['rauch'] > 0, w['lavaKontakt'])
+        a = w['ausbruch']
+        hb = a.get('himmelBild') or a['himmel']
+        pruefe('W2-C: Ausbruch – Himmel rötlich im Bild (r > g + 20, r > b + 40), ≥ 3 Bomben in der Luft, Meldung', a['glut'] > 0.6 and
+               hb[0] > hb[1] + (20 if a.get('himmelBild') else 0) and hb[0] > hb[2] + (40 if a.get('himmelBild') else 0) and a['bomben'] >= 3, a)
+        pruefe('W2-C: Krater auf der Fahrbahn', w['krater'] is not None, w['krater'])
+        if w.get('kraterKontakt'):
+            pruefe('W2-C: Krater-Kontakt → Meldung „Krater!", Tempo ≈ −50 %', w['kraterKontakt']['meldung'].startswith('Krater') and w['kraterKontakt']['kmh'] <= 45, w['kraterKontakt'])
+        pruefe('W2-C: Meteorit – Schatten auf der Straße, Felsbrocken danach', w['meteor']['schatten'] is not None and w['meteorBrocken'] >= 3, [w['meteor'], w['meteorBrocken']])
+        if w.get('umkehr'):
+            pruefe('W2-C2: Dino kehrt mitten auf der Straße um', w['umkehr']['umgekehrt'] and abs(w['umkehr']['q']) < 3, w['umkehr'])
+        fs = w['flugsaurier']
+        pruefe('W2-C: Flugsaurier über dem Auto (≥ 2,5 m, < 5 m), Meldung, nie tiefer als 2,5 m', fs['aktiv'] and 2.5 - 1e-3 <= fs['ueberAuto'] < 5 and
+               fs['meldung'].startswith('Flugsaurier') and fs['minUeberAuto'] >= 2.499, fs)
+    if z.get('tiere') and z['tiere'].get('info'):
+        t = z['tiere']
+        pruefe('Wald: Rehe + Bären + 2–3 grasende Rehe', len(t['info']['stellen']) >= 2 and 2 <= len(t['info']['grasend']) <= 3, t['info'])
+        g = t.get('groesse') or {}
+        pruefe('W2-C2: Größen stimmig – Reh ≈ 1,2 m (1,05–1,4), Bär ≈ 1,5 m (1,35–1,7)', 1.05 <= g.get('reh', 0) <= 1.4 and 1.35 <= g.get('baer', 0) <= 1.7, g)
+        gesamt = dc['meshes'] + t['drawCallsDynamik']['meshes']
+        pruefe('W2-C2: Draw-Calls Strecke + Deko + Hindernisse + Dynamik (Tiere) ≤ 45', gesamt <= 45,
+               str(dc['meshes']) + ' + ' + str(t['drawCallsDynamik']['meshes']) + ' ' + str(t['drawCallsDynamik']['namen']))
+        if t.get('baerTreffer'):
+            pruefe('Wald: Bär-Treffer → Meldung „Bär!", Tempo −60 % (≈ 36 km/h)', t['baerTreffer']['meldung'].startswith('Bär') and t['baerTreffer']['kmh'] <= 40, t['baerTreffer'])
     au = z['abseits_untergrund']
     pruefe('Untergrund neben der Straße = Thema', au['ist'] == au['erwartet'], au)
     page.close()

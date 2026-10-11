@@ -191,10 +191,13 @@ kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1
 .m-aktionen { display: flex; align-items: center; justify-content: center; gap: .8em; }
 .m-aktionen .start-knopf { margin-top: 0; min-width: 11em; }
 /* Welt-Zeile im Strecken-Schritt */
-.m-welt { margin-top: .7em; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .3em .8em;
+.m-welt, .m-variante { margin-top: .7em; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .3em .8em;
   background: var(--tafel); border: .18em solid rgba(255,255,255,.3); border-radius: 1em; padding: .35em .9em; max-width: 56em; }
-.m-welt .z-wert { flex-wrap: wrap; gap: .35em; }
+.m-welt .z-wert, .m-variante .z-wert { flex-wrap: wrap; gap: .35em; }
 .m-welt .pille small { font-size: .6em; opacity: .85; margin-left: .2em; text-transform: uppercase; letter-spacing: .03em; }
+.m-variante .z-label small { font-size: .65em; opacity: .8; }
+.m-variante { margin-top: .3em; padding: .1em .9em; font-size: .92em; max-width: 56em; }
+.m-variante .welt-text { flex-basis: auto; text-align: left; font-size: .78em; font-weight: 700; line-height: 1.2; }
 .m-welt .welt-text { flex-basis: 100%; text-align: center; font-size: .82em; font-weight: 700; line-height: 1.25; }
 .zeile { display: flex; align-items: center; justify-content: space-between; gap: .8em; background: var(--tafel);
   border: .18em solid rgba(255,255,255,.3); border-radius: 1em; padding: .28em .8em; cursor: pointer; }

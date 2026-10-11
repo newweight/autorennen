@@ -227,7 +227,7 @@
       let faktor = 1;
       for (const h of this.streckenHindernisse) {
         // Runde 4: Wracks (liegengeblieben/brennend) sind feste Hindernisse → ausweichen wie bei der Baustelle
-        const hart = h.typ === 'baustelle' || h.typ === 'ast' || h.typ === 'wrack' || h.typ === 'brand';
+        const hart = h.typ === 'baustelle' || h.typ === 'ast' || h.typ === 'wrack' || h.typ === 'brand' || !!h.hart;   // Runde 6: Lava (h.hart)
         const d0 = sp.differenzS(h.s0, n.s), d1 = sp.differenzS(h.s1, n.s);
         const b = (st.breiteBei ? st.breiteBei(h.s) : st.breite) / 2;
         const vorlauf = hart ? Math.max(HART_MIN, HART_ZEIT * tempo) : Math.max(WEICH_MIN, WEICH_ZEIT * tempo);

@@ -225,7 +225,8 @@
     /** Runde 4: Wetter-Objekt (R.Wetter) für Symbol + Windpfeil setzen; null = nichts anzeigen. */
     wetterSetzen(wetter) {
       this.wetter = wetter || null;
-      const w = this.wetter, symbol = w ? w.emoji : '', wind = w ? w.windStaerke : 0;
+      // Runde 6 (W2-D): Tageszeit-Symbol 🌇/🌙 vor dem Wetter-Symbol ('' bei Tag)
+      const w = this.wetter, symbol = w ? (w.tageszeitEmoji || '') + w.emoji : '', wind = w ? w.windStaerke : 0;
       setzeText(this.eWSymbol, symbol);
       setzeAnzeige(this.eWSymbol, !!symbol);
       setzeText(this.eWStufe, wind ? String(wind) : '');

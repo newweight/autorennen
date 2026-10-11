@@ -194,6 +194,40 @@ Rennspiel.config = {
     huepfer: 2.6,              // Hüpfer (vehicle.huepfer, m/s nach oben – nur Optik, wie Ast)
     ueberstand: 12,            // m: Start/Ende so weit neben der Fahrbahnkante (Dino ist lang)
   },
+  // Runde 6 (W2-C): Dino-Ausbau – Verhalten der laufenden Dinos, Lava, Krater, Vulkanausbruch, Meteoriten, Flugsaurier
+  // (Logik: world/dynamik.js, Lava/Krater-Kontakt: physics/collisions.js hindernisse(), Platzierung: trackCatalog.js dino)
+  dino: {
+    umkehrChance: 0.3,         // W2-C2: 30 % der Dinos bleiben mitten auf der Straße stehen und kehren um …
+    stehenChance: 0.5,         // … von den übrigen bleibt die Hälfte einmal stehen (auf der Fahrbahn oder knapp daneben) …
+    stehenMin: 1, stehenMax: 3,  // … für 1–3 s (Kopf gesenkt)
+    bruellenMin: 15, bruellenMax: 30,   // W2-C2: jede Dino-Stelle brüllt alle 15–30 s (Ton + Kamerawackler, Kopf hoch)
+    bruellenDauer: 1.2,        // s Kopf oben beim Brüllen
+    bruellenRadius: 30,        // m: Kamerawackeln nur so nah am Spieler
+    bruellenWackeln: 2.5,
+    // Lava-Zunge (Hindernis-Typ 'lava'): Kontakt = stopp s festgehalten + Rauch, danach frei s Schonzeit zum Wegfahren
+    lava: { laenge: 12, stopp: 1, frei: 2.5, gefahr: 1.0 },
+    // Krater (Hindernis-Typ 'krater', entsteht beim Vulkanausbruch): Tempo × tempoFaktor, bleibt dauer s
+    krater: { radius: 2.6, tempoFaktor: 0.5, dauer: 20, gefahr: 0.8 },
+    // Vulkanausbruch: alle intervallMin–intervallMax s (Seed), grollen s Vorwarnung, dann bomben Lavabomben
+    vulkan: { intervallMin: 80, intervallMax: 110, grollen: 3, bomben: 5, bombenAbstand: 0.35, flugZeit: 2.6,
+      vorausMin: 50, vorausMax: 200,   // m vor dem führenden Spieler (beim Einschlag; W2-C1: + Fahrweg während des Flugs)
+      querMax: 9,                      // m: Landepunkt quer (Fahrbahn ± Rand)
+      bombenAbstandS: 30,              // W2-C1: m längs zwischen den Einschlägen eines Ausbruchs (KI/Kind kann ausweichen)
+      wackelRadius: 60, wackeln: 5, himmelRot: 0xb0401c, himmelAnteil: 0.7 },
+    // Meteoriten (Katalog meteoriten [{ s, von }]): je Runde beim ersten Passieren (Fortschritt des führenden Spielers)
+    meteor: { vorlauf: 85, warnZeit: 2, abstand: 15, brockenMin: 3, brockenMax: 5, brockenTempo: 7, kraterDauer: 25,
+      wackelRadius: 60, wackeln: 4 },
+    // Flugsaurier (Katalog flugsaurier { s0, s1, intervall }): fliegt von vorn an, taucht bis tief m über das Auto
+    flugsaurier: { intervall: 40, hoehe: 25, tief: 2.5, tempo: 24, start: 170, breite: 34, duck: 0.45 },
+  },
+  // Runde 6 (W2-C): Wildtiere im Wald (Katalog tiere [{ art: 'reh'|'baer', s, von, intervall, tempo }], Schicht „dinos")
+  tiere: {
+    reh: { tempo: 6, tempoFaktor: 0.6, huepfer: 2.0, radius: 0.9, sprungHoehe: 0.6, sprungWeite: 3.2,   // W2-C2: Sprung 0,6 m (Reh kleiner)
+      schauenChance: 0.5, schauenMin: 0.8, schauenMax: 1.6 },
+    baer: { tempo: 3, tempoFaktor: 0.4, huepfer: 2.4, radius: 1.3 },
+    ueberstand: 9,             // m: Start/Ende so weit neben der Fahrbahnkante
+    grasendeRehe: 3,           // Deko-Rehe (grasen hinter dem Zaun), auch in Welt Klassisch
+  },
 
   // --- Runde 4: Schaden (Einstellung, Standard aus → keinerlei Wirkung). Logik: src/physics/schaden.js ---
   // Treffer kostet trefferVerlust (5 %) – nur ab Mindest-Stoßstärke (m/s) je Art, höchstens einmal je abklingZeit s
@@ -356,6 +390,39 @@ Rennspiel.config = {
   //   → Stufe 5 bei 200 km/h ohne Gegenlenken ≈ 3–4 m Versatz in 3 s, Stufe 1 ≈ 0,7 m (kaum).
   // vMaxJeStufe: Gegenwind −3 %, Rückenwind +3 % Höchsttempo je Stufe (Projektion auf die Fahrtrichtung).
   wind: { staerkeStandard: 0, staerkeMax: 5, richtungStandard: 'zufall', seitK: 0.019, gierK: 0.000036, vMaxJeStufe: 0.03 },
+
+  // --- Runde 6 (W2-D): Tageszeit 'tag' (Standard = Licht wie bisher, bitgleich) | 'daemmerung' | 'nacht' ---
+  // Nur Optik (world/wetter.js anwenden, main.js Scheinwerfer/Laternen). Farben je Thema überschreibbar (Schlüssel = Themenname).
+  // himmel: [oben, Mitte, Horizont] (Himmelskuppel, 1 Draw-Call), nebel: Nebel-/Hintergrundfarbe, sichtweiteFaktor: × Sichtweite,
+  // sonne: { farbe, intensitaet, hoehe (Grad) } (Nacht: schwaches Mondlicht), halbkugel: { himmel, boden, intensitaet } (absolut,
+  // × Jahreszeit-/Wetter-Lichtfaktor), wolken: [Farbe, Eigenleuchten], wetterHell: Wetter-Mischfarben (Regen-Grau …) × Helligkeit,
+  // partikelMisch: Niederschlag Richtung Nebelfarbe, sterne/mond: Nacht-Himmel, autoLicht: Scheinwerfer/Rücklichter leuchten,
+  // echteScheinwerfer: SpotLights an den Spielerautos (dieselben wie im Tunnel), laternen: Straßenlaternen (Thema laternen: true),
+  // markierung/randstein: Eigenleuchten der Mittellinie/Randsteine, ballonsLeuchten: Fantasie-Ballons leuchten.
+  tageszeitStandard: 'tag',
+  tageszeit: {
+    tag: { name: 'Tag', emoji: '' },
+    daemmerung: { name: 'Dämmerung', emoji: '🌇',
+      himmel: [0x4b3f8f, 0xc76d8c, 0xff9a52], nebel: 0xe8946a, sichtweiteFaktor: 0.92,
+      sonne: { farbe: 0xff8a3c, intensitaet: 0.7, hoehe: 11 },
+      halbkugel: { himmel: 0xffb890, boden: 0x5a4048, intensitaet: 0.8 },
+      wolken: [0xffa9bf, 0x8c4a6a], wetterHell: 0.62, partikelMisch: 0.3,
+      autoLicht: true, sonnenScheibe: [1, 0.72, 0.42],
+      wueste: { himmel: [0x3a2152, 0x9c3048, 0xd8402a], nebel: 0xc4583e, sonne: { farbe: 0xff5a2a, intensitaet: 0.7, hoehe: 5 },
+        halbkugel: { himmel: 0xff9a78, boden: 0x6a3428, intensitaet: 0.78 }, wolken: [0xff8a7a, 0x8a2a2a] },
+      fantasie: { himmel: [0x5a3aa8, 0xe07ab8, 0xffb070], nebel: 0xf0a0b8 } },
+    nacht: { name: 'Nacht', emoji: '🌙',
+      himmel: [0x03061a, 0x0a1430, 0x1a2c50], nebel: 0x121c34, sichtweiteFaktor: 0.85,
+      sonne: { farbe: 0x9fb8ff, intensitaet: 0.16, hoehe: 35 },
+      halbkugel: { himmel: 0x5c78c0, boden: 0x10161e, intensitaet: 0.25 },
+      wolken: [0x2a3248, 0x10141e], wetterHell: 0.18, partikelMisch: 0.45,
+      sterne: 700, mond: true, autoLicht: true, echteScheinwerfer: true, laternen: true,
+      markierung: 0x9a9a8c, randstein: 0x2c2c2c, ballonsLeuchten: true,
+      laterne: { abstand: 60, hoehe: 7, ausleger: 2.4, farbe: 0xffd08a, licht: 70, reichweite: 28, abfall: 1.5, punktlichter: 3 },
+      wueste: { himmel: [0x020a20, 0x0b1c3c, 0x24406c], nebel: 0x1a2a48, halbkugel: { himmel: 0x6c90d8, boden: 0x2a2a38, intensitaet: 0.3 } },
+      fantasie: { himmel: [0x0c0420, 0x241044, 0x3e1c60], nebel: 0x2a1642, halbkugel: { himmel: 0x9a74e0, boden: 0x2a1838, intensitaet: 0.3 },
+        wolken: [0x3a2a58, 0x1c1030] } },
+  },
 
   // --- Runde 4: Stunt (Sprungschanzen, Welt „Stunt"/„Verrückt") + Pickups (Turbo-Felder, Schild, Welt „Verrückt") ---
   // Logik: src/track/schanze.js (R.Schanzen) und src/world/pickups.js (R.Pickups); Platzierung in trackCatalog.js.

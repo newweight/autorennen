@@ -11,7 +11,7 @@ src/config.js            Einstellungen: Runden, Schwierigkeiten, Fahrhilfen, Tas
 src/audio/engine.js      synthetischer Ton (Web Audio), kein Datei-Zugriff nötig
 src/input.js             Tastatur (event.code)
 src/physics/vehicle.js   Arcade-Fahrphysik (ohne Three.js, testbar in Node)
-src/physics/collisions.js Bande (Zaun), Auto-Auto-Stöße
+src/physics/collisions.js Bande (Zaun), Auto-Auto-Stöße als gedrehte Rechtecke (OBB/SAT), Rempeln, Looping-Abstand, Pflanzen-Kollider
 src/cars/carCatalog.js   DATEN der Autos             <- neues Auto hier eintragen
 src/cars/carBuilder.js   Low-Poly-Karosserien je Typ (cabrio, van, limousine, sportwagen, coupe, kombi, kleinwagen, suv)
 src/track/spline.js      Catmull-Rom-Spline, Abtastung, nächster Punkt
@@ -20,7 +20,9 @@ src/track/trackBuilder.js Straße, Randsteine, Zaun, Checkpoints, Ideallinie, Br
 src/track/looping.js     Looping (Fantasie); src/world/dynamik.js: Bälle, Wasserstrahlen, Strohballen
 src/track/schanze.js     Runde 4: Sprungschanzen (R.Schanzen, Flugphysik)
 src/world/pickups.js     Runde 4: Turbo-Felder + Schutzschild (R.Pickups)
-src/world/wetter.js      Runde 4: Jahreszeit/Wetter/Wind (R.Wetter: erlaubt, aufloesen, umwelt, Partikel, Wolken)
+src/world/wetter.js      Runde 4: Jahreszeit/Wetter/Wind (R.Wetter: erlaubt, aufloesen, umwelt, Partikel, Wolken); Runde 6: Tageszeit (Licht, Himmelskuppel, Sterne, Mond)
+src/race/startBoost.js   Runde 6: Start-Boost (R.StartBoost, reine Logik)
+src/race/sterne.js       Runde 6: Sterne-Wertung (R.Sterne, localStorage)
 src/physics/schaden.js   Runde 4: Schaden/Gesundheit, Wracks-Grafik, Abschleppwagen (R.Schaden)
 src/world/themes.js      Wiese / Wald / Wüste / Fantasie: Farben, Nebel, Deko (InstancedMesh)
 src/ai/driver.js         Computerfahrer (Ideallinie, Skill, Gummiband, Ausweichen)
@@ -28,8 +30,7 @@ src/race/raceManager.js  Countdown, Checkpoints, Runden, Platzierung
 src/render/cameras.js    Verfolger-/Cockpit-/Weitkamera, Split-Screen in main.js
 src/ui/menu.js, hud.js, styles.css   Menü, HUD, Minimap, Ergebnis, Pause
 src/main.js              Spielzustände, Schleife, Szenenaufbau
-tests/                   node tests/test_*.js (Physik, Autos, Strecke, KI, Kollisionen, Rundenzeit)
-                         python3 tests/menu_test.py | screenshot_test.py <strecke> | rennen_test.py | audio_test.py
+tests/                   node tests/test_*.js | zaun_test.js | python3 tests/*_test.py (Liste siehe „Testdateien“ unten)
 ```
 
 ## Neues Auto
@@ -98,6 +99,36 @@ Die 3D-Autowahl (src/ui/autoVorschau) rendert diese Modelle; neue Autos erschein
 `rang` (1…7) bestimmt die Reihenfolge der Pillen im Menü; die Pille mit dem Schlüssel `unschlagbar` wird rot mit 💀 gezeigt.
 `fahrhilfen` (lenkhilfe, bremshilfe), `rennen` (Rundenbereich, Gegner).
 `physik.untergrund`: je Untergrund `grip`, `rollwiderstand`, `vMaxFaktor` (Höchsttempo × Faktor, z. B. Gras 0,5), optional `vMaxAbs` (m/s-Deckel); `oel` und `sandFleck` gehören zu den Hindernissen.
+
+## Runde 6: Kollisionen, Tageszeit, Varianten, Start-Boost, Sterne
+**Kollisionen** (`collisions.js`, `config.kollision`, `config.pflanzen`, `config.schaden`; alles Add-on, Standard `rempeln: 'sanft'`):
+- `autoAuto`: Autos = gedrehte Rechtecke (laenge × breite), SAT-Trennung in `teilschritte` (2) Durchgängen, danach `mindestAbstand` (0,1 m) Luft; Sweep über `vehicle._kollAlt` gegen Durchschießen bei hohem Tempo; Auto an der Bande zählt beim Trennen 10× so schwer (main.js prüft danach die Bande für verschobene Autos). `obbAbstand()` dient den Tests.
+- `rempeln` (Einstellung `'echt'`): Drehimpuls (`vehicle.drehImpuls`), Abdrängen (Querimpuls `querMin..querMax` bei 15–45° von hinten), Nebeneinander-Schieben (< `flachGrad`); Masse und Tempo entscheiden; KI ab `kiAbRang` (profi) rempelt gezielt (`driver.rempler`). Meldung „Dreher! 🌀“.
+- `loopingAbstand(fahrzeugListe, strecke)`: hält zwei Autos im selben Looping `laenge + loopingAbstand` Bogenlänge auseinander (looping.js unverändert).
+- Schaden: `schaden.mindest.auto` 1 m/s, `schaden.verluste` (bande 3, pflanze 3), `drehungVerlust` 3.
+- **Pflanzen-Kollider**: `pflanzenSammeln(strecke, deko)` (main.js `streckeSzeneBauen`, vor `statischVorbereiten`) macht Kreis-Kollider aus den Deko-Instanzen bis `grenzeBei(s) + zugabe`; Radius = Fuß der Geometrie (≤ `fussHoehe`). Welche Deko-Gruppen fest (wie Säule) oder weich (Tempo × `weichTempo`) sind, steht in `config.pflanzen.fest/weich` – neue Deko-Gruppe dort eintragen. `pflanzen()` wendet sie an.
+- Abseits: `physik.untergrund.gras/sand` mit `vMaxAbs` (60/50 km/h), Übergang Rand→Gras/Sand weich über `physik.abseitsUebergang` m (`vehicle.untergrundMisch`), `abseitsAnfahren` (m/s) damit man aus dem Sand wieder loskommt.
+
+**Tageszeit** (`config.tageszeit`, `tageszeitStandard: 'tag'`): `tag` hat keine Werte (Licht bitgleich wie vorher), `daemmerung`/`nacht` mit Themen-Ausnahmen (`wueste`, `fantasie`). `wetter.js` nimmt `opt.tageszeit` (→ `w.tz`, `tageszeitEmoji`, `nacht`) und setzt Sonne/Mond, Halbkugellicht, Himmelskuppel mit Verlauf, Sterne, Wolken. Straßenlaternen: Themenflag `laternen: true` (Wiese, Wald) + `themes.js laternenBauen()`. `main.js`: nachts Spot-Lichter an den Spielerautos und Punktlichter (Tunnellampen bzw. nächste Laternen), `carBuilder.setzeLicht(auto, an)` für Scheinwerfer/Rücklichter. Neue Farbvariante = Eintrag in `config.tageszeit` (+ Menü-Pille in `menu.js`).
+
+**Streckenvarianten**: Katalogfeld `varianten: { xl: { name, faktor, zeitFaktor, beschreibung } }` (Wüste 1,6, Fantasie 2). `R.Strecke.varianteAnwenden(daten, id)` liefert eine skalierte KOPIE (Kontrollpunkte x/z und Hügel um den Schwerpunkt × Faktor, y bleibt; alle Listenfelder `s/s0/s1` × Faktor; absolut bleiben Looping-Radius, Schanzenlänge, Anlauf, `checkpointAbstand`). `new R.Strecke(daten, { welt, variante })`; `strecke.variante`, `strecke.katalog` = skalierte Kopie. `zielRundenzeit` wird mit `zeitFaktor` (nicht `faktor`) skaliert, weil die Rundenzeit nicht linear mit der Länge wächst. Eine Variante für eine weitere Strecke = nur der `varianten`-Eintrag. Menü: Zeile `m-variante`, Taste V, Streckenwechsel setzt zurück.
+
+**Welt „Alles“**: `trackCatalog.js` hängt je Strecke `welten.alles` (alle Schichten `true`, inkl. loopings/kleber/dinos) als letzte Welt an; `R.weltInfo.alles`. Die Polizei bleibt eigener Schalter.
+
+**Start-Boost** (`src/race/startBoost.js`, `config`-unabhängige `STANDARD`-Werte im Modul): Gasdruck-Beginn im Fenster −0,25…+0,15 s um LOS → 1,5 s lang vMax/Beschleunigung × 1,2; zu früh und bei LOS gehalten → 1 s Gas gesperrt. KI würfelt (Chance 0,95 − 3,2 × `fehler`). Hook in `main.js physikSchritt` vor der Countdown-Sperre; Faktoren wirken nach den Pickup-Faktoren.
+**Sterne** (`src/race/sterne.js`): `bewerten(platz, imZiel, beste, zielzeit)` → 0–3; Zielzeit = `zielRundenzeit` der (ggf. skalierten) Strecke, bei Tempo „schnell“ × 0,9. Summe je Fahrername in `localStorage` `rennspiel.sterne.v1` (try/catch, Rückfall im Speicher); `rennenFertig` liefert `zeile.sterne/sterneGesamt`.
+
+**Reifen** (`carBuilder.js radGeometrie(r, w, zoll, felgeFarbe, slick)`): Flanke + Lauffläche mit Rillen und Querblöcken, 3D-Felge, Bremsscheibe; roter Sattel fest in der Karosserie (`bremssattel()`); Cache je Radgröße+slick; Limit ≤ 600 Dreiecke je Rad (Slick ≤ 400), geprüft in `test_autos.js`.
+
+**Neue Einstellungsfelder** (`spiel.einstellungen`, Standard/Prüfung in `main.js einstellungenPruefen`): `rempeln` ('sanft'|'echt'), `tageszeit` ('tag'|'daemmerung'|'nacht'), `variante` ('' = Normal | Name aus `varianten`), dazu `tempoKlasse`, `polizei` (Runde 5). Menü: Pillen „🌀 Rempeln“ (rechts), „🌗 Tageszeit“ (links unten), Zeile „📏 Variante“.
+**Neue Katalogfelder**: `varianten`, `welten.alles`; Dino-/Wald-Ausbau (W2-C, laut VERLAUF noch in Arbeit, Details im Code prüfen): `tiere: [{ art: 'reh'|'baer', s, von, intervall, tempo }]` (Wald, Schicht `dinos`, `config.tiere`), Dino-Strecke zusätzlich `meteoriten`, `flugsaurier`, `vulkan` (`config.dino`).
+
+## Testdateien (`tests/`)
+Node (`node tests/<datei>`): `lade.js` lädt die Script-Dateien ohne Three.js für die Tests · `test_autos.js` Auto-Katalog, Werte, Rad-Dreiecke, Multivan bronze · `test_dynamik.js` Bälle + Wasserstrahl · `test_fahrer.js` Fahrerliste/Computer-Namen · `test_hindernisse.js` Öl, Sand, Ast, Baustelle · `test_ki.js` KI-Fahrer (Mathe, beide Tempo-Klassen) · `test_kleber.js` Kleberstreifen · `test_kollisionen.js` Bande, Auto-Auto (OBB, kein Verschmelzen), Rempeln, Looping-Abstand · `test_looping.js` Looping · `test_physik.js` Fahrphysik inkl. Gras/Sand-Deckel · `test_pickups.js` Turbo + Schild · `test_polizei.js` Polizei-Logik · `test_rundenzeit.js` KI-Rundenzeiten aller Strecken, auch XL · `test_schaden.js` Schaden-System · `test_schanze.js` Schanzen · `test_startboost.js` Start-Boost + Sterne · `test_strecke.js` Strecken, Welten, Varianten, Regeln · `test_welten_ki.js` KI in allen Strecken × Welten × 7 Stufen (auch Rempeln, XL) · `test_wetter.js` Jahreszeit/Wetter/Wind/Tageszeit · `zaun_test.js` Zaun dicht, Pflanzen-Kollider.
+Python/Playwright (`python3 tests/<datei>`): `audio_test.py` Ton · `autos_screenshot.py` Auto-Vorschaubilder · `fahrbarkeit_test.py` Fahrbarkeit mit echter Tastatur · `interpolation_test.py` Ruckeln des Auto-Meshes · `leistung_test.py` fps/Draw-Calls · `menu_test.py` Menü und Modi · `polizei_test.py` Polizei im Browser · `rempeln_test.py` Rempeln „echt“ im Rennen · `rennen_test.py` ganzes Rennen im Schnellvorlauf · `schaden_screenshot.py` Wracks/Brand/Schaden-Bilder · `screenshot_test.py <strecke>` Strecke starten + Bild · `startboost_test.py` Start-Boost im echten Spiel · `stunt_screenshot.py` Schanzen/Turbo/Schild-Bilder · `tageszeit_screenshot.py` Tag/Dämmerung/Nacht (Referenz `tageszeit_tag_referenz.json`) · `welten_test.py` alle Strecken × Welten mit Schaden/Regen/Wind · `wetter_screenshot.py` Wetter-Bilder · `xl_screenshot.py` XL-Varianten. Hilfsdaten: `tests/bauplan/`, `tests/out/` (Ausgaben), `leistung_vorher.json`, `autos_vorschau.html`.
+
+## Versionen
+Nach jeder Welle wird der Stand gesichert UND spielbar abgelegt: `Spiele/Autorennen-Versionen/vN_…/` (jeder Ordner mit eigener `Autorennen.html`). Neue Versionen immer in neue Ordner (iCloud-Platzhalter lassen sich vom Container aus nicht überschreiben). Zwischenstände während der Arbeit: `versionen_r6/` und `Autorennen-Sicherung/`.
 
 ## Übertragung vom Entwicklungs-Container auf den Mac
 Paket `_hilfsdateien/uebertragung_<Zeit>.tgz` (immer neuer Name), auf dem Mac entpacken mit `tar xzf … --overwrite`, MD5 vergleichen.

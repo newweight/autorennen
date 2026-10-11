@@ -6,6 +6,7 @@
 - Doppelklick auf **„🚗 Autorennen starten"** (im Ordner Spiele) – öffnet das Spiel in Chrome.
 - Geht das nicht: Doppelklick auf `Autorennen/Autorennen starten.command` oder `Autorennen/Autorennen.html`.
 - Taste **F** = Vollbild (empfohlen). Kein Internet nötig.
+- **Versionen:** Jeder Spielstand liegt spielbar in `Spiele/Autorennen-Versionen/vN_…/` (jeder Ordner hat seine eigene `Autorennen.html`). Der Starter **„NEUESTE“** öffnet die neueste Version; ältere bleiben unverändert spielbar.
 
 ## Steuerung
 | | Gas | Bremse / Rückwärts | Lenken | Zurück auf die Strecke |
@@ -19,17 +20,18 @@ Bei der Fahrer- und Autowahl bewegt Spieler 1 mit den Pfeilen, Spieler 2 mit WAS
 
 ## Menü (5 Schritte)
 1. **Modus**: Allein gegen Computer oder Zu zweit (geteilter Bildschirm: links Spieler 1, rechts Spieler 2)
-2. **Strecke** (+ **Welt**): 5 Strecken, jede mit Schwierigkeits-Pille (leicht / mittel / schnell / spaß). Darunter wählst du die **Welt** (←→ Strecke, ↑↓ Welt; Pillen anklicken geht auch):
+2. **Strecke** (+ **Welt**): 5 Strecken, jede mit Schwierigkeits-Pille (leicht / mittel / schnell / spaß). Darunter wählst du die **Welt** (←→ Strecke, ↑↓ Welt; Pillen anklicken geht auch). Bei Wüste und Fantasie steht darunter die Zeile **📏 Variante** (Taste **V**, siehe unten):
    - **Wiese** (leicht): Hügel, lange Start-Gerade, Steinbrücke über den Teich
-   - **Wald** (mittel): viele Kurven, steil rauf und runter, Felstunnel, Baumtunnel, Holzbrücke
+   - **Wald** (mittel): viele Kurven, steil rauf und runter, Felstunnel, Baumtunnel, Holzbrücke; **Rehe und Bären** laufen über die Straße (ab Welt Hindernisse)
    - **Wüste** (schnell): lange Geraden, Tunnel unter der großen Düne, Brücke über die Schlucht
    - **Fantasie** (spaß, lila Karte): kurze Zauberland-Strecke mit 2 Loopings, Bällen und Wasserstrahl (siehe unten)
    - **Dino** (mittel): Urwald mit Vulkan, Baumstamm-Brücke über den Sumpf, Dino-Höhle und **laufenden Dinos** (ab Welt Hindernisse: Treffer −60 % Tempo, „Dino! 🦕“) und rollenden Felsbrocken
 3. **Fahrer**: Jeder Spieler wählt einen Namen: Emmy 🦁, Sara, Jonas 🐯, Kerle, Opa, Oma, Elki, Basti, Schumacher, Senna, Verstappen oder Röhrl (Karte mit Emoji). Zwei Spieler können nicht denselben Fahrer wählen. Der Name erscheint im Rennen und in der Ergebnistafel; die Computer-Gegner heißen wie die nicht gewählten Fahrer (zuerst Schumacher, Senna, Verstappen, Röhrl), z. B. „🤖 Senna“.
-4. **Auto**: 9 Autos als echte 3D-Modelle – VW T-Roc Cabrio, VW Multivan 6.1, VW Passat B8, Porsche 911, BMW M4, Mercedes-AMG GT, Audi RS6 Avant, Mini Cooper und der **Formel-Renner** (das schnellste Auto, extrem viel Haftung). Der Streifenwagen ist nicht wählbar.
+4. **Auto**: 9 Autos als echte 3D-Modelle mit neuen, detaillierten **Reifen** (Profilrillen, Felgen mit Speichen, Bremsscheibe und rotem Sattel; der Formel-Renner hat glatte Slicks) – VW T-Roc Cabrio, VW Multivan 6.1 (jetzt **bronze** mit cremeweißem Dach), VW Passat B8, Porsche 911, BMW M4, Mercedes-AMG GT, Audi RS6 Avant, Mini Cooper und der **Formel-Renner** (das schnellste Auto, extrem viel Haftung). Der Streifenwagen ist nicht wählbar.
    Das gewählte Auto steht groß auf der Bühne und dreht sich langsam von selbst. **Drehen:** Spieler 1 mit **,** und **.**, Spieler 2 mit **Q** und **E**, oder mit der **Maus ziehen**. Die Pfeile/WASD wechseln das Auto.
 5. **Los!** (zwei Spalten, passt ohne Scrollen): links **Rennen** – Runden (1–10), Computer-Gegner (0–**10**), Computer-Stärke, Fahrhilfe je Spieler (aus / wenig / viel);
-   rechts **Welt & Wetter** – Jahreszeit, Wetter, Wind (0–5 oder 🎲), Schaden (aus / an), **Tempo** (Normal / Schnell) und **Polizei** (aus / an). Der Knopf „🎮 Steuerung“ klappt die Tastenübersicht auf.
+   links unten **🌗 Tageszeit** (Tag / Dämmerung / Nacht);
+   rechts **Welt & Wetter** – Jahreszeit, Wetter, Wind (0–5 oder 🎲), Schaden (aus / an), **Tempo** (Normal / Schnell), **Polizei** (aus / an) und **🌀 Rempeln** (Sanft / Echt). Der Knopf „🎮 Steuerung“ klappt die Tastenübersicht auf.
 
 ### Welten (Schritt 2)
 Jede Strecke hat Welten – die Streckenform bleibt, die Welt schaltet Dinge dazu. Die **Standard-Welt** ist markiert und gilt, solange du nichts wählst; beim Wechsel der Strecke springt die Auswahl zurück auf Standard.
@@ -37,7 +39,23 @@ Jede Strecke hat Welten – die Streckenform bleibt, die Welt schaltet Dinge daz
 - **Hindernisse** (Wald- und Wüste-Standard): Öl, Sand, Baustellen, Äste, liegengebliebene und brennende Autos, rollende Strohballen (Strohballen nur Wiese/Wald).
 - **Stunt**: dazu **Sprungschanzen** und Straßenstücke mit **1 Spur** (eng, Leitplanke) oder **3 Spuren** (breit).
 - **Verrückt**: dazu Bälle, Wasserfontänen, **Turbo-Felder** und **Schutzschilde**.
-- **Fantasie-Strecke**: nur zwei Welten – **Fantasie** (Loopings, Bälle, Wasserstrahl; Standard) und **Verrückt** (dazu Turbo-Felder, Schutzschilde, Strohballen).
+- **🎪 Alles** (letzte Welt jeder Strecke): **alle Hindernisarten zugleich** – dazu Schanzen, Spuren, Bälle, Wasser, Turbo und Schilde (Fantasie: auch Loopings und Kleber; Dino: auch die Dinos). Die Polizei bleibt ein eigener Schalter.
+- **Fantasie-Strecke**: nur drei Welten – **Fantasie** (Loopings, Bälle, Wasserstrahl; Standard), **Verrückt** (dazu Turbo-Felder, Schutzschilde, Strohballen) und **Alles**.
+
+### Variante XL (Schritt 2, nur Wüste und Fantasie)
+Zeile **📏 Variante**: **Normal** (Standard) oder **XL** (Taste **V** schaltet um). **Wüste XL** ist 1,6-mal so lang (ca. 5.300 m, rund 3 Minuten pro Runde), **Fantasie XL** doppelt so lang (ca. 2.800 m) – gleiche Loopings, längere Geraden. Beim Streckenwechsel springt die Variante auf Normal.
+
+### Tageszeit (Schritt 5, Standard Tag)
+**☀️ Tag**, **🌇 Dämmerung** (tiefe orange Sonne, Scheinwerfer an) oder **🌙 Nacht** (Mond und Sterne, dunkel; Scheinwerfer leuchten, auf Wiese und Wald stehen **Straßenlaternen** am Rand). Geht auf allen Strecken und mit jedem Wetter. Das HUD zeigt 🌇 bzw. 🌙 vor dem Wetter-Symbol.
+
+### Rempeln (Schritt 5, Standard Sanft)
+- **Sanft**: Autos prallen nur voneinander ab (wie bisher).
+- **Echt**: Wer seitlich oder schräg getroffen wird, **dreht sich** („Dreher! 🌀") oder wird **von der Bahn gestoßen**; bei flachem Winkel schieben sich die Autos nebeneinander. Schwere Autos (Multivan) schieben leichte (Mini) stärker. Die Computer-Gegner ab Stufe **profi** rempeln dann auch gezielt. Mit **Schaden an** kostet eine Drehung zusätzlich 3 %.
+- In beiden Einstellungen können Autos **nicht mehr ineinander stecken** – auch im Looping fahren zwei Autos nie übereinander durch dasselbe Stück.
+
+### Start-Boost und Sterne
+- **Start-Boost**: Gas **genau bei „LOS"** drücken (0,25 s davor bis 0,15 s danach) → **1,5 s Turbo** („Startboost! 🚀"). **Zu früh gedrückt** und bis „LOS" gehalten → „Zu früh! 🐢", das Gas ist 1 s gesperrt. Also: erst loslassen, dann im richtigen Moment neu drücken. Später drücken = normaler Start. Die Computer-Gegner schaffen ihn je nach Stärke manchmal (leicht selten, unschlagbar fast immer).
+- **Sterne ⭐**: nach jedem Rennen gibt es 1–3 Sterne: **3** = Platz 1, **2** = Platz 2–3 *oder* eine Runde schneller als die Zielzeit der Strecke, **1** = angekommen. Sie stehen in der Ergebnistafel hinter dem Namen; die **Summe** steht im Fahrer-Menü an der Karte ("⭐ 7") und wird auf diesem Computer gemerkt.
 
 ### Jahreszeit, Wetter, Wind (Schritt 5)
 - **Jahreszeit**: Sommer (Standard), Frühling, Herbst, Winter oder 🎲 Zufall – ändert Farben, Licht und Bäume (Frühling Blüten, Herbst bunte Blätter und Nebel, Winter Schnee). In der **Wüste** gibt es statt Winter die **Sandsturm-Zeit** (kein Schnee).
@@ -47,7 +65,7 @@ Jede Strecke hat Welten – die Streckenform bleibt, die Welt schaltet Dinge daz
 - Standard ist wie früher: Sommer, klar, kein Wind.
 
 ### Schaden (Schritt 5, Standard aus)
-Mit **Schaden an** zeigt das HUD einen **Gesundheitsbalken**. Jeder Treffer (Zaun, Auto, Hindernis) kostet **5 %**, ein brennendes Auto **10 %**. **Je 20 %** Verlust wird das Auto **etwas langsamer** (Höchsttempo, Beschleunigung, Grip); unter 40 % raucht es, unter 20 % qualmt und blinkt es. Bei **0 %** bleibt es liegen (5 s, Warnblinker), dann kommt der **Abschleppwagen** und setzt es mit **60 %** zurück an den letzten Checkpoint. Für die Computer-Autos gilt dasselbe.
+Mit **Schaden an** zeigt das HUD einen **Gesundheitsbalken**. Jeder Treffer (Auto, Hindernis) kostet **5 %**, ein brennendes Auto **10 %**; **Zaun und Bäume/Felsen** am Rand kosten **3 %** (und bremsen). Ein Auto-Treffer zählt schon ab kleinem Tempounterschied (1 m/s). **Je 20 %** Verlust wird das Auto **etwas langsamer** (Höchsttempo, Beschleunigung, Grip); unter 40 % raucht es, unter 20 % qualmt und blinkt es. Bei **0 %** bleibt es liegen (5 s, Warnblinker), dann kommt der **Abschleppwagen** und setzt es mit **60 %** zurück an den letzten Checkpoint. Für die Computer-Autos gilt dasselbe.
 
 **Computer-Stärke (7 Stufen):** leicht · mittel · schwer · profi · meister · legende · 💀 unschlagbar (fährt die Ideallinie ohne Fehler – kaum zu schlagen).
 
@@ -84,8 +102,9 @@ In **Schnell** fahren die Autos **220 bis 270 km/h** (Multivan 220 … Porsche 2
 
 ## Tipps
 - Eine Runde dauert ungefähr 2 Minuten (Fantasie kürzer). Für Kleine: 1–2 Runden, Fahrhilfe „viel", Computer „leicht".
-- Abseits der Straße (Gras, Sand) ist das Auto langsam – zurück auf die Straße fahren oder **R** drücken.
-- Der Zaun hält das Auto auf der Strecke. Zusammenstöße bremsen nur – es sei denn, du schaltest **Schaden** an.
+- **Abseits bremst stärker:** auf Gras höchstens ca. **60 km/h**, auf Sand ca. **50 km/h** (der Randstreifen direkt neben der Straße bleibt mild, der Übergang ist weich). Also zurück auf die Straße fahren oder **R** drücken.
+- Der Zaun hält das Auto auf der Strecke und bremst es. **Bäume, Tannen, Felsen, Kakteen, Palmen** zwischen Straße und Zaun sind **fest** (Stopp; mit Schaden an −3 %), **Büsche, Farne, Pilze, Heuballen** sind **weich** (bremsen nur auf 70 %).
+- Zusammenstöße bremsen nur – es sei denn, du schaltest **Schaden** an.
 - Die Computer-Autos fahren fair: Wer hinten liegt, holt etwas auf; wer vorne liegt, wird gebremst („Gummiband"). Nur „unschlagbar" bekommt kein Gummiband nach vorne.
 - Taste **H** zeigt die Leistung (fps, ms je Frame) – siehe „Bei Problemen".
 

@@ -121,6 +121,7 @@
     zeilen() {
       const z = ['runden', 'gegner', 'schwierigkeit', 'hilfe0'];
       if (this.zwei) z.push('hilfe1');
+      z.push('tageszeit');      // Runde 6 (W2-D): unten in der linken Spalte (rechts ist kein Platz mehr)
       z.push('jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'rempeln', 'start');   // Runde 5: Tempo-Klasse, 5b: Polizei, 6: Rempeln
       return z;
     }
@@ -139,6 +140,34 @@
         k, info: info[k] || { name: k, emoji: '🌍', beschreibung: '' }, standard: k === d.weltStandard,
       }));
     }
+    // ---------- Runde 6 (W2-E): Streckenvariante (Normal / XL), Taste V ----------
+    /** Varianten der Strecke: [{ k, name, beschreibung }] – Normal ('' ) zuerst; leer, wenn die Strecke keine hat. */
+    varianteListe(id) {
+      const d = this.streckeDaten(id), v = d.varianten || {};
+      const ks = Object.keys(v);
+      if (!ks.length) return [];
+      return [{ k: '', name: 'Normal', beschreibung: 'Die Strecke in der gewohnten Länge.' }]
+        .concat(ks.map((k) => ({ k, name: v[k].name || k, beschreibung: v[k].beschreibung || '' })));
+    }
+    /** Gültige Variante der gewählten Strecke: Name oder '' (= Normal). */
+    varianteGueltig() {
+      const d = this.streckeDaten(), v = this.e.variante;
+      return v && d.varianten && d.varianten[v] ? v : '';
+    }
+    varianteSetzen(k) {
+      this.e.variante = k;
+      this.varianteFix();
+      this.hintergrundNeu();
+    }
+    varianteFix() { this.e.variante = this.varianteGueltig(); }
+    /** Variante um eins weiterschalten (Taste V): Normal → XL → Normal. */
+    varianteBewegen() {
+      const l = this.varianteListe();
+      if (!l.length) return;
+      const i = Math.max(0, l.findIndex((x) => x.k === this.varianteGueltig()));
+      this.varianteSetzen(l[(i + 1) % l.length].k);
+    }
+
     /** Jahreszeit-Pillen für das Thema der Strecke (Wüste: Winter = Sandsturm-Zeit). */
     jahreszeitListe() {
       const thema = this.streckeDaten().thema, J = R.config.jahreszeiten || {};
@@ -163,6 +192,7 @@
     weltFix() {
       const e = this.e;
       e.welt = this.weltGueltig();
+      e.variante = this.varianteGueltig();
       if (!this.jahreszeitListe().some((x) => x.k === e.jahreszeit)) e.jahreszeit = 'sommer';
       if (!this.wetterListe().some((x) => x.k === e.wetter)) e.wetter = 'klar';
     }
@@ -176,7 +206,7 @@
     }
     /** Streckenwechsel: Welt zurück auf Standard, Wetter prüfen. */
     streckeWaehlen(id) {
-      if (this.e.streckeId !== id) { this.e.streckeId = id; this.e.welt = ''; this.weltFix(); }
+      if (this.e.streckeId !== id) { this.e.streckeId = id; this.e.welt = ''; this.e.variante = ''; this.weltFix(); }
       this.spiel.menueHintergrund(id);
     }
     /** Welt der Strecke um `d` weiterschalten (Tastatur ↑↓). */
@@ -213,6 +243,11 @@
       if (id === 'auto' && DREH_TASTEN[code] && R.AutoVorschau) {
         const [sp, r] = DREH_TASTEN[code];
         R.AutoVorschau.drehen(this.zwei ? sp : 0, r);
+        return true;
+      }
+      if (id === 'strecke' && code === 'KeyV' && this.varianteListe().length) {   // Runde 6: Variante Normal/XL
+        this.varianteBewegen();
+        this.aenderung();
         return true;
       }
       const rich = richtung(code);
@@ -296,6 +331,9 @@
         if (dx) e.tempoKlasse = dx > 0 ? 'schnell' : 'normal';
       } else if (zeile === 'polizei') {
         if (dx) e.polizei = dx > 0;
+      } else if (zeile === 'tageszeit') {      // Runde 6 (W2-D): Tag → Dämmerung → Nacht
+        const l = Object.keys(R.config.tageszeit || { tag: 1 }), i = l.indexOf(e.tageszeit || 'tag');
+        this.wertSetzen('tageszeit', l[klemme((i < 0 ? 0 : i) + dx, 0, l.length - 1)]);
       } else if (zeile === 'rempeln') {
         if (dx) e.rempeln = dx > 0 ? 'echt' : 'sanft';
       }
@@ -313,6 +351,7 @@
       else if (zeile === 'tempo' && R.config.tempoKlassen[k]) e.tempoKlasse = k;
       else if (zeile === 'polizei') e.polizei = k === 'an';
       else if (zeile === 'rempeln') e.rempeln = k === 'echt' ? 'echt' : 'sanft';
+      else if (zeile === 'tageszeit') { if (R.config.tageszeit && R.config.tageszeit[k] && e.tageszeit !== k) { e.tageszeit = k; this.hintergrundNeu(); } }
     }
 
     weiter() {
@@ -335,6 +374,7 @@
       else if (art === 'modus') { e.modus = p1; this.einstellungenFix(); this.schritt = 1; }
       else if (art === 'strecke') this.streckeWaehlen(p1);     // bleibt im Schritt: darunter die Welt wählen, dann „Weiter“
       else if (art === 'welt') this.weltSetzen(p1);
+      else if (art === 'variante') this.varianteSetzen(p1);
       else if (art === 'tafel') this.tafelOffen = !this.tafelOffen;
       else if (art === 'auto') e.autoIds[+p1] = p2;
       else if (art === 'fahrer') {
@@ -435,7 +475,7 @@
           `<div class="strecken-bild" style="background:linear-gradient(180deg,${himmel} 0%,${himmel} 35%,${f[0]} 35%,${f[1]} 100%)">` +
           `<div class="strasse"></div>${pille}</div>` +
           `<div class="karten-name">${s.name}</div><div class="karten-sub">${s.beschreibung}</div>${hinweis}</div>`;
-      }).join('') + `</div>` + this.htmlWelt();
+      }).join('') + `</div>` + this.htmlWelt() + this.htmlVariante();
     }
 
     /** Runde 4: Zeile „Welt“ unter den Strecken-Karten (Pillen je Strecke, eine Zeile Erklärung). */
@@ -448,6 +488,18 @@
         `${w.info.emoji} ${w.info.name}${w.standard ? ' <small>Standard</small>' : ''}</span>`).join('');
       return `<div class="m-welt"><div class="z-label">🌍 Welt</div><div class="z-wert">${pillen}</div>` +
         `<div class="welt-text"><b>${a.info.emoji} ${a.info.name}${a.standard && !this.weltGueltig() ? ' (Standard)' : ''}:</b> ${a.info.beschreibung}</div></div>`;
+    }
+
+    /** Runde 6 (W2-E): Zeile „Variante“ unter der Welt-Zeile – nur bei Strecken mit `varianten` (Wüste, Fantasie). */
+    htmlVariante() {
+      const liste = this.varianteListe();
+      if (!liste.length) return '';
+      const akt = this.varianteGueltig(), a = liste.find((x) => x.k === akt) || liste[0];
+      const pillen = liste.map((x) =>
+        `<span class="pille variante${x.k === a.k ? ' aktiv' : ''}" data-a="variante:${x.k}" title="${x.beschreibung}">` +
+        `${x.k ? '📏 ' : ''}${x.name}</span>`).join('');
+      return `<div class="m-variante"><div class="z-label">📏 Variante <small>(Taste V)</small></div><div class="z-wert">${pillen}</div>` +
+        `<div class="welt-text"><b>${a.name}:</b> ${a.beschreibung}</div></div>`;
     }
 
     htmlFahrer() {
@@ -530,6 +582,10 @@
         pillen('schwierigkeit', '🎚️', 'Computer-Stärke', cfg.schwierigkeiten, e.schwierigkeit) +
         pillen('hilfe0', '🛟', name1, cfg.fahrhilfen, e.fahrhilfe[0]);
       if (this.zwei) links += pillen('hilfe1', '🛟', 'Fahrhilfe ' + e.fahrer[1], cfg.fahrhilfen, e.fahrhilfe[1]);
+      // Runde 6 (W2-D): Tageszeit (alle Strecken) – Dämmerung: Licht an, Nacht: Mond, Sterne, Scheinwerfer, Laternen
+      links += pillenL('tageszeit', '🌗', 'Tageszeit', [{ k: 'tag', text: '☀️ Tag' }, { k: 'daemmerung', text: '🌇 Dämmerung' }, { k: 'nacht', text: '🌙 Nacht' }],
+        e.tageszeit || 'tag', 'Dämmerung: tiefe Sonne, Licht an – Nacht: Mond, Sterne, Scheinwerfer und Laternen')
+        .replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele');
       const windZahl = e.windStaerke === 'zufall' ? '🎲' : e.windStaerke;
       const windExtra = e.windStaerke === 0 ? 'aus' : (e.windStaerke === 'zufall' ? '' : '💨');
       const wind =

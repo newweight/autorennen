@@ -114,6 +114,57 @@ const nah = (a, b, e) => Math.abs(a - b) < (e || 1e-9);
     s.sichtweiteFaktor === 1 && s.sonnenHoehe === null && s.lichtFaktor === 1);
   pruefe('Mischfarbe: 0x000000 ↔ 0xffffff zur Hälfte = 0x808080', W.mischHex(0, 0xffffff, 0.5) === 0x808080);
 }
+// 8) Runde 6 (W2-D): Tageszeit – Daten, Standard Tag = Lichtwerte identisch, Dämmerung/Nacht-Werte
+{
+  const RT = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/world/wetter.js', 'src/world/themes.js']);
+  const WT = RT.Wetter, CT = RT.config;
+  pruefe('Config: Standard tag, Tag ohne Lichtwerte', CT.tageszeitStandard === 'tag' && !CT.tageszeit.tag.sonne && !CT.tageszeit.tag.himmel);
+  pruefe('tageszeitDaten(tag) = null, Unbekanntes = null', WT.tageszeitDaten('wiese', 'tag') === null && WT.tageszeitDaten('wiese', 'mittag') === null);
+  pruefe('tageszeitName: Unbekanntes/fehlend → tag', WT.tageszeitName(undefined) === 'tag' && WT.tageszeitName('quatsch') === 'tag' && WT.tageszeitName('nacht') === 'nacht');
+  const d = WT.tageszeitDaten('wiese', 'daemmerung'), n = WT.tageszeitDaten('wald', 'nacht');
+  pruefe('Dämmerung: Sonne orange 0,7, tief (≤ 15°), Autolicht an, keine echten Scheinwerfer', d.sonne.intensitaet === 0.7 && d.sonne.hoehe <= 15 &&
+    ((d.sonne.farbe >> 16) & 255) === 255 && d.autoLicht === true && !d.echteScheinwerfer);
+  pruefe('Dämmerung: Himmel oben violett (B > R), Horizont orange (R > B)', (d.himmel[0] & 255) > (d.himmel[0] >> 16) && (d.himmel[2] >> 16) > (d.himmel[2] & 255));
+  pruefe('Nacht: Halbkugel 0,25 kühl-blau, Sterne, Mond, echte Scheinwerfer, Laternen', n.halbkugel.intensitaet === 0.25 && (n.halbkugel.himmel & 255) > (n.halbkugel.himmel >> 16) &&
+    n.sterne > 0 && n.mond && n.echteScheinwerfer && n.laternen && n.laterne.abstand === 60 && n.laterne.punktlichter <= 3);
+  const wn = WT.tageszeitDaten('wueste', 'nacht'), wd = WT.tageszeitDaten('wueste', 'daemmerung'), fn = WT.tageszeitDaten('fantasie', 'nacht');
+  pruefe('Wüste Nacht kalt-blau (Ausnahme eingemischt, Rest wie Nacht)', (wn.nebel & 255) > (wn.nebel >> 16) && wn.himmel !== n.himmel && wn.sterne === n.sterne && wn.sonne.intensitaet === n.sonne.intensitaet);
+  pruefe('Wüste Dämmerung tiefrot (Horizont R ≫ G)', ((wd.himmel[2] >> 16) & 255) > 2 * ((wd.himmel[2] >> 8) & 255) && wd.sonne.intensitaet === 0.7);
+  pruefe('Fantasie Nacht lila (R und B > G), Ballons leuchten', ((fn.himmel[2] >> 16) & 255) > ((fn.himmel[2] >> 8) & 255) && (fn.himmel[2] & 255) > ((fn.himmel[2] >> 8) & 255) && fn.ballonsLeuchten);
+  pruefe('Laternen-Themen: Wiese + Wald ja, Wüste/Fantasie/Dino nein', RT.themes.wiese.laternen && RT.themes.wald.laternen && !RT.themes.wueste.laternen && !RT.themes.fantasie.laternen && !RT.themes.dino.laternen);
+  // Licht-Attrappen (ohne THREE): Farbe, Vektor
+  const farbe = (h) => ({ h, setHex(x) { this.h = x; }, getHex() { return this.h; } });
+  const vek = (x, y, z) => ({ x, y, z, clone() { return vek(this.x, this.y, this.z); }, copy(v) { this.x = v.x; this.y = v.y; this.z = v.z; return this; },
+    set(a, b, c) { this.x = a; this.y = b; this.z = c; return this; }, length() { return Math.hypot(this.x, this.y, this.z); },
+    normalize() { const l = this.length(); this.x /= l; this.y /= l; this.z /= l; return this; } });
+  const licht = (th) => ({ sonne: { color: farbe(th.sonnenFarbe), intensity: th.sonnenIntensitaet, position: vek(120, 180, 60), userData: {} },
+    halbkugel: { color: farbe(th.lichtHimmel), groundColor: farbe(th.lichtBoden), intensity: 0.9 } });
+  const werte = (l, e) => JSON.stringify([l.sonne.color.h, l.sonne.intensity, l.sonne.position.x, l.sonne.position.y, l.sonne.position.z,
+    l.halbkugel.color.h, l.halbkugel.groundColor.h, l.halbkugel.intensity, e.sicht, e.nebelNah]);
+  let gleich = 0, alle = 0, abw = '';
+  ['wiese', 'wald', 'wueste', 'fantasie', 'dino'].forEach((t) => ['fruehling', 'sommer', 'herbst', 'winter'].forEach((jz) => WT.erlaubt(t, jz).forEach((wt) => {
+    const th = RT.themes[t], l0 = licht(th), l1 = licht(th);
+    const e0 = new WT(null, { thema: t, jahreszeit: jz, wetter: wt, seed: 5 }).anwenden(th, l0);
+    const e1 = new WT(null, { thema: t, jahreszeit: jz, wetter: wt, seed: 5, tageszeit: 'tag' }).anwenden(th, l1);
+    alle++; if (werte(l0, e0) === werte(l1, e1)) gleich++; else abw = t + '/' + jz + '/' + wt;
+  })));
+  pruefe('Tag: Licht/Sonnenstand/Sicht für alle Themen × Jahreszeiten × Wetter identisch mit „ohne Tageszeit"', gleich === alle && alle > 30, gleich + '/' + alle + ' ' + abw);
+  // Dämmerung/Nacht: angewandte Werte (Sommer klar → Faktor 1)
+  const th = RT.themes.wiese, lD = licht(th), lN = licht(th);
+  const wD = new WT(null, { thema: 'wiese', tageszeit: 'daemmerung' }), wN = new WT(null, { thema: 'wiese', tageszeit: 'nacht' });
+  const eD = wD.anwenden(th, lD), eN = wN.anwenden(th, lN);
+  const hoehe = (p) => Math.asin(p.y / p.length()) * 180 / Math.PI;
+  pruefe('Dämmerung angewandt: Sonne 0,7 orange, Höhe = Config, Halbkugel wärmer/dunkler als Tag', nah(lD.sonne.intensity, 0.7) && lD.sonne.color.h === d.sonne.farbe &&
+    nah(hoehe(lD.sonne.position), d.sonne.hoehe, 1e-6) && lD.halbkugel.intensity < 0.9 && lD.halbkugel.color.h === d.halbkugel.himmel, lD.halbkugel.intensity);
+  pruefe('Nacht angewandt: Halbkugel 0,25, Mondlicht schwach (≤ 0,2), Sicht kürzer', nah(lN.halbkugel.intensity, 0.25) && lN.sonne.intensity <= 0.2 && eN.sicht < eD.sicht);
+  pruefe('Emoji: Nacht 🌙, Dämmerung 🌇, Tag leer; nacht-Flag', wN.tageszeitEmoji === '🌙' && wD.tageszeitEmoji === '🌇' && new WT(null, {}).tageszeitEmoji === '' && wN.nacht && !wD.nacht);
+  // Nacht + Regen: Lichtfaktor des Wetters wirkt mit, Regen-Grau wird abgedunkelt
+  const lR = licht(th), wR = new WT(null, { thema: 'wiese', wetter: 'regen', tageszeit: 'nacht' });
+  wR.anwenden(th, lR);
+  const dm = wR._dunkelMisch(CT.wetter.regen.himmelMisch);
+  pruefe('Nacht + Regen: Halbkugel 0,25 × 0,7, Regen-Mischfarbe dunkel (Anteil gleich)', nah(lR.halbkugel.intensity, 0.25 * 0.7) && dm[1] === CT.wetter.regen.himmelMisch[1] &&
+    ((dm[0] >> 16) & 255) < 0.3 * ((CT.wetter.regen.himmelMisch[0] >> 16) & 255), dm[0].toString(16));
+}
 
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');
 process.exit(fehler ? 1 : 0);

@@ -11,6 +11,7 @@
 //   schadenTreffer(stufe) liegengeblieben() abschleppen()   (Runde 4, Schaden-System)
 //   wetter('regen'|'hagel'|'schnee'|'wind', an, staerke 0..1) / wetterAlleAus()   (Runde 4, Dauer-Geräusche)
 //   sirene(an, laut 0..1) / polizeiStopp()   (Runde 5b, Polizei: Dauer-Sirene „Tatü-tata" + Signal beim Anhalten)
+//   dinoBruellen(laut, art) grollen(dauer) pfeifen(dauer, laut) einschlag(laut) flugsaurierSchrei(laut) baerBrummen(laut)  (Runde 6, W2-C)  rehRuf(laut) (W2-C2)
 //   statistik()                   Zähler (aktive Nodes usw.) für Tests
 //
 // Aufbau: Motor-Stimmen (Sägezahn + Rechteck → Tiefpass) liegen in einem festen
@@ -613,6 +614,62 @@
     this._ton(500, 1100, 0.32, 'sawtooth', 0.08, 0);
     this._ton(500, 1100, 0.32, 'sawtooth', 0.08, 0.36);
     this._ton(370, 370, 0.25, 'square', 0.07, 0.8);
+  };
+
+  // ---------- Runde 6 (W2-C): Dino-Welt + Wald – laut 0..1 (Abstand zum Spieler, main.js) ----------
+  const laut01 = (l) => klemme(l === undefined ? 1 : +l, 0, 1);
+  /** Dino brüllt: tiefes, raues Grollen mit Rauschen (Langhals noch tiefer). */
+  Ton.prototype.dinoBruellen = function (laut, art) {
+    if (!this._bereit()) return;
+    const l = laut01(laut), f = art === 'langhals' ? 0.7 : 1;
+    this._ton(150 * f, 62 * f, 1.15, 'sawtooth', 0.16 * l, 0);
+    this._ton(105 * f, 55 * f, 1.0, 'square', 0.07 * l, 0.05);
+    this._stoss(1.05, 0.38 * l, 'lowpass', 900, 160, 2, 0);
+  };
+  /** Vulkan grollt (dauer s): tiefes Rumpeln mit Wellen. */
+  Ton.prototype.grollen = function (dauer) {
+    if (!this._bereit()) return;
+    const d = Math.max(0.5, +dauer || 3);
+    this._stoss(d, 0.55, 'lowpass', 180, 70, 1, 0);
+    this._ton(48, 32, d, 'sine', 0.5, 0);
+    for (let k = 0; k < 3; k++) this._stoss(0.6, 0.35, 'lowpass', 260, 90, 1.5, k * d / 3);
+  };
+  /** Pfeifen (fallende Bombe/Meteor): hoch → tief über dauer s. */
+  Ton.prototype.pfeifen = function (dauer, laut) {
+    if (!this._bereit()) return;
+    const d = Math.max(0.3, +dauer || 2), l = laut01(laut);
+    this._ton(1900, 420, d, 'sine', 0.11 * l, 0);
+    this._ton(1950, 450, d, 'triangle', 0.04 * l, 0);
+  };
+  /** Einschlag: dumpfer Knall mit Nachrollen. */
+  Ton.prototype.einschlag = function (laut) {
+    if (!this._bereit()) return;
+    const l = laut01(laut);
+    this._stoss(1.0, 0.8 * l, 'lowpass', 1600, 70, 0.8, 0);
+    this._ton(95, 28, 0.8, 'sine', 0.9 * l, 0);
+  };
+  /** Flugsaurier-Schrei: kreischend hoch, dann abfallend. */
+  Ton.prototype.flugsaurierSchrei = function (laut) {
+    if (!this._bereit()) return;
+    const l = laut01(laut);
+    this._ton(1200, 2300, 0.16, 'sawtooth', 0.08 * l, 0);
+    this._ton(2200, 850, 0.5, 'sawtooth', 0.08 * l, 0.15);
+    this._stoss(0.5, 0.18 * l, 'bandpass', 2600, 1600, 3, 0.1);
+  };
+  /** Bär brummt (nach einem Zusammenstoß). */
+  Ton.prototype.baerBrummen = function (laut) {
+    if (!this._bereit()) return;
+    const l = laut01(laut);
+    this._ton(118, 78, 0.65, 'sawtooth', 0.14 * l, 0);
+    this._ton(90, 70, 0.6, 'square', 0.05 * l, 0.03);
+  };
+
+  /** W2-C2: Reh ruft (kurzes, helles „Fiep" – bleibt stehen oder wird gestreift). */
+  Ton.prototype.rehRuf = function (laut) {
+    if (!this._bereit()) return;
+    const l = laut01(laut);
+    this._ton(900, 1500, 0.09, 'triangle', 0.09 * l, 0);
+    this._ton(1400, 700, 0.22, 'sine', 0.08 * l, 0.1);
   };
 
   R.AudioKlasse = Ton;

@@ -68,13 +68,59 @@
     return erg;
   }
 
+  /**
+   * Runde 6 (W2-E): Streckenvariante (z. B. 'xl') als skalierte Kopie der Katalogdaten.
+   * Kontrollpunkte (x, z) und Hügel (x, z, r) wachsen um den Schwerpunkt mit `faktor`, y/Hügelhöhe bleiben (flachere Steigung).
+   * ALLE s-Felder (s, s0, s1) aller Listen mitskaliert (Hindernisse, Tunnel, Brücken, Loopings, Bälle, Wasser, Kleber, Schanzen,
+   * Boost, Schilde, Wracks, Strohballen, Spuren, Dinos, Tiere …). Absolut bleiben: Looping-Radius, Schanzenlänge, Anlauf,
+   * checkpointAbstand (→ mehr Checkpoints). zielRundenzeit × zeitFaktor (Standard faktor). Unbekannte Variante → unveränderte Daten.
+   * @returns {object} neue Daten (mit .variante = id), die Originale bleiben unberührt
+   */
+  function varianteAnwenden(daten, varianteId) {
+    const v = varianteId && daten && daten.varianten && daten.varianten[varianteId];
+    if (!v || !(v.faktor > 0)) return daten;
+    const f = v.faktor, pk = daten.punkte;
+    let cx = 0, cz = 0;
+    pk.forEach((p) => { cx += p[0]; cz += p[2]; });
+    cx /= pk.length; cz /= pk.length;
+    const rund = (x) => Math.round(x * 100) / 100;
+    const kopie = Object.assign({}, daten);
+    kopie.punkte = pk.map(p => [rund(cx + (p[0] - cx) * f), p[1], rund(cz + (p[2] - cz) * f)]);
+    kopie.huegel = (daten.huegel || []).map(h => Object.assign({}, h, { x: rund(cx + (h.x - cx) * f), z: rund(cz + (h.z - cz) * f), r: rund(h.r * f) }));
+    Object.keys(daten).forEach((k) => {
+      // W2-C1: auch einzelne Objekte mit s/s0/s1 (z. B. dino berg { s0, s1 }, flugsaurier { s0, s1, intervall }) mitskalieren
+      const o = daten[k];
+      if (k !== 'varianten' && o && typeof o === 'object' && !Array.isArray(o) && ['s', 's0', 's1'].some(sk => typeof o[sk] === 'number')) {
+        const n = Object.assign({}, o);
+        ['s', 's0', 's1'].forEach((sk) => { if (typeof n[sk] === 'number') n[sk] = rund(n[sk] * f); });
+        kopie[k] = n;
+        return;
+      }
+      if (k === 'punkte' || k === 'huegel' || k === 'varianten' || !Array.isArray(daten[k])) return;
+      kopie[k] = daten[k].map((e) => {
+        if (!e || typeof e !== 'object' || Array.isArray(e)) return e;
+        const n = Object.assign({}, e);
+        ['s', 's0', 's1'].forEach((sk) => { if (typeof n[sk] === 'number') n[sk] = rund(n[sk] * f); });
+        return n;
+      });
+    });
+    // Rundenzeit wächst langsamer als die Länge (Kurventempo ∝ √Radius, längere Geraden): zeitFaktor aus der KI-Messung, Standard = faktor
+    if (daten.zielRundenzeit) kopie.zielRundenzeit = Math.round(daten.zielRundenzeit * (v.zeitFaktor || f));
+    kopie.variante = varianteId;
+    kopie.varianteFaktor = f;
+    return kopie;
+  }
+
   class Strecke {
     /**
      * @param {object} daten Eintrag aus Rennspiel.trackCatalog
-     * @param {{welt?:string}} [optionen] welt = Name aus daten.welten (Standard: daten.weltStandard)
+     * @param {{welt?:string, variante?:string}} [optionen] welt = Name aus daten.welten (Standard: daten.weltStandard);
+     *   variante = Name aus daten.varianten (z. B. 'xl'; leer = Normal) → skalierte Daten, strecke.katalog ist dann die skalierte Kopie
      */
     constructor(daten, optionen) {
       const opt = optionen || {};
+      daten = varianteAnwenden(daten, opt.variante);
+      this.variante = daten.variante || '';
       this.katalog = daten;
       this.welt = weltName(daten, opt.welt);
       this.weltDaten = weltSchichten(daten, this.welt);
@@ -383,6 +429,29 @@
             seitenabstand: vz * (b + 0.5) / 2, halbbreite: (b - 0.5) / 2 + 0.3, seite: vz });
           h.segmente = [{ ax: aussen.x, az: aussen.z, bx: innen.x, bz: innen.z, art: 'ast', dicke: c.dicke || 0.28 }];
           h.x = (aussen.x + innen.x) / 2; h.z = (aussen.z + innen.z) / 2; h.radius = b / 2 + 2;
+        } else if (e.typ === 'lava' || e.typ === 'krater') {
+          // Runde 6 (W2-C): Fläche im Straßen-Rahmen bei s: längs ±halblaenge, quer q0..q1 (flaeche, collisions.js).
+          //   lava:   Zunge über die halbe Fahrbahn (Seite vz, von der Mitte bis über den Rand) – KI meidet hart (h.hart)
+          //   krater: runde Mulde (radius) bei seitenabstand – entsteht dynamisch beim Vulkanausbruch (dynamik.js).
+          //           W2-C1: mit s0/s1 → die KI weicht nach dem Einschlag weich aus (main.js ruft driver.hindernisseSetzen
+          //           neu auf, sobald sich dynamik.hindernisVersion ändert). Reset ignoriert Krater (kein h.seite).
+          const CD = (R.config.dino || {})[e.typ] || {}, p = sp.punktBei(e.s);
+          if (e.typ === 'lava') {
+            const hl = (e.laenge || CD.laenge || 12) / 2, q0 = vz * 0.15, q1 = vz * (b + (this.randBreite || 1) + 0.6);
+            Object.assign(h, { s: sp.wrapS(e.s), s0: sp.wrapS(e.s - hl), s1: sp.wrapS(e.s + hl), laenge: hl * 2, halblaenge: hl,
+              seitenabstand: vz * (b / 2 + 0.075), halbbreite: b / 2 - 0.075, seite: vz, hart: true,   // b = halbe Fahrbahnbreite
+              gefahr: CD.gefahr !== undefined ? CD.gefahr : 1.0 });
+            h.flaeche = { hl, q0: Math.min(q0, q1), q1: Math.max(q0, q1) };
+          } else {
+            const r = e.radius || CD.radius || 2.6, q = e.seitenabstand !== undefined ? e.seitenabstand : (e.seite || 0) * b;
+            Object.assign(h, { s: sp.wrapS(e.s), s0: sp.wrapS(e.s - r), s1: sp.wrapS(e.s + r), laenge: 2 * r, halblaenge: r,
+              seitenabstand: q, halbbreite: r, radius: r + 1,
+              kraterRadius: r, gefahr: CD.gefahr !== undefined ? CD.gefahr : 0.8 });
+            h.flaeche = { hl: r, q0: q - r, q1: q + r, rund: r };
+          }
+          h.px = p.x; h.pz = p.z; h.tx = p.tx; h.tz = p.tz; h.nx = p.nx; h.nz = p.nz;
+          const m = welt(e.s, (h.flaeche.q0 + h.flaeche.q1) / 2); h.x = m.x; h.z = m.z;   // Grobtest-Mitte = Flächenmitte
+          if (e.typ === 'lava') h.radius = Math.hypot(h.flaeche.hl, (h.flaeche.q1 - h.flaeche.q0) / 2) + 1;
         }
         return h;
       });
@@ -1323,6 +1392,9 @@
           specular: 0xc8c8e8, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
         m.name = 'Oelflecken'; g.add(m);
       }
+      // Runde 6 (W2-C): Lava-Zungen (2 Draw-Calls: Fläche + Blasen) – leuchtet ohne Licht, pulsiert/blubbert (hindernisseAnimieren)
+      const lavas = this.hindernisse.filter(h => h.typ === 'lava');
+      if (lavas.length) this._lavaBauen(g, lavas, facher);
       // Feste Teile: Ast (Stamm + Zweige), Baken (rot-weiß), Baustellen-Schild
       const zyl = (ax, ay, az, bx, by, bz, r, farbe) => {
         const l = Math.hypot(bx - ax, by - ay, bz - az);
@@ -1419,10 +1491,119 @@
     }
 
     /**
+     * Runde 6 (W2-C): Lava-Zungen als ein Mesh (MeshBasic, Vertex-Farben: Mitte gelb → orange → rote Kante → dunkle Kruste)
+     * und Blasen (InstancedMesh, 10 je Zunge). Form im Straßen-Rahmen: Superellipse über flaeche (längs ±hl, quer q0..q1),
+     * zur Fahrbahnmitte hin schmaler (Zungenspitze), Rand leicht gewellt. Animation: _lavaAnimieren(zeit).
+     */
+    _lavaBauen(g, lavas, facher) {
+      void facher;
+      const sp = this.spline, pos = [], col = [], c = new THREE.Color();
+      const RINGE = [[0, 0xffe27a, 0.13], [0.45, 0xffa22a, 0.13], [0.8, 0xf2541a, 0.13], [1, 0xb8300e, 0.13], [1.18, 0x3a2620, 0.17], [1.32, 0x2a2420, 0.05]];
+      const N = 30;
+      this._lavaBlasen = []; this._lavaFlammen = [];
+      lavas.forEach((h, nr) => {
+        const F = h.flaeche, qc = (F.q0 + F.q1) / 2, B = (F.q1 - F.q0) / 2, seed = nr * 3.7 + 1.1;
+        const innenSeite = Math.sign(F.q0 + F.q1) || 1;          // Quelle außen (Rand), Spitze zur Mitte
+        const punkt = (w, f) => {
+          const cw = Math.cos(w), sw = Math.sin(w), p = 2.6;
+          const r = 1 / Math.pow(Math.pow(Math.abs(cw), p) + Math.pow(Math.abs(sw), p), 1 / p);
+          const wob = 1 + 0.07 * Math.sin(w * 3 + seed) + 0.04 * Math.sin(w * 7 + seed * 2);
+          const q = qc + sw * B * r * f * wob;
+          const t = Math.max(0, Math.min(1, (q - F.q0) / (F.q1 - F.q0)));      // 0 = innen (q0) … 1 = außen
+          const breit = innenSeite > 0 ? 0.5 + 0.5 * t : 0.5 + 0.5 * (1 - t);
+          const l = cw * F.hl * r * f * wob * breit;
+          const pp = sp.punktBei(h.s + l), x = pp.x + pp.nx * q, z = pp.z + pp.nz * q;
+          return [x, z];
+        };
+        for (let k = 0; k < N; k++) {
+          const w0 = k / N * Math.PI * 2, w1 = (k + 1) / N * Math.PI * 2;
+          for (let r = 0; r < RINGE.length - 1; r++) {
+            const [fa, ca, ha] = RINGE[r], [fb, cb, hb] = RINGE[r + 1];
+            const a0 = punkt(w0, fa), a1 = punkt(w1, fa), b0 = punkt(w0, fb), b1 = punkt(w1, fb);
+            const y = (pt, hh) => [pt[0], this.hoeheAn(pt[0], pt[1]) + hh, pt[1]];
+            const A0 = y(a0, ha), A1 = y(a1, ha), B0 = y(b0, hb), B1 = y(b1, hb);
+            const farbe = (hex) => { c.setHex(hex); return [c.r, c.g, c.b]; };
+            const ka = farbe(ca), kb = farbe(cb);
+            if (r === 0) { pos.push(...A0, ...B1, ...B0); col.push(...ka, ...kb, ...kb); }
+            else { pos.push(...A0, ...B1, ...B0, ...A0, ...A1, ...B1); col.push(...ka, ...kb, ...kb, ...ka, ...ka, ...kb); }
+          }
+        }
+        // Blasen: feste Plätze in der Zunge (f ≤ 0,75), je eigener Takt
+        for (let k = 0; k < 10; k++) {
+          const w = (k * 2.39996 + seed) % (Math.PI * 2), f = 0.15 + 0.6 * ((k * 0.618 + nr * 0.3) % 1);
+          const [x, z] = punkt(w, f);
+          this._lavaBlasen.push({ x, z, y: this.hoeheAn(x, z) + 0.13, t0: (k * 0.37 + nr * 0.21) % 1, takt: 1.1 + (k % 4) * 0.35, r: 0.22 + (k % 3) * 0.09 });
+        }
+        // W2-C1: kleine Flammen (7 je Zunge) züngeln aus der Lava, eher am heißen Rand (f 0,3–0,9)
+        for (let k = 0; k < 7; k++) {
+          const w = (k * 0.897 * Math.PI + seed * 1.7) % (Math.PI * 2), f = 0.3 + 0.6 * ((k * 0.381 + nr * 0.17) % 1);
+          const [x, z] = punkt(w, f);
+          this._lavaFlammen.push({ x, z, y: this.hoeheAn(x, z) + 0.12, t0: k * 1.37 + nr, h: 1.1 + (k % 3) * 0.35 });
+        }
+      });
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
+      geo.computeVertexNormals();
+      const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
+      const m = new THREE.Mesh(geo, mat);
+      m.name = 'Lava'; g.add(m);
+      this._lavaMat = mat;
+      const blase = new THREE.SphereGeometry(1, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2);
+      const bm = new THREE.InstancedMesh(blase, new THREE.MeshBasicMaterial({ color: 0xffc04a }), this._lavaBlasen.length);
+      bm.name = 'LavaBlasen'; bm.frustumCulled = false;
+      g.add(bm);
+      this._lavaBlasenMesh = bm;
+      // Flammen: Kegel mit Bauch (Lathe), leuchtend ohne Licht, Vertex-Farben unten rot-orange → Mitte orange → Spitze gelb (+1 Draw-Call)
+      const profil = [[0.01, 0], [0.32, 0.12], [0.36, 0.3], [0.26, 0.55], [0.12, 0.8], [0.01, 1]].map(p => new THREE.Vector2(p[0], p[1]));
+      const fl = new THREE.LatheGeometry(profil, 6);
+      const fc = [], fp = fl.attributes.position;
+      for (let i = 0; i < fp.count; i++) { const u = fp.getY(i); c.setRGB(1, 0.28 + 0.62 * u, 0.05 + 0.3 * u * u); fc.push(c.r, c.g, c.b); }
+      fl.setAttribute('color', new THREE.BufferAttribute(new Float32Array(fc), 3));
+      const fm = new THREE.InstancedMesh(fl, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.92,
+        depthWrite: false, side: THREE.DoubleSide }), this._lavaFlammen.length);
+      fm.name = 'LavaFlammen'; fm.frustumCulled = false;
+      g.add(fm);
+      this._lavaFlammenMesh = fm;
+      this._lavaAnimieren(0);
+    }
+
+    /** Lava pulsiert (Farbe) und blubbert: Blasen wachsen, platzen, kurze Pause (je Blase eigener Takt). */
+    _lavaAnimieren(zeit) {
+      if (!this._lavaMat) return;
+      const t = zeit || 0, f = 0.85 + 0.15 * (0.5 + 0.5 * Math.sin(t * 2.3) * Math.sin(t * 0.7 + 1));
+      this._lavaMat.color.setRGB(1, f, f * 0.92);
+      const m = this._lavaBlasenMesh, m4 = this._m4L || (this._m4L = new THREE.Matrix4());
+      const v = this._vL || (this._vL = new THREE.Vector3()), q = this._qL || (this._qL = new THREE.Quaternion()), sk = this._skL || (this._skL = new THREE.Vector3());
+      this._lavaBlasen.forEach((b, i) => {
+        const u = ((t / b.takt + b.t0) % 1 + 1) % 1;
+        const gr = u < 0.7 ? b.r * (0.3 + u / 0.7) : u < 0.8 ? b.r * 1.3 * (1 - (u - 0.7) * 8) : 0.001;
+        v.set(b.x, b.y, b.z); sk.set(gr, gr * 0.8, gr);
+        m4.compose(v, q, sk);
+        m.setMatrixAt(i, m4);
+      });
+      m.instanceMatrix.needsUpdate = true;
+      // W2-C1: Flammen flackern (Höhe/Breite unruhig, leicht schwankend)
+      const fm = this._lavaFlammenMesh;
+      if (fm) {
+        const e = this._eL || (this._eL = new THREE.Euler());
+        this._lavaFlammen.forEach((fl, i) => {
+          const a = t * 9 + fl.t0, hoch = fl.h * (0.55 + 0.3 * Math.sin(a) + 0.15 * Math.sin(a * 2.7 + 1));
+          e.set(0.18 * Math.sin(a * 0.8), 0, 0.18 * Math.cos(a * 0.6)); q.setFromEuler(e);
+          v.set(fl.x, fl.y, fl.z); sk.set(0.8 + 0.25 * Math.sin(a * 1.9), Math.max(0.05, hoch), 0.8 + 0.25 * Math.cos(a * 1.6));
+          m4.compose(v, q, sk); fm.setMatrixAt(i, m4);
+        });
+        fm.instanceMatrix.needsUpdate = true;
+        q.identity();
+      }
+    }
+
+    /**
      * Pylonen-Zustand anzeigen: stehen / umgefahren (blinkt blinkZeit s rot und kippt) / weg.
      * Nur Arbeit, wenn sich etwas geändert hat oder gerade eine blinkt.
      */
     hindernisseAnimieren(zeit) {
+      if (this._lavaMat) this._lavaAnimieren(zeit);    // Runde 6 (W2-C)
       const m = this._pylonMesh;
       if (!m || (!this.pylonenGeaendert && !this._blinkt)) return;
       const C = (R.config.hindernisse && R.config.hindernisse.baustelle) || {}, blink = C.blinkZeit || 0.3;
@@ -1453,6 +1634,7 @@
   }
 
   Strecke.headingAus = headingAus;
+  Strecke.varianteAnwenden = varianteAnwenden;   // (daten, varianteId) → skalierte Kopie
   Strecke.weltName = weltName;            // (daten, wunsch) → gültiger Weltname
   Strecke.weltSchichten = weltSchichten;  // (daten, name) → { schicht: bool }
   Strecke.SCHICHTEN = SCHICHTEN;

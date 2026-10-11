@@ -199,6 +199,14 @@
         { s: 700, von: -1, intervall: 10, tempo: 4 },
         { s: 1630, von: 1, intervall: 12, tempo: 4 },
       ],
+      // Runde 6 (W2-C): Rehe + Bären laufen über die Straße (Schicht „dinos“ = Tiere, ab Welt Hindernisse; world/dynamik.js).
+      // Reh flink in Sprüngen (bleibt kurz stehen und schaut, Geweih bei jedem 2.), Bär trottet. Klassisch: nur grasende Rehe.
+      tiere: [
+        { art: 'reh', s: 230, von: 1, intervall: 9, tempo: 6 },
+        { art: 'baer', s: 1135, von: -1, intervall: 14, tempo: 3 },
+        { art: 'reh', s: 1790, von: -1, intervall: 10, tempo: 6 },
+        { art: 'baer', s: 660, von: 1, intervall: 15, tempo: 3 },
+      ],
       schanzen: [
         { s: 65, winkel: 8, laenge: 10 },
         { s: 2082, winkel: 12, laenge: 10 },
@@ -307,6 +315,8 @@
       ],
       checkpointAbstand: 130,
       zielRundenzeit: 125,
+      // Runde 6 (W2-E): Streckenvariante XL – R.Strecke.varianteAnwenden skaliert Punkte/Hügel/alle s-Felder
+      varianten: { xl: { name: 'XL', faktor: 1.6, zeitFaktor: 1.37, beschreibung: 'Die Wüsten-Piste in Übergröße: 1,6-mal so lang, rund 3 Minuten pro Runde.' } },
       // Bauplan (Runde 3, vor ×1,45 um den Schwerpunkt; tests/bauplan/wueste.json):
       // G340 K110/180 G330 K30/-55 K30/110 K30/-55 G30 K50/-90 G60 K45/90 G? K50/90 G70 K40/-60 K40/60
       // G? K50/90 G140 K30/55 K30/-110 K30/55 G120
@@ -373,6 +383,8 @@
       abseitsUntergrund: 'gras',
       checkpointAbstand: 120,
       zielRundenzeit: 70,
+      // Runde 6 (W2-E): Streckenvariante XL (doppelt so lang; Looping-Radius bleibt, Anlauf wird länger)
+      varianten: { xl: { name: 'XL', faktor: 2, zeitFaktor: 1.45, beschreibung: 'Das Zauberland doppelt so lang: lange Geraden, gleiche Loopings.' } },
       // Runde 4: eigene Welten – „Fantasie" (Stand Runde 3) und „Verrückt" (+ Turbo, Schild, Strohballen)
       weltStandard: 'fantasie',
       welten: {
@@ -472,12 +484,19 @@
       welten: vierWelten(),
       strohOptik: 'fels',
       bruecken: [{ s0: 1579, s1: 1644, art: 'stamm', tiefe: 4 }],   // Baumstamm-Brücke über den Sumpf
-      tunnel: [{ s0: 2359, s1: 2504, art: 'hoehle' }],              // Felstunnel „Dino-Höhle" mit Stalaktiten
+      // Runde 6 (W2-C, C4): Berg-Massiv mit zwei Tunneln auf der Geraden vor dem Ziel: Tunnel 1 kurz (60 m), Schlucht,
+      // Tunnel 2 lang (140 m) mit der 90°-Kurve darin. Grundriss/Höhen unverändert (Steigung ≤ 8 %), nur Tunnel neu verteilt;
+      // berg = Massiv-Kulisse (themes.js bergmassivBauen).
+      tunnel: [{ s0: 2345, s1: 2405, art: 'hoehle' }, { s0: 2490, s1: 2630, art: 'hoehle' }],
+      berg: { s0: 2318, s1: 2655 },
       hindernisse: [
         { typ: 'sand', s: 359, seite: -0.3 },
         { typ: 'baustelle', s: 1389, seite: 1 },
         { typ: 'ast', s: 1779, seite: -1 },
         { typ: 'oel', s: 2014, seite: 0.3 },
+        // Runde 6 (W2-C, C2): Lava-Zungen über die halbe Fahrbahn (seite = belegte Hälfte); Kontakt = 1 s Stopp, KI meidet
+        { typ: 'lava', s: 180, seite: -1 },
+        { typ: 'lava', s: 960, seite: 1 },
       ],
       spuren: [
         { s0: 1089, s1: 1199, spuren: 1 },      // enger Urwaldweg am Ende der langen Geraden
@@ -496,7 +515,20 @@
       dinos: [
         { s: 1899, von: -1, intervall: 14, tempo: 4, art: 'dreihorn' },
         { s: 2284, von: 1, intervall: 16, tempo: 4, art: 'langhals' },
+        // Runde 6 (W2-C, C1): doppelt so viele Stellen; Verhalten (stehen, Kopf senken, umkehren, brüllen): config.dino
+        { s: 590, von: 1, intervall: 15, tempo: 4, art: 'dreihorn' },
+        { s: 1735, von: -1, intervall: 17, tempo: 4, art: 'langhals' },
       ],
+      // Runde 6 (W2-C, C5): Meteoriten – je Runde beim ersten Passieren: Schatten + Pfeifen, Einschlag 15 m neben der
+      // Fahrbahn (Seite von), dann rollen 3–5 Felsbrocken quer über die Straße (Felsbrocken-Mechanik, KI kennt sie nicht)
+      meteoriten: [
+        { s: 300, von: 1 },
+        { s: 2150, von: -1 },
+      ],
+      // Runde 6 (W2-C, C6): Flugsaurier auf der langen Geraden (s0–s1): kommt von vorn, taucht über das vorderste Spieler-Auto
+      flugsaurier: { s0: 660, s1: 1240, intervall: 40 },
+      // Runde 6 (W2-C, C3): Vulkanausbruch alle 80–110 s (Werte: config.dino.vulkan); Lavabomben → Krater (20 s)
+      vulkan: { ausbruch: true },
       schanzen: [
         { s: 65, winkel: 8, laenge: 10 },
         { s: 839, winkel: 12, laenge: 10 },     // lange Gerade
@@ -507,11 +539,11 @@
       ],
       schilde: [
         { s: 1479, seitenabstand: 0 },
-        { s: 2539, seitenabstand: -2 },
+        { s: 2440, seitenabstand: -2 },        // Runde 6: in der Schlucht zwischen den Tunneln
       ],
       baelle: [
         { s: 739, von: -1, abRunde: 2, intervall: 8, tempo: 9, radius: 2.2, farbe: 0xff4fa3 },
-        { s: 2619, von: 1, abRunde: 'letzte', intervall: 8, tempo: 9, radius: 2.2, farbe: 0xffd23a },
+        { s: 2660, von: 1, abRunde: 'letzte', intervall: 8, tempo: 9, radius: 2.2, farbe: 0xffd23a },
       ],
       wasserstrahlen: [
         { s: 1949, seitenabstand: -2, intervall: 20, dauer: 2, vorwarnung: 1 },

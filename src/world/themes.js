@@ -50,6 +50,7 @@
       lichtBoden: 0x4a6b2a,      // Bodenfarbe des Halbkugel-Lichts
       sonnenFarbe: 0xfff3d6,
       sonnenIntensitaet: 1.1,
+      laternen: true,            // Runde 6: Straßenlaternen bei Nacht
       seed: 7,
       deko: { baeume: 380, fernBaeume: 320, buesche: 200, heuballen: 16, kuehe: 3, blumen: 300 },
     },
@@ -64,6 +65,7 @@
       lichtBoden: 0x2c3f1e,
       sonnenFarbe: 0xffe9c0,
       sonnenIntensitaet: 0.95,
+      laternen: true,            // Runde 6: Straßenlaternen bei Nacht
       asphalt: 0x37393c,
       zaun: { latten: 0x5e3f22, pfosten: 0x3e2a17 },   // dunkler Holzzaun
       seed: 13,
@@ -120,7 +122,7 @@
       seed: 53,
       deko: { bandAbstand: 3.2, fernBaeume: 420, palmen: 260, riesenfarne: 150, farne: 340, felsen: 110,
         knochen: 60, skelette: 7, dinos: { langhals: 3, dreihorn: 3, zweibeiner: 3 } },
-      vulkan: { richtung: 0.12, abstand: 1300, hoehe: 470, radius: 700 },   // Kulisse: richtung 0 = Startrichtung (rad, + = rechts)
+      vulkan: { richtung: 0.12, abstand: 1300, hoehe: 610, radius: 860 },   // W2-C1: größer (vorher 470/700). Kulisse: richtung 0 = Startrichtung (rad, + = rechts)
     },
   };
 
@@ -1190,7 +1192,11 @@
     const berg = new THREE.Mesh(vulkanGeo(thema.nebel, 0.38), new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, depthTest: false, depthWrite: false }));
     berg.name = 'Vulkan'; berg.frustumCulled = false; berg.renderOrder = -10;
     const masse = [V.radius, V.hoehe, V.radius];
-    berg.onBeforeRender = function (r, sz, camera) { setzen(this, camera, masse); };
+    berg.onBeforeRender = function (r, sz, camera) {
+      setzen(this, camera, masse);
+      const g = themes.vulkanGlut || 0;     // Runde 6 (W2-C): beim Ausbruch rötlich glühen
+      this.material.color.setRGB(1 + g * 0.35, 1 - g * 0.2, 1 - g * 0.3);
+    };
     gruppe.add(berg);
     // Rauch: 70 Teilchen steigen aus dem Krater, werden breiter, heller und treiben zur Seite
     const n = 70, rnd = zufall(907), tl = [];
@@ -1202,33 +1208,38 @@
       opacity: 0.75, depthWrite: false, fog: false });
     const rauch = new THREE.Points(geo, mat);
     rauch.name = 'Vulkanrauch'; rauch.frustumCulled = false;
-    const dunst = new THREE.Color(thema.nebel), c = new THREE.Color();
+    const dunst = new THREE.Color(thema.nebel), c = new THREE.Color(), glutFarbe = new THREE.Color(0xff6a1a);
     rauch.onBeforeRender = function (r, sz, camera) {
       // lokale Einheiten: Vulkan-Höhe = 1 (Größe hoehe in allen Achsen → runde Wolken)
       const s = setzen(this, camera, [V.hoehe, V.hoehe, V.hoehe]), t = uhr();
       const p = this.geometry.attributes.position.array, cc = this.geometry.attributes.color.array;
+      // Runde 6 (W2-C): Ausbruch (themes.vulkanGlut 0..1, dynamik.js) → Rauch dichter, dunkler, breiter, unten glühend
+      const glut = themes.vulkanGlut || 0, tempo = 1 + glut * 1.6;
       for (let k = 0; k < n; k++) {
-        const e = tl[k], u = (t * e.tempo + e.t0) % 1, rr = e.r + u * 0.35;
+        const e = tl[k], u = (t * e.tempo * tempo + e.t0) % 1, rr = (e.r + u * 0.35) * (1 + glut * 0.6);
         p[k * 3] = Math.cos(e.w) * rr + u * u * 0.7;
         p[k * 3 + 1] = 0.97 + u * 1.15;
         p[k * 3 + 2] = Math.sin(e.w) * rr * 0.6 + u * 0.12;
         c.setRGB(0.22 + u * 0.4, 0.2 + u * 0.4, 0.19 + u * 0.42).lerp(dunst, 0.25 + u * 0.3);
+        if (glut > 0) { c.multiplyScalar(1 - glut * 0.45); if (u < 0.25) c.lerp(glutFarbe, glut * (1 - u * 4) * 0.8); }
         cc[k * 3] = c.r; cc[k * 3 + 1] = c.g; cc[k * 3 + 2] = c.b;
       }
       this.geometry.attributes.position.needsUpdate = true; this.geometry.attributes.color.needsUpdate = true;
-      this.material.size = V.hoehe * 0.32 * s;
+      this.material.size = V.hoehe * 0.32 * s * (1 + glut * 0.7);
+      this.material.opacity = 0.75 + glut * 0.2;
     };
     gruppe.add(rauch);
     return { x: vx, z: vz };
   }
 
   /** Lavasee: unregelmäßige glühende Fläche mit dunkler Kruste (1 Mesh, MeshBasic, pulsiert). */
-  function lavaseeBauen(gruppe, strecke, rnd, radius) {
+  function lavaseeBauen(gruppe, strecke, rnd, radius, sperre) {
     const zaun = hinterZaun(strecke);
     let beste = null;
     for (let v = 0; v < 160; v++) {
       const st = stelleSuchen(strecke, rnd, zaun + radius + 4, zaun + radius + 30, zaun + radius + 3, 10, 1);
       if (!st) continue;
+      if (sperre && sperre(st.x, st.z, radius + 6)) continue;   // Runde 6: nicht im Berg-Massiv
       let hMin = Infinity, hMax = -Infinity;
       for (let k = 0; k <= 12; k++) {
         const w = k / 12 * Math.PI * 2, rr = k === 12 ? 0 : radius;
@@ -1283,6 +1294,129 @@
     return beste;
   }
 
+  // ------------------------------------------------------------------ Runde 6 (W2-C, C4): Berg-Massiv (Dino)
+
+  /**
+   * Berg-Massiv über den Dino-Tunneln (Katalog berg { s0, s1 }): Querschnitte alle 4 m entlang der Strecke,
+   * Höhe über dem Boden = hoehe · Glocke(|q| / Q) · Hülle(s) (+ Felsrauheit). Q je Seite: bis 95 m, in Kurven innen
+   * höchstens 0,8 · Radius und nie über ein anderes Streckenteil. In den Tunneln überspannt der Berg die Röhre
+   * (mind. 4 m über dem Gewölbe), dazwischen bleibt eine Schlucht (Felswand ab Bande + 2 m). An jedem Portal eine
+   * Stirnwand mit Loch in Tunnelform (der Steinrahmen der Röhre steht 0,6 m davor). 1 Mesh, Vertex-Farben.
+   * @returns {{mesh: THREE.Mesh, drin: (x:number, z:number, rand?:number) => boolean}|null}
+   */
+  function bergmassivBauen(gruppe, strecke, berg) {
+    const sp = strecke.spline, tunnel = strecke.tunnel || [];
+    if (!berg || !tunnel.length) return null;
+    const HOCH = 46, W = strecke.grenzeEng + 0.35, WAND = 3.4, HT = 6.6, K = 16;
+    const imTunnel = (s) => tunnel.some(t => s >= t.s0 - 1e-6 && s <= t.s1 + 1e-6);
+    const huelle = (s) => {
+      const a = Math.min(1, (s - berg.s0) / 45), b = Math.min(1, (berg.s1 - s) / 30);
+      const h = Math.max(0, Math.min(a, b));
+      return h * h * (3 - 2 * h);
+    };
+    // Reichweite Q(s, Seite): Kurve innen begrenzen, nie über andere Streckenteile
+    const reichweite = (s, sg) => {
+      const p = sp.punktBei(s), pv = sp.punktBei(s + 6), ph = sp.punktBei(s - 6);
+      const kx = pv.tx - ph.tx, kz = pv.tz - ph.tz, k = Math.hypot(kx, kz) / 12;
+      let Q = 95;
+      if (k > 1e-4 && Math.sign(kx * p.nx + kz * p.nz) === sg) Q = Math.min(Q, 0.8 / k);
+      for (let q = 12; q <= Q; q += 4) {
+        const x = p.x + p.nx * q * sg, z = p.z + p.nz * q * sg, n = sp.naechster(x, z);
+        const fremd = Math.abs(sp.differenzS(n.s, s)) > 60;
+        if (fremd && Math.abs(n.seitenabstand) < 30) { Q = Math.max(16, q - 22); break; }
+      }
+      return Q;
+    };
+    // Querschnitte (s, tun) – an den Portalen doppelt (Schlucht-Form | Tunnel-Form)
+    const liste = [];
+    for (let s = berg.s0; s <= berg.s1 + 1e-6; s += 4) liste.push({ s, tun: imTunnel(s) });
+    tunnel.forEach((t) => {
+      if (t.s0 > berg.s0 && t.s0 < berg.s1) liste.push({ s: t.s0 - 0.05, tun: false, portal: -1, t }, { s: t.s0, tun: true });
+      if (t.s1 > berg.s0 && t.s1 < berg.s1) liste.push({ s: t.s1, tun: true }, { s: t.s1 + 0.05, tun: false, portal: 1, t });
+    });
+    liste.sort((a, b) => a.s - b.s || (a.tun === b.tun ? 0 : 0));
+    const qi = strecke.grenzeEng + 2;
+    const glocke = (u) => { const v = Math.max(0, 1 - u * u); return v * Math.sqrt(v); };
+    const rau = (s, q) => 2.4 * Math.sin(s * 0.071 + q * 0.13) + 1.6 * Math.sin(s * 0.19 - q * 0.21) + 1.0 * Math.sin(q * 0.5 + s * 0.05);
+    const pos = [], col = [], c = new THREE.Color();
+    const farbeH = (h, s, q) => {
+      // unten Vulkangestein, oben Moos/Urwald, dazwischen Felsbänder
+      const n = 0.5 + 0.5 * Math.sin(s * 0.11 + q * 0.17);
+      if (h > 26 + n * 8) c.setHex(n > 0.5 ? 0x4c6a2c : 0x587a34);
+      else if (h > 12 + n * 6) c.setHex(n > 0.6 ? 0x5e5246 : 0x4f463c);
+      else c.setHex(n > 0.4 ? 0x3e352d : 0x4a4038);
+      return [c.r, c.g, c.b];
+    };
+    // Punkt des Querschnitts: q (mit Vorzeichen), Q = Reichweite dieser Seite, offen = Schlucht (Wand ab qi)
+    const punkt = (e, q, Q) => {
+      const p = e.p, x = p.x + p.nx * q, z = p.z + p.nz * q, boden = strecke.bodenHoehe(x, z) - 0.6;
+      const u = Math.abs(q) / Q;
+      let h = HOCH * glocke(u) * e.H + rau(e.s, q) * glocke(u) * e.H;
+      if (!e.tun) { const w = Math.max(0, Math.min(1, (Math.abs(q) - e.qi) / 13)); h *= w * w * (3 - 2 * w); }
+      let y = boden + Math.max(0, h);
+      if (e.tun && Math.abs(q) < W + 18) y = Math.max(y, e.yc + HT + 4 + (W + 18 - Math.abs(q)) * 0.15);
+      return { x, y, z, h: y - boden };
+    };
+    liste.forEach((e) => {
+      e.p = sp.punktBei(e.s); e.yc = strecke.hoeheAn(e.p.x, e.p.z); e.H = huelle(e.s);
+      e.QL = reichweite(e.s, -1); e.QR = reichweite(e.s, 1);
+      // Schlucht/Vorfeld: Felswand erst 1,5 m hinter der Bande (Trichter vor den Portalen); Tunnel: fest
+      e.qi = e.tun ? qi : Math.max(qi, (strecke.grenzeBei ? strecke.grenzeBei(e.s) : 0) + 1.5);
+      e.links = []; e.rechts = []; e.oben = [];
+      for (let k = 0; k <= K; k++) {
+        const f = k / K;
+        e.links.push(punkt(e, -(e.QL - (e.QL - e.qi) * f), e.QL));     // außen → innen
+        e.rechts.push(punkt(e, e.qi + (e.QR - e.qi) * f, e.QR));          // innen → außen
+      }
+      if (e.tun) for (let k = 0; k <= 8; k++) { const q = -qi + 2 * qi * k / 8; e.oben.push(punkt(e, q, q < 0 ? e.QL : e.QR)); }
+    });
+    const vier = (a, b, d, f) => {   // Viereck a-b-d-f (Reihenfolge egal: DoubleSide)
+      pos.push(a.x, a.y, a.z, b.x, b.y, b.z, d.x, d.y, d.z, a.x, a.y, a.z, d.x, d.y, d.z, f.x, f.y, f.z);
+      [a, b, d, a, d, f].forEach(pt => col.push(...farbeH(pt.h, pt.x, pt.z)));
+    };
+    for (let i = 0; i + 1 < liste.length; i++) {
+      const A = liste[i], B = liste[i + 1];
+      if (B.s - A.s > 8) continue;
+      if (A.H < 0.01 && B.H < 0.01) continue;
+      for (let k = 0; k < K; k++) { vier(A.links[k], A.links[k + 1], B.links[k + 1], B.links[k]); vier(A.rechts[k], A.rechts[k + 1], B.rechts[k + 1], B.rechts[k]); }
+      if (A.tun && B.tun) for (let k = 0; k < 8; k++) vier(A.oben[k], A.oben[k + 1], B.oben[k + 1], B.oben[k]);
+    }
+    // Stirnwände an den Portalen: oben = Berg-Profil über der Röhre (q −qi..qi), unten = Boden + Tunnelbogen (Loch)
+    liste.filter(e => e.portal).forEach((e) => {
+      const tunE = liste.find(x => x.tun && Math.abs(x.s - e.s) < 0.2) || e;
+      const p = e.p, yc = e.yc, boden = (q) => strecke.bodenHoehe(p.x + p.nx * q, p.z + p.nz * q) - 0.6;
+      const unten = [];
+      const wp = (q, y) => ({ x: p.x + p.nx * q, y, z: p.z + p.nz * q, h: 0 });
+      unten.push(wp(-qi, boden(-qi)), wp(-W, boden(-W)));
+      for (let k = 0; k <= 10; k++) { const th = Math.PI - k * Math.PI / 10; unten.push(wp(W * Math.cos(th), yc + WAND + (HT - WAND) * Math.sin(th))); }
+      unten.push(wp(W, boden(W)), wp(qi, boden(qi)));
+      // oberes Profil auf dieselbe Punktzahl bringen (gleichmäßig in q)
+      const oben = unten.map((u, k) => {
+        const f = k / (unten.length - 1), q = -qi + 2 * qi * f;
+        const o = { p, s: e.s, tun: true, yc, H: tunE.H, qi };
+        const pt = punkt(o, q, q < 0 ? tunE.QL : tunE.QR);
+        return pt;
+      });
+      for (let k = 0; k + 1 < unten.length; k++) vier(unten[k], unten[k + 1], oben[k + 1], oben[k]);
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide }));
+    mesh.name = 'Bergmassiv';
+    gruppe.add(mesh);
+    // Grundfläche (für Deko-Sperre): nächster Querschnitt + Reichweite der Seite
+    const drin = (x, z, rand) => {
+      const n = sp.naechster(x, z);
+      if (n.s < berg.s0 - 5 || n.s > berg.s1 + 5) return false;
+      const e = liste.reduce((b, x2) => (Math.abs(x2.s - n.s) < Math.abs(b.s - n.s) ? x2 : b), liste[0]);
+      if (e.H < 0.05) return false;
+      return Math.abs(n.seitenabstand) < (n.seitenabstand < 0 ? e.QL : e.QR) * 0.92 + (rand || 0);
+    };
+    return { mesh, drin };
+  }
+
   function dinoDeko(gruppe, thema, strecke, rnd) {
     const sp = strecke.spline, L = sp.laenge, D = thema.deko;
     const grenze = dekoGrenze(strecke), zaun = hinterZaun(strecke), mitte = streckenMitte(strecke);
@@ -1293,8 +1427,11 @@
       const dx = x - bachMitte.x, dz = z - bachMitte.z;
       return Math.abs(dx * bachMitte.tx + dz * bachMitte.tz) < 16 && Math.abs(dx * bachMitte.nx + dz * bachMitte.nz) < strecke.seitenabstandMax + 60;
     };
+    // Runde 6 (W2-C): Berg-Massiv über den Tunneln zuerst – keine Deko darin (auch kein Lavasee)
+    const massiv = bergmassivBauen(gruppe, strecke, (strecke.katalog || strecke.daten || {}).berg);
+    const amBerg = (x, z, extra) => !!massiv && massiv.drin(x, z, extra || 0);
     // Lavasee zuerst (andere Deko hält Abstand)
-    const lava = lavaseeBauen(gruppe, strecke, rnd, 17);
+    const lava = lavaseeBauen(gruppe, strecke, rnd, 17, amBerg);
     const amLava = (x, z, extra) => lava && Math.hypot(x - lava.x, z - lava.z) < 17 * 1.35 + (extra || 0);
     // Lichtungen: um Deko-Dinos, Skelette und zwischen Straße und Lavasee keine Bäume (sonst sieht man sie nicht)
     const lichtungen = [];
@@ -1303,7 +1440,7 @@
       for (let d = Math.abs(n.seitenabstand) - 30; d > 6; d -= 12) lichtungen.push({ x: p.x + p.nx * d * sg, z: p.z + p.nz * d * sg, r: 22 });
     }
     const inLichtung = (x, z) => lichtungen.some(l => (x - l.x) * (x - l.x) + (z - l.z) * (z - l.z) < l.r * l.r);
-    const frei = (x, z, extra) => !amSumpf(x, z) && !amLava(x, z, extra);
+    const frei = (x, z, extra) => !amSumpf(x, z) && !amLava(x, z, extra) && !amBerg(x, z, (extra || 0) + 4);
     const freiBaum = (x, z, extra) => frei(x, z, extra) && !inLichtung(x, z);
 
     // ---------- Deko-Dinos (stehen hinter dem Zaun, schauen grob zur Straße) – vor den Bäumen: Lichtung ----------
@@ -1443,7 +1580,7 @@
 
     // ---------- Vulkan mit Rauch am Horizont ----------
     const vulkan = vulkanBauen(gruppe, thema, strecke);
-    return { baeume: baeume.length, palmen: palmen.length, riesenfarne: riesen.length, farne: farne.length, felsen: felsen.length,
+    return { bergmassiv: !!massiv, baeume: baeume.length, palmen: palmen.length, riesenfarne: riesen.length, farne: farne.length, felsen: felsen.length,
       knochen: knochen.length, skelette: skelette.length, dinos: dinoZahl, vulkan: !!vulkan, lavasee: lava ? { x: lava.x, z: lava.z, s: lava.s } : null };
   }
 
@@ -1607,6 +1744,79 @@
     return gruppe;
   }
 
+  // ------------------------------------------------------------------ Runde 6 (W2-D): Straßenlaternen (Nacht)
+
+  /** Weicher, warmer Lichtfleck (Canvas, einmal erzeugt). */
+  let _lichtfleckTextur = null;
+  function lichtfleckTextur() {
+    if (_lichtfleckTextur) return _lichtfleckTextur;
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d'), v = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    v.addColorStop(0, 'rgba(255,255,255,1)'); v.addColorStop(0.5, 'rgba(255,255,255,0.45)'); v.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = v; g.fillRect(0, 0, 64, 64);
+    _lichtfleckTextur = new THREE.CanvasTexture(c);
+    return _lichtfleckTextur;
+  }
+
+  /**
+   * Straßenlaternen für Themen mit laternen: true (Wiese, Wald, später Alpen): alle `abstand` m abwechselnd links/rechts,
+   * 2,2 m hinter dem Randstein, Ausleger über den Rand. Nicht in Tunneln, auf Brücken, nahe Säulen (Startbogen, Looping)
+   * oder dicht an anderen Streckenteilen. 3 InstancedMeshes = 3 Draw-Calls: Mast+Ausleger, Lampenkopf (leuchtet, ohne
+   * Nebel), Lichtfleck auf der Straße (additiv). Echtes Licht (PointLights an den nächsten Laternen) setzt main.js.
+   * @returns {{gruppe: THREE.Group, lampen: {x,y,z}[], masten: {x,z,r,art}[]}}
+   */
+  function laternenBauen(strecke, thema, opt) {
+    opt = opt || {};
+    const abstand = opt.abstand || 60, hoehe = opt.hoehe || 7, aus = opt.ausleger || 2.4, farbe = opt.farbe || 0xffd08a;
+    const sp = strecke.spline, L = sp.laenge, saeulen = strecke.saeulen || [];
+    const stellen = [];
+    let seite = 1;
+    for (let s = 30; s < L - 15; s += abstand, seite = -seite) {
+      if (strecke.imTunnel && strecke.imTunnel(s, 20)) continue;
+      if (strecke.brueckeBei && strecke.brueckeBei(s, 12)) continue;
+      const b = (strecke.breiteBei ? strecke.breiteBei(s) : strecke.breite) / 2 + (strecke.randBreite || 0.6);
+      const d = b + 2.2;
+      if (strecke.grenzeBei && strecke.grenzeBei(s) < d + 1) continue;          // Zaun zu nah (Trichter)
+      const p = sp.punktBei(s), x = p.x + p.nx * d * seite, z = p.z + p.nz * d * seite;
+      const n = sp.naechster(x, z);
+      if (Math.abs(n.seitenabstand) < d - 0.3) continue;                        // anderes Streckenteil näher
+      if (saeulen.some(q => (q.x - x) * (q.x - x) + (q.z - z) * (q.z - z) < 36)) continue;
+      const y = strecke.bodenHoehe ? strecke.bodenHoehe(x, z) : strecke.hoeheAn(x, z);
+      const dx = -p.nx * seite, dz = -p.nz * seite;                              // Richtung zur Straße
+      const kx = x + dx * aus, kz = z + dz * aus;
+      stellen.push({ x, y, z, dx, dz, kx, kz, ky: y + hoehe - 0.25, sy: strecke.hoeheAn(kx, kz) });
+    }
+    const gruppe = new THREE.Group();
+    gruppe.name = 'Laternen';
+    // Mast + Ausleger (lokal: Mast bei 0, Ausleger nach +x)
+    const mast = new THREE.CylinderGeometry(0.09, 0.14, hoehe, 6); mast.translate(0, hoehe / 2, 0);
+    const arm = new THREE.BoxGeometry(aus + 0.1, 0.1, 0.1); arm.translate(aus / 2, hoehe - 0.05, 0);
+    const fuss = new THREE.CylinderGeometry(0.22, 0.26, 0.5, 6); fuss.translate(0, 0.25, 0);
+    const mastGeo = vereinen([{ geo: mast, farbe: 0x4f555c }, { geo: arm, farbe: 0x4f555c }, { geo: fuss, farbe: 0x3a3e44 }]);
+    const winkel = (e) => Math.atan2(-e.dz, e.dx);
+    instanzMesh(gruppe, 'Laternenmasten', mastGeo, vertexMaterial(true), stellen, (e, d) => {
+      d.position.set(e.x, e.y - 0.05, e.z); d.rotation.set(0, winkel(e), 0);
+    });
+    const kopf = new THREE.BoxGeometry(0.85, 0.16, 0.42); kopf.translate(aus - 0.15, hoehe - 0.18, 0);
+    instanzMesh(gruppe, 'Laternenkoepfe', kopf, new THREE.MeshBasicMaterial({ color: farbe, fog: false }), stellen, (e, d) => {
+      d.position.set(e.x, e.y - 0.05, e.z); d.rotation.set(0, winkel(e), 0);
+    });
+    const fleck = new THREE.CircleGeometry(1, 20); fleck.rotateX(-Math.PI / 2);
+    const fleckMat = new THREE.MeshBasicMaterial({ color: farbe, map: lichtfleckTextur(), transparent: true, opacity: 0.45,
+      blending: THREE.AdditiveBlending, depthWrite: false, fog: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    const fl = instanzMesh(gruppe, 'Laternenlicht', fleck, fleckMat, stellen, (e, d) => {
+      d.position.set(e.kx + e.dx * 1.5, e.sy + 0.12, e.kz + e.dz * 1.5); d.scale.set(8, 1, 8);
+    });
+    fl.renderOrder = 1;
+    gruppe.children.forEach((m) => { m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere(); });
+    return {
+      gruppe,
+      lampen: stellen.map(e => ({ x: e.kx, y: e.ky - 0.3, z: e.kz })),
+      masten: stellen.map(e => ({ x: e.x, z: e.z, r: 0.2, art: 'laterne' })),
+    };
+  }
+
+  themes.laternenBauen = laternenBauen;
   themes.dekoBauen = dekoBauen;
   themes.jahreszeitFarben = jahreszeitFarben;
   themes.instanzenAufteilen = instanzenAufteilen;
