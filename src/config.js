@@ -182,6 +182,13 @@ Rennspiel.config = {
     liegenZeit: 3,             // s bleibt er am Rand liegen, dann weg
     ueberstand: 8,             // m: Start/Ende so weit neben der Fahrbahnkante
   },
+  // Runde 5b: laufende Dinos (Dynamik, Katalog dinos [{ s, von, intervall, tempo, art }], nur Welt mit dinos)
+  dinos: {
+    tempo: 4,                  // m/s Standard-Lauftempo quer
+    tempoFaktor: 0.4,          // Kontakt: Tempo −60 %
+    huepfer: 2.6,              // Hüpfer (vehicle.huepfer, m/s nach oben – nur Optik, wie Ast)
+    ueberstand: 12,            // m: Start/Ende so weit neben der Fahrbahnkante (Dino ist lang)
+  },
 
   // --- Runde 4: Schaden (Einstellung, Standard aus → keinerlei Wirkung). Logik: src/physics/schaden.js ---
   // Treffer kostet trefferVerlust (5 %) – nur ab Mindest-Stoßstärke (m/s) je Art, höchstens einmal je abklingZeit s
@@ -360,6 +367,30 @@ Rennspiel.config = {
     frei: 3,                   // s Schonzeit nach dem Lösen
     untergrund: { grip: 0.7, rollwiderstand: 8, vMaxFaktor: 0.6 },
     farbe: 0x3ddc5a,
+  },
+  // --- Runde 5b: Polizei (Einstellung `polizei`, Standard aus; Logik + Optik: src/world/polizei.js) ---
+  // Streifenwagen (nicht im Rennen) verfolgt den nächsten Spieler vor ihm (KI nur, wenn kein Spieler in kiRadius m);
+  // ≥ naheZeit s mit Karosserie-Abstand ≤ naheAbstand m neben/hinter dem Ziel → Ziel stoppDauer s angehalten
+  // (Steuerung = Bremse), danach schonfrist s in Ruhe gelassen; je Auto höchstens 1 Anhaltung pro Runde. Schild platzt statt Stopp.
+  polizei: {
+    standardAn: false,
+    autoId: 'polizei',           // Katalog-Eintrag (Ersatz: Passat in Weiß + eigener Blaulichtbalken)
+    schwierigkeit: 'meister',    // eigener R.Driver (ohne Gummiband)
+    anzahl: 1, anzahlViele: 2, vieleAb: 6,   // 2 Streifenwagen ab 6 Gegnern
+    startHinter: 60,             // m hinter dem letzten Startplatz
+    naheAbstand: 6,              // m Karosserie-Abstand (Kapsel zu Kapsel)
+    naheZeit: 1.5,               // s am Stück nah dran
+    vorZiel: 1,                  // m: Streifenwagen-Mitte darf höchstens so weit vor der Front des Ziels sein („neben/hinter")
+    stoppDauer: 10,              // s angehalten
+    schonfrist: 30,              // s danach lässt er dieses Auto in Ruhe
+    kiRadius: 300,               // m: kein Spieler so nah → auch KI-Autos anhalten
+    zielWahl: 1,                 // s: so oft wird das Ziel neu gewählt
+    folgeAbstand: 8,             // m Mitten-Abstand, ab dem er sich dem Tempo des Ziels anpasst (nicht rammen)
+    nebenAbstand: 3.8,           // m seitlich neben dem angehaltenen Auto
+    blinkHz: 4,                  // Blaulicht blau/rot
+    lichtAbstand: 40,            // m: PointLights nur so nah an einer Spieler-Kamera
+    lichtStaerke: 30, lichtReichweite: 14,
+    sireneHoerweite: 120,        // m: Lautstärke linear bis 0
   },
 
   // --- Kamera ---

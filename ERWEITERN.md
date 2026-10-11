@@ -36,6 +36,7 @@ tests/                   node tests/test_*.js (Physik, Autos, Strecke, KI, Kolli
 In `src/cars/carCatalog.js` einen Eintrag kopieren und anpassen: `id`, `name`, `farbe`, `karosserie` (einer der Typen oben),
 `fahrwerte` (vMax m/s, beschleunigung, bremsen, wendigkeit, grip, masse, laenge, breite). `node tests/test_autos.js` prüft die Werte.
 Vorschau: `tests/autos_vorschau.html?auto=<id>` im Browser öffnen.
+`waehlbar: false` (optional) = Auto erscheint weder im Spielermenü noch als Computer-Gegner (z. B. `polizei`); Menü, `main.js` (Gegnerverteilung, `autoOk`) und `autoVorschau.js` nutzen `R.carCatalog.waehlbare()`. Fehlt das Feld, ist das Auto wählbar.
 
 ## Neuer Fahrer
 In `src/config.js` unter `fahrer` einen Eintrag `{ name, emoji }` anhängen (Emoji als Avatar, keine Fotos/Logos). Das Menü-Raster passt sich an
@@ -78,6 +79,13 @@ Schichten: `hindernisse, wracks, strohballen, spuren, schanzen, baelle, wasserst
 `wetter` ('klar'|'regen'|'schnee'|'hagel'|'nebel'|'sandsturm'|'zufall'), `windStaerke` (0–5 oder 'zufall'), `windRichtung` ('zufall' oder Winkel), `schaden` (bool), `gegner` (0–`config.rennen.gegnerMax` = 10).
 Das Menü (`menu.js`) hält die Kombination gültig: Streckenwechsel setzt `welt` auf '', Jahreszeitwechsel setzt `wetter` auf 'klar'; die Wetter-Pillen kommen aus `R.Wetter.erlaubt(thema, jahreszeit)`
 (Wüste: Winter-Pille heißt „Sandsturm-Zeit“). Neue Welt = Eintrag in `welten` + `R.weltInfo`; neues Wetter = Eintrag in `config.wetter` und in die `wetter`-Listen der Jahreszeiten.
+
+## Runde 5: neue Module
+- `src/world/polizei.js` (`R.Polizei`, Logik ohne THREE + Glue): Streifenwagen jagt Spieler, Anhalten 10 s; Einstellung `polizei` (bool, Standard aus), `config.polizei`. Das Auto kommt aus dem Katalog (`id: 'polizei'`, `waehlbar: false`) und steht in `spiel.fahrzeuge` hinter allen Teilnehmern (nicht in RaceManager/Ergebnis).
+- `src/track/anlauf.js`: Anlauf-Hilfe vor Loopings/Schanzen (Mindesttempo, weiche Bremse, Taste R/T = Anlaufposition; `config.anlauf`).
+- `src/world/kleber.js`: Kleberstreifen (Fantasie); Katalogfeld `kleber: [{ s0, s1, seite: -1|1|0 }]`, Schicht `kleber`, `config.kleber`.
+- Katalogfeld `dinos: [{ s, von: -1|1, intervall, tempo, art: 'dreihorn'|'langhals' }]` (Schicht `dinos`, ab Welt Hindernisse; Logik in `dynamik.js`, `config.dinos`). Strecke Dino: Bauplan `tests/bauplan/dino.json`, Deko in `themes.js` (`dinoDeko`).
+- Tempo-Klasse: Einstellung `tempoKlasse` ('normal' Standard | 'schnell'), wirkt in `Vehicle` auf vMax/Beschleunigung/Bremse.
 
 ## Autos: Maße und Form
 Zusätzlich zu `fahrwerte` (vMax 220–270 km/h, notiert als `km/h / 3.6`) hat jedes Auto:

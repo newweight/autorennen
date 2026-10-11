@@ -135,7 +135,7 @@
 
   /** Alle Kachelbilder erzeugen (einmalig; danach nur noch Cache). */
   function alleKacheln() {
-    R.carCatalog.forEach((a) => kachel(a));
+    R.carCatalog.waehlbare().forEach((a) => kachel(a));   // Polizei hat keine Menükachel
     return S.kacheln;
   }
 

@@ -12,8 +12,12 @@
 //   bremslichter[2]   Rücklicht-Meshes (eigenes Material je Auto, siehe setzeBremslicht)
 //   scheinwerfer[2]   Scheinwerfer-Meshes (inkl. Tagfahrlicht)
 //   autoId, karosserie, bremslichtMaterial
+//   blaulicht[2]      (nur Autos mit form.blaulicht, z. B. Streifenwagen) linke/rechte Leuchte im Dachbalken,
+//                     je eigenes Material; schalten mit setzeBlaulicht(auto, phase, farbe). Sonst [].
+//   Formel-Renner (Typ 'formel'): scheinwerfer = [] (keine Scheinwerfer); bremslichter = [Regenlicht hinten,
+//                     Leuchtstreifen an den Heckflügel-Endplatten].
 //
-// Aufbau (10 Meshes pro Auto): Karosserie = EIN Mesh mit Vertex-Farben (Lack, Glas,
+// Aufbau (10 Meshes pro Auto; Streifenwagen 12, Formel-Renner 8): Karosserie = EIN Mesh mit Vertex-Farben (Lack, Glas,
 // Kunststoff, Chrom, Radhäuser, Innenraum …), 2 Scheinwerfer, 2 Rücklichter, 4 Räder,
 // Blob-Schatten (name 'schatten').
 //
@@ -42,6 +46,7 @@
   const LICHT_AUS = 0xa31414;      // Rücklicht normal
   const LICHT_AN = 0xff3b30;       // Rücklicht beim Bremsen
   const SCHEINWERFER = 0xfff6c8;
+  const BLAULICHT = { aus: { blau: 0x1c2f63, rot: 0x5a1c1c }, an: { blau: 0x3f8cff, rot: 0xff2b2b } };
 
   // --- Caches (gemeinsame Instanzen) ---
   const cache = { karosserie: {}, rad: {}, material: {}, farbe: {}, schatten: null };
@@ -76,6 +81,8 @@
     suv: { hoehe: 1.65, sill: 0.17, nase: 0.55, haubeH: 0.62, guertel: 0.63, deck: 0.64, heckH: 0.62, heckTyp: 'steil',
       dachHinten: 0.93, heckscheibeEnde: 0.985, heckNeigung: 0.16, verkleidung: true, dachreling: true, spoiler: 'dach',
       rueck: { form: 'eckig', y: 0.64, h: 0.09, x0: 0.50, x1: 0.98 } },
+    // Monoposto: eigener Bauplan (baueFormel), die Loft-Werte oben gelten hier nicht
+    formel: { hoehe: 0.95, felgeFarbe: 0x2a2d33, nummer: 1, helm: 0xffcc1a },
     cabrio: { hoehe: 1.52, cabrio: true, tueren: 2, sill: 0.165, nase: 0.56, haubeH: 0.655, guertel: 0.67, deck: 0.66,
       heckH: 0.645, scheibeUnten: 0.335, dachVorn: 0.445, dachHoehe: 0.93, verdeck: [0.80, 0.93], verkleidung: true },
   };
@@ -595,6 +602,11 @@
       if (k === 0) return inBogen(zm) && !f.verkleidung ? M.lack : FARBE.KUNSTSTOFF;
       if (k === 1 && f.verkleidung) return FARBE.KUNSTSTOFF;
       if (k >= 1 && k <= 4 && inFuge(zm)) return M.fuge;
+      // Seitenstreifen (z. B. Streifenwagen): Farbe je Flanken-Segment k, nicht um die Ecken herum
+      if (f.flankenStreifen && f.flankenStreifen[k] !== undefined && zm > M.zF + 0.3 && zm < M.zR - 0.3) {
+        const sf = f.flankenStreifen[k];
+        return sf === 'farbe2' ? (M.farbe2 !== undefined ? M.farbe2 : M.lack) : sf;
+      }
       if (k === 4 && f.tornado && !ende) return M.lackHell;
       if (k >= 6 && muldeGewicht(M, zm) > 0.5) return FARBE.INNEN;
       return M.lack;
@@ -1093,6 +1105,197 @@
   }
 
   // ------------------------------------------------------------
+  // 7. Blaulichtbalken auf dem Dach (form.blaulicht, z. B. Streifenwagen)
+  //    Sockel/Halter -> Karosserie-Sammler S; Leuchten -> BLAU[0] (links, -x) und BLAU[1] (rechts, +x)
+  // ------------------------------------------------------------
+  function baueBlaulicht(S, BLAU, K) {
+    const M = K.M;
+    const z = lerp(M.zDV, M.zDH, 0.22);
+    const y = obenY(K, z, 0, true);
+    const halb = K.kabHalb[Math.max(0, K.kabZ.findIndex((q) => q >= z))];
+    const b = Math.min(1.2, 2 * halb[4][0] + 0.06);            // Balkenbreite ≈ Dachbreite
+    // Füße und Sockel
+    [-1, 1].forEach((s) => quader(S, FARBE.SCHWARZ, s * b * 0.36, y + 0.02, z, 0.08, 0.05, 0.22));
+    quader(S, FARBE.SCHWARZ, 0, y + 0.05, z, b, 0.035, 0.3);
+    quader(S, FARBE.CHROM, 0, y + 0.11, z, 0.14, 0.09, 0.26);  // silbernes Mittelstück
+    // Leuchten: zweistufig (breiter Körper + schmalere Kuppe) für eine weichere Form
+    [-1, 1].forEach((s, si) => {
+      const w = b / 2 - 0.08, x = s * (0.07 + w / 2);
+      BLAU[si].geo(setze(new THREE.BoxGeometry(w, 0.09, 0.28), x, y + 0.11, z), 0);
+      BLAU[si].geo(setze(new THREE.BoxGeometry(w - 0.06, 0.035, 0.2), x, y + 0.17, z), 0);
+    });
+  }
+
+  // ------------------------------------------------------------
+  // 8. Formel-Renner (Typ 'formel'): Monoposto aus eigenem Loft + Anbauteilen
+  //    Nase, Frontflügel, Seitenkästen, Airbox, Halo-Bügel, Heckflügel, Fahrerhelm, Radaufhängung;
+  //    freistehende Räder (keine Radhäuser). Generisch: Startnummer 1, keine Logos/Sponsoren.
+  // ------------------------------------------------------------
+  /** Stab (Quader) von Punkt p nach q (z. B. Querlenker). */
+  function stab(S, farbe, p, q, b, h) {
+    const a = new THREE.Vector3(p[0], p[1], p[2]), e = new THREE.Vector3(q[0], q[1], q[2]);
+    const d = e.clone().sub(a), len = d.length();
+    const g = new THREE.BoxGeometry(b, h || b, len);
+    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), d.normalize());
+    g.applyMatrix4(new THREE.Matrix4().compose(a.add(e).multiplyScalar(0.5), quat, new THREE.Vector3(1, 1, 1)));
+    S.geo(g, farbe);
+  }
+  /** Flache Ziffer „1" (aus drei Balken) in der Ebene: u = rechts, v = oben, n = Normale (Einheitsvektoren). */
+  function zifferEins(S, farbe, mitte, u, v, h) {
+    const st = h * 0.17;
+    const teil = (cu, cv, bu, bv, wnk) => {
+      const g = new THREE.BoxGeometry(bu, bv, 0.012);
+      g.rotateZ(wnk || 0);
+      g.translate(cu, cv, 0);
+      const n = new THREE.Vector3().crossVectors(u, v);
+      const m = new THREE.Matrix4().makeBasis(u, v, n).setPosition(mitte);
+      g.applyMatrix4(m);
+      S.geo(g, farbe);
+    };
+    teil(0, 0, st, h);                                         // Hauptstrich
+    teil(-h * 0.14, h * 0.36, st * 0.9, h * 0.34, -0.85);     // Fähnchen oben links
+    teil(0, -h / 2 + st / 2, h * 0.5, st);                     // Fuß
+  }
+
+  function baueFormel(S, BL, M) {
+    const f = M.f, blau = M.lack, weiss = M.farbe2 !== undefined ? M.farbe2 : FARBE.WEISS;
+    const zF = M.zF, zR = M.zR;                                // ±L/2
+    const zNase = zF + 0.13, zEnde = zR - 0.43;                // Rumpf: Nasenspitze bis Getriebe
+    const zVA = M.zVA, zHA = M.zHA;
+    // --- Profile des Rumpfs (alle über z) ---
+    const P = {
+      hm: [[zNase, 0.07], [zNase + 0.4, 0.11], [zVA + 0.2, 0.19], [zVA + 0.85, 0.29], [zVA + 1.45, 0.35], [zVA + 2.3, 0.29], [zHA - 0.3, 0.17], [zEnde, 0.12]],
+      pod: [[zVA + 0.85, 0], [zVA + 1.15, 0.70], [zVA + 1.95, 0.72], [zVA + 2.75, 0.44], [zHA - 0.25, 0.2], [zEnde, 0]],
+      yb: [[zNase, 0.21], [zVA + 0.1, 0.16], [zVA + 0.75, 0.07], [zHA - 0.3, 0.08], [zEnde, 0.13]],
+      yt: [[zNase, 0.29], [zNase + 0.5, 0.40], [zVA + 0.4, 0.53], [zVA + 1.0, 0.64], [zVA + 1.55, 0.655], [zVA + 1.75, 0.80],
+        [zVA + 1.9, 0.935], [zVA + 2.15, 0.95], [zVA + 2.8, 0.74], [zHA - 0.1, 0.52], [zEnde, 0.43]],
+      yp: [[zVA + 0.85, 0.40], [zVA + 1.2, 0.50], [zVA + 2.0, 0.52], [zVA + 2.9, 0.37], [zEnde, 0.30]],
+    };
+    const hm = (z) => kurve(P.hm, z), yb = (z) => kurve(P.yb, z), yt = (z) => kurve(P.yt, z);
+    const hp = (z) => Math.max(hm(z), (z > P.pod[0][0] && z < zEnde) ? kurve(P.pod, z) : 0);
+    const yp = (z) => {
+      const b = yb(z), t = yt(z);
+      const roh = hp(z) > hm(z) + 0.01 ? kurve(P.yp, z) : lerp(b, t, 0.45);
+      return clamp(roh, b + 0.04, t - 0.03);
+    };
+    const zCockpit0 = zVA + 0.98, zCockpit1 = zVA + 1.62;      // Cockpit-Öffnung
+    const zEinlass0 = zVA + 0.85, zEinlass1 = zVA + 1.2;        // Seitenkasten-Lufteinlass
+    function halbRing(z) {
+      const b = yb(z), t = yt(z), m = hm(z), p = hp(z), q = yp(z), d = q - b;
+      let top = t;
+      if (z > zCockpit0 && z < zCockpit1) top = t - 0.1 * kosFenster(z - (zCockpit0 + zCockpit1) / 2, (zCockpit1 - zCockpit0) / 2);
+      return [
+        [m * 0.9, b], [p, b + 0.2 * d], [p, b + 0.8 * d], [lerp(m, p, 0.9), q], [lerp(m, p, 0.3), q + Math.min(0.02, 0.1 * (t - q))],
+        [m, lerp(q, t, 0.55)], [m * 0.6, t - 0.012], [0, top],
+      ].map(([x, y]) => [x, y, z]);
+    }
+    // Stationen: dicht an der Nase, an Einlass/Cockpit/Airbox und am Ende
+    const zs = [];
+    for (let z = zNase; z < zEnde - 0.01; z += 0.1) zs.push(z);
+    [zNase + 0.02, zNase + 0.05, zEinlass0, zEinlass0 + 0.06, zEinlass1, zCockpit0, zCockpit1, zVA + 1.75, zVA + 1.85, zEnde - 0.04, zEnde]
+      .forEach((z) => { if (!zs.some((q) => Math.abs(q - z) < 0.025)) zs.push(z); });
+    zs.sort((a, b) => a - b);
+    const halbe = zs.map(halbRing);
+    const ringe = halbe.map(vollRing);
+    const nr = ringe[0].length, mitteJ = (nr - 1) / 2;
+    loft(S, ringe, zs, (i, j) => {
+      const zm = (zs[i] + zs[i + 1]) / 2;
+      const k = j < mitteJ ? j : nr - 2 - j;
+      const hatPod = hp(zm) > hm(zm) + 0.05;
+      if (k === 0) return FARBE.SCHWARZ;                                      // Unterseite
+      if (k >= 1 && k <= 3 && zm > zEinlass0 - 0.02 && zm < zEinlass1 && hatPod) return FARBE.SCHWARZ;  // Lufteinlass
+      if (k === 7 - 1 && zm > zCockpit0 && zm < zCockpit1) return FARBE.INNEN;                     // Cockpit
+      if ((k === 3 || k === 4) && hatPod) return weiss;                       // weißer Streifen auf den Seitenkästen
+      if (zm < zNase + 0.35 && k >= 5) return weiss;                          // weiße Nasenspitze
+      if (k === 6 && zm > zVA + 1.75 && zm < zVA + 2.5) return weiss;         // weißer Rücken hinter der Airbox
+      return blau;
+    });
+    deckel(S, ringe[0], [0, 0, -1], weiss);
+    deckel(S, ringe[ringe.length - 1], [0, 0, 1], FARBE.SCHWARZ);
+
+    // --- Unterboden (flach, mit Seitenkante) und Diffusor ---
+    quader(S, FARBE.SCHWARZ, 0, 0.045, (zVA + 0.45 + zHA - 0.42) / 2, 1.26, 0.03, (zHA - 0.42) - (zVA + 0.45));
+    quader(S, FARBE.SCHWARZ, 0, 0.11, zHA + 0.05, 0.9, 0.025, 0.55, 0.32);
+    // --- Airbox-Öffnung über dem Fahrerkopf ---
+    const zAir = zVA + 1.72;
+    quader(S, FARBE.SCHWARZ, 0, yt(zAir) - 0.045, zAir + 0.02, 0.17, 0.12, 0.05);
+    // --- Haifischflosse auf der Motorabdeckung ---
+    const flosse = [];
+    for (let z = zVA + 2.2; z <= zEnde - 0.05; z += 0.12) flosse.push([z, yt(z) - 0.02]);
+    const zf1 = zEnde - 0.05;
+    flosse.push([zf1, yt(zf1) + 0.2], [zVA + 2.2, yt(zVA + 2.2) + 0.02]);
+    const gFl = new THREE.ExtrudeGeometry(umriss(flosse), { depth: 0.014, bevelEnabled: false });
+    gFl.rotateY(-Math.PI / 2); gFl.translate(0.007, 0, 0);
+    S.geo(gFl, blau);
+    // --- Fahrerhelm mit Visier ---
+    const zHelm = zVA + 1.42;
+    S.geo(setze(new THREE.SphereGeometry(0.13, 12, 8), 0, 0.73, zHelm), f.helm || 0xffcc1a);
+    quader(S, FARBE.SCHWARZ, 0, 0.75, zHelm - 0.105, 0.2, 0.055, 0.06, 0.15);
+    // --- Halo-Bügel (Schutzbügel über dem Cockpit) ---
+    const hy = 0.86, haloPkt = [[-0.27, 0.64, zHelm + 0.22], [-0.27, 0.82, zHelm + 0.05], [-0.21, hy, zHelm - 0.2], [0, hy + 0.01, zHelm - 0.35],
+      [0.21, hy, zHelm - 0.2], [0.27, 0.82, zHelm + 0.05], [0.27, 0.64, zHelm + 0.22]].map(([x, y, z]) => new THREE.Vector3(x, y, z));
+    S.geo(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(haloPkt), 18, 0.026, 6, false), FARBE.SCHWARZ);
+    stab(S, FARBE.SCHWARZ, [0, hy, zHelm - 0.35], [0, yt(zHelm - 0.6) - 0.02, zHelm - 0.6], 0.05, 0.035);
+    // --- Rückspiegel ---
+    [-1, 1].forEach((s) => {
+      const z = zCockpit0 - 0.05, x = s * (hm(z) + 0.13);
+      stab(S, FARBE.SCHWARZ, [s * hm(z) * 0.8, yt(z) - 0.03, z], [x, 0.69, z], 0.025);
+      quader(S, blau, x + s * 0.05, 0.7, z, 0.13, 0.065, 0.05);
+      quader(S, FARBE.GLAS, x + s * 0.05, 0.7, z + 0.027, 0.11, 0.05, 0.006);
+    });
+    // --- Startnummer „1" (generisch): auf der Nase ---
+    // liegend auf der Nase, lesbar von vorn: v zeigt nach hinten die Nase hinauf, u = rechts des Betrachters (-x)
+    const zNr = zNase + 0.6, steig = (yt(zNr + 0.05) - yt(zNr - 0.05)) / 0.1;
+    zifferEins(S, weiss, new THREE.Vector3(0, yt(zNr) + 0.008, zNr), new THREE.Vector3(-1, 0, 0),
+      new THREE.Vector3(0, steig, 1).normalize(), 0.2);
+
+    // --- Frontflügel: Hauptblatt + 2 Klappen, Endplatten, Halter zur Nase ---
+    const zW = zF + 0.13, bW = M.B - 0.12;
+    quader(S, blau, 0, 0.085, zW, bW, 0.025, 0.25, 0.06);
+    [-1, 1].forEach((s) => {
+      const xm = s * (0.25 + (bW / 2 - 0.25) / 2), bb = bW / 2 - 0.25;
+      quader(S, FARBE.SCHWARZ, xm, 0.13, zW + 0.1, bb, 0.018, 0.12, -0.35);
+      quader(S, weiss, xm, 0.175, zW + 0.15, bb, 0.016, 0.09, -0.6);
+      quader(S, weiss, s * (bW / 2 + 0.01), 0.15, zF + 0.18, 0.02, 0.2, 0.36);     // Endplatte
+      stab(S, FARBE.SCHWARZ, [s * 0.06, 0.095, zW + 0.05], [s * 0.05, yb(zNase + 0.15) + 0.01, zNase + 0.15], 0.025, 0.06);
+    });
+    // --- Heckflügel: Hauptblatt, Klappe, Beam-Wing, Endplatten (mit Leuchtstreifen), Halter ---
+    const zHF = zR - 0.2, bH = 1.0;
+    quader(S, FARBE.SCHWARZ, 0, 0.79, zHF, bH, 0.03, 0.3, 0.12);
+    quader(S, blau, 0, 0.885, zHF + 0.06, bH, 0.022, 0.17, 0.45);
+    quader(S, FARBE.SCHWARZ, 0, 0.43, zHF - 0.04, bH * 0.92, 0.02, 0.2, 0.1);
+    [-1, 1].forEach((s) => {
+      const x = s * (bH / 2 + 0.01);
+      quader(S, blau, x, 0.65, zR - 0.215, 0.02, 0.6, 0.43);
+      zifferEins(S, weiss, new THREE.Vector3(x + s * 0.0125, 0.62, zR - 0.24), new THREE.Vector3(0, 0, -s), new THREE.Vector3(0, 1, 0), 0.22);
+      BL[1].geo(setze(new THREE.BoxGeometry(0.025, 0.24, 0.02), x, 0.66, zR - 0.006), 0);
+    });
+    stab(S, FARBE.SCHWARZ, [0, yt(zEnde) - 0.05, zEnde - 0.05], [0, 0.785, zHF - 0.02], 0.04, 0.09);
+    // Crashstruktur + Regenlicht (Bremslicht) am Heck
+    quader(S, FARBE.SCHWARZ, 0, 0.3, zEnde + 0.06, 0.16, 0.13, 0.13);
+    BL[0].geo(setze(new THREE.BoxGeometry(0.11, 0.06, 0.02), 0, 0.31, zEnde + 0.13), 0);
+
+    // --- Radaufhängung: je Rad zwei Querlenker + Spurstange zum Rumpf ---
+    const raeder = [
+      { vorn: true, z: zVA, r: M.rV, w: M.wV, x: M.B / 2 - M.wV / 2 },
+      { vorn: false, z: zHA, r: M.rH, w: M.wH, x: M.B / 2 - M.wH / 2 },
+    ];
+    raeder.forEach((a) => {
+      const xi = a.x - a.w / 2 + 0.04;
+      [-1, 1].forEach((s) => {
+        const zk = clamp(a.z, zNase + 0.3, zEnde - 0.1);
+        const xk = hm(zk) * 0.9, yo = Math.min(yt(zk) - 0.05, a.r + 0.13);
+        stab(S, FARBE.SCHWARZ, [s * xk, yo, zk - 0.16], [s * xi, a.r + 0.1, a.z], 0.03, 0.022);
+        stab(S, FARBE.SCHWARZ, [s * xk, yo, zk + 0.16], [s * xi, a.r + 0.1, a.z], 0.03, 0.022);
+        stab(S, FARBE.SCHWARZ, [s * xk, yb(zk) + 0.03, zk - 0.18], [s * xi, a.r - 0.1, a.z], 0.03, 0.022);
+        stab(S, FARBE.SCHWARZ, [s * xk, yb(zk) + 0.03, zk + 0.18], [s * xi, a.r - 0.1, a.z], 0.03, 0.022);
+        quader(S, FARBE.KUNSTSTOFF, s * (xi - 0.03), a.r, a.z, 0.06, 0.26, 0.14);   // Radträger
+      });
+    });
+    return raeder.map((a) => Object.assign(a, { geo: radGeometrie(a.r, a.w, a.vorn ? M.zollV : M.zollH, f.felgeFarbe) }));
+  }
+
+  // ------------------------------------------------------------
   // Material, Schatten
   // ------------------------------------------------------------
   function karosserieMaterial() {
@@ -1105,7 +1308,8 @@
   }
   function material(farbe) { return new THREE.MeshLambertMaterial({ color: farbe }); }
 
-  function schattenMesh(L, B) {
+  /** Blob-Schatten; zusatzL/zusatzB = Rand um das Auto (Formel-Renner: schmaler, die Räder stehen frei). */
+  function schattenMesh(L, B, zusatzL, zusatzB) {
     if (!cache.schatten) {
       let map = null;
       try {
@@ -1125,7 +1329,7 @@
         ? { map, transparent: true, opacity: 0.55, depthWrite: false }
         : { color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false });
     }
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(B + 0.9, L + 1.0), cache.schatten);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(B + (zusatzB !== undefined ? zusatzB : 0.9), L + (zusatzL !== undefined ? zusatzL : 1.0)), cache.schatten);
     m.rotation.x = -Math.PI / 2;
     m.position.y = 0.02;
     m.name = 'schatten';
@@ -1138,22 +1342,29 @@
   /** Karosserie, Lichter-Geometrien und Radlagen für ein Auto erzeugen (gecacht). */
   function karosserieBauen(auto) {
     const M = modell(auto);
+    const S = new Sammler();
+    const BL = [new Sammler(), new Sammler()];
+    if (M.typ === 'formel') {
+      const raeder = baueFormel(S, BL, M);
+      return { geo: S.fertig(), sw: [], bl: BL.map((s) => s.fertig()), blau: [], raeder, M, schatten: [0.4, 0.3] };
+    }
     M._mitte = mitteProfil(M);
     const K = { M };
-    const S = new Sammler();
     const SW = [new Sammler(), new Sammler()];
-    const BL = [new Sammler(), new Sammler()];
+    const BLAU = [new Sammler(), new Sammler()];
     baueRumpf(S, K);
     if (M.f.cabrio) baueCabrio(S, K); else baueKabine(S, K);
     baueRadhaeuser(S, K);
     baueFront(S, SW, K);
     baueHeck(S, BL, K);
     baueAnbauten(S, K);
+    if (M.f.blaulicht && !M.f.cabrio) baueBlaulicht(S, BLAU, K);
     const raeder = achsen(M).map((a) => ({
       vorn: a.vorn, z: a.zc, r: a.r, w: a.w, x: halbBreite(M, a.zc, 1) - a.w / 2 - 0.015,
       geo: radGeometrie(a.r, a.w, a.vorn ? M.zollV : M.zollH, M.f.felgeFarbe),
     }));
-    return { geo: S.fertig(), sw: SW.map((s) => s.fertig()), bl: BL.map((s) => s.fertig()), raeder, M };
+    return { geo: S.fertig(), sw: SW.map((s) => s.fertig()), bl: BL.map((s) => s.fertig()),
+      blau: M.f.blaulicht && !M.f.cabrio ? BLAU.map((s) => s.fertig()) : [], raeder, M, schatten: null };
   }
 
   /**
@@ -1204,12 +1415,21 @@
       if (a.vorn) { vorderraeder.push(rad); lenkObjekte.push(halter); }
     });
 
-    g.add(schattenMesh(e.M.L, e.M.B));
+    // Blaulicht-Leuchten (Streifenwagen): je Seite eigenes Material, Start = aus
+    const blaulicht = e.blau.map((geo, i) => {
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: BLAULICHT.aus.blau }));
+      m.name = i === 0 ? 'blaulicht-links' : 'blaulicht-rechts';
+      g.add(m);
+      return m;
+    });
+
+    g.add(e.schatten ? schattenMesh(e.M.L, e.M.B, e.schatten[0], e.schatten[1]) : schattenMesh(e.M.L, e.M.B));
 
     g.userData = {
       autoId: autoDaten.id, karosserie: typ,
       raeder, vorderraeder, lenkObjekte, bremslichter, scheinwerfer,
       bremslichtMaterial: bremslichtMat,
+      blaulicht,
     };
     return g;
   }
@@ -1218,6 +1438,21 @@
   function setzeBremslicht(auto, an) {
     const m = auto.userData.bremslichtMaterial;
     if (m) m.color.setHex(an ? LICHT_AN : LICHT_AUS);
+  }
+
+  /**
+   * Blaulicht schalten (nur Autos mit userData.blaulicht; sonst ohne Wirkung).
+   * @param {number} phase 0 = aus, 1 = links an, 2 = rechts an, 3 = beide an (Wechselblinken: 1/2 abwechseln)
+   * @param {string} [farbe] 'blau' (Standard) oder 'rot' – Farbe der eingeschalteten Leuchten
+   */
+  function setzeBlaulicht(auto, phase, farbe) {
+    const bl = auto && auto.userData && auto.userData.blaulicht;
+    if (!bl || !bl.length) return;
+    const art = farbe === 'rot' ? 'rot' : 'blau';
+    bl.forEach((m, i) => {
+      const an = phase === 3 || (phase === 1 && i === 0) || (phase === 2 && i === 1);
+      m.material.color.setHex(an ? BLAULICHT.an[art] : BLAULICHT.aus[art]);
+    });
   }
 
   /** Vorderräder einschlagen (Winkel in Radiant, positiv = nach links). */
@@ -1232,7 +1467,9 @@
 
   /** Cache leeren (nur falls Katalog zur Laufzeit geändert wird). */
   function cacheLeeren() {
-    Object.values(cache.karosserie).forEach((e) => { e.geo.dispose(); e.sw.forEach((x) => x.dispose()); e.bl.forEach((x) => x.dispose()); });
+    Object.values(cache.karosserie).forEach((e) => {
+      e.geo.dispose(); e.sw.forEach((x) => x.dispose()); e.bl.forEach((x) => x.dispose()); (e.blau || []).forEach((x) => x.dispose());
+    });
     Object.values(cache.rad).forEach((geo) => geo.dispose());
     cache.karosserie = {}; cache.rad = {};
   }
@@ -1261,5 +1498,5 @@
     return g;
   }
 
-  R.carBuilder = { bauen, platzhalterAuto, setzeBremslicht, lenkeRaeder, dreheRaeder, cacheLeeren, TYP_STANDARD };
+  R.carBuilder = { bauen, platzhalterAuto, setzeBremslicht, setzeBlaulicht, lenkeRaeder, dreheRaeder, cacheLeeren, TYP_STANDARD };
 })();

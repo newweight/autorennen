@@ -37,6 +37,10 @@
 //   schilde:     [{ s, seitenabstand }]                   Schutzschild-Pickup (Welt „Verrückt")
 //   Nicht in Tunnel/Brücke/Looping/Haarnadel/Spur-Abschnitt (1 Spur), nicht auf Hindernissen –
 //   tests/test_strecke.js prüft alle Listen.
+// Runde 5b (Dino-Strecke): Schicht „dinos" (ab Welt Hindernisse; nur Strecken mit Liste dinos)
+//   dinos:       [{ s, von: -1 | 1, intervall, tempo, art: 'dreihorn' | 'langhals' }]  laufende Dinos (world/dynamik.js)
+//   strohOptik:  'fels' → Strohballen rollen als Felsbrocken (gleiche Mechanik)
+//   bruecken art 'stamm' (Baumstamm-Brücke über Sumpf), tunnel art 'hoehle' (Höhle mit Stalaktiten, Fackeln)
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -52,9 +56,9 @@
   };
   // Bausteine: jede Welt baut auf der vorigen auf (Klassisch → Hindernisse → Stunt → Verrückt)
   const AUS = { hindernisse: false, wracks: false, strohballen: false, spuren: false, schanzen: false,
-    baelle: false, wasserstrahlen: false, boost: false, schild: false, loopings: false, kleber: false };
+    baelle: false, wasserstrahlen: false, boost: false, schild: false, loopings: false, kleber: false, dinos: false };
   const W_KLASSISCH = Object.assign({}, AUS);
-  const W_HINDERNISSE = Object.assign({}, W_KLASSISCH, { hindernisse: true, wracks: true, strohballen: true });
+  const W_HINDERNISSE = Object.assign({}, W_KLASSISCH, { hindernisse: true, wracks: true, strohballen: true, dinos: true });
   const W_STUNT = Object.assign({}, W_HINDERNISSE, { spuren: true, schanzen: true });
   const W_VERRUECKT = Object.assign({}, W_STUNT, { baelle: true, wasserstrahlen: true, boost: true, schild: true });
   /** Die vier Standard-Welten (Kopien), optional mit Änderungen für alle Welten (z. B. { strohballen: false }). */
@@ -446,6 +450,106 @@
         [172.5, -0.31, 90.8], [163.2, -0.06, 93.9], [153.5, 0.09, 95], [123.9, 0.36, 95], [94.2, 0.45, 95], [64.6, 0.33, 95],
         [35, 0.17, 95], [25.9, 0.13, 93.8], [17.5, 0.1, 90.3], [10.3, 0.09, 84.7], [4.7, 0.1, 77.5], [1.2, 0.13, 69.1],
         [0, 0.17, 60], [0, 0.36, 30],
+      ],
+    },
+    {
+      id: 'dino',
+      name: 'Dino',
+      thema: 'dino',
+      beschreibung: 'Urwald am Vulkan: Palmen, Riesenfarne und Dinos! Durch die Dino-Höhle, über die ' +
+        'Baumstamm-Brücke am Sumpf, Schikane und Haarnadel – und manchmal läuft ein Dino über die Straße.',
+      schwierigkeit: 'mittel',
+      breite: 13,
+      randBreite: 1.5,
+      zaunAbstand: 12,          // dichter Urwald dahinter
+      abseitsUntergrund: 'gras',
+      checkpointAbstand: 110,
+      zielRundenzeit: 125,
+      // Runde 5b: Welten wie Wald/Wüste; „dinos" (laufende Dinos) ab Welt Hindernisse, Klassisch nur Deko-Dinos.
+      // Strohballen-Mechanik mit Felsoptik („Felsbrocken rollen", dynamik.js liest strohOptik).
+      weltStandard: 'hindernisse',
+      welten: vierWelten(),
+      strohOptik: 'fels',
+      bruecken: [{ s0: 1579, s1: 1644, art: 'stamm', tiefe: 4 }],   // Baumstamm-Brücke über den Sumpf
+      tunnel: [{ s0: 2359, s1: 2504, art: 'hoehle' }],              // Felstunnel „Dino-Höhle" mit Stalaktiten
+      hindernisse: [
+        { typ: 'sand', s: 359, seite: -0.3 },
+        { typ: 'baustelle', s: 1389, seite: 1 },
+        { typ: 'ast', s: 1779, seite: -1 },
+        { typ: 'oel', s: 2014, seite: 0.3 },
+      ],
+      spuren: [
+        { s0: 1089, s1: 1199, spuren: 1 },      // enger Urwaldweg am Ende der langen Geraden
+        { s0: 2104, s1: 2189, spuren: 3 },     // breit nach dem Kurvengeschlängel
+      ],
+      wracks: [
+        { s: 539, seitenabstand: -4, brennt: false, autoId: 'passat' },
+        { s: 2259, seitenabstand: 3.5, brennt: true, autoId: 'multivan' },
+      ],
+      strohballen: [                           // Optik: Felsbrocken (strohOptik)
+        { s: 639, von: 1, intervall: 10, tempo: 4 },
+        { s: 1699, von: -1, intervall: 12, tempo: 4 },
+      ],
+      // Laufende Dinos (world/dynamik.js): alle intervall s läuft ein Dino (art: 'dreihorn' | 'langhals') mit tempo m/s
+      // von der Seite von quer über die Straße. Kontakt: Tempo −60 % + Hüpfer, der Dino läuft unbeeindruckt weiter.
+      dinos: [
+        { s: 1899, von: -1, intervall: 14, tempo: 4, art: 'dreihorn' },
+        { s: 2284, von: 1, intervall: 16, tempo: 4, art: 'langhals' },
+      ],
+      schanzen: [
+        { s: 65, winkel: 8, laenge: 10 },
+        { s: 839, winkel: 12, laenge: 10 },     // lange Gerade
+      ],
+      boostFelder: [
+        { s: 1019, seitenabstand: 0, laenge: 12 },
+        { s: 1529, seitenabstand: 2, laenge: 12 },
+      ],
+      schilde: [
+        { s: 1479, seitenabstand: 0 },
+        { s: 2539, seitenabstand: -2 },
+      ],
+      baelle: [
+        { s: 739, von: -1, abRunde: 2, intervall: 8, tempo: 9, radius: 2.2, farbe: 0xff4fa3 },
+        { s: 2619, von: 1, abRunde: 'letzte', intervall: 8, tempo: 9, radius: 2.2, farbe: 0xffd23a },
+      ],
+      wasserstrahlen: [
+        { s: 1949, seitenabstand: -2, intervall: 20, dauer: 2, vorwarnung: 1 },
+      ],
+      // Bauplan (tests/bauplan/dino.json, Runde 5b; danach ×1,225 um den Schwerpunkt → 2.752 m):
+      // G200 K34/90 G70 K28/-45 K28/90 K28/-45 (Schikane) G60 K45/35 K45/-35 G?(502, lange Gerade) K25/180 (Haarnadel)
+      // G120 K34/-90 G70 (Brücke) K32/70 K32/-70 G50 K34/90 G40 K34/-60 K34/120 K34/-60 G30 K34/-50 K34/50 G30
+      // K36/-45 K36/45 G210 (Höhle) K36/90 G?(89) G1
+      huegel: [
+        { x: 97.9, z: -205.9, r: 153.1, h: 14 },
+        { x: 832.9, z: -144.6, r: 165.4, h: -12 },    // Sumpf-Senke (Brücke)
+        { x: 97.9, z: 259.6, r: 116.4, h: 10 },    // Höhlenberg
+        { x: 489.9, z: -71.1, r: 140.9, h: 7 },
+        { x: 489.9, z: 271.9, r: 110.3, h: -6 },
+        { x: 1175.9, z: -426.4, r: 171.5, h: 8 },
+      ],
+      punkte: [
+        [-85.8, 2.73, 14.6], [-85.8, 3.57, -26.2], [-85.8, 4.57, -67], [-85.8, 5.58, -107.9], [-85.8, 6.36, -148.7], [-85.8, 6.78, -189.5],
+        [-85.8, 6.73, -230.4], [-84.4, 6.71, -241.2], [-80.2, 6.81, -251.2], [-73.6, 7.03, -259.8], [-65, 7.35, -266.4], [-54.9, 7.78, -270.6],
+        [-44.2, 8.29, -272], [-1.3, 10.34, -272], [41.6, 11.94, -272], [50.5, 12.13, -273.2], [58.7, 12.2, -276.6], [65.8, 12.12, -282.1],
+        [74.5, 11.99, -288.4], [84.7, 11.95, -291.7], [95.5, 12, -291.7], [105.7, 12.14, -288.4], [114.3, 12.36, -282.1], [121.5, 12.51, -276.6],
+        [129.7, 12.53, -273.2], [138.6, 12.42, -272], [175.4, 11.43, -272], [212.1, 10.01, -272], [223.2, 9.57, -270.9], [233.9, 9.2, -267.5],
+        [243.7, 8.91, -262.1], [253.5, 8.61, -256.6], [264.2, 8.22, -253.2], [275.3, 7.77, -252.1], [316.3, 6.2, -252.1], [357.3, 5, -252.1],
+        [398.3, 4.13, -252.1], [439.3, 3.42, -252.1], [480.4, 2.65, -252.1], [521.4, 1.64, -252.1], [562.4, 0.28, -252.1], [603.4, -1.41, -252.1],
+        [644.4, -3.33, -252.1], [685.4, -5.27, -252.1], [726.4, -6.99, -252.1], [767.4, -8.26, -252.1], [808.4, -8.89, -252.1], [849.4, -8.77, -252.1],
+        [890.4, -7.9, -252.1], [902.1, -7.62, -249.8], [912, -7.54, -243.1], [918.7, -7.68, -233.2], [921, -8.01, -221.5], [918.7, -8.5, -209.7],
+        [912, -9.05, -199.8], [902.1, -9.58, -193.2], [890.4, -10, -190.8], [853.6, -10.74, -190.8], [816.9, -10.81, -190.8], [780.1, -10.16, -190.8],
+        [743.4, -8.87, -190.8], [732.6, -8.4, -189.4], [722.6, -7.94, -185.3], [713.9, -7.51, -178.6], [707.3, -7.16, -170], [703.1, -6.89, -160],
+        [701.7, -6.76, -149.2], [701.7, -6.3, -106.3], [701.7, -5.49, -63.4], [699.9, -5.12, -51.6], [694.6, -4.57, -41], [686.4, -3.9, -32.3],
+        [675.9, -3.16, -26.6], [665.5, -2.45, -20.9], [657.2, -1.84, -12.2], [652, -1.42, -1.6], [650.1, -1.21, 10.2], [650.1, -1.02, 40.9],
+        [650.1, -0.97, 71.5], [648.7, -0.95, 82.3], [644.6, -0.88, 92.3], [637.9, -0.8, 100.9], [629.3, -0.72, 107.6], [619.3, -0.63, 111.7],
+        [608.5, -0.52, 113.1], [584, -0.23, 113.1], [559.5, 0, 113.1], [548.7, 0.03, 114.6], [538.7, -0.08, 118.7], [530, -0.34, 125.3],
+        [523.4, -0.74, 134], [516.8, -1.15, 142.6], [508.2, -1.46, 149.2], [498.1, -1.65, 153.4], [487.4, -1.68, 154.8], [476.6, -1.54, 153.4],
+        [466.5, -1.24, 149.2], [457.9, -0.82, 142.6], [451.3, -0.31, 134], [444.7, 0.2, 125.3], [436, 0.61, 118.7], [426, 0.89, 114.6],
+        [415.2, 1.05, 113.1], [378.5, 1.37, 113.1], [366.5, 1.42, 114.9], [355.6, 1.39, 120], [346.6, 1.28, 128], [337.5, 1.24, 136],
+        [326.6, 1.35, 141.1], [314.7, 1.59, 142.9], [277.9, 2.58, 142.9], [266.5, 2.92, 144.4], [255.9, 3.27, 148.8], [246.7, 3.63, 155.8],
+        [237.6, 4.04, 162.8], [226.9, 4.52, 167.2], [215.5, 5.02, 168.7], [172.7, 6.69, 168.7], [129.8, 7.83, 168.7], [86.9, 8.06, 168.7],
+        [44, 7.29, 168.7], [1.2, 5.8, 168.7], [-41.7, 4.05, 168.7], [-53.1, 3.59, 167.2], [-63.8, 3.14, 162.8], [-72.9, 2.75, 155.8],
+        [-79.9, 2.45, 146.7], [-84.3, 2.24, 136], [-85.8, 2.13, 124.6], [-85.8, 2.05, 88.4], [-85.8, 2.24, 52.1], [-85.8, 2.71, 15.9],
       ],
     },
   ];

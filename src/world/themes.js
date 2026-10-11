@@ -12,6 +12,10 @@
 //
 // Runde 4: dekoBauen(thema, strecke, jahreszeit) färbt Bäume/Büsche je Jahreszeit
 // (jahreszeitFarben/jahreszeitFaerben, eigener Zufall – Platzierung bleibt gleich).
+// Runde 5b: Thema 'dino' (Urwald am Vulkan): Urwaldbäume ('Laubbaeume'), Palmen, Riesenfarne, Farne, Vulkangestein,
+// Knochen + Skelette, 9 Deko-Dinos (themes.dinoTeile/dinoGeo, auch für die laufenden Dinos in dynamik.js),
+// Vulkan mit Rauch als Horizont-Kulisse (je Kamera in der Sichtweite gezeichnet) und ein glühender Lavasee.
+// Jahreszeiten wie Wald.
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -98,6 +102,25 @@
       loopingBand: 0x6a5a8e,
       seed: 41,
       deko: { pilze: 70, ballons: 70, zuckerbaeume: 200, fernBaeume: 220, huegel: 36, blumen: 300 },
+    },
+    // Runde 5b: Urwald am Vulkan (Dino-Strecke). Jahreszeiten wie Wald (Urwaldbäume = 'Laubbaeume', Farne = 'Farne').
+    dino: {
+      name: 'Dino',
+      boden: 0x4c7a2a,           // sattes Urwald-Grün
+      boden2: 0x5e6a2c,          // moosig-erdige Flecken
+      himmel: 0xc3cfae,          // dunstig, leicht gelblich (Vulkan-Dunst)
+      nebel: 0xc8c9a6,
+      sichtweite: 380,
+      lichtHimmel: 0xf4f0d8,
+      lichtBoden: 0x34461e,
+      sonnenFarbe: 0xffecc4,
+      sonnenIntensitaet: 1.0,
+      asphalt: 0x3f3c38,
+      zaun: { latten: 0x6b4a2a, pfosten: 0x47301a },   // Holzzaun aus Ästen
+      seed: 53,
+      deko: { bandAbstand: 3.2, fernBaeume: 420, palmen: 260, riesenfarne: 150, farne: 340, felsen: 110,
+        knochen: 60, skelette: 7, dinos: { langhals: 3, dreihorn: 3, zweibeiner: 3 } },
+      vulkan: { richtung: 0.12, abstand: 1300, hoehe: 470, radius: 700 },   // Kulisse: richtung 0 = Startrichtung (rad, + = rechts)
     },
   };
 
@@ -944,6 +967,486 @@
     return { pilze: pilze.reduce((s, l) => s + l.length, 0), zuckerbaeume: baeume.length, huegel: huegel.length, ballons: ballons.length, blumen: blumen.length, regenbogen: 1 };
   }
 
+  // ------------------------------------------------------------------ Dino (Runde 5b)
+
+  /** Ellipsoid (Low-Poly-Kugel) mit Halbachsen rx/ry/rz an (x, y, z). */
+  function ellipsoid(rx, ry, rz, x, y, z, seg) {
+    const g = new THREE.SphereGeometry(1, seg || 10, Math.max(5, Math.round((seg || 10) * 0.7)));
+    g.scale(rx, ry, rz); g.translate(x, y, z);
+    return g;
+  }
+
+  /** Zylinder/Kegelstumpf von Punkt a nach b (Radius r0 bei a, r1 bei b). */
+  function zylinderZwischen(a, b, r0, r1, seg) {
+    const va = new THREE.Vector3(a[0], a[1], a[2]), vb = new THREE.Vector3(b[0], b[1], b[2]);
+    const d = vb.clone().sub(va), len = d.length();
+    const g = new THREE.CylinderGeometry(r1, r0, len, seg || 7);
+    g.translate(0, len / 2, 0);
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+    g.translate(a[0], a[1], a[2]);
+    return g;
+  }
+
+  /**
+   * Low-Poly-Dinos (generische Formen aus Kugeln/Zylindern/Kegeln, keine Film- oder Markenfiguren).
+   * Blickrichtung +x, Ursprung am Boden unter der Körpermitte.
+   * @param {'dreihorn'|'langhals'|'zweibeiner'} art
+   * @returns {{koerper:THREE.BufferGeometry, bein:THREE.BufferGeometry, huefte:number[][], beinLaenge:number, laenge:number, breite:number}}
+   *   bein: ein Bein, Ursprung an der Hüfte, hängt nach −y (für die Lauf-Animation drehbar um z).
+   */
+  function dinoTeile(art) {
+    const t = [], add = (geo, farbe) => t.push({ geo, farbe });
+    let huefte, beinL, beinR, beinFarbe, laenge, breite;
+    if (art === 'langhals') {
+      const haut = 0x7f9c62, bauch = 0xc9c79a;
+      add(ellipsoid(3.0, 1.9, 1.7, 0, 4.1, 0, 12), haut);
+      add(ellipsoid(2.6, 1.3, 1.45, 0, 3.5, 0, 10), bauch);
+      // Hals in drei Stücken nach vorn oben, dann Kopf
+      const hals = [[2.2, 4.6, 0], [3.6, 6.6, 0], [4.6, 8.6, 0], [5.2, 10.2, 0]];
+      for (let k = 0; k < 3; k++) add(zylinderZwischen(hals[k], hals[k + 1], 0.85 - k * 0.15, 0.7 - k * 0.15, 8), haut);
+      add(ellipsoid(0.9, 0.5, 0.48, 5.75, 10.35, 0, 8), haut);
+      [-1, 1].forEach(sg => add(ellipsoid(0.1, 0.1, 0.1, 6.15, 10.55, 0.36 * sg, 5), 0x1a1a1a));
+      // Schwanz nach hinten unten, spitz
+      add(zylinderZwischen([-2.6, 4.2, 0], [-5.4, 3.4, 0], 0.95, 0.5, 8), haut);
+      add(zylinderZwischen([-5.4, 3.4, 0], [-8.6, 2.2, 0], 0.5, 0.06, 7), haut);
+      // Rückenflecken
+      [[-1.2, 5.85], [0.3, 6.0], [1.6, 5.6]].forEach(([x, y]) => add(ellipsoid(0.55, 0.12, 0.6, x, y, 0, 6), 0x5f7a46));
+      huefte = [[1.9, 3.1, 1.0], [1.9, 3.1, -1.0], [-1.9, 3.1, 1.0], [-1.9, 3.1, -1.0]];
+      beinL = 3.1; beinR = 0.55; beinFarbe = 0x6f8c55; laenge = 15; breite = 3.4;
+    } else if (art === 'zweibeiner') {
+      const haut = 0xb07a3a;
+      const rumpf = ellipsoid(1.05, 0.55, 0.45, 0, 0, 0, 9); rumpf.rotateZ(0.3); rumpf.translate(0, 1.55, 0); add(rumpf, haut);
+      add(ellipsoid(0.55, 0.36, 0.32, 1.25, 2.35, 0, 8), haut);
+      add(ellipsoid(0.32, 0.12, 0.26, 1.55, 2.2, 0, 6), 0xd9c08a);
+      [-1, 1].forEach(sg => add(ellipsoid(0.07, 0.07, 0.07, 1.55, 2.48, 0.24 * sg, 4), 0x1a1a1a));
+      add(zylinderZwischen([-0.8, 1.35, 0], [-2.6, 1.1, 0], 0.32, 0.04, 6), haut);
+      [-1, 1].forEach(sg => add(zylinderZwischen([0.75, 1.75, 0.3 * sg], [1.15, 1.35, 0.35 * sg], 0.08, 0.06, 5), haut));
+      [[-0.3, 1.75], [0.4, 1.95]].forEach(([x, y]) => add(ellipsoid(0.28, 0.08, 0.3, x, y, 0, 5), 0x7a4f22));   // Streifen
+      huefte = [[0, 1.3, 0.3], [0, 1.3, -0.3]];
+      beinL = 1.3; beinR = 0.17; beinFarbe = 0x9a6a30; laenge = 4.5; breite = 1.2;
+    } else {
+      // dreihorn
+      const haut = 0x7f8f4c, bauch = 0xbab27a;
+      add(ellipsoid(2.3, 1.25, 1.2, 0, 1.95, 0, 12), haut);
+      add(ellipsoid(2.0, 0.9, 1.0, 0, 1.55, 0, 10), bauch);
+      add(ellipsoid(0.95, 0.75, 0.72, 2.55, 1.8, 0, 9), haut);
+      const schnabel = new THREE.ConeGeometry(0.36, 0.75, 7); schnabel.rotateZ(-Math.PI / 2); schnabel.translate(3.55, 1.55, 0); add(schnabel, 0x5d5a44);
+      const schild = new THREE.CylinderGeometry(1.3, 1.3, 0.2, 14); schild.rotateZ(Math.PI / 2 - 0.5); schild.translate(1.95, 2.55, 0); add(schild, 0xd9822b);
+      const rand = new THREE.TorusGeometry(1.3, 0.12, 5, 14); rand.rotateY(Math.PI / 2); rand.rotateZ(-0.5); rand.translate(1.95, 2.55, 0); add(rand, 0x9a4e1a);
+      [-1, 1].forEach((sg) => {
+        const horn = new THREE.ConeGeometry(0.17, 1.35, 6); horn.rotateZ(-1.1); horn.translate(3.05, 2.45, 0.34 * sg); add(horn, 0xf2ead2);
+        add(ellipsoid(0.1, 0.1, 0.1, 3.0, 2.1, 0.55 * sg, 5), 0x1a1a1a);
+      });
+      const nase = new THREE.ConeGeometry(0.14, 0.6, 6); nase.rotateZ(-0.55); nase.translate(3.4, 2.2, 0); add(nase, 0xf2ead2);
+      add(zylinderZwischen([-1.9, 2.0, 0], [-4.6, 1.3, 0], 0.65, 0.05, 7), haut);
+      [[-0.8, 3.1], [0.4, 3.18]].forEach(([x, y]) => add(ellipsoid(0.5, 0.12, 0.55, x, y, 0, 6), 0x66753c));
+      huefte = [[1.35, 1.45, 0.78], [1.35, 1.45, -0.78], [-1.35, 1.45, 0.78], [-1.35, 1.45, -0.78]];
+      beinL = 1.45; beinR = 0.34; beinFarbe = 0x6d7c40; laenge = 8.2; breite = 2.6;
+    }
+    const bein = vereinen([{ geo: zylinderZwischen([0, 0, 0], [0, -beinL + beinR * 0.4, 0], beinR, beinR * 0.85, 7), farbe: beinFarbe },
+      { geo: ellipsoid(beinR * 1.25, beinR * 0.5, beinR * 1.1, beinR * 0.35, -beinL + beinR * 0.45, 0, 7), farbe: beinFarbe }]);
+    return { koerper: vereinen(t), bein, huefte, beinLaenge: beinL, laenge, breite };
+  }
+
+  /** Ganzer Dino als EINE Geometrie (Beine in Ruhestellung) – für die Deko-Dinos. */
+  function dinoGeo(art) {
+    const d = dinoTeile(art);
+    // vereinen() färbt einheitlich – darum Vertex-Farben der Teile direkt zusammenkopieren
+    const geos = [d.koerper].concat(d.huefte.map(h => { const b = d.bein.clone(); b.translate(h[0], h[1], h[2]); return b; }));
+    const n = geos.reduce((s, g) => s + g.attributes.position.count, 0);
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
+    let o = 0;
+    geos.forEach((g) => {
+      pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3); col.set(g.attributes.color.array, o * 3);
+      o += g.attributes.position.count;
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geos.forEach(g => g.dispose()); d.bein.dispose();
+    return geo;
+  }
+
+  /** Riesenfarn: 9 lange, gebogene Wedel aus der Mitte (Ursprung am Boden, ~3 m hoch). */
+  function riesenfarnGeo() {
+    const teile = [];
+    for (let i = 0; i < 9; i++) {
+      const w = i / 9 * Math.PI * 2, steil = 0.55 + (i % 3) * 0.18;
+      // Wedel aus zwei flachen Kegeln: steil nach oben, dann überhängend
+      const a = new THREE.ConeGeometry(0.45, 2.2, 4); a.scale(1, 1, 0.22); a.translate(0, 1.1, 0); a.rotateZ(-steil);
+      const ax = Math.sin(steil) * 2.2, ay = Math.cos(steil) * 2.2;
+      const b = new THREE.ConeGeometry(0.38, 1.9, 4); b.scale(1, 1, 0.22); b.translate(0, 0.95, 0); b.rotateZ(-steil - 0.9); b.translate(ax * 0.92, ay * 0.92, 0);
+      a.rotateY(w); b.rotateY(w);
+      teile.push({ geo: a, farbe: i % 2 ? 0x3e7f2e : 0x4a8e34 }, { geo: b, farbe: i % 2 ? 0x4f9a3a : 0x5aa540 });
+    }
+    const mitte = new THREE.ConeGeometry(0.35, 0.8, 6); mitte.translate(0, 0.4, 0); teile.push({ geo: mitte, farbe: 0x5a4a2a });
+    return vereinen(teile);
+  }
+
+  /** Knochen (~1 m): Schaft + je zwei Knubbel an den Enden, liegt flach (Achse x). */
+  function knochenGeo() {
+    const schaft = zylinderZwischen([-0.45, 0.12, 0], [0.45, 0.12, 0], 0.08, 0.08, 6);
+    const teile = [{ geo: schaft, farbe: 0xeee6cf }];
+    [-0.5, 0.5].forEach(x => [-0.07, 0.07].forEach(z => teile.push({ geo: ellipsoid(0.12, 0.11, 0.11, x, 0.12, z, 6), farbe: 0xf4ecd6 })));
+    return vereinen(teile);
+  }
+
+  /** Dino-Skelett (~7 m, halb im Boden): Wirbelsäule, Rippenbögen, Schädel mit Hörnchen, Schwanzwirbel. */
+  function skelettGeo() {
+    const teile = [], hell = 0xf1e9d2, dunkel = 0xd8cdb0;
+    const ruecken = [[-3.4, 0.4], [-2.2, 0.9], [-0.8, 1.35], [0.6, 1.5], [1.9, 1.3], [2.9, 1.0]];
+    for (let k = 0; k < ruecken.length - 1; k++) teile.push({ geo: zylinderZwischen([ruecken[k][0], ruecken[k][1], 0], [ruecken[k + 1][0], ruecken[k + 1][1], 0], 0.13, 0.13, 6), farbe: hell });
+    ruecken.forEach(([x, y]) => teile.push({ geo: ellipsoid(0.2, 0.18, 0.18, x, y, 0, 6), farbe: dunkel }));
+    for (let i = 0; i < 6; i++) {
+      const x = -1.4 + i * 0.55, y = 1.4 - Math.abs(x - 0.2) * 0.12;
+      const r = new THREE.TorusGeometry(1.05 - Math.abs(i - 2.5) * 0.08, 0.07, 4, 10, Math.PI);
+      r.rotateZ(Math.PI); r.rotateY(Math.PI / 2); r.scale(1, 1.15, 1); r.translate(x, y, 0);
+      teile.push({ geo: r, farbe: hell });
+    }
+    teile.push({ geo: ellipsoid(0.75, 0.48, 0.45, 3.7, 0.75, 0, 8), farbe: hell });          // Schädel
+    teile.push({ geo: ellipsoid(0.13, 0.13, 0.1, 3.95, 0.92, 0.36, 5), farbe: 0x2a2620 });
+    teile.push({ geo: ellipsoid(0.13, 0.13, 0.1, 3.95, 0.92, -0.36, 5), farbe: 0x2a2620 });
+    const zahn = new THREE.ConeGeometry(0.1, 0.4, 5); zahn.rotateZ(Math.PI); zahn.translate(4.15, 0.42, 0.18); teile.push({ geo: zahn, farbe: hell });
+    const zahn2 = new THREE.ConeGeometry(0.1, 0.4, 5); zahn2.rotateZ(Math.PI); zahn2.translate(4.15, 0.42, -0.18); teile.push({ geo: zahn2, farbe: hell });
+    teile.push({ geo: zylinderZwischen([-3.4, 0.4, 0], [-5.6, 0.05, 0.3], 0.1, 0.04, 5), farbe: hell });
+    return vereinen(teile);
+  }
+
+  /** Vulkan (Einheitsmaße: Fuß-Radius 1, Höhe 1): unregelmäßiger Kegel mit Krater, Lava-Rinnen (Vertex-Farben). */
+  function vulkanGeo(dunst, dunstAnteil) {
+    const N = 40, M = 14, pos = [], col = [], c = new THREE.Color(), d = new THREE.Color(dunst);
+    const profil = (u) => 0.09 + 0.91 * Math.pow(1 - u, 1.55);           // Radius über der Höhe (u 0..1)
+    const punkt = (j, k) => {
+      const w = j / N * Math.PI * 2, u = k / M;
+      const rau = 1 + 0.07 * Math.sin(w * 3 + 1.3) + 0.045 * Math.sin(w * 7 + 0.4) + 0.03 * Math.sin(w * 13);
+      return [Math.cos(w) * profil(u) * rau, u, Math.sin(w) * profil(u) * rau];
+    };
+    const farbe = (j, k) => {
+      const u = k / M;
+      c.setHex(u < 0.3 ? 0x5e5246 : u < 0.75 ? 0x4a4038 : 0x3a322d);
+      // Lava-Rinnen: schmale Streifen von oben bis ca. halbe Höhe, unten verglimmend
+      const rinne = (j % 10 === 3 || j % 10 === 4) || (j % 17 === 9);
+      if (rinne && u > 0.35) c.lerp(new THREE.Color(u > 0.85 ? 0xffb347 : 0xff6a12), Math.min(1, (u - 0.35) * 2.2));
+      if (k === M) c.setHex(0xffa040);                                    // glühender Kraterrand
+      return c.lerp(d, rinne && u > 0.35 ? dunstAnteil * 0.35 : dunstAnteil).toArray();
+    };
+    for (let k = 0; k < M; k++) {
+      for (let j = 0; j < N; j++) {
+        const a = punkt(j, k), b = punkt(j + 1, k), e = punkt(j + 1, k + 1), f = punkt(j, k + 1);
+        const fa = farbe(j, k), fe = farbe(j, k + 1);
+        pos.push(...a, ...e, ...b, ...a, ...f, ...e);
+        col.push(...fa, ...fe, ...fa, ...fa, ...fe, ...fe);
+      }
+    }
+    // Krater: Trichter nach innen-unten, Boden glüht
+    for (let j = 0; j < N; j++) {
+      const a = punkt(j, M), b = punkt(j + 1, M), mitte = [0, 0.93, 0];
+      pos.push(...a, ...b, ...mitte);
+      const fr = new THREE.Color(0xff7a1a).lerp(d, dunstAnteil * 0.2).toArray(), fm = new THREE.Color(0xffd070).toArray();
+      col.push(...fr, ...fr, ...fm);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  let rauchTex = null;
+  /** Weicher runder Fleck (Rauchwolke). */
+  function rauchTextur() {
+    if (rauchTex || typeof document === 'undefined') return rauchTex;
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+    const g = cv.getContext('2d'), grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.5, 'rgba(255,255,255,0.65)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+    rauchTex = new THREE.CanvasTexture(cv);
+    return rauchTex;
+  }
+  const uhr = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+
+  /**
+   * Vulkan am Horizont: steht „virtuell" weit draußen (abstand m in Startrichtung + richtung), wird aber je Kamera
+   * innerhalb der Sichtweite gezeichnet (gleicher Blickwinkel, kleiner skaliert) – darum immer sichtbar, ohne Nebel.
+   * Rauchsäule: Points (wie Brand-Rauch, aber groß), Position = Funktion der Uhr.
+   */
+  function vulkanBauen(gruppe, thema, strecke) {
+    const V = thema.vulkan, mitte = streckenMitte(strecke), st = strecke.spline.punktBei(0);
+    const w = Math.atan2(st.tx, st.tz) + (V.richtung || 0);
+    const vx = mitte.x + Math.sin(w) * V.abstand, vz = mitte.z + Math.cos(w) * V.abstand, vy = -8;
+    const v3 = new THREE.Vector3(), sk = new THREE.Vector3(), q0 = new THREE.Quaternion(), kam = new THREE.Vector3();
+    /** Weltmatrix je Kamera: Vulkan auf (kamera → Vulkan) in Entfernung D gezogen, Größe × D/Abstand. */
+    const setzen = (obj, camera, groesse) => {
+      kam.setFromMatrixPosition(camera.matrixWorld);
+      const dx = vx - kam.x, dy = vy - kam.y, dz = vz - kam.z, d = Math.hypot(dx, dz);
+      const D = Math.min(d, camera.far * 0.82), s = D / d;
+      v3.set(kam.x + dx * s, kam.y + dy * s, kam.z + dz * s);
+      sk.set(groesse[0] * s, groesse[1] * s, groesse[2] * s);
+      obj.matrixWorld.compose(v3, q0, sk);
+      return s;
+    };
+    // Hintergrund: ohne Tiefentest und als Erstes gezeichnet → alles andere (auch ferne Bäume/Boden im Dunst) liegt davor
+    const berg = new THREE.Mesh(vulkanGeo(thema.nebel, 0.38), new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, depthTest: false, depthWrite: false }));
+    berg.name = 'Vulkan'; berg.frustumCulled = false; berg.renderOrder = -10;
+    const masse = [V.radius, V.hoehe, V.radius];
+    berg.onBeforeRender = function (r, sz, camera) { setzen(this, camera, masse); };
+    gruppe.add(berg);
+    // Rauch: 70 Teilchen steigen aus dem Krater, werden breiter, heller und treiben zur Seite
+    const n = 70, rnd = zufall(907), tl = [];
+    for (let k = 0; k < n; k++) tl.push({ t0: rnd(), w: rnd() * Math.PI * 2, r: 0.02 + rnd() * 0.05, tempo: 0.03 + rnd() * 0.025 });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    const mat = new THREE.PointsMaterial({ size: 1, sizeAttenuation: true, map: rauchTextur(), vertexColors: true, transparent: true,
+      opacity: 0.75, depthWrite: false, fog: false });
+    const rauch = new THREE.Points(geo, mat);
+    rauch.name = 'Vulkanrauch'; rauch.frustumCulled = false;
+    const dunst = new THREE.Color(thema.nebel), c = new THREE.Color();
+    rauch.onBeforeRender = function (r, sz, camera) {
+      // lokale Einheiten: Vulkan-Höhe = 1 (Größe hoehe in allen Achsen → runde Wolken)
+      const s = setzen(this, camera, [V.hoehe, V.hoehe, V.hoehe]), t = uhr();
+      const p = this.geometry.attributes.position.array, cc = this.geometry.attributes.color.array;
+      for (let k = 0; k < n; k++) {
+        const e = tl[k], u = (t * e.tempo + e.t0) % 1, rr = e.r + u * 0.35;
+        p[k * 3] = Math.cos(e.w) * rr + u * u * 0.7;
+        p[k * 3 + 1] = 0.97 + u * 1.15;
+        p[k * 3 + 2] = Math.sin(e.w) * rr * 0.6 + u * 0.12;
+        c.setRGB(0.22 + u * 0.4, 0.2 + u * 0.4, 0.19 + u * 0.42).lerp(dunst, 0.25 + u * 0.3);
+        cc[k * 3] = c.r; cc[k * 3 + 1] = c.g; cc[k * 3 + 2] = c.b;
+      }
+      this.geometry.attributes.position.needsUpdate = true; this.geometry.attributes.color.needsUpdate = true;
+      this.material.size = V.hoehe * 0.32 * s;
+    };
+    gruppe.add(rauch);
+    return { x: vx, z: vz };
+  }
+
+  /** Lavasee: unregelmäßige glühende Fläche mit dunkler Kruste (1 Mesh, MeshBasic, pulsiert). */
+  function lavaseeBauen(gruppe, strecke, rnd, radius) {
+    const zaun = hinterZaun(strecke);
+    let beste = null;
+    for (let v = 0; v < 160; v++) {
+      const st = stelleSuchen(strecke, rnd, zaun + radius + 4, zaun + radius + 30, zaun + radius + 3, 10, 1);
+      if (!st) continue;
+      let hMin = Infinity, hMax = -Infinity;
+      for (let k = 0; k <= 12; k++) {
+        const w = k / 12 * Math.PI * 2, rr = k === 12 ? 0 : radius;
+        const h = strecke.bodenHoehe(st.x + Math.cos(w) * rr, st.z + Math.sin(w) * rr);
+        hMin = Math.min(hMin, h); hMax = Math.max(hMax, h);
+      }
+      // flach + nah an einer Geraden (gut sichtbar beim Vorbeifahren)
+      const guete = (hMax - hMin) + Math.abs(strecke.spline.punktBei(st.s).kruemmung) * 300;
+      if (!beste || guete < beste.guete) beste = Object.assign(st, { guete, hMin, hMax });
+    }
+    if (!beste) return null;
+    const N = 36, pos = [], col = [], c = new THREE.Color();
+    const rand = [];
+    for (let i = 0; i < N; i++) {
+      const w = i / N * Math.PI * 2;
+      rand.push(radius * (0.84 + 0.12 * Math.sin(w * 3 + 0.7) + 0.06 * Math.sin(w * 5 + 2.1)));
+    }
+    const pt = (i, f, dy) => { const w = (i % N) / N * Math.PI * 2, r = rand[i % N] * f;
+      const x = beste.x + Math.cos(w) * r, z = beste.z + Math.sin(w) * r; return [x, Math.max(strecke.bodenHoehe(x, z), beste.hMin) + dy, z]; };
+    const y0 = beste.hMax + 0.25;
+    const innen = (i, f) => { const p = pt(i, f, 0); p[1] = y0; return p; };
+    for (let i = 0; i < N; i++) {
+      // glühende Fläche: Mitte gelb, außen orange
+      const m = [beste.x, y0, beste.z], a = innen(i, 0.55), b = innen(i + 1, 0.55), e = innen(i, 1), f = innen(i + 1, 1);
+      const gelb = c.setHex(0xffd060).toArray(), orange = c.setHex(0xff7a18).toArray(), rot = c.setHex(0xe8480c).toArray();
+      pos.push(...m, ...b, ...a); col.push(...gelb, ...orange, ...orange);
+      pos.push(...a, ...b, ...f, ...a, ...f, ...e); col.push(...orange, ...orange, ...rot, ...orange, ...rot, ...rot);
+      // Kruste: Ring von der Lava bis auf den Boden außen (dunkel, leicht erhaben)
+      const ka = innen(i, 1), kb = innen(i + 1, 1), aa = pt(i, 1.3, 0.05), ab = pt(i + 1, 1.3, 0.05);
+      ka[1] += 0.12; kb[1] += 0.12;
+      const k1 = c.setHex(0x3a2a22).toArray(), k2 = c.setHex(0x2a2420).toArray();
+      pos.push(...ka, ...kb, ...ab, ...ka, ...ab, ...aa); col.push(...k1, ...k1, ...k2, ...k1, ...k2, ...k2);
+    }
+    // Lava-Inseln (dunkle Schollen) auf der Fläche
+    for (let k = 0; k < 7; k++) {
+      const w = rnd() * Math.PI * 2, r = radius * (0.2 + rnd() * 0.5), sx = beste.x + Math.cos(w) * r, sz = beste.z + Math.sin(w) * r, g = 0.8 + rnd() * 1.4;
+      for (let j = 0; j < 6; j++) {
+        const a1 = j / 6 * Math.PI * 2, a2 = (j + 1) / 6 * Math.PI * 2;
+        pos.push(sx, y0 + 0.06, sz, sx + Math.cos(a2) * g, y0 + 0.04, sz + Math.sin(a2) * g, sx + Math.cos(a1) * g, y0 + 0.04, sz + Math.sin(a1) * g);
+        const k1 = c.setHex(0x4a2e20).toArray(); col.push(...k1, ...k1, ...k1);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    const m = new THREE.Mesh(geo, mat);
+    m.name = 'Lavasee';
+    m.userData = { x: beste.x, z: beste.z, s: beste.s, radius };
+    m.onBeforeRender = function () { const t = uhr(); const f = 0.86 + 0.14 * (0.5 + 0.5 * Math.sin(t * 1.7) * Math.sin(t * 0.63 + 1)); this.material.color.setRGB(1, f, f * 0.95); };
+    gruppe.add(m);
+    return beste;
+  }
+
+  function dinoDeko(gruppe, thema, strecke, rnd) {
+    const sp = strecke.spline, L = sp.laenge, D = thema.deko;
+    const grenze = dekoGrenze(strecke), zaun = hinterZaun(strecke), mitte = streckenMitte(strecke);
+    // Sumpf unter der Brücke freihalten (wie Bach im Wald)
+    const br = strecke.bruecke || null, bachMitte = br ? sp.punktBei((br.von + br.bis) / 2) : null;
+    const amSumpf = (x, z) => {
+      if (!bachMitte) return false;
+      const dx = x - bachMitte.x, dz = z - bachMitte.z;
+      return Math.abs(dx * bachMitte.tx + dz * bachMitte.tz) < 16 && Math.abs(dx * bachMitte.nx + dz * bachMitte.nz) < strecke.seitenabstandMax + 60;
+    };
+    // Lavasee zuerst (andere Deko hält Abstand)
+    const lava = lavaseeBauen(gruppe, strecke, rnd, 17);
+    const amLava = (x, z, extra) => lava && Math.hypot(x - lava.x, z - lava.z) < 17 * 1.35 + (extra || 0);
+    // Lichtungen: um Deko-Dinos, Skelette und zwischen Straße und Lavasee keine Bäume (sonst sieht man sie nicht)
+    const lichtungen = [];
+    if (lava) {
+      const n = sp.naechster(lava.x, lava.z), p = sp.punktBei(n.s), sg = n.seitenabstand > 0 ? 1 : -1;
+      for (let d = Math.abs(n.seitenabstand) - 30; d > 6; d -= 12) lichtungen.push({ x: p.x + p.nx * d * sg, z: p.z + p.nz * d * sg, r: 22 });
+    }
+    const inLichtung = (x, z) => lichtungen.some(l => (x - l.x) * (x - l.x) + (z - l.z) * (z - l.z) < l.r * l.r);
+    const frei = (x, z, extra) => !amSumpf(x, z) && !amLava(x, z, extra);
+    const freiBaum = (x, z, extra) => frei(x, z, extra) && !inLichtung(x, z);
+
+    // ---------- Deko-Dinos (stehen hinter dem Zaun, schauen grob zur Straße) – vor den Bäumen: Lichtung ----------
+    const dinoZahl = {}, alle = [], dinoListen = {};
+    ['langhals', 'dreihorn', 'zweibeiner'].forEach((art) => {
+      const liste = [], weit = art === 'langhals' ? 14 : art === 'dreihorn' ? 7 : 4;
+      for (let i = 0; i < (D.dinos[art] || 0) * 30 && liste.length < (D.dinos[art] || 0); i++) {
+        const st = stelleSuchen(strecke, rnd, zaun + weit, zaun + weit + 22, zaun + weit, 10, 1.3);
+        if (!st || !frei(st.x, st.z, weit) || alle.some(o => Math.hypot(o.x - st.x, o.z - st.z) < 150)) continue;
+        // Blick: zur Straße (±60°) – Kinder sollen sie von vorn/seitlich sehen
+        const p = sp.punktBei(st.s), zurStrasse = Math.atan2(-(p.nz * -st.seite), (p.nx * -st.seite));
+        st.drehung = zurStrasse + (rnd() - 0.5) * 2.1;
+        liste.push(st); alle.push(st);
+        // Lichtung um den Dino und bis zur Straße
+        const r = art === 'langhals' ? 16 : 11;
+        for (let d = st.d; d > zaun - 4; d -= r * 0.9) lichtungen.push({ x: p.x + p.nx * d * st.seite, z: p.z + p.nz * d * st.seite, r });
+      }
+      dinoZahl[art] = liste.length; dinoListen[art] = liste;
+    });
+    const skelette = [];
+    for (let i = 0; i < D.skelette * 6 && skelette.length < D.skelette; i++) {
+      const st = stelleSuchen(strecke, rnd, zaun + 4, zaun + 16, zaun + 4, 10, 1.2);
+      if (!st || !frei(st.x, st.z, 6) || inLichtung(st.x, st.z) || skelette.some(o => Math.hypot(o.x - st.x, o.z - st.z) < 120)) continue;
+      skelette.push(st);
+      lichtungen.push({ x: st.x, z: st.z, r: 9 });
+    }
+
+    // ---------- Urwald: Band aus Urwaldbäumen + Palmen hinter dem Zaun, dazu Wald in der Ferne ----------
+    const baeume = [], palmen = [];
+    for (let s = 0; s < L; s += D.bandAbstand) {
+      const p = sp.punktBei(s + rnd() * 2);
+      [-1, 1].forEach((seite) => {
+        const anzahl = 1 + (rnd() < 0.45 ? 1 : 0);
+        for (let k = 0; k < anzahl; k++) {
+          const d = zaun + 1 + Math.pow(rnd(), 1.3) * 45;
+          const x = p.x + p.nx * d * seite, z = p.z + p.nz * d * seite;
+          if (!istFrei(strecke, x, z, zaun + 0.5) || !freiBaum(x, z, 4)) continue;
+          const e = { x, z, y: strecke.bodenHoehe(x, z), winkel: rnd() * Math.PI * 2, groesse: 1.0 + rnd() * 0.8 };
+          (rnd() < 0.3 ? palmen : baeume).push(e);
+        }
+      });
+    }
+    for (let i = 0; i < D.fernBaeume; i++) {
+      const st = stelleSuchen(strecke, rnd, 50, 280, zaun + 25, 8, 1);
+      if (!st || !aufBoden(mitte, st.x, st.z) || !freiBaum(st.x, st.z, 6)) continue;
+      st.groesse = 1.3 + rnd() * 0.9; baeume.push(st);
+    }
+    instanzMesh(gruppe, 'Laubbaeume', laubbaumGeo(), vertexMaterial(true), baeume, (b, d, f) => {
+      d.position.set(b.x, b.y - 0.2, b.z);
+      d.rotation.set(0, b.winkel, 0);
+      d.scale.set(b.groesse * 1.25, b.groesse * (1.4 + rnd() * 0.6), b.groesse * 1.25);   // hohe Urwaldriesen
+      f.setHSL(0.25 + rnd() * 0.08, 0.55, 0.6 + rnd() * 0.35);
+    });
+    for (let i = 0; i < D.palmen; i++) {
+      const st = stelleSuchen(strecke, rnd, zaun + 0.5, 160, zaun + 0.5, 10, 1.5);
+      if (st && freiBaum(st.x, st.z, 3)) { st.groesse = 1.0 + rnd() * 0.6; palmen.push(st); }
+    }
+    instanzMesh(gruppe, 'Palmen', palmeGeo(), vertexMaterial(true), palmen, (b, d) => {
+      d.position.set(b.x, b.y - 0.1, b.z);
+      d.rotation.set(0, b.winkel, 0);
+      d.scale.setScalar((b.groesse || 1) * (1.0 + rnd() * 0.3));
+    });
+
+    // ---------- Riesenfarne (hinter dem Zaun, auch dicht am Zaun) ----------
+    const riesen = [];
+    for (let i = 0; i < D.riesenfarne; i++) {
+      const st = stelleSuchen(strecke, rnd, zaun + 0.5, zaun + 40, zaun + 0.5, 10, 1.6);
+      if (st && frei(st.x, st.z, 2)) riesen.push(st);
+    }
+    instanzMesh(gruppe, 'Riesenfarne', riesenfarnGeo(), vertexMaterial(true), riesen, (b, d, f) => {
+      d.position.set(b.x, b.y - 0.1, b.z);
+      d.rotation.set(0, b.winkel, 0);
+      d.scale.setScalar(1.0 + rnd() * 1.4);
+      f.setHSL(0.28, 0.35, 0.75 + rnd() * 0.25);
+    });
+
+    // ---------- Farne / Büsche (niedrig, auch vor dem Zaun) ----------
+    const farne = [];
+    for (let i = 0; i < D.farne; i++) {
+      const st = stelleSuchen(strecke, rnd, grenze + 0.5, zaun + 30, grenze, 10, 1.3);
+      if (st && frei(st.x, st.z, 1)) farne.push(st);
+    }
+    instanzMesh(gruppe, 'Farne', new THREE.IcosahedronGeometry(1, 0),
+      new THREE.MeshLambertMaterial({ color: 0x3f7f2a, flatShading: true }), farne, (b, d, f) => {
+        const g = 0.6 + rnd() * 0.8;
+        d.position.set(b.x, b.y + 0.15 * g, b.z);
+        d.rotation.set(0, b.winkel, 0);
+        d.scale.set(1.6 * g, 0.65 * g, 1.4 * g);
+        f.setHSL(0.25 + rnd() * 0.07, 0.55, 0.6 + rnd() * 0.3);
+      });
+
+    // ---------- Felsen (dunkles Vulkangestein, hinter dem Zaun; ein paar glimmen um den Lavasee) ----------
+    const felsen = [];
+    for (let i = 0; i < D.felsen; i++) {
+      const st = stelleSuchen(strecke, rnd, zaun + 1, zaun + 70, zaun + 1.5, 10, 1.5);
+      if (st && frei(st.x, st.z, 2)) felsen.push(st);
+    }
+    if (lava) for (let k = 0; k < 10; k++) {
+      const w = k / 10 * Math.PI * 2 + rnd() * 0.3, r = 17 * 1.32 + rnd() * 3;
+      const x = lava.x + Math.cos(w) * r, z = lava.z + Math.sin(w) * r;
+      if (istFrei(strecke, x, z, zaun + 1)) felsen.push({ x, z, y: strecke.bodenHoehe(x, z), winkel: rnd() * 6.28, lava: true });
+    }
+    instanzMesh(gruppe, 'Felsen', new THREE.DodecahedronGeometry(1, 0),
+      new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), felsen, (b, d, f) => {
+        const g = b.lava ? 0.9 + rnd() * 1.2 : 0.7 + rnd() * 1.9;
+        d.position.set(b.x, b.y + 0.2 * g, b.z);
+        d.rotation.set(rnd() * 0.6, b.winkel, rnd() * 0.6);
+        d.scale.set(1.3 * g, 0.8 * g, 1.1 * g);
+        if (b.lava) f.setRGB(0.42, 0.3, 0.26); else f.setHSL(0.08 + rnd() * 0.05, 0.1 + rnd() * 0.1, 0.32 + rnd() * 0.16);
+      });
+
+    // ---------- Knochen (verstreut) und Skelette (halb im Boden) ----------
+    const knochen = [];
+    for (let i = 0; i < D.knochen; i++) {
+      const st = stelleSuchen(strecke, rnd, grenze + 1, zaun + 25, grenze + 1, 10, 1.2);
+      if (st && frei(st.x, st.z, 1)) knochen.push(st);
+    }
+    instanzMesh(gruppe, 'Knochen', knochenGeo(), vertexMaterial(false), knochen, (b, d) => {
+      d.position.set(b.x, b.y - 0.04, b.z);
+      d.rotation.set(0, b.winkel, (rnd() - 0.5) * 0.3);
+      d.scale.setScalar(0.8 + rnd() * 1.0);
+    });
+    instanzMesh(gruppe, 'Skelette', skelettGeo(), vertexMaterial(true), skelette, (b, d) => {
+      d.position.set(b.x, b.y - 0.35, b.z);
+      d.rotation.set((rnd() - 0.5) * 0.1, b.winkel, (rnd() - 0.5) * 0.12);
+      d.scale.setScalar(1.0 + rnd() * 0.4);
+    });
+
+    // ---------- Deko-Dinos (Plätze oben gewählt) ----------
+    ['langhals', 'dreihorn', 'zweibeiner'].forEach((art) => {
+      instanzMesh(gruppe, 'Dinos', dinoGeo(art), vertexMaterial(true), dinoListen[art], (b, d) => {
+        d.position.set(b.x, b.y - 0.1, b.z);
+        d.rotation.set(0, b.drehung, 0);
+        d.scale.setScalar(art === 'zweibeiner' ? 1.1 + rnd() * 0.3 : 0.9 + rnd() * 0.25);
+      });
+    });
+
+    // ---------- Vulkan mit Rauch am Horizont ----------
+    const vulkan = vulkanBauen(gruppe, thema, strecke);
+    return { baeume: baeume.length, palmen: palmen.length, riesenfarne: riesen.length, farne: farne.length, felsen: felsen.length,
+      knochen: knochen.length, skelette: skelette.length, dinos: dinoZahl, vulkan: !!vulkan, lavasee: lava ? { x: lava.x, z: lava.z, s: lava.s } : null };
+  }
+
   // ------------------------------------------------------------------ Runde 4: Jahreszeiten
 
   /**
@@ -956,7 +1459,7 @@
     if (!J || !jahreszeit || !J[jahreszeit]) return null;
     let d = J[jahreszeit];
     if (d[themaName]) d = Object.assign({}, d, d[themaName]);
-    const baeume = themaName === 'wiese' || themaName === 'wald';    // Wüste/Fantasie: eigene Pflanzen bleiben
+    const baeume = themaName === 'wiese' || themaName === 'wald' || themaName === 'dino';    // Wüste/Fantasie: eigene Pflanzen bleiben
     const f = {
       laub: baeume ? d.laub : null, bluete: baeume ? d.bluete : null, bluetenAnteil: d.bluetenAnteil || 0,
       tanneMisch: baeume ? d.tanneMisch : null, buschMisch: baeume ? d.buschMisch : null,
@@ -1025,7 +1528,7 @@
     const rnd = zufall(textSeed(strecke.id || 'strecke') ^ thema.seed);
     const gruppe = new THREE.Group();
     gruppe.name = 'Deko ' + themaName;
-    const bauer = { wiese: wieseDeko, wald: waldDeko, wueste: wuesteDeko, fantasie: fantasieDeko }[themaName] || wieseDeko;
+    const bauer = { wiese: wieseDeko, wald: waldDeko, wueste: wuesteDeko, fantasie: fantasieDeko, dino: dinoDeko }[themaName] || wieseDeko;
     const anzahl = bauer(gruppe, thema, strecke, rnd);
     // Instanzen bewegen sich nicht: Begrenzungskugeln einmal berechnen
     gruppe.children.forEach((m) => {
@@ -1109,5 +1612,7 @@
   themes.instanzenAufteilen = instanzenAufteilen;
   themes.statischVorbereiten = statischVorbereiten;
   themes.zufall = zufall;
+  themes.dinoTeile = dinoTeile;     // Runde 5b: laufende Dinos (world/dynamik.js)
+  themes.dinoGeo = dinoGeo;
   R.themes = themes;
 })();

@@ -10,6 +10,7 @@
 //   countdown(n) kollision(staerke) bande() runde() ziel(platz) menueKlick() bremsen(an)
 //   schadenTreffer(stufe) liegengeblieben() abschleppen()   (Runde 4, Schaden-System)
 //   wetter('regen'|'hagel'|'schnee'|'wind', an, staerke 0..1) / wetterAlleAus()   (Runde 4, Dauer-Geräusche)
+//   sirene(an, laut 0..1) / polizeiStopp()   (Runde 5b, Polizei: Dauer-Sirene „Tatü-tata" + Signal beim Anhalten)
 //   statistik()                   Zähler (aktive Nodes usw.) für Tests
 //
 // Aufbau: Motor-Stimmen (Sägezahn + Rechteck → Tiefpass) liegen in einem festen
@@ -569,6 +570,49 @@
   /** Alle Wetter-Geräusche ausblenden (Szene abbauen, Menü). */
   Ton.prototype.wetterAlleAus = function () {
     Object.keys(this._wetterTon || {}).forEach(art => this.wetter(art, false));
+  };
+
+  // ---------- Runde 5b: Polizei-Sirene (Dauer-Schleife, nur Zusatz) ----------
+  /**
+   * Sirene an/aus. Zwei Töne im Wechsel (≈ 466/622 Hz, je 0,6 s – „Tatü-tata"): Dreieck + leises Rechteck, die Frequenz
+   * steuert ein Rechteck-LFO (0,83 Hz). laut 0..1 = Lautstärke (Abstand); Mehrfach-Aufrufe ändern nur die Lautstärke.
+   */
+  Ton.prototype.sirene = function (an, laut) {
+    if (!this._ctx || !this._effekte) { this._sireneAn = false; return; }
+    const c = this._ctx, t = c.currentTime, s = klemme(laut === undefined ? 1 : +laut, 0, 1);
+    let w = this._sirene;
+    if (!an || !(s > 0)) {
+      if (!w) return;
+      try { w.gain.gain.setTargetAtTime(0, t, 0.08); } catch (e) { /* egal */ }
+      w.quellen.forEach(q => { try { q.stop(t + 0.6); } catch (e) { /* egal */ } });
+      this._sirene = null;
+      return;
+    }
+    if (!w) {
+      const o1 = this._n(c.createOscillator()), o2 = this._n(c.createOscillator()), lfo = this._n(c.createOscillator());
+      const hub = this._gain(78), g2 = this._gain(0.25), g = this._gain(0);
+      o1.type = 'triangle'; o2.type = 'square';
+      o1.frequency.value = 544; o2.frequency.value = 544;
+      lfo.type = 'square'; lfo.frequency.value = 0.83;
+      lfo.connect(hub); hub.connect(o1.frequency); hub.connect(o2.frequency);
+      o1.connect(g); o2.connect(g2); g2.connect(g); g.connect(this._effekte);
+      const quellen = [o1, o2, lfo], nodes = [o1, o2, lfo, hub, g2, g];
+      quellen.forEach(q => q.start(t));
+      o1.onended = () => { this._aktiv -= nodes.length; nodes.forEach(n => { try { n.disconnect(); } catch (e) { /* egal */ } }); };
+      w = this._sirene = { quellen, gain: g };
+    }
+    if (w._laut === undefined || Math.abs(w._laut - s) > 0.02) {
+      w._laut = s;
+      try { w.gain.gain.setTargetAtTime(0.13 * s, t, 0.15); } catch (e) { /* egal */ }
+    }
+  };
+
+  /** Runde 5b: Signal beim Anhalten (kurzes „Wuup-wuup" + Hupe). */
+  Ton.prototype.polizeiStopp = function () {
+    if (!this._bereit()) return;
+    this._ton(500, 1100, 0.32, 'sawtooth', 0.08, 0);
+    this._ton(500, 1100, 0.32, 'sawtooth', 0.08, 0.36);
+    this._ton(370, 370, 0.25, 'square', 0.07, 0.8);
   };
 
   R.AudioKlasse = Ton;

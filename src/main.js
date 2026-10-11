@@ -23,6 +23,8 @@
       welt: '', jahreszeit: 'sommer', wetter: 'klar', windStaerke: 0, windRichtung: 'zufall', schaden: false,
       // Runde 5: Tempo-Klasse 'normal' (≈ 155–190 km/h) | 'schnell' (Katalog 220–270 km/h), Spieler und KI gleich
       tempoKlasse: c.tempoKlasseStandard || 'normal',
+      // Runde 5b: Polizei (Streifenwagen hält an, world/polizei.js), Standard aus
+      polizei: !!(c.polizei && c.polizei.standardAn),
     };
   }
 
@@ -30,7 +32,7 @@
   function einstellungenPruefen(roh) {
     const std = standardEinstellungen(), c = R.config, r = roh || {};
     const zahl = (v, lo, hi, d) => (Number.isFinite(+v) && v !== null && v !== '' ? Math.max(lo, Math.min(hi, Math.round(+v))) : d);
-    const autoOk = (id, d) => (R.carCatalog.find(a => a.id === id) ? id : d);
+    const autoOk = (id, d) => (R.carCatalog.waehlbare().find(a => a.id === id) ? id : d);
     const ids = Array.isArray(r.autoIds) ? r.autoIds : [];
     const hilfe = Array.isArray(r.fahrhilfe) ? r.fahrhilfe : [];
     const fa = Array.isArray(r.fahrer) ? r.fahrer : [];
@@ -51,6 +53,7 @@
       windRichtung: Number.isFinite(+r.windRichtung) && r.windRichtung !== '' && r.windRichtung !== null ? +r.windRichtung : 'zufall',
       schaden: r.schaden === true,
       tempoKlasse: c.tempoKlassen && c.tempoKlassen[r.tempoKlasse] ? r.tempoKlasse : std.tempoKlasse,
+      polizei: typeof r.polizei === 'boolean' ? r.polizei : std.polizei,
     };
   }
 
@@ -221,6 +224,7 @@
       // Runde 4: Teile an den Auto-Meshes (Schild-Hülle, Turbo-Flammen, Rauch) zuerst lösen – die Meshes sind Katalog-Caches
       if (this.pickups) { this.pickups.zerstoeren(); this.pickups = null; }
       if (this.schaden) { this.schaden.zerstoeren(); this.schaden = null; }
+      if (this.polizei) { this.polizei.zerstoeren(); this.polizei = null; }   // Runde 5b: Blaulicht-Lichter, Sirene
       this.huds.forEach(h => h.zerstoeren());
       this.huds = [];
       const autoMeshes = new Set(this.fahrzeuge.map(f => f.mesh));
@@ -276,7 +280,8 @@
       this.dynamik = null;
       const strohDa = !!(strecke.strohballen && strecke.strohballen.length) && !(strecke.aktiveSchichten && strecke.aktiveSchichten.strohballen === false);
       const dd = strecke.daten || daten;     // nach Welt gefiltert (Wiese Klassisch: keine Bälle, obwohl der Katalog welche hat)
-      if (R.Dynamik && ((dd.baelle && dd.baelle.length) || (dd.wasserstrahlen && dd.wasserstrahlen.length) || strohDa)) {
+      if (R.Dynamik && ((dd.baelle && dd.baelle.length) || (dd.wasserstrahlen && dd.wasserstrahlen.length) || strohDa ||
+          (strecke.dinos && strecke.dinos.length))) {     // Runde 5b: laufende Dinos
         this.dynamik = new R.Dynamik(strecke, { seed: 4242 });
         this.szene.add(this.dynamik.bauen());
       }
@@ -344,6 +349,7 @@
       this.streckeAufbauen(e.streckeId, {
         spieler: zwei ? 2 : 1, autoIds: e.autoIds, fahrer: e.fahrer, gegner: e.gegner, runden: e.runden,
         schwierigkeit: e.schwierigkeit, fahrhilfe: e.fahrhilfe, schaden: e.schaden === true, tempoKlasse: e.tempoKlasse,
+        polizei: e.polizei === true,
       });
       for (let i = 0; i < (zwei ? 2 : 1); i++) this.kameraHinzufuegen(this.fahrzeuge[i]);
       const split = zwei;
@@ -354,6 +360,8 @@
       if (this.wetter) { this.wetter.partikelBauen(this.kameras.length); this.huds.forEach(h => h.wetterSetzen && h.wetterSetzen(this.wetter)); }
       // Runde 4: Gesundheitsbalken (HUD i gehört zu Fahrzeug i – Spieler stehen vorne); aus = versteckt
       this.huds.forEach((h, i) => h.schadenSetzen && h.schadenSetzen(this.schaden, i));
+      // Runde 5b: Polizei-Anzeige (Stopp-Countdown) + Streifenwagen auf der Minimap
+      this.huds.forEach((h, i) => h.polizeiSetzen && h.polizeiSetzen(this.polizei, i));
       // Ton: Motoren je Auto, Ereignisse
       if (R.Audio) {
         const A = R.Audio; this._tonCd = -1;
@@ -417,7 +425,7 @@
 
       // Fahrzeuge: Spieler zuerst (Startplatz 1, 2), danach die Computerautos.
       // Computer bekommen die Autos, die kein Spieler fährt.
-      const katalog = R.carCatalog;
+      const katalog = R.carCatalog.waehlbare();   // Polizei (waehlbar: false) weder Spielerwahl noch KI-Gegner
       const spielerIds = opt.autoIds.slice(0, opt.spieler);
       const plaetze = strecke.startpositionen(opt.spieler + opt.gegner);
       const frei = katalog.filter(a => !spielerIds.includes(a.id));
@@ -457,6 +465,14 @@
           this.fahrzeuge.forEach((f, i) => this.schaden.meshBauen(i, f.mesh));
           this.schaden.bei((e) => this._schadenEreignis(e));
         }
+      }
+      // Runde 5b: Polizei – Streifenwagen NACH Schaden (bekommt keinen Schaden) als eigene Fahrzeug-Einträge hinter
+      // allen Teilnehmern (f.polizei = true); RaceManager/Platzierung/Ergebnis kennen ihn nicht.
+      this.polizei = null;
+      if (opt.polizei === true && R.Polizei) {
+        this.polizei = new R.Polizei(this);
+        this.polizei.einsetzen(strecke, opt.spieler + opt.gegner, opt.gegner);
+        this.polizei.vorkompilieren(this.renderer, this.szene, this.menueKamera);
       }
       if (this.tunnelLichter) this._tunnelLichterVorkompilieren();
       return strecke;
@@ -586,6 +602,7 @@
       // Runde 4: Turbo-Pfeile/Schild-Kugeln/Hülle/Flammen; Schaden-Rauch + Warnblinker (NACH setzeBremslicht oben)
       if (this.pickups) this.pickups.animieren(this._physikZeit || 0, this.fahrzeuge);
       if (this.schaden && this.schaden.an) this.schaden.update(this.pausiert || this.zustand === 'menue' ? 0 : dt);
+      if (this.polizei) this.polizei.animieren(this._physikZeit || 0);   // Runde 5b: Blaulicht
       if (this.tunnelLichter) this._tunnelLichterAktualisieren();
       const t2 = performance.now();
       if (R.Audio) this.tonAktualisieren(dt);
@@ -646,6 +663,7 @@
       const A = R.Audio, r = this.rennen, d = this._tonD || (this._tonD = {});
       const stumm = this.zustand !== 'rennen' || this.pausiert;
       if (stumm !== this._tonStumm) { this._tonStumm = stumm; A.motorStumm(stumm); }
+      if (this.polizei) this.polizei.ton(stumm);   // Runde 5b: Sirene (Pause/Menü: aus)
       if (!r || stumm) return;
       const z = r.countdownZahl;
       if (z !== this._tonCd) { this._tonCd = z; if (z > 0) A.countdown(z); }
@@ -729,7 +747,7 @@
       if (!ereignis) return;
       const f = this.fahrzeuge[i];
       if (ereignis === 'gefallen') {
-        if (this.rennen) this.rennen.verfolgungSetzen(i, f.vehicle.x, f.vehicle.z);
+        if (this.rennen && !f.polizei) this.rennen.verfolgungSetzen(i, f.vehicle.x, f.vehicle.z);
         this._vorherAngleichen(f); f.index = -1;
         this._meldung(i, 'Mehr Anlauf! 🚀', 2200);
         if (R.Audio && f.istSpieler) R.Audio.kollision(4);
@@ -771,6 +789,7 @@
       const countdown = !!rennen && !rennen.gasErlaubt;
       const schaden = this.schaden && this.schaden.an ? this.schaden : null;
       const pickups = this.pickups;
+      const polizei = this.polizei;      // Runde 5b (null = aus → alles wie vorher)
       // Fortschritt der Spieler für das Gummiband der KI
       const tn = rennen ? rennen.teilnehmer : [];
       let spielerMax = null;
@@ -787,14 +806,16 @@
         const v = f.vehicle;
         // --- 1./2. Eingabe (liegengeblieben: nur Bremse, Computerfahrer wird nicht gefragt) ---
         let s = { gas: 0, bremse: 0, lenkung: 0 };
-        const fahrer = f.driver || f.autopilot;       // Computerfahrer (KI oder Autopilot)
+        const fahrer = f.driver || f.autopilot || f.polizeiFahrer;       // Computerfahrer (KI, Autopilot, Polizei)
         if (schaden && schaden.gesperrt(i)) s = { gas: 0, bremse: 1, lenkung: 0 };
+        else if (polizei && polizei.gesperrt(i)) s = polizei.haltSteuerung(v);   // Runde 5b: von der Polizei angehalten
+        else if (f.polizei) { if (polizei) s = polizei.steuerung(i, dt, rennen); }   // Runde 5b: Streifenwagen
         else if (f.istSpieler && tn[i] && tn[i].imZiel) s = { gas: 0, bremse: 0.6, lenkung: 0 };   // im Ziel: ausrollen
         else if (f.istSpieler && f.spielerNr >= 0 && !f.autopilot) s = this.input.steuerung(f.spielerNr);
         else if (fahrer && rennen) {
           const t = tn[i];
           // andere = alle Teilnehmer (die KI überspringt ihr eigenes Fahrzeug selbst)
-          umgebung.andere = tn; umgebung.spielerFortschrittMax = spielerMax;
+          umgebung.andere = polizei ? polizei.andereFuer(tn) : tn; umgebung.spielerFortschrittMax = spielerMax;
           umgebung.eigenerFortschritt = t.fortschritt; umgebung.laeuft = rennen.gasErlaubt;
           s = fahrer.steuerung(dt, umgebung);
           if (fahrer.brauchtReset) { this.zuruecksetzen(i); fahrer.zurueckgesetzt(); return; }
@@ -804,7 +825,7 @@
         const kz = R.Kleber && strecke && strecke.kleber && strecke.kleber.length ? (f.kleber || (f.kleber = R.Kleber.zustand())) : null;
         if (kz && R.Kleber.gesperrt(kz)) s = { gas: 0, bremse: 0, lenkung: 0 };
         const az = R.Anlauf && strecke ? (f.anlauf || (f.anlauf = R.Anlauf.zustand())) : null;
-        if (az && fahrer && (!f.istSpieler || f.autopilot) && !countdown && f.nah) s = R.Anlauf.kiHilfe(az, v, strecke, f.nah, s);   // KI: Anlauf nehmen
+        if (az && fahrer && (!f.istSpieler || f.autopilot) && !countdown && f.nah && !(polizei && polizei.gesperrt(i))) s = R.Anlauf.kiHilfe(az, v, strecke, f.nah, s);   // KI: Anlauf nehmen
         // --- 3. Im Looping (oder beim Zurückfallen) übernimmt track/looping.js statt vehicle.schritt ---
         const lp = f.looping;
         if (lp && (lp.aktiv || lp.fallen) && strecke) {
@@ -904,7 +925,9 @@
           if (!f || !f.istSpieler) continue;
           if (R.Audio) R.Audio.kollision(Math.min(12, ds[k].staerke));
           this.kameras.forEach((kam) => { if (kam.ziel === f.vehicle) kam.wackeln(Math.min(8, Math.max(4, ds[k].staerke))); });
-          this._meldung(ds[k].nr, ds[k].typ === 'ball' ? 'Bumm! ⚽' : ds[k].typ === 'stroh' ? 'Stroh! 🌾' : 'Platsch! 💦', 1000);
+          // Runde 5b: Dino (Dino-Strecke) und Felsbrocken (Strohballen mit Felsoptik)
+          const T = { ball: 'Bumm! ⚽', stroh: 'Stroh! 🌾', dino: 'Dino! 🦕', fels: 'Steinschlag! 🪨' };
+          this._meldung(ds[k].nr, T[ds[k].typ] || 'Platsch! 💦', 1000);
         }
         this.dynamikStoesse = ds;
       }
@@ -934,12 +957,13 @@
       // --- 10. Pickups: zuerst geplatzte Schilde dieses Schritts melden (schritt() leert die Liste), dann Felder/Kugeln
       //         (erst ab Rennfreigabe – kein Turbo im Countdown) ---
       if (pickups && (!rennen || rennen.gasErlaubt)) {
+        const pfz = polizei ? polizei.rennListe : this.fahrzeuge;   // Runde 5b: Polizei sammelt nichts ein
         for (let k = 0; k < pickups.geplatzt.length; k++) {
           const g = pickups.geplatzt[k];
           this._meldung(g.nr, 'Schild weg! 💥', 1000);
           if (this.fahrzeuge[g.nr] && this.fahrzeuge[g.nr].istSpieler) pickups.ton('platzen');
         }
-        const ev = pickups.schritt(dt, this.fahrzeuge);
+        const ev = pickups.schritt(dt, pfz);
         for (let k = 0; k < ev.length; k++) {
           const e = ev[k], spieler = this.fahrzeuge[e.nr] && this.fahrzeuge[e.nr].istSpieler;
           if (e.typ === 'turbo') { this._meldung(e.nr, 'TURBO! 🔥', 1200); if (spieler) pickups.ton('turbo'); }
@@ -960,6 +984,7 @@
         }
         this._feststeckenPruefen(f, dt, countdown);
       });
+      if (polizei && rennen) polizei.schritt(dt, rennen.gasErlaubt);   // Runde 5b: Ziel, Nähe, Anhalten, Freigabe
       if (rennen) rennen.schritt(dt);
     }
 
@@ -1001,11 +1026,12 @@
       if (f.kleber) { R.Kleber.abbrechen(f.kleber); R.Kleber.optik(f, false); }
       const pose = R.Anlauf.zurAnlaufposition(f.anlauf, f.vehicle, this.strecke, this.fahrzeuge);
       if (!pose) return false;
-      if (this.rennen) this.rennen.verfolgungSetzen(i, pose.x, pose.z);
+      if (this.rennen && !f.polizei) this.rennen.verfolgungSetzen(i, pose.x, pose.z);
       this._vorherAngleichen(f);
       f.index = -1;
       f.stehZeit = 0; f.resetHinweis = false; f.falschHerum = false; f.falschZeit = 0;
       if (f.driver && f.driver.zurueckgesetzt) f.driver.zurueckgesetzt();
+      if (f.polizeiFahrer) f.polizeiFahrer.zurueckgesetzt();
       if (f.autopilot && f.autopilot.zurueckgesetzt) f.autopilot.zurueckgesetzt();
       this._meldung(i, 'Anlauf! Jetzt Vollgas! 🚀', 2000);
       return true;

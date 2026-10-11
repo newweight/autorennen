@@ -35,11 +35,11 @@
   const SPUR_UEBERGANG = 40;             // m weicher Übergang vor s0 und nach s1
   const BODEN_HALB = 800, BODEN_SICHT = 450;   // Bodenplatte mind. ±800 m, sonst Strecke + 450 m Rand
   // Alle Schichten einer Welt (Katalog welten[name] = { schicht: bool })
-  const SCHICHTEN = ['hindernisse', 'wracks', 'strohballen', 'spuren', 'schanzen', 'baelle', 'wasserstrahlen', 'boost', 'schild', 'loopings', 'kleber'];
+  const SCHICHTEN = ['hindernisse', 'wracks', 'strohballen', 'spuren', 'schanzen', 'baelle', 'wasserstrahlen', 'boost', 'schild', 'loopings', 'kleber', 'dinos'];
   // Katalogfeld je Schicht (Liste der Einträge)
   const SCHICHT_FELD = { hindernisse: 'hindernisse', wracks: 'wracks', strohballen: 'strohballen', spuren: 'spuren',
     schanzen: 'schanzen', baelle: 'baelle', wasserstrahlen: 'wasserstrahlen', boost: 'boostFelder', schild: 'schilde', loopings: 'loopings',
-    kleber: 'kleber' };
+    kleber: 'kleber', dinos: 'dinos' };
 
   /** Weicher Übergang 0 → 1 zwischen a und b. */
   function glatt(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
@@ -105,7 +105,7 @@
       this.grenzeEng = this.breite / 2 + this.randBreite + ENG_ZUGABE;   // Geländer / Tunnelwand
       // Brücken und Tunnel (Bogenlänge s0..s1). Alt: bruecke { von, bis } → eine Holzbrücke.
       const br = daten.bruecken || (daten.bruecke ? [{ s0: daten.bruecke.von, s1: daten.bruecke.bis, art: 'holz' }] : []);
-      this.bruecken = br.map(b => this._bereich(b, { holz: 'holz', stein: 'stein', stahl: 'stahl' }[b.art] || 'holz'));
+      this.bruecken = br.map(b => this._bereich(b, { holz: 'holz', stein: 'stein', stahl: 'stahl', stamm: 'stamm' }[b.art] || 'holz'));
       this.bruecken.forEach((b) => {
         b.tiefe = b.tiefe || 5;
         // Senke quer nur so weit, dass kein anderes Streckenstück abgesenkt wird
@@ -120,7 +120,7 @@
         b.q0 = Math.min(SENKE_Q0, b.q1 - 18);
       });
       this.bruecke = this.bruecken[0] || null;          // Kurzform (erste Brücke) für Deko/ältere Aufrufer
-      this.tunnel = (daten.tunnel || []).map(t => this._bereich(t, t.art === 'sandstein' ? 'sandstein' : 'fels'));
+      this.tunnel = (daten.tunnel || []).map(t => this._bereich(t, t.art === 'sandstein' || t.art === 'hoehle' ? t.art : 'fels'));
       this._engstellen = this.bruecken.concat(this.tunnel);
       this.hindernisse = this._hindernisseBerechnen(sicht.hindernisse || []);
       this._flecken = this.hindernisse.filter(h => h.untergrund);
@@ -133,6 +133,7 @@
       this.schanzen = kopie(sicht.schanzen);        // [{ s, winkel: 8 | 12, laenge }]
       this.boostFelder = kopie(sicht.boostFelder);  // [{ s, seitenabstand, laenge }]
       this.schilde = kopie(sicht.schilde);          // [{ s, seitenabstand }]
+      this.dinos = kopie(sicht.dinos);              // Runde 5b: [{ s, von, intervall, tempo, art }] (world/dynamik.js)
       // Runde 5: Klebe-Seitenstreifen (Fantasie): [{ s0, s1, seite: -1 | 1 | 0 (beide) }] → Untergrund 'kleber' auf dem Rand
       this.kleber = (sicht.kleber || []).map(e => ({ s0: this.spline.wrapS(e.s0), s1: this.spline.wrapS(e.s1), seite: e.seite || 0 }));
       this.checkpoints = this._checkpointsBerechnen(daten.checkpointAbstand || 120);
@@ -203,7 +204,7 @@
 
     /** Liegt s im Bereich b (± zugabe)? Berücksichtigt den Rundenübergang. */
     _inBereich(b, s, zugabe) {
-      const z = zugabe || 0, sp = this.spline;
+      const z = (zugabe || 0) + 1e-9, sp = this.spline;   // 1e-9: Rundungsfehler bei s + L (Rundenübergang)
       return sp.differenzS(s, b.s0) >= -z && sp.differenzS(s, b.s1) <= z;
     }
 
@@ -916,8 +917,8 @@
       const pos = new Float32Array((nl + 1) * (nq + 1) * 3), col = new Float32Array(pos.length);
       const basis = new THREE.Color(thema.boden !== undefined ? thema.boden : 0x5f9e3a);
       const zweite = new THREE.Color(thema.boden2 !== undefined ? thema.boden2 : basis.getHex());
-      const c = new THREE.Color(), erde = new THREE.Color(b.art === 'stahl' ? 0xa65a34 : 0x6b5a3a);
-      const schicht = new THREE.Color(0xc98a52), grund = new THREE.Color(b.art === 'stahl' ? 0x9c6a44 : 0x4f7a34);
+      const c = new THREE.Color(), erde = new THREE.Color(b.art === 'stahl' ? 0xa65a34 : b.art === 'stamm' ? 0x4d4128 : 0x6b5a3a);
+      const schicht = new THREE.Color(0xc98a52), grund = new THREE.Color(b.art === 'stahl' ? 0x9c6a44 : b.art === 'stamm' ? 0x3f4a24 : 0x4f7a34);
       let o = 0;
       for (let i = 0; i <= nl; i++) {
         for (let j = 0; j <= nq; j++) {
@@ -975,12 +976,25 @@
       const sAt = (k) => s0 + (s1 - s0) * k / schritte;
       const unten = (s, q) => { const p = this._punktSQ(s, q, 0); return this.bodenHoehe(p[0], p[2]); };
 
-      if (b.art === 'holz') {
-        // Bretter quer (abwechselnd hell/dunkel), über Straße und Rand bis zum Geländer
-        for (let k = 0; k < schritte; k++) {
-          const p = this.spline.punktBei(sAt(k)), q = this.spline.punktBei(sAt(k) + (s1 - s0) / schritte * 0.92);
-          v.push(this._band(p, q, -w, w, 0.16, k % 2 ? 0x8a5a32 : 0x7a4d2a));
-          v.push(this._band(p, q, -bb - 0.25, -bb, 0.17, 0xe8dcc0), this._band(p, q, bb, bb + 0.25, 0.17, 0xe8dcc0));
+      if (b.art === 'holz' || b.art === 'stamm') {
+        // Bretter quer (abwechselnd hell/dunkel), über Straße und Rand bis zum Geländer.
+        // Runde 5b 'stamm': quer liegende Baumstämme (~0,55 m, dunkle Fugen, Rinde), dicke Stamm-Geländer
+        const stamm = b.art === 'stamm';
+        const nDeck = stamm ? Math.max(8, Math.round(b.laenge / 0.55)) : schritte;
+        const dAt = (k) => s0 + (s1 - s0) * k / nDeck;
+        for (let k = 0; k < nDeck; k++) {
+          const p = this.spline.punktBei(dAt(k)), q = this.spline.punktBei(dAt(k) + (s1 - s0) / nDeck * (stamm ? 0.8 : 0.92));
+          const holzFarbe = stamm ? [0x7a5530, 0x6c4a2a, 0x845c34][k % 3] : (k % 2 ? 0x8a5a32 : 0x7a4d2a);
+          v.push(this._band(p, q, -w, w, 0.16, holzFarbe));
+          if (stamm) {
+            // Rundung: schmale dunklere Kanten vorn/hinten am Stamm, Stirnseiten (Jahresringe) außen
+            const pm = this.spline.punktBei(dAt(k) + (s1 - s0) / nDeck * 0.9);
+            v.push(this._band(q, pm, -w, w, 0.1, 0x4a321c));
+            [-1, 1].forEach((sg) => { v.push(this._wandSQ(dAt(k), (w + 0.25) * sg, dAt(k) + (s1 - s0) / nDeck * 0.8, (w + 0.25) * sg, -0.25, 0.16, 0xc8a070)); });
+            v.push(this._band(p, q, -w - 0.25, -w, 0.16, holzFarbe), this._band(p, q, w, w + 0.25, 0.16, holzFarbe));
+          } else {
+            v.push(this._band(p, q, -bb - 0.25, -bb, 0.17, 0xe8dcc0), this._band(p, q, bb, bb + 0.25, 0.17, 0xe8dcc0));
+          }
           v.push(this._band(p, q, -w, w, -0.55, 0x4a301a));                         // Unterseite
         }
         [-1, 1].forEach((sg) => {
@@ -988,6 +1002,13 @@
           for (let k = 0; k < schritte; k++) {
             const a = sAt(k), e = sAt(k + 1);
             v.push(this._wandSQ(a, quer, e, quer, -0.55, 0.16, 0x5a3a1e));            // Randbalken
+            if (stamm) {
+              // dicker Geländer-Stamm (Rinde) mit heller Oberkante, darunter ein zweiter, dünnerer
+              v.push(this._wandSQ(a, quer, e, quer, 0.65, 1.15, 0x5b3d22));
+              v.push(this._band(this.spline.punktBei(a), this.spline.punktBei(e), quer - 0.22, quer + 0.22, 1.15, 0x6e4c2c));
+              v.push(this._wandSQ(a, quer, e, quer, 0.25, 0.45, 0x553820));
+              continue;
+            }
             v.push(this._wandSQ(a, quer, e, quer, 1.0, 1.18, 0x9a6a3c));              // Handlauf
             v.push(this._wandSQ(a, quer, e, quer, 0.5, 0.62, 0x9a6a3c));              // Mittellatte
             v.push(this._band(this.spline.punktBei(a), this.spline.punktBei(e), quer - 0.12, quer + 0.12, 1.18, 0xa87848));
@@ -997,7 +1018,8 @@
           for (let k = 0; k <= n; k++) {
             const s = s0 + b.laenge * k / n, p = this.spline.punktBei(s);
             const x = p.x + p.nx * quer, z = p.z + p.nz * quer, y = this.hoeheAn(x, z);
-            this._kiste(v, x, z, p.tx, p.tz, 0.12, 0.12, y - 0.5, y + 1.3, 0x5a3a1e);
+            if (b.art === 'stamm') this._kiste(v, x, z, p.tx, p.tz, 0.2, 0.2, y - 0.5, y + 1.45, 0x4e331b);
+            else this._kiste(v, x, z, p.tx, p.tz, 0.12, 0.12, y - 0.5, y + 1.3, 0x5a3a1e);
           }
         });
         // Holzjoche: je zwei Stützen + Querbalken alle ~8 m bis in den Bach
@@ -1078,11 +1100,11 @@
       [s0, s1].forEach((s) => {
         const p = this.spline.punktBei(s), y = this.hoeheAn(p.x, p.z);
         this._kiste(v, p.x, p.z, p.tx, p.tz, 0.8, w + 0.6, Math.min(y, this.bodenHoehe(p.x, p.z)) - 1.5, y - 0.35,
-          b.art === 'holz' ? 0x7d776b : b.art === 'stein' ? 0x8f897d : 0x9a948b);
+          b.art === 'holz' || b.art === 'stamm' ? 0x7d776b : b.art === 'stein' ? 0x8f897d : 0x9a948b);
       });
       // Wasser im Grund (Bach / Teich), folgt dem Gefälle der Senke
       if (b.art !== 'stahl') {
-        const breiteL = b.halb * (b.art === 'stein' ? 0.42 : 0.3), Q = b.q0 + 10, ST = 3;
+        const breiteL = b.halb * (b.art === 'stein' ? 0.42 : b.art === 'stamm' ? 0.55 : 0.3), Q = b.q0 + 10, ST = 3;
         const m = b.m, pend = (q) => Math.sin(q * 0.11) * 2.2;
         for (let q = -Q; q < Q; q += ST) {
           const ecke = (l, qq) => {
@@ -1090,7 +1112,7 @@
             return [x, this.bodenHoehe(x, z) + 0.35, z];
           };
           v.push({ a: ecke(-breiteL, q), b: ecke(breiteL, q), c: ecke(breiteL, q + ST), d: ecke(-breiteL, q + ST),
-            farbe: b.art === 'stein' ? 0x4f95c0 : 0x3f86b8 });
+            farbe: b.art === 'stein' ? 0x4f95c0 : b.art === 'stamm' ? ((Math.round(q / ST) & 1) ? 0x3f6b5c : 0x386254) : 0x3f86b8 });   // Sumpf: trüb grün-blau
         }
       }
       const mesh = new THREE.Mesh(this._viereckeZuGeometrie(v),
@@ -1110,10 +1132,12 @@
       const W = this.grenzeEng + 0.35, WAND = 3.4, H = 6.6, M = 17, N = 13, ST = 2;
       this.tunnelLampen = [];
       for (const t of this.tunnel) {
-        const sand = t.art === 'sandstein';
-        const fInnen = sand ? 0x3a322c : 0x2e2e30, fWand = sand ? 0x4a4038 : 0x3c3b39;
-        const fHuegel = sand ? [0xc68d58, 0xd8a56c, 0xb97f4c] : [0x4b6a33, 0x587a3a, 0x6f6e62];
-        const fPortal = sand ? [0xb57d4c, 0xc68d58] : [0x55603f, 0x646a58], fRahmen = sand ? 0xe0b07a : 0xbdb8aa;
+        const sand = t.art === 'sandstein', hoehle = t.art === 'hoehle';
+        // Runde 5b 'hoehle' (Dino-Höhle): braun-schwarzer Fels, bemooster Berg, grober Felsrahmen, Fackeln, Stalaktiten
+        const fInnen = sand ? 0x3a322c : hoehle ? 0x2a231d : 0x2e2e30, fWand = sand ? 0x4a4038 : hoehle ? 0x3a3027 : 0x3c3b39;
+        const fHuegel = sand ? [0xc68d58, 0xd8a56c, 0xb97f4c] : hoehle ? [0x4a5e2c, 0x5b5146, 0x46582a] : [0x4b6a33, 0x587a3a, 0x6f6e62];
+        const fPortal = sand ? [0xb57d4c, 0xc68d58] : hoehle ? [0x4a4036, 0x3e352c] : [0x55603f, 0x646a58];
+        const fRahmen = sand ? 0xe0b07a : hoehle ? 0x6a5e50 : 0xbdb8aa;
         // Querschnitte (Weltkoordinaten): innen 13 Punkte (Wand links unten → Bogen → Wand rechts unten), außen 13
         const quer = (s) => {
           const p = sp.punktBei(s), yc = this.hoeheAn(p.x, p.z);
@@ -1172,11 +1196,44 @@
           }
         });
         // Deckenlampen alle 12 m (leuchtende Flächen) – Positionen für die Punktlichter merken
-        for (let s = t.s0 + 6; s <= t.s1 - 3; s += 12) {
+        // Höhle: statt Lampen Fackeln an der Wand (abwechselnd links/rechts, orange Flamme)
+        for (let s = t.s0 + 6, nr = 0; s <= t.s1 - 3; s += 12, nr++) {
           const p = sp.punktBei(s), y = this.hoeheAn(p.x, p.z) + H - 0.18;
+          if (hoehle) {
+            const sg = nr % 2 ? 1 : -1, q = (W - 0.15) * sg, yb = this.hoeheAn(p.x, p.z) + 2.6;
+            const f = (sl, hy, sq) => [p.x + p.tx * 0.22 * sl + p.nx * (q - sg * sq), yb + hy, p.z + p.tz * 0.22 * sl + p.nz * (q - sg * sq)];
+            v.push({ a: f(-0.4, -0.9, 0), b: f(0.4, -0.9, 0), c: f(0.4, 0, 0.35), d: f(-0.4, 0, 0.35), farbe: 0x3a2614 });   // Halter
+            lampen.push({ a: f(-1, 0, 0.35), b: f(1, 0, 0.35), c: f(0.3, 0.9, 0.4), d: f(-0.3, 0.9, 0.4), farbe: 0xffa040 });
+            lampen.push({ a: f(-0.5, 0.05, 0.36), b: f(0.5, 0.05, 0.36), c: f(0.1, 0.55, 0.38), d: f(-0.1, 0.55, 0.38), farbe: 0xfff0a0 });
+            this.tunnelLampen.push({ x: p.x + p.nx * q * 0.6, y: yb + 1.2, z: p.z + p.nz * q * 0.6, s });
+            continue;
+          }
           const e = (sl, sq) => [p.x + p.tx * 0.9 * sl + p.nx * 0.45 * sq, y, p.z + p.tz * 0.9 * sl + p.nz * 0.45 * sq];
           lampen.push({ a: e(-1, -1), b: e(1, -1), c: e(1, 1), d: e(-1, 1), farbe: 0xfff3c8 });
           this.tunnelLampen.push({ x: p.x, y: y - 0.3, z: p.z, s });
+        }
+        // Höhle: Stalaktiten von der Decke (über der Fahrbahn kurz, an den Seiten länger) + Stalagmiten hinter der Bande
+        if (hoehle) {
+          let zz = 1234567 + Math.round(t.s0);
+          const rnd = () => { zz = (zz * 16807) % 2147483647; return zz / 2147483647; };
+          const decke = (q) => { const c = Math.max(-1, Math.min(1, q / W)); return WAND + (H - WAND) * Math.sqrt(1 - c * c); };
+          const kegel = (s, q, y0, laenge, r, nachUnten, farbe, farbeSpitze) => {
+            const p = sp.punktBei(s), yc = this.hoeheAn(p.x, p.z), m = [p.x + p.nx * q, yc + y0, p.z + p.nz * q];
+            const spitze = [m[0], m[1] + (nachUnten ? -laenge : laenge), m[2]];
+            for (let k = 0; k < 5; k++) {
+              const w0 = k / 5 * Math.PI * 2, w1 = (k + 1) / 5 * Math.PI * 2;
+              const ra = [m[0] + (p.nx * Math.cos(w0) + p.tx * Math.sin(w0)) * r, m[1], m[2] + (p.nz * Math.cos(w0) + p.tz * Math.sin(w0)) * r];
+              const rb = [m[0] + (p.nx * Math.cos(w1) + p.tx * Math.sin(w1)) * r, m[1], m[2] + (p.nz * Math.cos(w1) + p.tz * Math.sin(w1)) * r];
+              v.push({ a: ra, b: rb, c: spitze, d: spitze, farbe: k % 2 ? farbe : farbeSpitze });
+            }
+          };
+          for (let s = t.s0 + 3; s <= t.s1 - 2; s += 1.6 + rnd() * 1.6) {
+            const sg = rnd() < 0.5 ? -1 : 1, aussen = rnd() < 0.7;
+            const q = aussen ? sg * W * (0.7 + rnd() * 0.24) : sg * W * rnd() * 0.55;
+            const y0 = decke(q) + 0.15, laenge = aussen ? Math.min(y0 - 3.6, 0.7 + rnd() * 1.4) : 0.3 + rnd() * 0.5;
+            kegel(s + rnd(), q, y0, Math.max(0.25, laenge), 0.16 + rnd() * 0.22, true, 0x5a4c3e, 0x7a6a58);
+            if (rnd() < 0.35) kegel(s + rnd(), sg * (this.grenzeEng + 0.2 + rnd() * 0.25), -0.3, 0.6 + rnd() * 1.1, 0.18 + rnd() * 0.15, false, 0x4e4236, 0x6e6052);
+          }
         }
       }
       const roehre = new THREE.Mesh(this._viereckeZuGeometrie(v),

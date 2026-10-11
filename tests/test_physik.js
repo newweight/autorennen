@@ -73,8 +73,9 @@ for (const k of ['normal', 'schnell']) {
     Math.abs(n.daten.beschleunigung - 5.1) < 1e-9 && Math.abs(n.daten.bremsen - 18) < 1e-9 && n.tempoKlasse === 'normal',
     (n.daten.vMax * 3.6).toFixed(0) + ' km/h');
   pruefe('Tempo-Klasse schnell / ohne Option: Katalogwerte', s.daten.vMax === 70 && o.daten.vMax === 70 && o.tempoKlasse === null);
+  // Obergrenze 200 statt 190: Formel-Renner (280 km/h × 0,7 = 196 km/h) ist bewusst das schnellste Auto
   const kmh = R.carCatalog.map(a => new R.Vehicle(a.fahrwerte, { tempoKlasse: 'normal' }).daten.vMax * 3.6);
-  pruefe('Tempo-Klasse normal: Katalog 150–190 km/h', Math.min(...kmh) >= 150 && Math.max(...kmh) <= 190,
+  pruefe('Tempo-Klasse normal: Katalog 150–200 km/h', Math.min(...kmh) >= 150 && Math.max(...kmh) <= 200,
     Math.min(...kmh).toFixed(0) + '–' + Math.max(...kmh).toFixed(0) + ' km/h');
 }
 // 4b'') Lenkung spricht schneller an: 90 % des Volleinschlags nach ≤ 0,27 s (einschwingen 9/s), zurück auf < 10 % in ≤ 0,2 s (12/s)
@@ -97,7 +98,7 @@ for (const k of ['normal', 'schnell']) {
 //     Tempoverlust gegenüber geradeaus (≥ 0,3 m/s beim trägsten Auto, Bus in „normal"; Sportwagen deutlich mehr) (vorher: Drehrate exakt an der Haftgrenze, < 1 rad, kaum Drift)
 for (const k of ['normal', 'schnell']) {
   let schlimmsterH = 0, schlimmsterD = 0, minDrift = Infinity, minVerlust = Infinity, wer = '';
-  for (const a of R.carCatalog) {
+  for (const a of R.carCatalog.waehlbare()) {
     const v = new R.Vehicle(a.fahrwerte, { tempoKlasse: k }), g = new R.Vehicle(a.fahrwerte, { tempoKlasse: k });
     v.vLaengs = g.vLaengs = v.daten.vMax;
     let maxQuer = 0;

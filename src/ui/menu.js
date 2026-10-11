@@ -15,7 +15,7 @@
 (function () {
   const R = window.Rennspiel;
 
-  const SPALTEN = 4;                       // Auto-Raster
+  const SPALTEN = 3;                       // Auto-Raster
   const FAHRER_SPALTEN = { solo: 6, zwei: 3 };   // Fahrer-Raster (12 Karten: 6×2 bzw. je Spieler 3×4)
   const SCHRITTE = [
     { id: 'modus', name: 'Modus' },
@@ -58,7 +58,7 @@
 
   /** Fahrwerte auf 0.3..1 normieren (kleinster Katalogwert = 30 %). */
   function normiert() {
-    const kat = R.carCatalog;
+    const kat = R.carCatalog.waehlbare();
     const felder = { tempo: 'vMax', start: 'beschleunigung', kurven: 'wendigkeit' };
     const grenzen = {};
     Object.keys(felder).forEach((k) => {
@@ -121,7 +121,7 @@
     zeilen() {
       const z = ['runden', 'gegner', 'schwierigkeit', 'hilfe0'];
       if (this.zwei) z.push('hilfe1');
-      z.push('jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'start');   // Runde 5: Tempo-Klasse
+      z.push('jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'start');   // Runde 5: Tempo-Klasse, 5b: Polizei
       return z;
     }
 
@@ -249,7 +249,7 @@
     }
 
     autoBewegen(spieler, dx, dy) {
-      const kat = R.carCatalog, n = kat.length;
+      const kat = R.carCatalog.waehlbare(), n = kat.length;
       let i = kat.findIndex((a) => a.id === this.e.autoIds[spieler]);
       if (i < 0) i = 0;
       i = dx ? (i + dx + n) % n : (i + dy * SPALTEN + n * 2) % n;
@@ -294,6 +294,8 @@
         if (dx) e.schaden = dx > 0;
       } else if (zeile === 'tempo') {
         if (dx) e.tempoKlasse = dx > 0 ? 'schnell' : 'normal';
+      } else if (zeile === 'polizei') {
+        if (dx) e.polizei = dx > 0;
       }
     }
 
@@ -307,6 +309,7 @@
       else if (zeile === 'wind') e.windStaerke = k === 'zufall' ? 'zufall' : +k;
       else if (zeile === 'schaden') e.schaden = k === 'an';
       else if (zeile === 'tempo' && R.config.tempoKlassen[k]) e.tempoKlasse = k;
+      else if (zeile === 'polizei') e.polizei = k === 'an';
     }
 
     weiter() {
@@ -395,7 +398,7 @@
       const g = BUEHNE[this.zwei ? 'zwei' : 'solo'];
       felder.forEach((c) => {
         const sp = +c.dataset.sp;
-        const auto = R.carCatalog.find((a) => a.id === this.e.autoIds[sp]) || R.carCatalog[0];
+        const auto = R.carCatalog.waehlbare().find((a) => a.id === this.e.autoIds[sp]) || R.carCatalog.waehlbare()[0];
         AV.binden(sp, c, auto, g.w, g.h);
       });
     }
@@ -411,11 +414,11 @@
     }
 
     htmlStrecke() {
-      const farben = { wiese: ['#7ed957', '#3a8f2f'], wald: ['#2f7a3a', '#143d1f'], wueste: ['#f2c768', '#c98a34'], fantasie: ['#ff8fd8', '#9b5de5'] };
+      const farben = { wiese: ['#7ed957', '#3a8f2f'], wald: ['#2f7a3a', '#143d1f'], wueste: ['#f2c768', '#c98a34'], fantasie: ['#ff8fd8', '#9b5de5'], dino: ['#6fae3a', '#3d6b1e'] };
       const labels = { leicht: 'leicht', mittel: 'mittel', schnell: 'schnell', spass: 'spaß' };
       return `<div class="reihe strecken">` + R.trackCatalog.map((s) => {
         const f = farben[s.thema] || farben.wiese;
-        const himmel = s.thema === 'fantasie' ? '#b48cff' : '#8fc8ff';
+        const himmel = s.thema === 'fantasie' ? '#b48cff' : s.thema === 'dino' ? '#f2b36a' : '#8fc8ff';   // Dino: Vulkan-Dunst
         // Hinweis aus den Katalogdaten (Fantasie: Loopings, Bälle, Wasserstrahl)
         const teile = [];
         // nur, was in der Standard-Welt der Strecke aktiv ist (Runde 4: Wiese/Wald/Wüste haben Bälle erst in „Verrückt“)
@@ -469,9 +472,9 @@
         `<div class="bar"><span class="b-ico">${emoji}</span>${name ? `<span class="b-name">${name}</span>` : ''}` +
         `<div class="spur"><i style="width:${Math.round(this.norm(a, k) * 100)}%"></i></div>${extra ? `<span class="b-wert">${extra}</span>` : ''}</div>`;
       const panels = spieler.map((sp) => {
-        const wahl = R.carCatalog.find((a) => a.id === this.e.autoIds[sp]) || R.carCatalog[0];
+        const wahl = R.carCatalog.waehlbare().find((a) => a.id === this.e.autoIds[sp]) || R.carCatalog.waehlbare()[0];
         const g = BUEHNE[this.zwei ? 'zwei' : 'solo'];
-        const karten = R.carCatalog.map((a) => {
+        const karten = R.carCatalog.waehlbare().map((a) => {
           const url = dreid ? AV.kachel(a) : null;
           const bild = url ? `<img src="${url}" alt="${a.name}" draggable="false">` : autoSvg(a);
           // Im Solo-Modus Balken auf jeder Karte; zu zweit nur im Infofeld der Bühne (Platz)
@@ -538,7 +541,10 @@
           'Treffer kosten Energie, bei 0 % kommt der Abschleppwagen') +
         // Runde 5: Tempo-Klasse (Spieler und Computer gleich)
         pillenL('tempo', '🏎️', 'Tempo', [{ k: 'normal', text: 'Normal' }, { k: 'schnell', text: 'Schnell (220–270 km/h)' }],
-          e.tempoKlasse === 'schnell' ? 'schnell' : 'normal', 'Normal ≈ 155–190 km/h, leichter zu fahren – Schnell = volle Leistung');
+          e.tempoKlasse === 'schnell' ? 'schnell' : 'normal', 'Normal ≈ 155–190 km/h, leichter zu fahren – Schnell = volle Leistung') +
+        // Runde 5b: Polizei (Streifenwagen hält dich 10 s an, wenn er dich einholt)
+        pillenL('polizei', '🚓', 'Polizei', [{ k: 'aus', text: 'Aus' }, { k: 'an', text: 'An' }], e.polizei ? 'an' : 'aus',
+          'Ein Streifenwagen jagt dich – holt er dich ein, musst du 10 s anhalten');
       const tonAn = !R.Audio || R.Audio.an;
       const aktionen = `<div class="m-aktionen"><div class="start-knopf${fk('start')}" data-a="start">🏁 LOS GEHT'S!</div>` +
         `<div class="knopf klein ton" data-a="ton">${tonAn ? '🔊 Ton an' : '🔇 Ton aus'} <kbd>M</kbd></div>` +

@@ -19,16 +19,17 @@ Bei der Fahrer- und Autowahl bewegt Spieler 1 mit den Pfeilen, Spieler 2 mit WAS
 
 ## Menü (5 Schritte)
 1. **Modus**: Allein gegen Computer oder Zu zweit (geteilter Bildschirm: links Spieler 1, rechts Spieler 2)
-2. **Strecke** (+ **Welt**): 4 Strecken, jede mit Schwierigkeits-Pille (leicht / mittel / schnell / spaß). Darunter wählst du die **Welt** (←→ Strecke, ↑↓ Welt; Pillen anklicken geht auch):
+2. **Strecke** (+ **Welt**): 5 Strecken, jede mit Schwierigkeits-Pille (leicht / mittel / schnell / spaß). Darunter wählst du die **Welt** (←→ Strecke, ↑↓ Welt; Pillen anklicken geht auch):
    - **Wiese** (leicht): Hügel, lange Start-Gerade, Steinbrücke über den Teich
    - **Wald** (mittel): viele Kurven, steil rauf und runter, Felstunnel, Baumtunnel, Holzbrücke
    - **Wüste** (schnell): lange Geraden, Tunnel unter der großen Düne, Brücke über die Schlucht
    - **Fantasie** (spaß, lila Karte): kurze Zauberland-Strecke mit 2 Loopings, Bällen und Wasserstrahl (siehe unten)
+   - **Dino** (mittel): Urwald mit Vulkan, Baumstamm-Brücke über den Sumpf, Dino-Höhle und **laufenden Dinos** (ab Welt Hindernisse: Treffer −60 % Tempo, „Dino! 🦕“) und rollenden Felsbrocken
 3. **Fahrer**: Jeder Spieler wählt einen Namen: Emmy 🦁, Sara, Jonas 🐯, Kerle, Opa, Oma, Elki, Basti, Schumacher, Senna, Verstappen oder Röhrl (Karte mit Emoji). Zwei Spieler können nicht denselben Fahrer wählen. Der Name erscheint im Rennen und in der Ergebnistafel; die Computer-Gegner heißen wie die nicht gewählten Fahrer (zuerst Schumacher, Senna, Verstappen, Röhrl), z. B. „🤖 Senna“.
-4. **Auto**: 8 Autos als echte 3D-Modelle – VW T-Roc Cabrio, VW Multivan 6.1, VW Passat B8, Porsche 911, BMW M4, Mercedes-AMG GT, Audi RS6 Avant, Mini Cooper.
+4. **Auto**: 9 Autos als echte 3D-Modelle – VW T-Roc Cabrio, VW Multivan 6.1, VW Passat B8, Porsche 911, BMW M4, Mercedes-AMG GT, Audi RS6 Avant, Mini Cooper und der **Formel-Renner** (das schnellste Auto, extrem viel Haftung). Der Streifenwagen ist nicht wählbar.
    Das gewählte Auto steht groß auf der Bühne und dreht sich langsam von selbst. **Drehen:** Spieler 1 mit **,** und **.**, Spieler 2 mit **Q** und **E**, oder mit der **Maus ziehen**. Die Pfeile/WASD wechseln das Auto.
 5. **Los!** (zwei Spalten, passt ohne Scrollen): links **Rennen** – Runden (1–10), Computer-Gegner (0–**10**), Computer-Stärke, Fahrhilfe je Spieler (aus / wenig / viel);
-   rechts **Welt & Wetter** – Jahreszeit, Wetter, Wind (0–5 oder 🎲), Schaden (aus / an). Der Knopf „🎮 Steuerung“ klappt die Tastenübersicht auf.
+   rechts **Welt & Wetter** – Jahreszeit, Wetter, Wind (0–5 oder 🎲), Schaden (aus / an), **Tempo** (Normal / Schnell) und **Polizei** (aus / an). Der Knopf „🎮 Steuerung“ klappt die Tastenübersicht auf.
 
 ### Welten (Schritt 2)
 Jede Strecke hat Welten – die Streckenform bleibt, die Welt schaltet Dinge dazu. Die **Standard-Welt** ist markiert und gilt, solange du nichts wählst; beim Wechsel der Strecke springt die Auswahl zurück auf Standard.
@@ -59,9 +60,14 @@ Die Einstellungen werden gemerkt.
 - **Strohballen** (ab Welt Hindernisse; nicht in der Wüste): rollen quer über die Straße, ein Treffer bremst (−50 %).
 - **Liegengebliebene und brennende Autos** (ab Welt Hindernisse): stehen mit Warnblinker auf der Fahrbahn – **vorbeifahren**! Brennende Autos sind besonders gefährlich (bei Schaden an −10 %).
 - **Bis zu 10 Computer-Gegner** (Startaufstellung in zwei Spalten) und **längere Strecken**: Wiese ca. 3.040 m, Wald ca. 2.480 m, Wüste ca. 3.330 m – eine Runde dauert jetzt etwa 2 Minuten.
+- **Anlauf** (Looping, Schanze): Wer zu langsam ankommt, wird 10 m vorher sanft gestoppt. Mit **R** (Spieler 1) bzw. **T** (Spieler 2) setzt du das Auto auf die Anlaufposition (150–160 m davor) und gibst Vollgas.
+- **Kleber** (Fantasie): grüne Streifen am Rand – wer länger darauf fährt, **klebt 5 Sekunden fest** (Steuerung aus), danach geht es weiter.
+- **Dinos** (Strecke Dino): laufen quer über die Straße; Felsbrocken rollen wie Strohballen („Steinschlag! 🪨“).
+- **Polizei** (Schalter in Schritt 5, Standard aus): Ein Streifenwagen fährt hinter dem Feld los und jagt den nächsten Spieler. Bleibt er 1,5 s dicht dran (Blaulicht, Sirene), musst du **10 s anhalten** („🚨 Polizei! Anhalten…“); je Auto und Runde nur einmal, danach 30 s Ruhe. Ein Schutzschild platzt stattdessen. Der Streifenwagen zählt nicht im Ergebnis.
 
 ## Tempo
-Alle Autos fahren **220 bis 270 km/h** Höchsttempo (Multivan 220 … Porsche 270). Runden dauern auf den langen Strecken ca. 2 Minuten (Fantasie kürzer). Bergauf bremst, bergab beschleunigt das Auto.
+Neu: Schritt 5 hat die **Tempo-Klasse**. **Normal** (Standard) ist gemütlich: ca. **154–196 km/h** Höchsttempo (Formel-Renner 196), mit weniger Beschleunigung und Bremse. **Schnell** nutzt die vollen Katalogwerte unten.
+In **Schnell** fahren die Autos **220 bis 270 km/h** (Multivan 220 … Porsche 270, Formel-Renner 280). Runden dauern auf den langen Strecken ca. 2 Minuten (Fantasie kürzer). Bergauf bremst, bergab beschleunigt das Auto.
 
 ## Auf der Strecke
 - **Tunnel** (dunkle Röhre mit Lampen; die Scheinwerfer gehen im Tunnel an) und **Brücken** (mit Geländer über Teich, Bach oder Schlucht).

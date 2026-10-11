@@ -36,8 +36,8 @@ const SPANNE = { fantasie: 12 };
 // Runde 4: Rundenzeit KI „mittel" (Runde 2) je Strecke
 // Runde 5: je Tempo-Klasse – normal (vMax × 0,7) Ziel 110–140 s (2-Minuten-Vorgabe), schnell wie Runde 4
 const MITTEL = KLASSE === 'normal'
-  ? { wiese: [110, 140], wald: [110, 140], wueste: [110, 140], fantasie: [55, 75] }
-  : { wiese: [100, 130], wald: [100, 130], wueste: [100, 130], fantasie: [50, 70] };
+  ? { wiese: [110, 140], wald: [110, 140], wueste: [110, 140], fantasie: [55, 75], dino: [110, 140] }
+  : { wiese: [100, 130], wald: [100, 130], wueste: [100, 130], fantasie: [50, 70], dino: [100, 130] };
 
 const dt = R.config.physik.schritt;
 const nurId = process.argv[2];

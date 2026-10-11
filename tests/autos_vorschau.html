@@ -17,6 +17,9 @@
                                          (Front-Dreiviertel, Seite, Heck-Dreiviertel, Front)
     ?ansicht=alle4&auto=<id>             nur dieses Auto, 4 große Ansichten nebeneinander
     ...&bremsen=1                        Bremslichter an
+    ...&blaulicht=<phase>                Blaulicht (nur Streifenwagen): 0 aus, 1 links, 2 rechts, 3 beide
+                                         (&blaulichtFarbe=rot für rot)
+  Autos mit waehlbar: false (Streifenwagen) werden mit „(nicht wählbar)" beschriftet.
 -->
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #cfe8ff; font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; }
@@ -66,6 +69,7 @@
       const m = R.carBuilder.bauen(a);
       if (q.get('bremsen')) R.carBuilder.setzeBremslicht(m, true);
       if (q.get('lenkung')) R.carBuilder.lenkeRaeder(m, rad(parseFloat(q.get('lenkung'))));
+      if (q.get('blaulicht')) R.carBuilder.setzeBlaulicht(m, parseInt(q.get('blaulicht'), 10), q.get('blaulichtFarbe'));
       m.visible = false; szene.add(m); return { a, m };
     });
     // Azimut: 0 = von vorne, 90 = linke Seite, 180 = von hinten
@@ -99,7 +103,7 @@
             const el = document.createElement('div');
             el.className = 'label';
             el.style.left = '90px'; el.style.top = (zi * zh + 6) + 'px';
-            el.innerHTML = e.a.name;
+            el.innerHTML = e.a.name + (e.a.waehlbar === false ? ' <small>(nicht wählbar)</small>' : '');
             labels.appendChild(el);
           }
         });
@@ -150,9 +154,10 @@
     if (q.get('lenkung')) R.carBuilder.lenkeRaeder(auto, rad(parseFloat(q.get('lenkung'))));
     if (q.get('rollen')) R.carBuilder.dreheRaeder(auto, rad(parseFloat(q.get('rollen'))));
     if (q.get('bremsen')) R.carBuilder.setzeBremslicht(auto, true);
+    if (q.get('blaulicht')) R.carBuilder.setzeBlaulicht(auto, parseInt(q.get('blaulicht'), 10), q.get('blaulichtFarbe'));
     const el = document.createElement('div');
     el.className = 'label';
-    el.innerHTML = a.name + '<small>' + (a.farbeName || '') + ' · ' + a.karosserie + '</small>';
+    el.innerHTML = a.name + '<small>' + (a.farbeName || '') + ' · ' + a.karosserie + (a.waehlbar === false ? ' · nicht wählbar' : '') + '</small>';
     document.getElementById('labels').appendChild(el);
     return { auto, el };
   });

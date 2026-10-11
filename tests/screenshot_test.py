@@ -2,7 +2,8 @@
 """Headless-Test: öffnet Autorennen.html per file://, startet ein Rennen auf einer Strecke,
 macht Screenshots und liest Zustand aus window.Rennspiel.
 Aufruf: python3 tests/screenshot_test.py [streckenId] [ausgabeordner]
-  streckenId: wiese (Standard) | wald | wueste | alle
+  streckenId: wiese (Standard) | wald | wueste | fantasie | dino | alle
+        Runde 5b Dino: 30_vulkan, 31_lavasee, 32_deko_dino, 33_dino_strasse_<art>, 33b_dino_nah, 34_dino_treffer, 35_felsbrocken
 Bilder: 01_start, 02_fahrt, 03_links_abseits, 04_reset, 05_cockpit, 06_weit, 07_huegel,
         08_uebersicht, 09_kurve (engste Stelle: Haarnadel/Schikane), 10_minimap (Ausschnitt),
         Wald: 11_tunnel (Baumtunnel) · Wüste: 11_oase, 12_gerade
@@ -69,10 +70,13 @@ DEKO_PRUEFEN = '''(() => { const s = Rennspiel.spiel, sp = s.strecke.spline; let
 # Draw-Calls Strecke + Deko: sichtbare Meshes zählen (obere Grenze, unabhängig vom Blickwinkel).
 # In Regionen geteilte InstancedMeshes (userData.stueck > 0) zählen als ein Objekt – je Ansicht wird nur
 # gezeichnet, was im Blickfeld liegt (echte Draw-Calls stehen in drawCalls von ZUSTAND).
-DRAW_CALLS = '''(() => { const s = Rennspiel.spiel; let n = 0; const namen = [];
+# Runde 5b: liegengebliebene Autos (Gruppe 'Wracks', je Wrack ~12 Auto-Meshes) zählen extra (wracks), nicht zur Strecke.
+DRAW_CALLS = '''(() => { const s = Rennspiel.spiel; let n = 0, w = 0; const namen = [];
+  const imWrack = (o) => { for (let p = o.parent; p; p = p.parent) if (p.name === 'Wracks') return true; return false; };
   s.szene.children.forEach(g => { if (!(g.name.startsWith('Strecke') || g.name.startsWith('Deko'))) return;
-    g.traverse(o => { if ((o.isMesh || o.isInstancedMesh) && o.visible && (!o.isInstancedMesh || o.count > 0) && !(o.userData.stueck > 0)) { n++; namen.push(o.name); } }); });
-  return { meshes: n, namen }; })()'''
+    g.traverse(o => { if ((o.isMesh || o.isInstancedMesh) && o.visible && (!o.isInstancedMesh || o.count > 0) && !(o.userData.stueck > 0)) {
+      if (imWrack(o)) { w++; return; } n++; namen.push(o.name); } }); });
+  return { meshes: n, wracks: w, namen }; })()'''
 
 MINIMAP = '''(() => { const c = document.querySelector('.hud-minimap'); if (!c) return null;
   const r = c.getBoundingClientRect(), st = getComputedStyle(c);
@@ -128,7 +132,7 @@ def runde3_bilder(page, snap):
     bilder = {'baustelle': '15_hindernis_baustelle.png', 'oel': '16_hindernis_oel.png', 'ast': '17_hindernis_ast.png', 'sand': '18_hindernis_sand.png'}
     gemacht = set()
     for h in info['hindernisse']:
-        if h['typ'] in gemacht: continue
+        if h['typ'] in gemacht or h['typ'] not in bilder: continue      # Wracks (typ wrack/brand) haben eigene Bilder
         gemacht.add(h['typ'])
         vorne = h['s0'] if h['typ'] == 'baustelle' else h['s']
         page.evaluate(AUTO_NACH_SQ, [vorne - 20, 0]); page.wait_for_timeout(1300)
@@ -297,6 +301,80 @@ def fantasie_bilder(page, snap):
     return erg
 
 
+def dino_bilder(page, snap):
+    """Runde 5b: Vulkan/Lavasee, Deko-Dinos, laufender Dino auf der Straße + Treffer, Felsbrocken. Liefert Messwerte."""
+    erg = {}
+    page.evaluate(KI_WEG)
+    info = page.evaluate('''(() => { const s = Rennspiel.spiel; let lava = null, vulkan = 0, rauch = 0, dinos = 0;
+      s.szene.traverse(o => { if (o.name === 'Lavasee') lava = o.userData; if (o.name === 'Vulkan') vulkan++; if (o.name === 'Vulkanrauch') rauch++;
+        if (o.name === 'Dinos') dinos += o.count; });
+      return { lava, vulkan, rauch, dekoDinos: dinos, dinoStellen: s.dynamik ? s.dynamik.dinoStellen.map(d => ({ s: d.s, von: d.von, art: d.art })) : [],
+        fels: !!(s.dynamik && s.dynamik.felsOptik) }; })()''')
+    erg['info'] = info
+    # Start-Blick Richtung Vulkan (Kamera hinter dem Start, etwas erhöht)
+    blick = page.evaluate(KAMERA_BEI_S, [30, 40, 7, 120])
+    page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(900)
+    snap('30_vulkan.png')
+    erg['vulkanPixel'] = page.evaluate('''(() => { const s = Rennspiel.spiel; let v = null; s.szene.traverse(o => { if (o.name === 'Vulkan') v = o; });
+      const p = new THREE.Vector3().setFromMatrixPosition(v.matrixWorld).project(s.kameras[0].kamera);
+      return { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(3) }; })()''')
+    # Lavasee vom nächsten Streckenpunkt
+    if info['lava']:
+        blick = page.evaluate('''(l) => { const st = Rennspiel.spiel.strecke, sp = st.spline, n = sp.naechster(l.x, l.z), a = sp.punktBei(n.s - 30);
+          return [a.x, st.hoeheAn(a.x, a.z) + 9, a.z, l.x, st.hoeheAn(l.x, l.z), l.z, true]; }''', info['lava'])
+        page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(900)
+        snap('31_lavasee.png')
+    page.evaluate('(() => { const s = Rennspiel.spiel, k = s.kameras[0]; delete k.update; k._erstesMal = true; })()')
+    # Deko-Dino: Kamera auf den ersten Langhals (Instanz 0 des ersten Dinos-Meshes) von der Straße aus
+    blick = page.evaluate('''(() => { const s = Rennspiel.spiel, st = s.strecke, sp = st.spline; let m = null;
+      s.szene.traverse(o => { if (o.name === 'Dinos' && o.count && !m) m = o; });
+      const m4 = new THREE.Matrix4(); m.getMatrixAt(0, m4); const p = new THREE.Vector3().setFromMatrixPosition(m4);
+      const n = sp.naechster(p.x, p.z), a = sp.punktBei(n.s);
+      return [a.x, st.hoeheAn(a.x, a.z) + 3, a.z, p.x, p.y + 5, p.z, true]; })()''')
+    page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(900)
+    snap('32_deko_dino.png')
+    page.evaluate('(() => { const s = Rennspiel.spiel, k = s.kameras[0]; delete k.update; k._erstesMal = true; })()')
+    # Laufender Dino mitten auf der Straße (Zeit der Dynamik eingefroren), Auto 28 m davor
+    for nr in range(len(info['dinoStellen'])):
+        d = page.evaluate('''(nr) => { const s = Rennspiel.spiel, dy = s.dynamik, st = dy.dinoStellen[nr];
+          if (!dy._schrittOrig) { dy._schrittOrig = dy.schritt; dy.schritt = function () { return {}; }; }
+          st.dinos.length = 0; st.timer = 0; dy._dinoSchritt(1 / 60); st.timer = 1e9;
+          const dn = st.dinos[0]; dn.q = 1.5 * st.von; dn.phase = 0.9; dy._dinoWelt(dn); dy.animieren();
+          return { s: dn.s, art: dn.art }; }''', nr)
+        page.evaluate(AUTO_NACH_SQ, [d['s'] - 30, -2])
+        page.wait_for_timeout(1300)
+        snap('33_dino_strasse_' + d['art'] + '.png')
+    # Seitenansicht des Dinos auf der Straße
+    blick = page.evaluate('''(() => { const s = Rennspiel.spiel, st = s.strecke, dn = s.dynamik.dinoStellen[0].dinos[0], p = st.spline.punktBei(dn.s);
+      return [dn.x - p.tx * 18 + p.nx * 10, dn.y + 4, dn.z - p.tz * 18 + p.nz * 10, dn.x, dn.y + 2, dn.z, true]; })()''')
+    page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(900)
+    snap('33b_dino_nah.png')
+    page.evaluate('(() => { const s = Rennspiel.spiel, k = s.kameras[0]; delete k.update; k._erstesMal = true; })()')
+    # Treffer: Dynamik läuft wieder, Dino der Stelle 0 steht mitten auf der Spur des Autos, Auto mit 25 m/s hinein
+    page.evaluate('''(() => { const dy = Rennspiel.spiel.dynamik; dy.schritt = dy._schrittOrig; delete dy._schrittOrig; })()''')
+    s0 = page.evaluate('''(() => { const s = Rennspiel.spiel, dy = s.dynamik, st = dy.dinoStellen[0], dn = st.dinos[0];
+      dn.q = 0; dn.vq = 0; dy._dinoWelt(dn); dn.getroffen.clear(); return dn.s; })()''')
+    page.evaluate(AUTO_NACH_SQ, [s0 - 14, 0])
+    page.evaluate('(() => { const s = Rennspiel.spiel; s.fahrzeuge[0].vehicle.vLaengs = 25; s.dynamikStoesse = []; })()')
+    try:
+        page.wait_for_function('(Rennspiel.spiel.huds[0].meldungText || "").startsWith("Dino")', timeout=15000)
+    except Exception:
+        pass
+    erg['treffer'] = page.evaluate('''(() => { const s = Rennspiel.spiel, v = s.fahrzeuge[0].vehicle, dn = s.dynamik.dinoStellen[0].dinos[0];
+      return { kmhNachher: Math.round(v.vLaengs * 3.6), meldung: s.huds[0].meldungText || '', dinoDa: !!dn, getroffen: dn ? dn.getroffen.size : 0 }; })()''')
+    page.wait_for_timeout(200)
+    snap('34_dino_treffer.png')
+    # Felsbrocken (Strohballen-Mechanik) auf der Straße
+    if info['fels']:
+        f = page.evaluate('''(() => { const dy = Rennspiel.spiel.dynamik, st = dy.strohStellen[0];
+          st.ballen.length = 0; st.timer = 0; dy._strohSchritt(1 / 60); st.timer = 1e9; const b = st.ballen[0]; b.q = 0; b.vq = 0.01; dy._strohWelt(b); dy.animieren();
+          return { s: b.s }; })()''')
+        page.evaluate(AUTO_NACH_SQ, [f['s'] - 22, 2])
+        page.wait_for_timeout(1200)
+        snap('35_felsbrocken.png')
+    return erg
+
+
 def lauf(browser, sid, out):
     os.makedirs(out, exist_ok=True)
     page = browser.new_page(viewport={'width': 1280, 'height': 800})
@@ -367,6 +445,8 @@ def lauf(browser, sid, out):
     z['elemente'] = runde3_bilder(page, snap)
     if sid == 'fantasie':
         z['fantasie'] = fantasie_bilder(page, snap)
+    if sid == 'dino':
+        z['dino'] = dino_bilder(page, snap)
     if sid == 'wueste':
         # Stelle der Strecke, die der Oase am nächsten liegt
         s_oase = page.evaluate('''(() => { const s = Rennspiel.spiel; let w = null;
@@ -404,7 +484,7 @@ def lauf(browser, sid, out):
     pruefe('Deko ≥ breite/2 + 6 m von der Mitte', d['minAbstandZurMitte'] >= d['grenze'] - 0.05,
            f"{d['minAbstandZurMitte']} m ({d['naechsteArt']}), Grenze {d['grenze']} m, {d['instanzen']} Instanzen")
     dc = z['drawCallsStreckeDeko']
-    pruefe('Draw-Calls Strecke + Deko + Hindernisse ≤ 40', dc['meshes'] <= 40, dc['meshes'])
+    pruefe('Draw-Calls Strecke + Deko + Hindernisse ≤ 40 (ohne Wrack-Autos)', dc['meshes'] <= 40, str(dc['meshes']) + ' (+ ' + str(dc['wracks']) + ' Wrack-Meshes)')
     el = z['elemente']
     pruefe('höchstens 3 Punkt- + 2 Spotlichter', el['lichter']['punkt'] <= 3 and el['lichter']['spot'] <= 2, el['lichter'])
     for t in el['tunnel']:
@@ -432,6 +512,15 @@ def lauf(browser, sid, out):
         pruefe('Kleber: nach 5 s gelöst (Optik aus, Schonzeit)', fz['geloest']['klebt'] == 0 and not fz['geloest']['optik'] and fz['geloest']['frei'] > 0, fz['geloest'])
         pruefe('Ball-Treffer: Tempo −60 % (25 → 10 m/s = 36 km/h), Meldung', abs(fz['ball']['kmhNachher'] - 36) <= 3 and fz['ball']['meldung'] != '', fz['ball'])
         pruefe('Wasser-Treffer: Tempo −40 % (≈ 54 km/h) + Schlingern', abs(fz['wasser']['kmhNachher'] - 54) <= 4 and abs(fz['wasser']['vQuer']) > 2, fz['wasser'])
+    if z.get('dino'):
+        dz = z['dino']
+        pruefe('Dino: Vulkan + Rauch gebaut, Vulkan im Startblick (Bildmitte oben)', dz['info']['vulkan'] == 1 and dz['info']['rauch'] == 1 and
+               abs(dz['vulkanPixel']['x']) < 0.9 and -1 < dz['vulkanPixel']['y'] < 1 and dz['vulkanPixel']['z'] <= 1, dz['vulkanPixel'])
+        pruefe('Dino: Lavasee neben der Strecke', dz['info']['lava'] is not None, dz['info']['lava'])
+        pruefe('Dino: 6–10 Deko-Dinos', 6 <= dz['info']['dekoDinos'] <= 10, dz['info']['dekoDinos'])
+        pruefe('Dino: laufende Dinos (2 Stellen) + Felsbrocken in Welt Hindernisse', len(dz['info']['dinoStellen']) == 2 and dz['info']['fels'], dz['info'])
+        pruefe('Dino-Treffer: Tempo −60 % (25 → 10 m/s = 36 km/h), Meldung „Dino!", Dino bleibt', abs(dz['treffer']['kmhNachher'] - 36) <= 3 and
+               dz['treffer']['meldung'].startswith('Dino') and dz['treffer']['dinoDa'], dz['treffer'])
     au = z['abseits_untergrund']
     pruefe('Untergrund neben der Straße = Thema', au['ist'] == au['erwartet'], au)
     page.close()
@@ -482,7 +571,7 @@ def spur_lauf(browser, sid, out):
     return info, zeilen
 
 
-ids = ['wiese', 'wald', 'wueste', 'fantasie'] if wahl == 'alle' else [wahl]
+ids = ['wiese', 'wald', 'wueste', 'fantasie', 'dino'] if wahl == 'alle' else [wahl]
 with sync_playwright() as p:
     browser = p.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
     alle = []
@@ -491,7 +580,7 @@ with sync_playwright() as p:
         z, pruef = lauf(browser, sid, out)
         print(json.dumps(z, indent=1, ensure_ascii=False))
         alle += pruef
-        if sid in ('wiese', 'wald', 'wueste'):
+        if sid in ('wiese', 'wald', 'wueste', 'dino'):
             info, pruef = spur_lauf(browser, sid, out)
             print(json.dumps({'stunt': info}, ensure_ascii=False))
             alle += pruef

@@ -17,6 +17,11 @@
 //   von der Seite `von` quer über die Fahrbahn. Treffer: Tempo −50 %, der Ballen kippt um, rutscht an den
 //   nächsten Fahrbahnrand und bleibt dort liegenZeit (3 s) liegen, dann ist er weg. Stoß-typ 'stroh'.
 //   Dynamik lohnt sich auch, wenn eine Strecke NUR Strohballen hat (main.js: Bau-Bedingung beachten).
+// Runde 5b – Dinos (Schicht „dinos“, strecke.dinos [{ s, von, intervall, tempo, art }], config.dinos):
+//   ab Runde 1 läuft an jeder Stelle alle `intervall` s ein Dino (Dreihorn/Langhals, Low-Poly aus themes.dinoTeile)
+//   langsam (tempo m/s) von der Seite `von` quer über die Straße, die Beine wippen. Kontakt: Tempo −60 % + Hüpfer
+//   (vehicle.huepfer wie beim Ast), höchstens einmal je Dino und Auto; der Dino bleibt unbeeindruckt und läuft weiter.
+//   Stoß-typ 'dino'. Strohballen mit strecke.katalog.strohOptik === 'fels' sehen aus wie Felsbrocken (Stoß-typ 'fels').
 // Die KI kennt beides nicht (gewollt). Autos im Looping (vehicle.imLooping) werden nicht getroffen.
 // Rechenteil ohne Three.js (Node-Tests: tests/test_dynamik.js), bauen()/animieren() brauchen THREE.
 // ============================================================
@@ -37,6 +42,9 @@
   }
   function cfg() { return (R.config.fantasie) || {}; }
   function cfgStroh() { return (R.config.strohballen) || {}; }
+  function cfgDino() { return (R.config.dinos) || {}; }
+  // Kollisionsform je Dino-Art: Kreise längs der Laufrichtung (Abstand vom Mittelpunkt in m) mit Radius r
+  const DINO_FORM = { dreihorn: { kreise: [-1.9, 0, 1.9, 3.1], r: 1.15 }, langhals: { kreise: [-3.6, -1.6, 0.4, 2.3], r: 1.5 } };
   function wert(x, std) { return x === undefined ? std : x; }
 
   class Dynamik {
@@ -70,6 +78,17 @@
       const CS = cfgStroh(), schichtAn = !strecke.aktiveSchichten || strecke.aktiveSchichten.strohballen !== false;
       const strohListe = schichtAn ? (strecke.strohballen || d.strohballen || []) : [];
       const radius = wert(CS.radius, 0.75), uebS = wert(CS.ueberstand, 8);
+      const kat = strecke.katalog || d;
+      this.felsOptik = kat.strohOptik === 'fels';
+      // Runde 5b: Dinos (nur wenn die Welt die Schicht einschaltet; strecke.dinos ist schon gefiltert)
+      const CD = cfgDino(), dinoAn = !strecke.aktiveSchichten || strecke.aktiveSchichten.dinos !== false;
+      const dinoListe = dinoAn ? (strecke.dinos || d.dinos || []) : [];
+      this.dinoStellen = dinoListe.map((e, nr) => {
+        const s = sp.wrapS(e.s), bh = (strecke.breiteBei ? strecke.breiteBei(s) : strecke.breite) / 2, von = e.von < 0 ? -1 : 1;
+        const art = DINO_FORM[e.art] ? e.art : 'dreihorn';
+        return { nr, s, von, art, intervall: e.intervall || 14, tempo: e.tempo || wert(CD.tempo, 4),
+          qStart: von * (bh + wert(CD.ueberstand, 12)), timer: 1 + this.rnd() * Math.min(4, e.intervall || 14), dinos: [] };
+      });
       this.strohStellen = strohListe.map((e, nr) => {
         const s = sp.wrapS(e.s), bh = (strecke.breiteBei ? strecke.breiteBei(s) : strecke.breite) / 2;
         const von = e.von < 0 ? -1 : 1;
@@ -146,6 +165,7 @@
         }
       }
       this._strohSchritt(dt);
+      this._dinoSchritt(dt);
       for (const d of this.duesen) {
         const z = this.duesenZustand(d, this.zeit);
         if (d.zustand === 'aktiv' && z.zustand !== 'aktiv') d.getroffen.clear();
@@ -183,6 +203,45 @@
           this._strohWelt(b);
         }
       }
+    }
+
+    /** Dinos: neue laufen los (ab Runde 1, sobald das Rennen läuft), laufende bewegen; drüben angekommen → weg. */
+    _dinoSchritt(dt) {
+      for (const st of this.dinoStellen) {
+        st.timer -= dt;
+        if (st.timer <= 0) {
+          st.timer = st.intervall;
+          const dino = { s: st.s + (this.rnd() - 0.5) * 3, q: st.qStart, vq: -st.von * st.tempo, art: st.art, zeit: 0, phase: this.rnd() * 6,
+            getroffen: new Set(), x: 0, y: 0, z: 0, nx: 1, nz: 0, tx: 0, tz: 1 };
+          this._dinoWelt(dino);
+          st.dinos.push(dino);
+        }
+        for (let i = st.dinos.length - 1; i >= 0; i--) {
+          const d = st.dinos[i];
+          d.zeit += dt;
+          d.q += d.vq * dt;
+          d.phase += Math.abs(d.vq) * dt * (d.art === 'langhals' ? 0.9 : 1.6);   // Schrittfrequenz
+          if (d.q * st.von < -Math.abs(st.qStart)) { st.dinos.splice(i, 1); continue; }
+          this._dinoWelt(d);
+        }
+      }
+    }
+
+    /** Weltposition eines Dinos (s, q) → x, y, z; Laufrichtung (lx, lz) quer zur Straße. */
+    _dinoWelt(d) {
+      const st = this.strecke, p = st.spline.punktBei(d.s);
+      d.x = p.x + p.nx * d.q; d.z = p.z + p.nz * d.q;
+      d.y = st.hoeheAn(d.x, d.z);
+      d.nx = p.nx; d.nz = p.nz; d.tx = p.tx; d.tz = p.tz;
+      const sg = Math.sign(d.vq) || 1;
+      d.lx = p.nx * sg; d.lz = p.nz * sg;
+    }
+
+    /** Alle Dinos, die gerade über die Straße laufen (für Tests/Anzeige). */
+    alleDinos() {
+      const l = [];
+      for (const st of this.dinoStellen) for (const d of st.dinos) l.push(d);
+      return l;
     }
 
     /** Weltposition eines Strohballens (s, q) → x, y, z (+ Tangente/Normale für die Grafik). */
@@ -262,7 +321,32 @@
             // Ballen kippt um und rutscht an den Fahrbahnrand auf seiner Seite (vom Auto weg)
             const seite = b.q >= 0 ? 1 : -1;
             b.zustand = 'gekippt'; b.zeit = 0; b.qVon = b.q; b.qZiel = seite * st.randQ;
-            stoesse.push({ nr: i, typ: 'stroh', staerke: Math.max(3, vorher * 0.5) });
+            stoesse.push({ nr: i, typ: this.felsOptik ? 'fels' : 'stroh', staerke: Math.max(3, vorher * 0.5) });
+          }
+        }
+        // Runde 5b: Dinos (Kreise längs der Laufrichtung) – einmal je Dino und Auto, Dino läuft weiter
+        const CD = cfgDino();
+        for (const st of this.dinoStellen) {
+          for (const d of st.dinos) {
+            if (d.getroffen.has(i)) continue;
+            const form = DINO_FORM[d.art], gx = d.x - v.x, gz = d.z - v.z, gr = 4.5 + form.r + v.daten.laenge;
+            if (gx * gx + gz * gz > gr * gr) continue;
+            let treffer = false;
+            for (const k of form.kreise) {
+              const kx = d.x + d.lx * k, kz = d.z + d.lz * k;
+              for (const c of ka.kreise) {
+                const dx = kx - c.x, dz = kz - c.z, rr = ka.rad + form.r;
+                if (dx * dx + dz * dz < rr * rr) { treffer = true; break; }
+              }
+              if (treffer) break;
+            }
+            if (!treffer) continue;
+            d.getroffen.add(i);
+            const vorher = v.tempo;
+            v.vLaengs *= wert(CD.tempoFaktor, 0.4);
+            v.vQuer *= 0.5;
+            v.huepfer = wert(CD.huepfer, 2.6);
+            stoesse.push({ nr: i, typ: 'dino', staerke: Math.max(3, vorher * 0.6) });
           }
         }
         // Wasserfontänen
@@ -391,10 +475,27 @@
       }
       // Runde 4: Strohballen – ein InstancedMesh für alle Stellen (höchstens 4 je Stelle gleichzeitig)
       if (this.strohStellen.length) {
-        const m = new THREE.InstancedMesh(this._strohGeo(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x2a1e06 }), this.strohStellen.length * 4);
+        const m = this.felsOptik
+          ? new THREE.InstancedMesh(this._felsGeo(), new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), this.strohStellen.length * 4)
+          : new THREE.InstancedMesh(this._strohGeo(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x2a1e06 }), this.strohStellen.length * 4);
         m.count = 0; m.frustumCulled = false; m.name = 'Strohballen';
         g.add(m);
         this._strohMesh = m;
+      }
+      // Runde 5b: Dinos – je Art ein InstancedMesh für die Körper und eins für die Beine (je Stelle höchstens 2 gleichzeitig)
+      this._dinoMeshes = {};
+      if (this.dinoStellen.length && R.themes && R.themes.dinoTeile) {
+        const arten = [...new Set(this.dinoStellen.map(s => s.art))];
+        arten.forEach((art) => {
+          const teile = R.themes.dinoTeile(art), n = this.dinoStellen.filter(s => s.art === art).length * 2;
+          const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+          const koerper = new THREE.InstancedMesh(teile.koerper, mat, n);
+          const beine = new THREE.InstancedMesh(teile.bein, mat, n * teile.huefte.length);
+          koerper.count = 0; beine.count = 0; koerper.frustumCulled = false; beine.frustumCulled = false;
+          koerper.name = 'Dino'; beine.name = 'DinoBeine';
+          g.add(koerper); g.add(beine);
+          this._dinoMeshes[art] = { koerper, beine, huefte: teile.huefte };
+        });
       }
       this._m4 = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._v = new THREE.Vector3(); this._sk = new THREE.Vector3();
       this._achse = new THREE.Vector3();
@@ -440,6 +541,30 @@
       return geo;
     }
 
+    /**
+     * Runde 5b: Felsbrocken statt Strohballen (Einheitsmaße wie der Rundballen: Radius 1 quer, Länge 1 längs y):
+     * unregelmäßiger, grau-brauner Brocken mit helleren Kanten (Vertex-Farben).
+     */
+    _felsGeo() {
+      const g = new THREE.DodecahedronGeometry(1, 1).toNonIndexed();
+      const pos = g.attributes.position, n = pos.count, col = new Float32Array(n * 3), c = new THREE.Color(), rnd = zufall(515);
+      // Knubbelig verformen (gleiche Ecke → gleicher Versatz, sonst reißt die Fläche auf)
+      const versatz = new Map();
+      for (let i = 0; i < n; i++) {
+        const key = [pos.getX(i), pos.getY(i), pos.getZ(i)].map(v => v.toFixed(3)).join(',');
+        if (!versatz.has(key)) versatz.set(key, 0.82 + rnd() * 0.3);
+        const f = versatz.get(key);
+        pos.setXYZ(i, pos.getX(i) * f, pos.getY(i) * f * 0.5, pos.getZ(i) * f);
+      }
+      for (let i = 0; i < n; i += 3) {
+        c.setHSL(0.07 + rnd() * 0.04, 0.12 + rnd() * 0.1, 0.3 + rnd() * 0.16);
+        for (let k = 0; k < 3; k++) col.set([c.r, c.g, c.b], (i + k) * 3);
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      g.computeVertexNormals();
+      return g;
+    }
+
     /** Optik je Frame: Bälle (Position + Rollen), Fontänen (Skalierung), Spritzer. */
     animieren() {
       if (!this._m4) return;
@@ -481,13 +606,49 @@
               qr.setFromAxisAngle(achse, -b.kipp * Math.PI / 2);
               q.premultiply(qr);
             }
-            v.set(b.x, b.y, b.z); sk.set(b.radius, b.breite, b.radius);
+            const fg = this.felsOptik ? 1.35 : 1;      // Felsbrocken optisch etwas größer (Kontakt wie Strohballen)
+            v.set(b.x, b.y + (fg - 1) * b.radius * 0.5, b.z); sk.set(b.radius * fg, b.breite * fg, b.radius * fg);
             m4.compose(v, q, sk);
             m.setMatrixAt(n++, m4);
           }
         }
         m.count = n;
         m.instanceMatrix.needsUpdate = true;
+      }
+      // Runde 5b: Dinos – Körper wippt leicht, Beine pendeln (diagonal gegengleich)
+      const dm = this._dinoMeshes;
+      if (dm && Object.keys(dm).length) {
+        const zaehler = {};
+        Object.keys(dm).forEach((a) => { zaehler[a] = { k: 0, b: 0 }; });
+        const qb = this._qb || (this._qb = new THREE.Quaternion()), zAchse = this._zAchse || (this._zAchse = new THREE.Vector3(0, 0, 1));
+        const yAchse = this._yAchse2 || (this._yAchse2 = new THREE.Vector3(0, 1, 0)), m4b = this._m4b || (this._m4b = new THREE.Matrix4());
+        const hv = this._hv || (this._hv = new THREE.Vector3());
+        for (const st of this.dinoStellen) {
+          const M = dm[st.art]; if (!M) continue;
+          let je = 0;
+          for (const d of st.dinos) {
+            if (je++ >= 2) break;
+            const zz = zaehler[st.art], wipp = Math.abs(Math.sin(d.phase)) * (st.art === 'langhals' ? 0.18 : 0.12);
+            // Blickrichtung +x des Modells → Laufrichtung (lx, lz)
+            q.setFromAxisAngle(yAchse, Math.atan2(-d.lz, d.lx));
+            v.set(d.x, d.y + wipp, d.z); sk.setScalar(1);
+            m4.compose(v, q, sk);
+            M.koerper.setMatrixAt(zz.k++, m4);
+            M.huefte.forEach((h, j) => {
+              const gegen = (j === 0 || j === 3) ? 1 : -1;               // vorne links + hinten rechts zusammen
+              qb.setFromAxisAngle(zAchse, Math.sin(d.phase) * 0.45 * gegen);
+              hv.set(h[0], h[1], h[2]);
+              m4b.compose(hv, qb, sk);
+              this._m4c = this._m4c || new THREE.Matrix4();
+              this._m4c.multiplyMatrices(m4, m4b);
+              M.beine.setMatrixAt(zz.b++, this._m4c);
+            });
+          }
+        }
+        Object.keys(dm).forEach((a) => {
+          dm[a].koerper.count = zaehler[a].k; dm[a].beine.count = zaehler[a].b;
+          dm[a].koerper.instanceMatrix.needsUpdate = true; dm[a].beine.instanceMatrix.needsUpdate = true;
+        });
       }
       const tr = this._tropfen;
       this._fontaenen.forEach((F, k) => {

@@ -12,13 +12,15 @@ function pruefe(name, ok, info) { console.log((ok ? 'OK   ' : 'FEHL ') + praefix
 
 // Erwartungen je Strecke (Charakter): Kurvenzahl, lange Geraden, Höhe
 // Runde 3: Wald/Wüste kräftiger (bis ±14 m), Wiese sanft (±6 m), Steigung überall ≤ 8 %
-// Runde 4: Wiese ×1,35, Wald ×1,25, Wüste ×1,45 (Längen ~3.040 / 2.480 / 3.330 m)
+// Runde 4: Wiese ×1,35, Wald ×1,25, Wüste ×1,45 (Längen ~3.040 / 2.480 / 3.330 m); Runde 5b: Dino 2.750 m
 const ERWARTUNG = {
   wiese:  { kurven: [10, 14], geraden: { min: 150, anzahl: [3, 5] }, hoehe: 6, hoeheMin: 5, laenge: [3000, 3080] },
   wald:   { kurven: [16, 30], geraden: { min: 200, anzahl: [0, 1] }, hoehe: 14, hoeheMin: 18, laenge: [2440, 2520] },
   wueste: { kurven: [7, 16], geraden: { min: 250, anzahl: [2, 4] }, hoehe: 14, hoeheMin: 15, laenge: [3290, 3370] },
   // Fantasie (Runde 3): kürzer, 2 Loopings auf langen Geraden, nur 1–2 Hindernisse
   fantasie: { kurven: [4, 12], geraden: { min: 150, anzahl: [2, 3] }, hoehe: 10, laenge: [1300, 1500], hindernisse: [1, 2] },
+  // Runde 5b: Dino (mittel) 2.300–2.800 m, Hügel kräftig, 1 Schikane + 1 Haarnadel, lange Gerade (≥ 500 m) mit Schanze
+  dino:   { kurven: [16, 30], geraden: { min: 150, anzahl: [2, 4] }, hoehe: 14, hoeheMin: 18, laenge: [2300, 2800], haarnadeln: 1, langeGerade: 500 },
 };
 const STEIGUNG_MAX = 0.08;
 const nurId = process.argv[2];
@@ -95,6 +97,7 @@ pruefe('Abstand nicht benachbarter Teile ≥ 40 m (keine Überschneidung)', minA
   const g = erw.geraden, lange = laengen.filter(l => l >= g.min);
   pruefe(g.anzahl[0] + '–' + g.anzahl[1] + ' Geraden ≥ ' + g.min + ' m', lange.length >= g.anzahl[0] && lange.length <= g.anzahl[1],
     lange.map(l => l.toFixed(0) + ' m').join(', ') || 'keine (alle: ' + laengen.map(l => l.toFixed(0)).join(', ') + ')');
+  if (erw.langeGerade) pruefe('lange Gerade ≥ ' + erw.langeGerade + ' m', Math.max(...laengen) >= erw.langeGerade, Math.max(...laengen).toFixed(0) + ' m');
 }
 // Höhe und Steigung
 {
@@ -114,6 +117,8 @@ pruefe('Abstand nicht benachbarter Teile ≥ 40 m (keine Überschneidung)', minA
 }
 // Start auf einer Geraden
 pruefe('Start auf einer Geraden', [-40, -20, 0, 20, 40].every(d => Math.abs(sp.punktBei(d).kruemmung) < 1 / 500));
+
+if (erw.haarnadeln !== undefined) pruefe(erw.haarnadeln + ' Haarnadel(n)', haarnadelnSuchen().length === erw.haarnadeln, haarnadelnSuchen().map(h => Math.round(h.scheitel)).join('/'));
 
 // ---------- naechster(): global vs. lokal, Seitenabstand ----------
 {
@@ -211,7 +216,7 @@ pruefe('Start auf einer Geraden', [-40, -20, 0, 20, 40].every(d => Math.abs(sp.p
 // ---------- Hindernisse (Runde 3) ----------
 {
   const ANZAHL = { wiese: { sand: 1, ast: 1, baustelle: 1 }, wald: { oel: 1, ast: 1, baustelle: 1, sand: 1 },
-    wueste: { sand: 2, oel: 1, baustelle: 1 }, fantasie: { oel: 1, ast: 1 } }[daten.id];
+    wueste: { sand: 2, oel: 1, baustelle: 1 }, fantasie: { oel: 1, ast: 1 }, dino: { sand: 1, baustelle: 1, ast: 1, oel: 1 } }[daten.id];
   const hs = strecke.hindernisse, b2 = strecke.breite / 2, hz = erw.hindernisse || [3, 5];
   pruefe(hz[0] + '–' + hz[1] + ' Hindernisse', hs.length >= hz[0] && hs.length <= hz[1], hs.map(h => h.typ + '@' + Math.round(h.s)).join(', '));
   if (ANZAHL) {
@@ -294,7 +299,7 @@ if (strecke.loopings.length || daten.baelle || daten.wasserstrahlen) {
 // ---------- Runde 4: Welten ----------
 if (daten.welten) {
   const namen = Object.keys(daten.welten);
-  const STANDARD = { wiese: 'klassisch', wald: 'hindernisse', wueste: 'hindernisse', fantasie: 'fantasie' };
+  const STANDARD = { wiese: 'klassisch', wald: 'hindernisse', wueste: 'hindernisse', fantasie: 'fantasie', dino: 'hindernisse' };
   if (STANDARD[daten.id]) pruefe('weltStandard = ' + STANDARD[daten.id], daten.weltStandard === STANDARD[daten.id], daten.weltStandard);
   const erwNamen = daten.id === 'fantasie' ? ['fantasie', 'verrueckt'] : ['klassisch', 'hindernisse', 'stunt', 'verrueckt'];
   pruefe('Welten: ' + erwNamen.join(', '), JSON.stringify(namen) === JSON.stringify(erwNamen), namen.join(', '));
@@ -304,7 +309,7 @@ if (daten.welten) {
   pruefe('unbekannte Welt → weltStandard', new R.Strecke(daten, { welt: 'gibtsnicht' }).welt === daten.weltStandard);
   const katalogH = (daten.hindernisse || []).length;
   const listen = { wracks: 'wracks', strohballen: 'strohballen', schanzen: 'schanzen', boost: 'boostFelder', schild: 'schilde',
-    baelle: 'baelle', wasserstrahlen: 'wasserstrahlen', spuren: 'spuren' };
+    baelle: 'baelle', wasserstrahlen: 'wasserstrahlen', spuren: 'spuren', dinos: 'dinos' };
   namen.forEach((w) => {
     const st = new R.Strecke(daten, { welt: w }), a = st.aktiveSchichten, pf = 'Welt ' + w + ': ';
     pruefe(pf + 'welt/weltDaten/aktiveSchichten gesetzt, alle Schichten bool', st.welt === w && R.Strecke.SCHICHTEN.every(k => typeof a[k] === 'boolean') &&
@@ -365,6 +370,16 @@ if (daten.welten) {
   liste('schilde', () => 1, e => e.seitenabstand);
   liste('baelle', () => 3, () => 0);
   liste('wasserstrahlen', () => 3, e => e.seitenabstand);
+  liste('dinos', () => 4, () => 0);
+  // Runde 5b: laufende Dinos nur Dino-Strecke (2 Stellen), nur ab Welt Hindernisse (Klassisch: nur Deko-Dinos)
+  if (daten.id === 'dino') {
+    pruefe('dinos: 1–3 Stellen (von ±1, intervall/tempo > 0, art dreihorn/langhals)', daten.dinos.length >= 1 && daten.dinos.length <= 3 &&
+      daten.dinos.every(e => (e.von === 1 || e.von === -1) && e.intervall > 0 && e.tempo > 0 && ['dreihorn', 'langhals'].includes(e.art)));
+    pruefe('dinos: Welt klassisch aus, hindernisse/stunt/verrueckt an', !daten.welten.klassisch.dinos &&
+      ['hindernisse', 'stunt', 'verrueckt'].every(w => daten.welten[w].dinos) && new R.Strecke(daten, { welt: 'klassisch' }).dinos.length === 0 &&
+      new R.Strecke(daten, { welt: 'hindernisse' }).dinos.length === daten.dinos.length);
+    pruefe('Brücke art stamm, Tunnel art hoehle, strohOptik fels', strecke.bruecken[0].art === 'stamm' && strecke.tunnel[0].art === 'hoehle' && daten.strohOptik === 'fels');
+  }
   (daten.wracks || []).forEach(e => pruefe('wracks@' + e.s + ': brennt bool, autoId gesetzt', typeof e.brennt === 'boolean' && typeof e.autoId === 'string'));
   (daten.strohballen || []).forEach(e => pruefe('strohballen@' + e.s + ': von ±1, intervall/tempo > 0', (e.von === 1 || e.von === -1) && e.intervall > 0 && e.tempo > 0));
   (daten.schanzen || []).forEach((e) => {

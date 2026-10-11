@@ -168,5 +168,53 @@ pruefe('Fantasie: 2–3 Ballstellen, 1–2 Wasserstrahlen', daten.baelle.length 
   pruefe('alleStrohballen() liefert Liste', Array.isArray(d2.alleStrohballen()));
 }
 
+// ---------- Runde 5b: Dinos (Dino-Strecke, Welten Hindernisse/Stunt/Verrückt) ----------
+{
+  const CD = R.config.dinos;
+  const dino = R.trackCatalog.find(t => t.id === 'dino');
+  pruefe('Dino klassisch: keine laufenden Dinos', new R.Dynamik(new R.Strecke(dino, { welt: 'klassisch' })).dinoStellen.length === 0);
+  pruefe('Wald hindernisse: keine Dinos (Liste fehlt)', new R.Dynamik(new R.Strecke(R.trackCatalog.find(t => t.id === 'wald'), { welt: 'hindernisse' })).dinoStellen.length === 0);
+  ['hindernisse', 'stunt', 'verrueckt'].forEach((w) => {
+    const dd = new R.Dynamik(new R.Strecke(dino, { welt: w }));
+    pruefe('Dino ' + w + ': Dino-Stellen aktiv, Felsbrocken-Optik', dd.dinoStellen.length === dino.dinos.length && dd.felsOptik === true);
+  });
+  const stD = new R.Strecke(dino, { welt: 'hindernisse' }), spD = stD.spline;
+  const d = new R.Dynamik(stD, { seed: 21 });
+  const st = d.dinoStellen[0];
+  let dn = null, t = 0;
+  while (!dn && t < 20) { d.schritt(dt, { fortschritt: 10, runden: 3 }); t += dt; dn = st.dinos[0]; }
+  pruefe('Dino erscheint nach dem Start (≤ 5 s), außerhalb der Fahrbahn', !!dn && t <= 5.01 && Math.abs(dn.q) > stD.breite / 2 + 5, t.toFixed(2) + ' s, q=' + (dn ? dn.q.toFixed(1) : '-'));
+  const q0 = dn.q, s0 = dn.s, ph0 = dn.phase;
+  for (let k = 0; k < 60; k++) d.schritt(dt, { fortschritt: 10, runden: 3 });
+  const dq = dn.q - q0;
+  pruefe('Dino läuft quer (1 s ≈ tempo 4 m/s, weg von Seite "von", s fest), Beine bewegen sich', Math.abs(Math.abs(dq) - st.tempo) < 0.05 &&
+    Math.sign(dq) === -st.von && dn.s === s0 && dn.phase > ph0 + 1, 'dq=' + dq.toFixed(2) + ' m');
+  pruefe('Dino steht auf dem Boden, Laufrichtung quer zur Straße', Math.abs(dn.y - stD.hoeheAn(dn.x, dn.z)) < 1e-6 &&
+    Math.abs(dn.lx * dn.tx + dn.lz * dn.tz) < 1e-6);
+  // Treffer: Auto steht auf der Fahrbahnmitte, Dino läuft hinein
+  const p = spD.punktBei(dn.s), v = new R.Vehicle({});
+  v.setzen(p.x, p.z, R.headingAus(p.tx, p.tz));
+  let tr = [], k = 0;
+  while (!tr.length && k < 900) { v.vLaengs = 30; v.vQuer = 0; v.huepfer = 0; d.schritt(dt, { fortschritt: 10, runden: 3 }); tr = d.kollisionen([v]); k++; }
+  pruefe('Treffer Auto-Dino erkannt (typ dino)', tr.length === 1 && tr[0].typ === 'dino' && tr[0].nr === 0, JSON.stringify(tr));
+  pruefe('Treffer: Tempo −60 % + Hüpfer', Math.abs(v.vLaengs - 30 * CD.tempoFaktor) < 1e-9 && Math.abs(CD.tempoFaktor - 0.4) < 1e-9 && v.huepfer === CD.huepfer,
+    v.vLaengs.toFixed(2) + ' m/s, huepfer ' + v.huepfer);
+  pruefe('kein zweiter Treffer durch denselben Dino', d.kollisionen([v]).length === 0);
+  const qVor = dn.q;
+  d.schritt(dt, { fortschritt: 10, runden: 3 });
+  pruefe('Dino unbeeindruckt: läuft mit gleichem Tempo weiter', st.dinos.includes(dn) && Math.abs(Math.abs(dn.q - qVor) - st.tempo * dt) < 1e-9);
+  // ohne Treffer: läuft drüben raus und verschwindet
+  const d2 = new R.Dynamik(stD, { seed: 21 }), st2 = d2.dinoStellen[0];
+  while (!st2.dinos.length) d2.schritt(dt, { fortschritt: 10, runden: 3 });
+  const dn2 = st2.dinos[0];
+  let tw = 0;
+  while (st2.dinos.includes(dn2) && tw < 30) { d2.schritt(dt, { fortschritt: 10, runden: 3 }); tw += dt; }
+  pruefe('ohne Treffer: verschwindet jenseits der Fahrbahn (2·qStart/tempo)', !st2.dinos.includes(dn2) && Math.abs(tw - 2 * Math.abs(st2.qStart) / st2.tempo) < 0.3,
+    tw.toFixed(1) + ' s');
+  pruefe('alleDinos() liefert Liste', Array.isArray(d2.alleDinos()));
+  const weit = new R.Vehicle({}); weit.setzen(dn2.x + 40, dn2.z + 40, 0);
+  pruefe('Auto weit weg: kein Dino-Treffer', d2.kollisionen([weit]).length === 0);
+}
+
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');
 process.exit(fehler ? 1 : 0);

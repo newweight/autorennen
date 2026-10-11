@@ -292,3 +292,55 @@
   Lenkung direkter (vMax 0,52 rad/s statt 0,35), Kamera tempoabhängig; Anlauf-Mechanik Looping+Schanze (R/T =
   Anlaufposition 150–160 m), Zaun dicht (4-Ecken-Bande, Masten fest), Fantasie-Kleberstreifen.
   17 Node-Tests + zaun_test + menu/welten/rennen grün. → Version v5.
+- 11.10. Agent Polizei (Runde 5b, Opus) – fertig:
+  Neu src/world/polizei.js (PolizeiLogik ohne THREE + Glue R.Polizei), config.polizei, Einstellung `polizei` (Standard aus,
+  einstellungenPruefen: nur boolean), Menü-Pille „🚓 Polizei Aus/An" rechts unter Tempo (Fokus …tempo, polizei, start).
+  Ablauf: 1 Streifenwagen (2 ab 6 Gegnern) 60 m hinter dem letzten Startplatz, Katalog 'polizei' (Ersatz: weißer Passat +
+  eigener Lichtbalken/Streifen), eigener R.Driver 'meister' ohne Gummiband; Eintrag in spiel.fahrzeuge HINTER allen
+  Teilnehmern (f.polizei, f.polizeiFahrer), nach Schaden angelegt → kein Schaden, nicht in RaceManager/Ergebnis.
+  Ziel = nächster Spieler vor ihm (Bogenlänge, −10 m zählt noch), KI nur wenn kein Spieler in 300 m; Neuwahl 1×/s.
+  Jagd: ≤ 60 m hinter dem Ziel auf dessen Spur einschwenken, < 8 m Tempo angleichen (nicht rammen). Nähe = Kapsel-
+  Abstand ≤ 6 m und nicht vor der Ziel-Front; ≥ 1,5 s am Stück → 10 s angehalten (haltSteuerung: Bremse bis Stand, nicht
+  rückwärts), Streifenwagen parkt 3,8 m daneben (parkSteuerung), HUD „🚨 Polizei! Anhalten… N s", Ton polizeiStopp;
+  danach „Weiterfahren! 🚗💨", Schonfrist 30 s, max. 1 Anhaltung je Auto/Runde. Schild → platzt (pickups.schildVerbrauchen)
+  statt Stopp. Kein Stopp im Looping/Flug/liegengeblieben/festgeklebt. KI weicht dem Streifenwagen aus (andereFuer).
+  Blaulicht 4 Hz blau/rot (Materialfarbe), 2 PointLights am Wagen nur ≤ 40 m an einer Spieler-Kamera (vorkompiliert),
+  Sirene (engine.js sirene(an, laut): 466/622 Hz Wechsel, Lautstärke bis 120 m), Minimap blau blinkend, HUD „🚨 Polizei!"
+  klein, wenn er dich ≤ 80 m verfolgt. main.js: Einstellung, streckeAufbauen/szeneAbbauen, Eingabe-Zweige (gesperrt →
+  haltSteuerung, f.polizei → polizei.steuerung), KI-Umgebung, Anlauf-Hilfe nicht für Angehaltene, Pickups ohne Polizei,
+  polizei.schritt vor rennen.schritt, verfolgungSetzen nicht für Polizei, animieren/ton. Autorennen.html: polizei.js.
+  Tests: neu tests/test_polizei.js (40 OK), tests/polizei_test.py (Wiese Klassisch: Stopp nach 12 s, Bild
+  tests/out/polizei_stopp.png angesehen, Countdown, Weiterfahrt, Ergebnis 4 Zeilen ohne Polizei, 6 Gegner → 2 Wagen,
+  Nochmal/Menü sauber, keine JS-Fehler). welten_test: Regression bitgleich grün (Wald-Abschleppprüfung 1× rot im
+  Parallel-Lauf, einzeln grün – bekannt lageabhängig), rennen_test wiese grün, Node-Tests grün außer test_autos/test_physik
+  (neue Katalog-Autos formel/polizei des Auto-Agenten). menu_test: Fokus-Reihenfolge (Z. 330) + „↓ erreicht Start" brauchen
+  'polizei' bzw. ein ↓ mehr; Auto-Auswahl-Scrollprüfungen rot durch 10 Katalog-Autos.
+  Schwächen: Streifenwagen stoppt beim Parken nur vorwärts (Punkt hinter ihm → bleibt stehen, evtl. etwas versetzt);
+  kein eigenes Ausweichen der Polizei vor Baustellen beim Parken; Sirene eine Stimme für alle Wagen; KI-Opfer werden
+  weiter vom Gummiband beeinflusst; Katalog-'polizei' ist auch als Spieler-/KI-Auto wählbar (KI-Gegner im Polizei-Look möglich).
+- 11.10. Agent Dino (Runde 5b, Opus) – fertig: Strecke „Dino" (id/Thema 'dino', mittel, 2.753 m, 5. Streckenkarte)
+  Bauplan tests/bauplan/dino.json (×1,225): Start-Gerade (Schanze 65), Schikane, lange Gerade 588 m (Schanze 839),
+  1 Haarnadel R31 (s≈1272), Baumstamm-Brücke (art 'stamm', 1579–1644) über Sumpf, viele S-Kurven, Dino-Höhle
+  (tunnel art 'hoehle', 2359–2504: Stalaktiten/Stalagmiten, Fackeln statt Lampen), Hügel −10,9…+12,5 m, Steigung ≤ 7 %.
+  Welten klassisch/hindernisse(Standard)/stunt/verrueckt; neue Schicht 'dinos' (ab Hindernisse). Felsbrocken = Strohballen-
+  Mechanik mit strohOptik 'fels' (Stoß 'fels' → „Steinschlag! 🪨"). Laufende Dinos (dynamik.js, config.dinos): Dreihorn 1899,
+  Langhals 2284, tempo 4 m/s quer, Beine pendeln; Kontakt −60 % + Hüpfer, einmal je Dino/Auto, Dino läuft weiter („Dino! 🦕").
+  Deko (themes.js dinoDeko): Urwaldbäume ('Laubbaeume' → Jahreszeiten wie Wald), Palmen, Riesenfarne, Farne, Vulkangestein,
+  Knochen, 7 Skelette, 9 Deko-Dinos (3 Langhals/3 Dreihorn/3 Zweibeiner, Lichtung bis zur Straße), Lavasee (MeshBasic, pulsiert),
+  Vulkan + Rauchsäule als Horizont-Kulisse (je Kamera in Sichtweite gezogen, ohne Tiefentest als Hintergrund).
+  Geändert: trackCatalog (Eintrag, AUS/W_HINDERNISSE + dinos), trackBuilder (Schicht dinos, Brücke 'stamm', Höhle, _inBereich
+  +1e-9 gegen Rundungsfehler bei s+L), themes.js, dynamik.js, config.js (dinos), main.js (2 Edits: Meldungstexte, Dynamik auch
+  nur mit Dinos), menu.js (Kartenfarbe/Himmel), styles.css (.karte.strecke 12,2→10em, t-dino).
+  Tests: test_strecke (dino-Erwartungen, Haarnadel/lange Gerade, dinos-Liste), test_rundenzeit (dino 110–140/100–130),
+  test_dynamik (+16 Dino-Prüfungen), menu_test (5 Karten bei 1280×800/1440×900, Dino-Hintergrund), screenshot_test (dino_bilder
+  30–35, Draw-Calls ohne Wrack-Autos, Wrack-Hindernisse ohne Bild übersprungen).
+  Rundenzeiten Runde 2 normal: leicht 128,6 / mittel 114,2 / schwer 106,4 / profi 101,7 / meister 98,3 / legende 96,0 /
+  unschlagbar 92,3 s; schnell mittel 108,1 s. welten_ki: alle 4 Welten × 7 Stufen 0 Resets (Absprung ≥ 111 km/h).
+  Draw-Calls Strecke+Deko+Hindernisse 30 (+22 Wrack-Meshes). Screenshots tests/out/dino/ (2 Iterationen angesehen).
+  Schwächen: Felsbrocken/Dinos kennt die KI nicht (gewollt, wie Bälle); Auto fährt nach Dino-Treffer durch den Dino hindurch
+  (kein Abprall); Vulkan ohne eigenes Licht/Glühen am Himmel; Urwaldbäume = Laubbaum-Modell (hoch skaliert);
+  test_physik (F1 196 km/h) und menu_test Auto-/Polizei-Schritte rot durch parallele Agenten, nicht Dino.
+- 11.10. Runde 5b abgeschlossen (Fable-Prüfung): Dino-Strecke (2.753 m, Höhle, Lava, Vulkan, laufende Dinos, Felsbrocken),
+  Polizei-Schalter (Streifenwagen, 1,5 s Nähe → 10 s Stopp, Schonfrist, Schild schützt), Formel-Renner (wählbar, 280 km/h
+  schnell / 196 normal), Streifenwagen-Modell (nicht wählbar). 18 Node-Tests + menu/welten/polizei grün. → Version v6.
+  Offen: Dino ohne Abprall; Streifenwagen parkt nur vorwärts; Ghosting zu zweit weiter ungeprüft.

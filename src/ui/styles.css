@@ -143,7 +143,7 @@ kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1
 .karte.gross .emoji { font-size: 3.6em; line-height: 1.1; }
 .karte.gross .karten-name { font-size: 1.15em; margin-top: .2em; }
 .reihe.strecken { gap: .8em; flex-wrap: nowrap; }
-.karte.strecke { width: 12.2em; padding: .5em; }
+.karte.strecke { width: 10em; padding: .5em; }   /* Runde 5b: 5 Karten (vorher 12,2em bei 4) */
 .karte.strecke .karten-name { font-size: 1.15em; }
 .karte.strecke .karten-sub { font-size: .75em; }
 .strecken-hinweis { margin-top: .4em; font-size: .78em; font-weight: 900; background: rgba(255,255,255,.18); border-radius: .8em; padding: .15em .4em; }
@@ -297,7 +297,7 @@ kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1
 .m-autos.auto3d:not(.zwei) .m-spieler.p1 .buehne-rahmen { border-color: rgba(255,255,255,.5); }
 canvas.buehne { display: block; width: 100%; height: auto; aspect-ratio: 1.6; }
 .m-autos.auto3d:not(.zwei) .buehne-rahmen { width: 24em; }
-.m-autos.auto3d.zwei .buehne-rahmen { width: 15.4em; }
+.m-autos.auto3d.zwei .buehne-rahmen { width: 10.6em; }
 .buehne-rahmen.svg { padding: 1em; box-sizing: border-box; }
 .buehne-rahmen.svg svg { width: 100%; height: auto; display: block; }
 .buehne-tipp { position: absolute; left: 0; right: 0; bottom: .25em; text-align: center; font-size: .6em; font-weight: 800; opacity: .75; pointer-events: none; }
@@ -314,11 +314,17 @@ canvas.buehne { display: block; width: 100%; height: auto; aspect-ratio: 1.6; }
 .m-autos.auto3d.zwei .a-info .beschreibung { font-size: .58em; }
 
 /* Karten im Raster: Kachelbild statt Emoji-Silhouette */
-.m-autos.auto3d .raster { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .4em; }
+.m-autos.auto3d .raster { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4em; }
 .m-autos.auto3d:not(.zwei) .m-spieler .raster { grid-column: 2; grid-row: 1; gap: .5em; align-self: start; }
 .m-autos.auto3d .karte.auto { padding: .25em .3em .3em; }
 .m-autos.auto3d .karte.auto:hover { transform: none; }
-.m-autos.auto3d .auto-bild img, .m-autos.auto3d .auto-bild svg { width: 100%; height: auto; display: block; aspect-ratio: 1.6; object-fit: contain; }
+.m-autos.auto3d .auto-bild img, .m-autos.auto3d .auto-bild svg { width: 100%; height: auto; display: block; aspect-ratio: 3.1; object-fit: contain; }
+/* 9 Autokarten (3×3): flachere Kartenbilder, damit der Schritt ohne Scrollen passt */
+.m-autos.auto3d.zwei .auto-bild img, .m-autos.auto3d.zwei .auto-bild svg { aspect-ratio: 3.1; }
 .m-autos.auto3d .karte.auto .karten-name { font-size: .78em; min-height: 2.2em; }
 .m-autos.auto3d.zwei .karte.auto .karten-name { font-size: .6em; min-height: 2.3em; }
-.m-autos.auto3d:not(.zwei) .karte.auto .bar { font-size: .66em; }
+.m-autos.auto3d:not(.zwei) .karte.auto .bar { font-size: .56em; }
+/* Runde 5b: Dino-Strecke (Urwald/Vulkan) – eigene Kartenfarbe; 5 Streckenkarten passen bei 1280 px in eine Reihe */
+.karte.strecke.t-dino { border-color: #9ad15a; background: rgba(46, 82, 26, .78); }
+.karte.strecke.t-dino .strecken-hinweis { background: rgba(255,150,60,.35); }
+.karte.strecke.t-dino.gewaehlt { background: rgba(70, 120, 36, .92); }

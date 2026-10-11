@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Menü-/Modus-Test (Playwright, headless Chromium):
-a) Menü-Screenshot, b) per Tastatur: zu zweit, Strecke, Fahrer (P1 Senna, P2 versucht Senna -> springt weiter), Autos (P1 Porsche, P2 Multivan), Runden 1, Gegner 2, Start
+a) Menü-Screenshot (Runde 5b: 5 Streckenkarten inkl. Dino), b) per Tastatur: zu zweit, Strecke, Fahrer (P1 Senna, P2 versucht Senna -> springt weiter), Autos (P1 Porsche, P2 Multivan), Runden 1, Gegner 2, Start
    -> Split-Screen-Screenshot, c) Autopilot für beide, Schnellvorlauf bis 'ergebnis' -> Ergebnis-Screenshot + Prüfung,
 e) Runde 4: Welt-Pillen je Strecke, Jahreszeit/Wetter/Wind/Schaden/Gegner(10) im Einstellungen-Schritt, Emojis Emmy 🦁 / Jonas 🐯, Layout ohne Überlauf
 d) Titel "Jonas Hot Steering Wheel" im Menü, Fahrernamen in HUD/Meldungen/Ergebnis, KI-Namen aus der Restliste; Enter = Nochmal, Esc = Pause, Weiter, Hauptmenü, keine JS-Fehler, Draw-Calls im Split-Screen < 120.
@@ -50,7 +50,7 @@ with sync_playwright() as p:
             px = page.evaluate(PIXEL, sp)
             pruefe(f'{label}: Bühne {sp + 1} nicht leer', px and px['anteil'] > 0.03 and px['farben'] >= 4, px)
         bilder = page.evaluate("Array.from(document.querySelectorAll('.karte.auto img')).map(i => i.src.length)")
-        n_auto = len(page.evaluate('Rennspiel.carCatalog'))
+        n_auto = len(page.evaluate('Rennspiel.carCatalog.waehlbare()'))
         pruefe(f'{label}: Kachelbilder (dataURL > 1000) für alle {n_auto} Autos je Spieler', len(bilder) == n_auto * len(spieler) and min(bilder) > 1000, bilder)
         pruefe(f'{label}: Bühne zeigt gewähltes Auto', all(page.evaluate(f'{AV}.autoId({sp})') == page.evaluate(f'Rennspiel.spiel.einstellungen.autoIds[{sp}]') for sp in spieler))
         r = page.evaluate(IMPASSEND)
@@ -97,8 +97,8 @@ with sync_playwright() as p:
     pruefe('Modus zu zweit', page.evaluate('Rennspiel.spiel.einstellungen.modus') == 'zwei')
     taste('Enter'); page.wait_for_timeout(200); snap('menu_2_strecke.png')
     karten = page.evaluate("Array.from(document.querySelectorAll('.karte.strecke')).map(k => k.dataset.a)")
-    pruefe('Streckenwahl: 4 Karten (Wiese, Wald, Wüste, Fantasie)', karten == ['strecke:wiese', 'strecke:wald', 'strecke:wueste', 'strecke:fantasie'], karten)
-    # 4 Karten in EINER Reihe (gleiches offsetTop), im Bild, ohne Überlappung – bei 1280×800 und 1440×900
+    pruefe('Streckenwahl: 5 Karten (Wiese, Wald, Wüste, Fantasie, Dino)', karten == ['strecke:wiese', 'strecke:wald', 'strecke:wueste', 'strecke:fantasie', 'strecke:dino'], karten)
+    # 5 Karten in EINER Reihe (gleiches offsetTop), im Bild, ohne Überlappung – bei 1280×800 und 1440×900
     LAGE = """(() => { const k = Array.from(document.querySelectorAll('.karte.strecke')), r = k.map(e => e.getBoundingClientRect());
       return { gleicheReihe: new Set(k.map(e => e.offsetTop)).size === 1,
         ok: r.every(a => a.left >= 0 && a.right <= innerWidth && a.bottom <= innerHeight) &&
@@ -106,14 +106,17 @@ with sync_playwright() as p:
         pillen: k.map(e => !!e.querySelector('.s-pille')), pilleText: k.map(e => e.querySelector('.s-pille') && e.querySelector('.s-pille').textContent),
         hinweis: (k[3].querySelector('.strecken-hinweis') || {}).textContent || '',
         farbe3: getComputedStyle(k[3]).backgroundColor, farbe0: getComputedStyle(k[0]).backgroundColor,
+        farbe4: getComputedStyle(k[4]).backgroundColor, bild4: getComputedStyle(k[4].querySelector('.strecken-bild')).backgroundImage,
+        textUeber: k.some(e => e.scrollHeight > e.clientHeight + 2),
         scroll: document.querySelector('.m-inhalt').scrollHeight <= document.querySelector('.m-inhalt').clientHeight + 1,
         breiten: r.map(a => Math.round(a.width)) }; })()"""
     for vw, vh in ((1280, 800), (1440, 900)):
         page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(400)
         lage = page.evaluate(LAGE)
-        pruefe(f'Streckenwahl {vw}×{vh}: 4 Karten in einer Reihe (gleiches offsetTop), im Bild, ohne Überlappung', lage['gleicheReihe'] and lage['ok'] and lage['scroll'], lage)
+        pruefe(f'Streckenwahl {vw}×{vh}: 5 Karten in einer Reihe (gleiches offsetTop), im Bild, ohne Überlappung', lage['gleicheReihe'] and lage['ok'] and lage['scroll'] and not lage['textUeber'], lage)
         snap(f'menu_2_strecke_{vw}.png')
-    pruefe('Streckenkarten: Schwierigkeits-Pillen leicht/mittel/schnell/spaß', lage['pilleText'] == ['leicht', 'mittel', 'schnell', 'spaß'], lage['pilleText'])
+    pruefe('Streckenkarten: Schwierigkeits-Pillen leicht/mittel/schnell/spaß/mittel', lage['pilleText'] == ['leicht', 'mittel', 'schnell', 'spaß', 'mittel'], lage['pilleText'])
+    pruefe('Dino-Karte: eigene Farbe (Rahmen/Hintergrund) + Vulkan-Himmel im Bild', lage['farbe4'] != lage['farbe0'] and '242, 179, 106' in lage['bild4'], [lage['farbe4'], lage['bild4'][:80]])
     pruefe('Fantasie-Karte: eigene Farbe + Hinweis 2 Loopings, Bälle, Wasserstrahl', lage['farbe3'] != lage['farbe0'] and '2 Loopings' in lage['hinweis'] and 'Bälle' in lage['hinweis'] and 'Wasserstrahl' in lage['hinweis'], [lage['farbe3'], lage['hinweis']])
     page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
     # Durchblättern: Menü-Hintergrund baut jede Strecke auf (Deko/Thema ohne Fehler)
@@ -124,7 +127,11 @@ with sync_playwright() as p:
     pruefe('Streckenwahl: Fantasie per Pfeiltaste (Menü-Hintergrund mit Loopings)', page.evaluate('Rennspiel.spiel.einstellungen.streckeId') == 'fantasie' and
            page.evaluate('(() => { let n = 0; Rennspiel.spiel.szene.traverse(o => { if (o.name === "LoopingBand") n++; }); return n; })()') == 1)
     snap('menu_2c_strecke_fantasie.png')
-    for _ in range(3): taste('ArrowLeft'); page.wait_for_timeout(300)
+    taste('ArrowRight'); page.wait_for_timeout(800)
+    pruefe('Streckenwahl: Dino per Pfeiltaste (Menü-Hintergrund mit Vulkan + Deko-Dinos)', page.evaluate('Rennspiel.spiel.einstellungen.streckeId') == 'dino' and
+           page.evaluate('(() => { let v = 0, d = 0; Rennspiel.spiel.szene.traverse(o => { if (o.name === "Vulkan") v++; if (o.name === "Dinos") d += o.count; }); return v === 1 && d >= 6; })()'))
+    snap('menu_2d_strecke_dino.png')
+    for _ in range(4): taste('ArrowLeft'); page.wait_for_timeout(300)
     taste('Enter'); page.wait_for_timeout(200)
     # Fahrer: Standard P1 Jonas, P2 Emmy; P1 wählt Senna, P2 läuft mit WASD auf Senna zu und wird übersprungen
     fe = lambda: page.evaluate('Rennspiel.spiel.einstellungen.fahrer')
@@ -159,7 +166,7 @@ with sync_playwright() as p:
       return r.every(a => a.left >= 0 && a.right <= innerWidth && a.top >= 0 && a.bottom <= innerHeight); })()'''))
     taste('Enter'); page.wait_for_timeout(200)
     # Autos: P1 (Pfeile) auf Porsche (Index 3), P2 (WASD) auf Multivan (Index 1)
-    ids = page.evaluate('Rennspiel.carCatalog.map(a => a.id)')
+    ids = page.evaluate('Rennspiel.carCatalog.waehlbare().map(a => a.id)')
     def cursor(sp): return ids.index(page.evaluate(f'Rennspiel.spiel.einstellungen.autoIds[{sp}]'))
     while cursor(0) != ids.index('porsche-911'): taste('ArrowRight')
     while cursor(1) != ids.index('multivan'): taste('KeyD' if cursor(1) < ids.index('multivan') else 'KeyA')
@@ -320,7 +327,7 @@ with sync_playwright() as p:
     # Einstellungen-Schritt (solo)
     page.click('[data-a="schritt:4"]'); page.wait_for_timeout(300)
     zl = page.evaluate('Rennspiel.spiel.menue.zeilen()')
-    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'start'], zl)
+    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'start'], zl)
     pj = texte('[data-a="fokus:4"] .pille')
     pruefe('Jahreszeit-Pillen (Wiese): Frühling, Sommer, Herbst, Winter, Zufall; Sommer aktiv', len(pj) == 5 and 'Sommer' in pj[1] and 'Zufall' in pj[4]
            and 'Sommer' in texte('[data-a="fokus:4"] .pille.aktiv')[0], pj)
@@ -381,6 +388,10 @@ with sync_playwright() as p:
     taste('ArrowRight')
     pruefe('Tastatur: Tempo → = schnell', E()['tempoKlasse'] == 'schnell', E().get('tempoKlasse'))
     taste('ArrowLeft'); taste('ArrowDown')
+    pruefe('Tastatur: Polizei-Zeile fokussiert, Standard aus; → = an, ← = aus', E()['polizei'] is False, E().get('polizei'))
+    taste('ArrowRight'); an = E()['polizei']; taste('ArrowLeft')
+    pruefe('Tastatur: Polizei → = an, ← = aus', an is True and E()['polizei'] is False, [an, E()['polizei']])
+    taste('ArrowDown')
     pruefe('Tastatur: ↓ erreicht Start (Fokus-Ring), Schaden wieder an', page.locator('.start-knopf.fokus').count() == 1 and E()['schaden'] is True)
     # Layout ohne Überlauf: solo/zwei × Tafel zu/auf × 1280×800 / 1440×900
     LAYOUT = """(() => { const m = document.querySelector('.m-inhalt'), fuss = document.querySelector('.m-fuss').getBoundingClientRect().top;

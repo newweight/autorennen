@@ -6,6 +6,7 @@
 // unter der Rundenanzeige; ohne Aufruf (oder klar + Wind 0) bleibt das HUD wie bisher.
 // Runde 4: schadenSetzen(schaden, index) → Gesundheitsbalken (❤️ + Balken grün→gelb→rot) unter der Rundenanzeige,
 // nur wenn schaden.an; liegengeblieben: Balken blinkt rot. Meldungen dazu kommen über meldung().
+// Runde 5b: polizeiSetzen(polizei, index) → „🚨 Polizei! Anhalten… N s" (Countdown) bzw. „🚨 Polizei!" (verfolgt), Minimap: Streifenwagen blau blinkend.
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -81,7 +82,7 @@
     }
 
     /** Karte + Punkte für alle Autos zeichnen (Umriss kommt fertig aus dem Offscreen-Canvas). */
-    zeichnen(teilnehmer, eigener) {
+    zeichnen(teilnehmer, eigener, polizei) {
       const g = this.ctx, k = this.karte, dpr = this.dpr, farben = R.config.ui.spielerFarben;
       g.clearRect(0, 0, this.canvas.width, this.canvas.height);
       g.drawImage(k.canvas, 0, 0);
@@ -93,6 +94,8 @@
       };
       // erst KI, dann die anderen Spieler, zuletzt der eigene Punkt (oben, größer)
       teilnehmer.forEach((t) => { if (!t.istSpieler) punkt(t, 3.5, KI_FARBE); });
+      // Runde 5b: Streifenwagen blau blinkend (polizei = Liste von Vehicles, .blink = Phase)
+      if (polizei) for (let j = 0; j < polizei.length; j++) punkt({ vehicle: polizei[j] }, 4.5, polizei.blink ? '#d6e2ff' : '#2a5cff');
       teilnehmer.forEach((t, i) => { if (t.istSpieler && t !== eigener) punkt(t, 4.5, farben[i] || '#fff'); });
       if (eigener) {
         const i = teilnehmer.indexOf(eigener);
@@ -238,6 +241,37 @@
       setzeAnzeige(this.eGesund, !!this.schaden);
     }
 
+    /**
+     * Runde 5b: Polizei-System (R.Polizei) + Fahrzeug-Index. Anzeige „🚨 Polizei! Anhalten… 10 s" mit Countdown
+     * (angehalten) bzw. kleines „🚨 Polizei!" (wird verfolgt); null = nichts.
+     */
+    polizeiSetzen(polizei, index) {
+      this.polizei = polizei || null;
+      this.polizeiIndex = index;
+      if (!this.polizei) { if (this.ePolizei) setzeAnzeige(this.ePolizei, false); return; }
+      if (!this.ePolizei) {
+        const e = document.createElement('div');
+        e.className = 'hud-polizei';
+        Object.assign(e.style, { position: 'absolute', left: '50%', top: '31%', transform: 'translateX(-50%)', whiteSpace: 'nowrap',
+          fontSize: '2.1em', fontWeight: '900', color: '#fff', padding: '.25em .9em', borderRadius: '1em', border: '.08em solid #fff',
+          background: 'linear-gradient(90deg, rgba(40,90,255,.92), rgba(255,40,40,.92))', pointerEvents: 'none', display: 'none',
+          textShadow: '0 .06em .12em rgba(0,0,0,.4)' });
+        this.el.appendChild(e);
+        this.ePolizei = e;
+      }
+    }
+
+    _polizeiAnzeigen() {
+      const a = this.polizei.anzeige(this.polizeiIndex), e = this.ePolizei;
+      let text = '';
+      if (a && a.art === 'stopp') text = '🚨 Polizei! Anhalten… ' + a.rest + ' s';
+      else if (a && a.art === 'verfolgt') text = '🚨 Polizei!';
+      setzeText(e, text);
+      const klein = !!a && a.art === 'verfolgt';
+      if (e._klein !== klein) { e._klein = klein; e.style.fontSize = klein ? '1.3em' : '2.1em'; e.style.top = klein ? '12%' : '31%'; }
+      setzeAnzeige(e, !!text);
+    }
+
     /** Gesundheitsbalken: Breite = Prozent, Farbe grün (> 60 %) → gelb (> 30 %) → rot; liegengeblieben blinkt. */
     _gesundheitAnzeigen() {
       const z = this.schaden.zustand(this.schadenIndex), p = z.prozent;
@@ -319,7 +353,8 @@
 
       if (this.wetter) this._windAnzeigen(v);
       if (this.schaden) this._gesundheitAnzeigen();
-      if (this.minimap) this.minimap.zeichnen(r.teilnehmer, t);
+      if (this.polizei && this.ePolizei) this._polizeiAnzeigen();
+      if (this.minimap) this.minimap.zeichnen(r.teilnehmer, t, this.polizei ? this.polizei.minimapPunkte() : null);
     }
 
     zerstoeren() {

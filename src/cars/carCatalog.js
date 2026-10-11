@@ -10,6 +10,8 @@
 //   fahrwerte { vMax m/s (Runde 3: 220–270 km/h, als km/h / 3.6 notiert), beschleunigung m/s², bremsen m/s², rueckwaertsMax m/s,
 //               wendigkeit rad/s, grip 0..1, masse kg, laenge m, breite m },
 //   beschreibung (ein kindgerechter Satz)
+//   waehlbar (optional): false = nicht im Spielermenü und NICHT als Computer-Gegner verteilen
+//                        (z. B. der Streifenwagen, den nur das Spiel selbst einsetzt). Fehlt das Feld = wählbar.
 //   abmessungen { laenge, breite, hoehe, radstand, ueberhangVorn (m), radRadius (+radRadiusHinten),
 //                 radBreite (+radBreiteHinten), felgeZoll (+felgeZollHinten) } – echte Maße, nur für die Optik
 //                 (die Physik nutzt weiter fahrwerte.laenge/breite)
@@ -17,8 +19,8 @@
 //                 Höhen als Anteil von hoehe, Längspositionen als Anteil von laenge (0 = Front, 1 = Heck),
 //                 x-Lagen als Anteil der halben Breite, Detailgrößen (b, h) in Metern
 //
-// Balance: Der Porsche ist am schnellsten, aber rutschiger; der Multivan ist
-// langsam, aber sehr stabil. Kein Auto ist hoffnungslos – wer sauber fährt,
+// Balance: Der Formel-Renner ist das schnellste Auto (280 km/h, extreme Haftung), der Porsche der
+// schnellste Straßenwagen, aber rutschiger; der Multivan ist langsam, aber sehr stabil. Kein Auto ist hoffnungslos – wer sauber fährt,
 // gewinnt mit jedem (Computergegner werden über tempoFaktor/Gummiband angepasst).
 // ============================================================
 window.Rennspiel = window.Rennspiel || {};
@@ -27,7 +29,7 @@ window.Rennspiel = window.Rennspiel || {};
   const R = window.Rennspiel;
 
   /** Erlaubte Karosserie-Typen (Reihenfolge nur zur Anzeige). */
-  const KAROSSERIEN = ['cabrio', 'van', 'limousine', 'sportwagen', 'coupe', 'kombi', 'kleinwagen', 'suv'];
+  const KAROSSERIEN = ['cabrio', 'van', 'limousine', 'sportwagen', 'coupe', 'kombi', 'kleinwagen', 'suv', 'formel'];
 
   const katalog = [
     {
@@ -246,6 +248,53 @@ window.Rennspiel = window.Rennspiel || {};
       beschreibung: 'Klein und superwendig – durch enge Kurven flitzt er wie ein Floh.',
       generischerName: 'Grüner Flitzer mit weißem Dach',
     },
+    {
+      id: 'formel',
+      name: 'Formel-Renner',
+      marke: 'Rennwagen', modell: 'Formel-Monoposto',
+      farbe: 0x16337e, farbe2: 0xf4f6f8, farbeName: 'Dunkelblau-Weiß',
+      karosserie: 'formel',
+      // Generischer Monoposto (keine Teamfarben, keine Sponsoren): Maße angelehnt an aktuelle Formel-Autos
+      // (ca. 5,5 × 2,0 × 0,95 m, Radstand 3,6 m); Räder vorn kleiner als hinten, breite Slicks ohne Radhäuser.
+      abmessungen: { laenge: 5.5, breite: 2.0, hoehe: 0.95, radstand: 3.6, ueberhangVorn: 1.0,
+        radRadius: 0.33, radRadiusHinten: 0.36, radBreite: 0.30, radBreiteHinten: 0.40, felgeZoll: 18 },
+      // Merkmale für den Baukasten (siehe baueFormel in carBuilder.js): Startnummer 1 (generisch), gelber Helm
+      form: { nummer: 1, helm: 0xffcc1a, felgeFarbe: 0x2a2d33 },
+      fahrwerte: {
+        vMax: 280 / 3.6, beschleunigung: 12, bremsen: 26, rueckwaertsMax: 8,
+        wendigkeit: 2.3, grip: 0.97, masse: 800, laenge: 5.5, breite: 2.0,
+      },
+      beschreibung: 'Ein echter Rennwagen mit Flügeln: superschnell und klebt in den Kurven wie Kaugummi!',
+      generischerName: 'Blau-weißer Formel-Renner',
+    },
+    {
+      id: 'polizei',
+      name: 'Streifenwagen',
+      marke: 'Einsatzwagen', modell: 'Streifenwagen Kombi',
+      farbe: 0xf3f4f1, farbe2: 0x1d4fb0, farbeName: 'Weiß mit blauen Streifen',
+      karosserie: 'kombi',
+      waehlbar: false,                 // nicht im Spielermenü, kein Computer-Gegner – setzt nur das Spiel ein
+      // Generischer Kombi (kein echtes Behördendesign, kein Wappen, kein Schriftzug); Maße wie ein Mittelklasse-Kombi
+      abmessungen: { laenge: 4.85, breite: 1.85, hoehe: 1.48, radstand: 2.84, ueberhangVorn: 0.90,
+        radRadius: 0.334, radBreite: 0.225, felgeZoll: 17 },
+      // Merkmale: weiß, blau-silberne Seitenstreifen, Blaulichtbalken auf dem Dach (userData.blaulicht)
+      form: {
+        sill: 0.13, nase: 0.49, haubeH: 0.60, guertel: 0.665, deck: 0.70, heckH: 0.70,
+        scheibeUnten: 0.31, dachVorn: 0.45, dachHinten: 0.90, heckscheibeEnde: 0.985, heckTyp: 'steil', dachAbfall: 0.04,
+        frontNeigung: 0.13, heckNeigung: 0.18, eckVorn: 0.28, eckHinten: 0.22, kotfluegel: 0.05, tumble: 0.15,
+        dachreling: false, fensterleiste: 'schwarz', felgeFarbe: 0xc2c7cd, spiegelFarbe: 'schwarz',
+        flankenStreifen: { 2: 'farbe2', 3: 0x98a2ae }, blaulicht: true,
+        licht: { form: 'schmal', x: 0.72, y: 0.49, b: 0.40, h: 0.10 }, tfl: 'linie', grill: 'quer', einlass: 'flach',
+        rueck: { form: 'kombi', y: 0.65, h: 0.08, x0: 0.42, x1: 0.95 }, endrohre: { n: 0 }, spoiler: 'dach',
+        kennzeichenY: 0.26, kennzeichenHY: 0.43,
+      },
+      fahrwerte: {
+        vMax: 62, beschleunigung: 9.5, bremsen: 22, rueckwaertsMax: 8,
+        wendigkeit: 2.0, grip: 0.9, masse: 1700, laenge: 4.85, breite: 1.85,
+      },
+      beschreibung: 'Mit Blaulicht auf dem Dach passt der Streifenwagen auf, dass alle fair fahren.',
+      generischerName: 'Streifenwagen',
+    },
   ];
 
   /** Auto per id holen (oder undefined). */
@@ -253,7 +302,13 @@ window.Rennspiel = window.Rennspiel || {};
     return katalog.find((a) => a.id === id);
   }
 
+  /** Nur die für Spieler (und Computer-Gegner) wählbaren Autos (waehlbar !== false). */
+  function waehlbare() {
+    return katalog.filter((a) => a.waehlbar !== false);
+  }
+
   R.carCatalog = katalog;
   R.carCatalog.KAROSSERIEN = KAROSSERIEN;
   R.carCatalog.finde = finde;
+  R.carCatalog.waehlbare = waehlbare;
 })();
