@@ -9,6 +9,13 @@
 //
 // Runde 4: optionales 4. Argument `umwelt` von schritt() (Wetter/Wind aus src/world/wetter.js):
 // { gripFaktor, bremsFaktor, windX, windZ } – fehlt es, rechnet alles exakt wie vorher.
+//
+// Runde 5 (Fahrbarkeit):
+// - Tempo-Klasse: new Vehicle(daten, { tempoKlasse: 'normal' | 'schnell' }) rechnet die Faktoren aus
+//   config.tempoKlassen EINMAL in this.daten ein (vMax/beschleunigung/bremsen). Schaden (datenBasis) und
+//   Turbo multiplizieren danach weiter auf diese Werte. Ohne Option: Vehicle.klasseStandard (null = Katalogwerte).
+// - Lenkung: Drehrate bei hohem Tempo direkter (arcade-Untergrenze aus config.physik.lenkung), über der
+//   Haftgrenze rutscht das Auto spürbar nach außen und verliert Tempo (Untersteuern statt „nichts passiert").
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -27,12 +34,21 @@
      *   wendigkeit (rad/s Drehrate bei langsamer Fahrt), grip (0..1), masse (kg), laenge, breite
      *   Schnell begrenzt config.physik.querGrip die Drehrate (siehe drehrateMax()).
      */
-    constructor(daten) {
+    constructor(daten, optionen) {
       // Standard = Mittelklasse (240 km/h), passt zum Passat im Katalog
       this.daten = Object.assign({
         vMax: 240 / 3.6, beschleunigung: 5.2, bremsen: 21, rueckwaertsMax: 8,
         wendigkeit: 1.9, grip: 0.9, masse: 1400, laenge: 4.4, breite: 1.8,
       }, daten);
+      // Runde 5: Tempo-Klasse (Faktoren direkt in daten → Schaden/Turbo bleiben multiplikativ)
+      const klassen = R.config.tempoKlassen || {};
+      const klasse = optionen && optionen.tempoKlasse !== undefined ? optionen.tempoKlasse : Vehicle.klasseStandard;
+      this.tempoKlasse = klassen[klasse] ? klasse : null;
+      this.tempoKlasseFaktor = klassen[klasse] || { vMax: 1, beschleunigung: 1, bremsen: 1 };
+      const kf = this.tempoKlasseFaktor;
+      if (kf.vMax !== 1) this.daten.vMax *= kf.vMax;
+      if (kf.beschleunigung !== 1) this.daten.beschleunigung *= kf.beschleunigung;
+      if (kf.bremsen !== 1) this.daten.bremsen *= kf.bremsen;
       this.gripBonus = 1;        // Faktor auf die Haftung (KI "unschlagbar" setzt 1.05)
       this.umweltGrip = 1;       // Runde 4: Wetter-Faktor auf die Haftung (aus umwelt.gripFaktor, gilt auch für die KI-Planung)
       this.windSeite = 0;        // Runde 4: Seitenwind relativ zum Auto −1..1 (> 0 = drückt nach rechts), für das HUD
@@ -155,7 +171,9 @@
       this.letzteSteuerung = s;   // für Bremslicht (Bremshilfe sichtbar machen)
 
       const zielLenkung = s.lenkung;
-      const lenkTempo = zielLenkung === 0 ? 9 : 6;   // zurückstellen schneller
+      // Runde 5: schneller ansprechend (einschwingen 6 → 9, zurückstellen 9 → 12 je s)
+      const LK = R.config.physik.lenkung || {};
+      const lenkTempo = zielLenkung === 0 ? (LK.zurueck || 12) : (LK.einschwingen || 9);
       this.lenkung += (zielLenkung - this.lenkung) * Math.min(1, lenkTempo * dt);
       if (zielLenkung === 0 && Math.abs(this.lenkung) < 0.002) this.lenkung = 0;
 
@@ -178,6 +196,8 @@
       let widerstand = 0.6 * ug.rollwiderstand + luft * vRel * vRel;
       // Reifen radieren in der Kurve (Untersteuern kostet Tempo)
       widerstand += P.kurvenWiderstand * Math.abs(this._querBeschl || 0);
+      // Runde 5: über der Haftgrenze radieren die Reifen stärker (Untersteuern kostet spürbar Tempo)
+      widerstand += (P.lenkung ? P.lenkung.ueberBremsen : 0) * (this._ueberBeschl || 0);
       if (this.vLaengs > 0) a -= widerstand; else if (this.vLaengs < 0) a += Math.min(widerstand, 3);
 
       const vAlt = this.vLaengs;
@@ -197,6 +217,7 @@
       //     Querhaftung (Drehrate ≤ aQuer / v) → bei hohem Tempo untersteuert das Auto. ---
       const tempoAnteil = Math.min(1, this.tempo / d.vMax);
       this._querBeschl = 0;
+      this._ueberBeschl = 0;
       if (this.tempo > 0.2) {
         const drehrateMax = this.drehrateMax();
         const richtungVz = this.vLaengs >= 0 ? 1 : -1;      // rückwärts lenkt spiegelverkehrt
@@ -207,6 +228,16 @@
         // die selbst begrenzt ist (kein Wegdrehen bei hohem Tempo).
         // vQuer > 0 = nach rechts. Rechtskurve (drehrate > 0) → nach links (vQuer sinkt).
         this.vQuer -= this._querBeschl * (1 - grip) * 0.4 * dt;
+        // Runde 5: Anteil über der Haftgrenze (arcade-Drehrate > aQuer/v) → zusätzlich nach außen rutschen
+        const LK = R.config.physik.lenkung;
+        if (LK && this.vLaengs > 0) {
+          const grenze = this.querBeschleunigungMax(this.vLaengs);
+          const ueber = Math.abs(this._querBeschl) - grenze;
+          if (ueber > 0) {
+            this._ueberBeschl = ueber;
+            this.vQuer -= Math.sign(this._querBeschl) * ueber * LK.ueberDrift * dt;
+          }
+        }
       }
       // Runde 4: Seitenwind – schiebt das Auto seitlich (vQuer) und dreht es leicht mit (Lenkversatz),
       // beides ∝ Stufe × Tempo. Wer nicht gegenlenkt, wird zur Seite getragen.
@@ -250,12 +281,25 @@
       return P.querGrip * this.gripGesamt(untergrund) * (1 + Math.abs(v) / P.abtriebTempo);
     }
 
-    /** Größte Drehrate (rad/s) bei Volleinschlag im aktuellen Zustand (bzw. Tempo v). */
+    /**
+     * Größte Drehrate (rad/s) bei Volleinschlag im aktuellen Zustand (bzw. Tempo v).
+     * Langsam begrenzt die Wendigkeit, schnell die Querhaftung (aQuer/v) – Runde 5: aber nie unter einer
+     * Arcade-Untergrenze (rateVmax … rateHalb rad/s × √(Wendigkeit/Bezug)), linear über den Tempo-Anteil
+     * (vMax: rateVmax, 50 % vMax: rateHalb). Über der Haftgrenze rutscht das Auto dafür nach außen (schritt()).
+     */
     drehrateMax(v) {
       const t = Math.abs(v === undefined ? this.vLaengs : v);
       const grip = this.gripGesamt();
       const langsam = this.daten.wendigkeit * (0.55 + 0.45 * grip) * Math.min(1, t / 4);
-      return Math.min(langsam, this.querBeschleunigungMax(t) / Math.max(t, 0.5));
+      const haft = this.querBeschleunigungMax(t) / Math.max(t, 0.5);
+      const LK = R.config.physik.lenkung;
+      if (!LK) return Math.min(langsam, haft);
+      // Untergrenze in rad/s für ein Auto mit Bezugs-Wendigkeit (langsam = LK.bezug), andere Autos × √(langsam/bezug)
+      // (gestaucht: der wendige Mini dreht bei vMax nicht weg, der Bus bleibt nicht träge)
+      const tA = Math.min(1, t / this.daten.vMax);
+      const voll = this.daten.wendigkeit * (0.55 + 0.45 * grip);
+      const arcade = (LK.rateVmax + (LK.rateHalb - LK.rateVmax) * 2 * (1 - tA)) * Math.sqrt(voll / LK.bezug);
+      return Math.min(langsam, Math.max(haft, arcade));
     }
 
     /** Höchsttempo auf einem Untergrund (m/s). */
@@ -277,5 +321,7 @@
   }
 
   Vehicle.winkelDiff = winkelDiff;
+  /** Runde 5: Tempo-Klasse, wenn new Vehicle() keine Option bekommt (null = Katalogwerte; Tests setzen sie). */
+  Vehicle.klasseStandard = null;
   R.Vehicle = Vehicle;
 })();

@@ -2,9 +2,12 @@
 // a) Mathe: 30 m/s kommt durch (360°, Ausfahrt bei s + versatz), 15 m/s fällt vor 180° und wird zurückgesetzt,
 //    zu langsam = keine Übernahme, Fortschritt monoton, Pose (Dach zum Mittelpunkt).
 // b) KI: alle 7 Stufen fahren 2 Runden inkl. beider Loopings (keine Stürze, kein "zu langsam").
+// c) Runde 5 (Anlauf, track/anlauf.js): zu langsam → sanfter Stopp vor der Einfahrt (kein Durchfahren), rückwärts löst,
+//    R → Anlaufposition (freie Stelle), Vollgas von dort → durch (jedes Auto × jede Tempo-Klasse + Worst Case),
+//    Mindesttempo + Gas → immer durch (Arcade-Hilfe oben), Mindest-Anlauf je Auto.
 const { ladeModule } = require('./lade');
-const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/track/spline.js', 'src/track/trackCatalog.js',
-  'src/track/trackBuilder.js', 'src/track/looping.js', 'src/race/raceManager.js', 'src/physics/collisions.js', 'src/ai/driver.js']);
+const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/cars/carCatalog.js', 'src/track/spline.js', 'src/track/trackCatalog.js',
+  'src/track/trackBuilder.js', 'src/track/looping.js', 'src/track/anlauf.js', 'src/race/raceManager.js', 'src/physics/collisions.js', 'src/ai/driver.js']);
 
 let fehler = 0;
 function pruefe(name, ok, info) { console.log((ok ? 'OK   ' : 'FEHL ') + name + (info ? '  (' + info + ')' : '')); if (!ok) fehler++; }
@@ -105,8 +108,10 @@ function fahren(a, steuerung, maxSchritte, stoppBei) {
   const a = aufstellen(18, 0);
   const verlauf = fahren(a, { gas: 0 }, 120);
   const ev = verlauf.filter(x => x.e).map(x => x.e);
-  pruefe('18 m/s: keine Übernahme, Meldung "zuLangsam", fährt unten durch', ev.length === 1 && ev[0] === 'zuLangsam' && !a.lp.aktiv &&
-    sp.differenzS(sp.naechster(a.v.x, a.v.z).s, L.s) > 10, ev.join(','));
+  // Runde 5: kein Durchfahren mehr – ohne Anlauf-Zustand greift der Notstopp direkt vor der Einfahrt
+  const nE = sp.naechster(a.v.x, a.v.z);
+  pruefe('18 m/s (ohne Anlauf-Bremse): keine Übernahme, "zuLangsam", Notstopp vor der Einfahrt (kein Durchfahren)',
+    ev.length >= 1 && ev[0] === 'zuLangsam' && !a.lp.aktiv && sp.differenzS(nE.s, L.s) < 0 && a.v.vLaengs === 0, ev.join(',') + ', s−Einfahrt ' + sp.differenzS(nE.s, L.s).toFixed(2) + ' m');
   const b = aufstellen(30, 9);     // neben der Fahrbahn
   const vb = fahren(b, { gas: 0 }, 60);
   pruefe('Neben der Fahrbahn: keine Übernahme', vb.every(x => !x.e));
@@ -138,6 +143,126 @@ function fahren(a, steuerung, maxSchritte, stoppBei) {
   pruefe('autoAuto ignoriert Autos im Looping', R.Kollisionen.autoAuto([a, b]).length === 0 && a.x === 0);
 }
 
+// ---------- Runde 5: Anlauf-Bremse, Anlaufposition, Vollgas von dort ----------
+const AN = R.Anlauf, CA = R.config.anlauf;
+const stellen = AN.stellen(strecke);
+pruefe('Anlauf-Stellen: 2 Loopings', stellen.length === 2 && stellen.every(s => s.art === 'looping'),
+  stellen.map(s => 's=' + s.s.toFixed(0) + ' abstand ' + s.abstand + ' m (' + s.quelle + ', langsamstes Auto ' + s.auto + '/' + s.klasse + ' braucht ' + s.berechnet.toFixed(0) + ' m)').join(' | '));
+/** Einfacher Spurhalter (Tangente + Mitte), Vollgas wahlweise. */
+function spur(v, gas) {
+  const n = sp.naechster(v.x, v.z), p = sp.punktBei(n.s + 4);
+  const fehler = R.Vehicle.winkelDiff(v.heading, R.headingAus(p.tx, p.tz));
+  return { gas, bremse: 0, lenkung: Math.max(-1, Math.min(1, fehler * 2.5 - n.seitenabstand * 0.08)) };
+}
+/** Ein Lauf mit Anlauf-Zustand: liefert Ereignisse, Minimal-Abstand zur Einfahrt, Verlauf. */
+function anlaufLauf(v, az, lp, steuerFn, n, stoppBei) {
+  let index = -1, ev = [], minD = Infinity, maxVerz = 0, vAlt = v.vLaengs, eintritt = null;
+  for (let k = 0; k < n; k++) {
+    const s = steuerFn(v, k);
+    const r = LP.fahrzeugSchritt(lp, v, strecke, s, dt, index, az); index = r.index;
+    if (r.ereignis) ev.push(r.ereignis);
+    if (r.ereignis === 'start') eintritt = lp.v;
+    if (!lp.aktiv && !lp.fallen) {
+      const d = stellen.reduce((m, st) => { const x = sp.differenzS(st.s, sp.naechster(v.x, v.z).s); return x > -3 && x < m ? x : m; }, Infinity);
+      minD = Math.min(minD, d);
+      if (az.bremst && vAlt > 1.5) maxVerz = Math.max(maxVerz, (vAlt - v.vLaengs) / dt);   // ohne den letzten Halt (< 1,5 m/s)
+    }
+    vAlt = v.vLaengs;
+    if (stoppBei && stoppBei(r, v, k)) break;
+  }
+  return { ev, minD, maxVerz, eintritt };
+}
+for (const [nr, L2] of strecke.loopings.entries()) {
+  const st = stellen[nr];
+  // a) 60 m vor der Einfahrt mit 18 m/s, ohne Gas → Bremse greift, steht 10 m davor, kein Looping, kein Durchfahren
+  {
+    const p = sp.punktBei(L2.s - 60), v = new R.Vehicle({});
+    v.setzen(p.x + p.nx * 1.5, p.z + p.nz * 1.5, R.headingAus(p.tx, p.tz)); v.vLaengs = 18;
+    const az = AN.zustand(), lp = LP.zustand();
+    const e = anlaufLauf(v, az, lp, (vv) => ({ gas: 0, bremse: 0, lenkung: 0 }), 60 * 8);
+    const d = sp.differenzS(L2.s, sp.naechster(v.x, v.z).s);
+    pruefe(`Looping ${nr + 1}: 18 m/s ohne Gas → sanfter Stopp ${CA.stopp} m vor der Einfahrt, kein Durchfahren`,
+      e.ev[0] === 'zuLangsam' && e.ev.includes('gestoppt') && !e.ev.includes('start') && Math.abs(d - CA.stopp) < 0.6 && v.vLaengs === 0 &&
+      lp.geschafft === 0 && e.maxVerz <= CA.bremsVerz + 0.6 && AN.aktiv(az),
+      `steht ${d.toFixed(2)} m davor, max. Verzögerung ${e.maxVerz.toFixed(1)} m/s², Ereignisse ${e.ev.join(',')}`);
+    // b) Gas aus dem Stand an der Linie → bleibt stehen (würde Mindesttempo nie erreichen)
+    const e2 = anlaufLauf(v, az, lp, () => ({ gas: 1, bremse: 0, lenkung: 0 }), 60 * 3);
+    const d2 = sp.differenzS(L2.s, sp.naechster(v.x, v.z).s);
+    pruefe(`Looping ${nr + 1}: Gas an der Linie → kommt nicht durch (bleibt vor der Einfahrt)`, !e2.ev.includes('start') && d2 > CA.stopp - 0.6 && lp.geschafft === 0,
+      'Abstand ' + d2.toFixed(2) + ' m');
+    // c) Rückwärts (Bremse) → fährt zurück, Bremse gelöst; R-Zustand bleibt (aktiv)
+    anlaufLauf(v, az, lp, () => ({ gas: 0, bremse: 1, lenkung: 0 }), 60 * 3);
+    const d3 = sp.differenzS(L2.s, sp.naechster(v.x, v.z).s);
+    pruefe(`Looping ${nr + 1}: rückwärts möglich (Bremse-Taste)`, d3 > CA.stopp + 5 && !az.bremst && AN.aktiv(az), 'jetzt ' + d3.toFixed(1) + ' m davor');
+    // d) R → Anlaufposition (anderes Auto genau dort → 10 m weiter zurück)
+    const frei = AN.position(strecke, st, [], null);
+    const anderes = new R.Vehicle({}); anderes.setzen(frei.x + 2, frei.z, 0);
+    const pose = AN.zurAnlaufposition(az, v, strecke, [anderes, v]);
+    const nP = sp.naechster(pose.x, pose.z);
+    pruefe(`Looping ${nr + 1}: R → Anlaufposition ${st.abstand} m (+10 m, weil dort ein Auto steht), Tempo 0, Blick nach vorne`,
+      Math.abs(sp.differenzS(L2.s, nP.s) - st.abstand - 10) < 0.6 && v.vLaengs === 0 && Math.abs(nP.seitenabstand) < 0.2 &&
+      Math.abs(R.Vehicle.winkelDiff(v.heading, R.headingAus(sp.punktBei(nP.s).tx, sp.punktBei(nP.s).tz))) < 0.01 && !AN.aktiv(az),
+      sp.differenzS(L2.s, nP.s).toFixed(1) + ' m vor der Einfahrt');
+  }
+  // e) Von der Anlaufposition Vollgas: jedes Auto × jede Tempo-Klasse + Worst Case → Einfahrt ≥ vMin × 1,1, geschafft
+  {
+    const pose = AN.position(strecke, st, [], null), klassen = Object.keys(R.config.tempoKlassen || { schnell: 1 });
+    let alle = 0, ok = 0, minV = Infinity, wer = '', schlecht = [];
+    R.carCatalog.forEach((auto) => klassen.concat(['worst']).forEach((k) => {
+      const v = new R.Vehicle(auto.fahrwerte, { tempoKlasse: k === 'worst' ? null : k });
+      if (k === 'worst') { v.daten.vMax = auto.fahrwerte.vMax * 0.7; v.daten.beschleunigung = auto.fahrwerte.beschleunigung * 0.85; }
+      v.setzen(pose.x, pose.z, pose.heading);
+      const az = AN.zustand(), lp = LP.zustand();
+      const e = anlaufLauf(v, az, lp, (vv) => spur(vv, 1), 60 * 25, (r) => r.ereignis === 'geschafft' || r.ereignis === 'gefallen');
+      alle++;
+      const gut = lp.geschafft === 1 && lp.gefallen === 0 && az.eingriffe === 0 && e.eintritt >= L2.vMin * (1 + CA.reserve) - 1e-6;
+      if (gut) ok++; else schlecht.push(auto.id + '/' + k + ' ' + (e.eintritt ? (e.eintritt * 3.6).toFixed(0) + ' km/h' : e.ev.join(',')));
+      if (e.eintritt !== null && e.eintritt < minV) { minV = e.eintritt; wer = auto.id + '/' + k; }
+    }));
+    pruefe(`Looping ${nr + 1}: von der Anlaufposition mit Vollgas kommen alle durch (Einfahrt ≥ vMin + 10 %, ${alle} Läufe)`, ok === alle,
+      `langsamste Einfahrt ${(minV * 3.6).toFixed(0)} km/h (${wer}), vMin+10 % = ${(L2.vMin * 1.1 * 3.6).toFixed(0)} km/h` + (schlecht.length ? ' | FEHL: ' + schlecht.join('; ') : ''));
+  }
+}
+// f) Mindesttempo + Gas → immer durch (Arcade-Hilfe oben), jedes Auto × Klasse
+{
+  let alle = 0, ok = 0, geschoben = 0, klassen = Object.keys(R.config.tempoKlassen || { schnell: 1 });
+  R.carCatalog.forEach((auto) => klassen.concat(['worst']).forEach((k) => {
+    const v = new R.Vehicle(auto.fahrwerte, { tempoKlasse: k === 'worst' ? null : k });
+    if (k === 'worst') { v.daten.vMax = auto.fahrwerte.vMax * 0.7; v.daten.beschleunigung = auto.fahrwerte.beschleunigung * 0.85; }
+    const p = sp.punktBei(L.s - 1); v.setzen(p.x, p.z, R.headingAus(p.tx, p.tz)); v.vLaengs = L.vMin + 0.01;
+    const lp = LP.zustand(); let index = -1, e = null;
+    for (let i = 0; i < 600 && e !== 'geschafft' && e !== 'gefallen'; i++) { const r = LP.fahrzeugSchritt(lp, v, strecke, { gas: 1 }, dt, index); index = r.index; e = r.ereignis || e; }
+    alle++; if (lp.geschafft === 1 && lp.gefallen === 0) ok++;
+    geschoben += lp.geschoben ? 1 : 0;
+  }));
+  pruefe(`Mindesttempo + Gas: alle Autos × Klassen kommen durch (${alle} Läufe)`, ok === alle, `${ok}/${alle}, Arcade-Hilfe nötig bei ${geschoben}`);
+  // ohne Gas knapp unter dem Nötigen → fällt weiterhin (Hilfe nur mit Gas)
+  const v = new R.Vehicle({}), p = sp.punktBei(L.s - 1); v.setzen(p.x, p.z, R.headingAus(p.tx, p.tz)); v.vLaengs = L.vMin + 0.01;
+  const lp = LP.zustand(); let index = -1, e = null;
+  v.vLaengs = L.vMin + 0.3;
+  for (let i = 0; i < 600 && e !== 'geschafft' && e !== 'gefallen'; i++) {
+    const r = LP.fahrzeugSchritt(lp, v, strecke, { gas: 0, bremse: lp.aktiv ? 1 : 0 }, dt, index); index = r.index; e = r.ereignis || e;
+  }
+  pruefe('Mindesttempo, im Looping gebremst → fällt (Hilfe nur mit Gas)', e === 'gefallen', e);
+}
+// g) Mindest-Anlauf je Auto (aus dem Stand bis vMin + 10 %)
+{
+  const ziel = L.vMin * (1 + CA.reserve), zeilen = [], klassen = Object.keys(R.config.tempoKlassen || {});
+  let max = 0;
+  R.carCatalog.forEach((auto) => {
+    const w = klassen.map((k) => {
+      const v = new R.Vehicle(auto.fahrwerte, { tempoKlasse: k }); v.setzen(0, 0, 0); v.untergrund = 'strasse';
+      let weg = Infinity;
+      for (let i = 0; i < 3600; i++) { v.schritt(dt, { gas: 1 }); if (v.vLaengs >= ziel) { weg = -v.z; break; } }
+      max = Math.max(max, weg);
+      return k + ' ' + weg.toFixed(0) + ' m';
+    });
+    zeilen.push(auto.id + ': ' + w.join(', '));
+  });
+  console.log('INFO Mindest-Anlauf bis ' + (ziel * 3.6).toFixed(0) + ' km/h: ' + zeilen.join(' | '));
+  pruefe('Anlauf-Abstand ≥ Mindest-Anlauf des langsamsten Autos', stellen.every(s => s.abstand >= max), 'max ' + max.toFixed(0) + ' m, Abstand ' + stellen.map(s => s.abstand).join('/'));
+}
+
 // ---------- KI: alle 7 Stufen, 2 Runden, beide Loopings ----------
 const STUFEN = Object.keys(R.config.schwierigkeiten).sort((x, y) => R.config.schwierigkeiten[x].rang - R.config.schwierigkeiten[y].rang);
 const zeiten = {};
@@ -147,18 +272,18 @@ for (const stufe of STUFEN) {
   v.setzen(start.x, start.z, start.heading);
   const rennen = new R.RaceManager(strecke, [{ vehicle: v, name: 'KI', istSpieler: false }], { runden: 2, countdown: 0 });
   const d = new R.Driver(v, strecke, { schwierigkeit: stufe, seed: 7, name: 'KI' });
-  const t = rennen.teilnehmer[0], lp = LP.zustand();
+  const t = rennen.teilnehmer[0], lp = LP.zustand(), az = R.Anlauf.zustand();
   let index = -1, vEin = Infinity;
   for (let k = 0; k < 60 * 300 && !t.imZiel; k++) {
     const s = d.steuerung(dt, { andere: [], spielerFortschrittMax: null, eigenerFortschritt: t.fortschritt, laeuft: true });
-    const r = LP.fahrzeugSchritt(lp, v, strecke, s, dt, index);
+    const r = LP.fahrzeugSchritt(lp, v, strecke, s, dt, index, az);
     index = r.index;
     if (r.ereignis === 'start') vEin = Math.min(vEin, v.vLaengs);
     if (r.ereignis === 'gefallen') rennen.verfolgungSetzen(0, v.x, v.z);
     rennen.schritt(dt);
   }
   zeiten[stufe] = t.rundenzeiten;
-  pruefe(`KI ${stufe}: 2 Runden, 4 Loopings geschafft, 0 Stürze, 0× zu langsam`, t.imZiel && lp.geschafft === 4 && lp.gefallen === 0 && lp.zuLangsam === 0 && !d.brauchtReset,
+  pruefe(`KI ${stufe}: 2 Runden, 4 Loopings geschafft, 0 Stürze, 0× zu langsam, Anlauf-Bremse nie nötig`, t.imZiel && lp.geschafft === 4 && lp.gefallen === 0 && lp.zuLangsam === 0 && az.eingriffe === 0 && !d.brauchtReset,
     `Runden ${t.rundenzeiten.map(z => z.toFixed(1)).join(' / ')} s | geschafft ${lp.geschafft}, gefallen ${lp.gefallen}, zu langsam ${lp.zuLangsam} | min. Einfahrt ${(vEin * 3.6).toFixed(0)} km/h`);
 }
 console.log('\nFantasie (' + strecke.laenge.toFixed(0) + ' m), Runde 2: ' + STUFEN.map(s => s + ' ' + (zeiten[s][1] || 0).toFixed(1) + ' s').join(', '));

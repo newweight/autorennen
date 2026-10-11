@@ -121,7 +121,7 @@
     zeilen() {
       const z = ['runden', 'gegner', 'schwierigkeit', 'hilfe0'];
       if (this.zwei) z.push('hilfe1');
-      z.push('jahreszeit', 'wetter', 'wind', 'schaden', 'start');
+      z.push('jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'start');   // Runde 5: Tempo-Klasse
       return z;
     }
 
@@ -292,6 +292,8 @@
         e.windStaerke = WIND_FOLGE[klemme((i < 0 ? 0 : i) + dx, 0, WIND_FOLGE.length - 1)];
       } else if (zeile === 'schaden') {
         if (dx) e.schaden = dx > 0;
+      } else if (zeile === 'tempo') {
+        if (dx) e.tempoKlasse = dx > 0 ? 'schnell' : 'normal';
       }
     }
 
@@ -304,6 +306,7 @@
       else if (zeile === 'wetter') { if (e.wetter !== k) { e.wetter = k; this.hintergrundNeu(); } }
       else if (zeile === 'wind') e.windStaerke = k === 'zufall' ? 'zufall' : +k;
       else if (zeile === 'schaden') e.schaden = k === 'an';
+      else if (zeile === 'tempo' && R.config.tempoKlassen[k]) e.tempoKlasse = k;
     }
 
     weiter() {
@@ -532,7 +535,10 @@
         pillenL('wetter', '🌦️', 'Wetter', this.wetterListe(), e.wetter) +
         wind +
         pillenL('schaden', '💥', 'Schaden', [{ k: 'aus', text: 'Aus' }, { k: 'an', text: 'An' }], e.schaden ? 'an' : 'aus',
-          'Treffer kosten Energie, bei 0 % kommt der Abschleppwagen');
+          'Treffer kosten Energie, bei 0 % kommt der Abschleppwagen') +
+        // Runde 5: Tempo-Klasse (Spieler und Computer gleich)
+        pillenL('tempo', '🏎️', 'Tempo', [{ k: 'normal', text: 'Normal' }, { k: 'schnell', text: 'Schnell (220–270 km/h)' }],
+          e.tempoKlasse === 'schnell' ? 'schnell' : 'normal', 'Normal ≈ 155–190 km/h, leichter zu fahren – Schnell = volle Leistung');
       const tonAn = !R.Audio || R.Audio.an;
       const aktionen = `<div class="m-aktionen"><div class="start-knopf${fk('start')}" data-a="start">🏁 LOS GEHT'S!</div>` +
         `<div class="knopf klein ton" data-a="ton">${tonAn ? '🔊 Ton an' : '🔇 Ton aus'} <kbd>M</kbd></div>` +

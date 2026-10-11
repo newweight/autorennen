@@ -1,6 +1,8 @@
 // ============================================================
 // Kameras: Verfolger (Chase-Cam), Cockpit, weit
 // Jede Kamera folgt einem Fahrzeug weich nach.
+// Runde 5: tempoabhängig (Abstand/Höhe/Vorausblick wachsen mit Tempo / vMax), Blickpunkt folgt der
+// Fahrtrichtung (inkl. Drift) und greift mit dem Lenkwinkel leicht in die Kurve vor → Kurven früher sichtbar.
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -19,6 +21,29 @@
       this._erstesMal = true;
       this._wackelZeit = 0;                   // Kamerawackeln nach Stößen
       this._wackelStaerke = 0;
+      this._tempoAnteil = 0;                  // geglättet (kein Kamerasprung bei Stößen)
+      this._blickVersatz = 0;                 // geglätteter Blickwinkel-Versatz (rad, > 0 = nach links)
+    }
+
+    /** Runde 5: geglätteten Tempo-Anteil (0..1) und Blick-Versatz (Drift + Lenk-Vorgriff) nachführen. */
+    _fahrZustand(dt, e) {
+      const v = this.ziel;
+      let tA = 0, versatz = 0;
+      if (v && v.daten && v.daten.vMax > 0) {
+        tA = Math.max(0, Math.min(1, Math.abs(v.vLaengs || 0) / v.daten.vMax));
+        if ((v.vLaengs || 0) > 2) {
+          // Drift: Blick in Bewegungsrichtung (vQuer > 0 = nach rechts = heading kleiner)
+          const drift = Math.atan((v.vQuer || 0) / Math.max(5, v.vLaengs));
+          // Lenk-Vorgriff: lenkung > 0 = rechts → Blick nach rechts (heading kleiner); wächst mit dem Tempo
+          versatz = -drift - (e.lenkVorgriff || 0) * (v.lenkung || 0) * (0.4 + 0.6 * tA);
+          versatz = Math.max(-0.3, Math.min(0.3, versatz));
+        }
+      }
+      const w = 1 - Math.exp(-3 * dt);
+      this._tempoAnteil += (tA - this._tempoAnteil) * w;
+      this._blickVersatz += (versatz - this._blickVersatz) * (1 - Math.exp(-(e.blickWeichheit || 6) * dt));
+      if (this._erstesMal) { this._tempoAnteil = tA; this._blickVersatz = versatz; }
+      return this._tempoAnteil;
     }
 
     /** Kurzes Wackeln (0,2 s) nach einem Stoß; staerke in m/s Aufprall-Tempo. */
@@ -65,22 +90,35 @@
       const r = f.richtung();
       const m = this.modus;
 
+      const lin = (a, b, t) => (b === undefined ? a : a + (b - a) * t);
       if (m === 'cockpit') {
-        this.kamera.position.set(f.x + r.x * k.cockpit.vor, f.y + k.cockpit.hoehe, f.z + r.z * k.cockpit.vor);
-        this.kamera.lookAt(f.x + r.x * 30, f.y + k.cockpit.hoehe - 0.5, f.z + r.z * 30);
+        const c = k.cockpit, tA = this._fahrZustand(dt, c);
+        this._erstesMal = false;
+        // Blickrichtung leicht in die Kurve (Lenk-Vorgriff/Drift), Blick weiter voraus bei hohem Tempo
+        const h = (f.heading !== undefined ? f.heading : Math.atan2(-r.x, -r.z)) + this._blickVersatz;
+        const bw = lin(c.blickWeite || 30, c.blickWeiteSchnell, tA);
+        this.kamera.position.set(f.x + r.x * c.vor, f.y + c.hoehe, f.z + r.z * c.vor);
+        this.kamera.lookAt(f.x - Math.sin(h) * bw, f.y + c.hoehe - 0.5, f.z - Math.cos(h) * bw);
         this.kamera.rotation.z = f.neigung * 0.5;
         this._wackelnAnwenden(dt);
         return;
       }
 
       const e = m === 'weit' ? k.weit : k.verfolger;
+      const tA = this._fahrZustand(dt, e);
+      const abstand = lin(e.abstand, e.abstandSchnell, tA), hoehe = lin(e.hoehe, e.hoeheSchnell, tA);
+      const voraus = lin(e.vorausblick, e.vorausblickSchnell, tA);
+      // Blickpunkt in Fahrtrichtung + Vorgriff (gedreht um _blickVersatz)
+      const h = (f.heading !== undefined ? f.heading : Math.atan2(-r.x, -r.z)) + this._blickVersatz;
+      const bx = -Math.sin(h), bz = -Math.cos(h);
       // Bei Rückwärtsfahrt bleibt die Kamera hinten (nicht umschwenken)
-      const zielPos = this._zielPos.set(f.x - r.x * e.abstand, f.y + e.hoehe, f.z - r.z * e.abstand);
-      const zielBlick = this._zielBlick.set(f.x + r.x * e.vorausblick, f.y + 0.8, f.z + r.z * e.vorausblick);
+      const zielPos = this._zielPos.set(f.x - r.x * abstand, f.y + hoehe, f.z - r.z * abstand);
+      const zielBlick = this._zielBlick.set(f.x + bx * voraus, f.y + 0.8, f.z + bz * voraus);
       if (this._erstesMal) { this.pos.copy(zielPos); this.blick.copy(zielBlick); this._erstesMal = false; }
       const t = 1 - Math.exp(-e.weichheit * dt);
       this.pos.lerp(zielPos, t);
-      this.blick.lerp(zielBlick, Math.min(1, t * 1.6));
+      // Blick folgt schneller als die Position (Kurve früher im Bild)
+      this.blick.lerp(zielBlick, 1 - Math.exp(-(e.blickWeichheit || e.weichheit * 1.6) * dt));
       this.kamera.position.copy(this.pos);
       this.kamera.lookAt(this.blick);
       this._wackelnAnwenden(dt);

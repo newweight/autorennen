@@ -9,7 +9,9 @@ Bilder: 01_start, 02_fahrt, 03_links_abseits, 04_reset, 05_cockpit, 06_weit, 07_
         Runde 3 (je Strecke, falls vorhanden): 13_tunnel_innen (Scheinwerfer), 13b_tunnel_portal, 14_bruecke,
         14b_bruecke_seite (Senke von der Seite), 15_hindernis_baustelle, 16_hindernis_oel, 17_hindernis_ast, 18_hindernis_sand
         Fantasie: 19_looping_aussen, 19b_looping2_aussen, 20_looping_auto (Verfolger kopfüber), 20b_looping_auto_aussen,
-        20c_looping_cockpit, 21_ball (Ball auf der Straße), 21b_ball_treffer, 22_wasser_aktiv, 22b_wasser_blubbern
+        20c_looping_cockpit, 21_ball (Ball auf der Straße), 21b_ball_treffer, 22_wasser_aktiv, 22b_wasser_blubbern,
+        Runde 5: 25_anlauf_meldung (zu langsam → Stopp + HUD), 25b_anlaufposition (nach R), 26_kleber_streifen,
+        27_festgeklebt (HUD), 27b_festgeklebt_nah (Fäden/Blasen)
         Runde 4 (Wiese/Wald/Wüste, Welt „Stunt"): 23_spur_eng (1 Spur + Leitplanke), 23b_spur_eng_oben, 24_spur_breit (3 Spuren)
         – main.js kennt die Welt-Wahl noch nicht: der Test setzt vorher trackCatalog[...].weltStandard = 'stunt'.
 Prüft: keine JS-Fehler, Deko ≥ breite/2 + 6 m von der Mitte, Draw-Calls Strecke+Deko+Hindernisse ≤ 40, Minimap sichtbar,
@@ -200,12 +202,59 @@ def fantasie_bilder(page, snap):
         s: +s.strecke.spline.naechster(f.vehicle.x, f.vehicle.z).s.toFixed(1), meldung: s.huds[0].meldungText || '' }; })()''')
     page.wait_for_timeout(1500)
     erg['kameraNachher'] = page.evaluate('+Rennspiel.spiel.kameras[0].kamera.up.y.toFixed(3)')
-    # Zu langsam: Auto fährt mit 15 m/s auf Looping 2 → fährt unten durch, Meldung
+    # Runde 5: Zu langsam (15 m/s, ohne Gas) auf Looping 2 → Anlauf-Bremse stoppt 10 m davor, Meldung; R → Anlaufposition;
+    # Vollgas von dort → geschafft
     l2 = lps[1]
-    page.evaluate(AUTO_NACH_SQ, [l2['s'] - 5, 0])
+    page.evaluate(KI_WEG)
+    page.evaluate(AUTO_NACH_SQ, [l2['s'] - 60, 0])
     page.evaluate('(() => { const v = Rennspiel.spiel.fahrzeuge[0].vehicle; v.vLaengs = 15; })()')
-    page.wait_for_function('Rennspiel.spiel.fahrzeuge[0].looping.zuLangsam >= 1', timeout=20000)
-    erg['zuLangsam'] = page.evaluate('(() => { const s = Rennspiel.spiel; return { zuLangsam: s.fahrzeuge[0].looping.zuLangsam, meldung: s.huds[0].meldungText || "" }; })()')
+    page.evaluate('Rennspiel.spiel.schnellvorlauf(9)')      # Physik ohne Zeichnen (Software-Grafik ist langsam)
+    page.wait_for_timeout(600)
+    snap('25_anlauf_meldung.png')
+    erg['zuLangsam'] = page.evaluate('''(() => { const s = Rennspiel.spiel, f = s.fahrzeuge[0], sp = s.strecke.spline, n = sp.naechster(f.vehicle.x, f.vehicle.z);
+      const L = s.strecke.loopings[1];
+      return { abstand: +sp.differenzS(L.s, n.s).toFixed(2), imLooping: !!f.vehicle.imLooping, geschafft: f.looping.geschafft,
+        meldung: s.huds[0].meldungText || '' }; })()''')
+    page.keyboard.press('KeyR'); page.wait_for_timeout(300)
+    erg['anlaufPos'] = page.evaluate('''(() => { const s = Rennspiel.spiel, f = s.fahrzeuge[0], sp = s.strecke.spline, n = sp.naechster(f.vehicle.x, f.vehicle.z);
+      const L = s.strecke.loopings[1], st = Rennspiel.Anlauf.stellen(s.strecke)[1];
+      return { abstand: +sp.differenzS(L.s, n.s).toFixed(1), soll: st.abstand, kmh: f.vehicle.tempoKmh, meldung: s.huds[0].meldungText || '' }; })()''')
+    page.wait_for_timeout(600)
+    snap('25b_anlaufposition.png')
+    vorher = erg['durch']['geschafft']
+    page.keyboard.down('ArrowUp')
+    page.evaluate('''(n) => { const s = Rennspiel.spiel, lp = s.fahrzeuge[0].looping;
+      for (let k = 0; k < 60 * 25 && lp.geschafft <= n && lp.gefallen === 0; k++) s.physikSchritt(1 / 60); }''', vorher)
+    page.keyboard.up('ArrowUp')
+    erg['vonAnlauf'] = page.evaluate('''(() => { const f = Rennspiel.spiel.fahrzeuge[0]; return { geschafft: f.looping.geschafft, gefallen: f.looping.gefallen,
+      eingriffe: f.anlauf.eingriffe }; })()''')
+    # Runde 5: Klebestreifen (Abschnitt mit beiden Seiten): Streifen von oben/hinten, dann Auto langsam drauf → festgeklebt
+    kl = page.evaluate('(() => { const st = Rennspiel.spiel.strecke, k = st.kleber.find(e => e.seite === 0) || st.kleber[0]; return { s0: k.s0, s1: k.s1, q: st.breite / 2 + st.randBreite / 2 }; })()')
+    page.evaluate(AUTO_NACH_SQ, [kl['s0'] - 30, 0]); page.wait_for_timeout(300)
+    blick = page.evaluate(KAMERA_BEI_S, [kl['s0'] + 5, 25, 9, 30])
+    page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(800)
+    snap('26_kleber_streifen.png')
+    page.evaluate('(() => { const s = Rennspiel.spiel, k = s.kameras[0]; delete k.update; k._erstesMal = true; })()')
+    page.evaluate(AUTO_NACH_SQ, [kl['s0'] + 12, kl['q']])
+    page.evaluate('(() => { Rennspiel.spiel.fahrzeuge[0].vehicle.vLaengs = 3; })()')
+    page.evaluate('''(() => { const s = Rennspiel.spiel, f = s.fahrzeuge[0];
+      for (let k = 0; k < 60 * 6 && !(f.kleber && f.kleber.klebt > 0 && f.kleber.klebt < 4.2); k++) s.physikSchritt(1 / 60); })()''')
+    erg['kleber'] = page.evaluate('''(() => { const s = Rennspiel.spiel, f = s.fahrzeuge[0];
+      return { klebt: +f.kleber.klebt.toFixed(1), untergrund: f.vehicle.untergrund, kmh: f.vehicle.tempoKmh, optik: !!(f._kleberOptik && f._kleberOptik.visible),
+        meldung: s.huds[0].meldungText || '' }; })()''')
+    page.wait_for_timeout(500)
+    snap('27_festgeklebt.png')
+    # Außensicht nah am festgeklebten Auto (Fäden/Blasen)
+    blick = page.evaluate('''(() => { const s = Rennspiel.spiel, v = s.fahrzeuge[0].vehicle, sp = s.strecke.spline, n = sp.naechster(v.x, v.z), p = sp.punktBei(n.s);
+      const sg = n.seitenabstand > 0 ? -1 : 1, x = v.x + p.nx * sg * 5 - p.tx * 3, z = v.z + p.nz * sg * 5 - p.tz * 3;
+      return [x, s.strecke.hoeheAn(x, z) + 2.2, z, v.x, v.y + 0.4, v.z, true]; })()''')
+    page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(700)
+    snap('27b_festgeklebt_nah.png')
+    page.evaluate('(() => { const s = Rennspiel.spiel, k = s.kameras[0]; delete k.update; k._erstesMal = true; })()')
+    page.evaluate('''(() => { const s = Rennspiel.spiel, f = s.fahrzeuge[0];
+      for (let k = 0; k < 60 * 6 && f.kleber.klebt > 0; k++) s.physikSchritt(1 / 60); })()''')
+    erg['geloest'] = page.evaluate('''(() => { const s = Rennspiel.spiel, f = s.fahrzeuge[0];
+      return { klebt: f.kleber.klebt, frei: +f.kleber.frei.toFixed(1), optik: !!(f._kleberOptik && f._kleberOptik.visible), meldung: s.huds[0].meldungText || '' }; })()''')
     # Ball auf der Straße: Stelle 0 aktivieren, Ball langsam mitten auf die Fahrbahn
     b = page.evaluate('''(() => { const s = Rennspiel.spiel, d = s.dynamik, st = d.stellen[0];
       st.aktiv = true; st.timer = 0; d.baelleAn = true; d.schritt(1 / 60, { fortschritt: 0, runden: 3 });
@@ -375,7 +424,12 @@ def lauf(browser, sid, out):
         pruefe('Looping: Kamera folgt der Drehung (oben = Auto-oben)', fz['oben']['kameraObenY'] < -0.5, fz['oben'])
         pruefe('Looping geschafft, Ausfahrt mit Tempo', fz['durch']['geschafft'] >= 1 and fz['durch']['gefallen'] == 0 and fz['durch']['kmh'] > 60 and not fz['durch']['imLooping'], fz['durch'])
         pruefe('Kamera danach wieder aufrecht', fz['kameraNachher'] > 0.999, fz['kameraNachher'])
-        pruefe('Zu langsam: keine Übernahme, Meldung', fz['zuLangsam']['zuLangsam'] >= 1 and 'Schneller' in fz['zuLangsam']['meldung'], fz['zuLangsam'])
+        pruefe('Zu langsam: Stopp 10 m vor der Einfahrt, kein Looping/Durchfahren, Meldung mit R', abs(fz['zuLangsam']['abstand'] - 10) < 1 and
+               not fz['zuLangsam']['imLooping'] and 'Zu langsam' in fz['zuLangsam']['meldung'] and 'R: Anlaufposition' in fz['zuLangsam']['meldung'], fz['zuLangsam'])
+        pruefe('R → Anlaufposition (Abstand laut Anlauf-Stelle), Tempo 0, Meldung', abs(fz['anlaufPos']['abstand'] - fz['anlaufPos']['soll']) < 12 and fz['anlaufPos']['kmh'] == 0 and 'Anlauf' in fz['anlaufPos']['meldung'], fz['anlaufPos'])
+        pruefe('Von der Anlaufposition mit Vollgas: Looping geschafft', fz['vonAnlauf']['gefallen'] == 0 and fz['vonAnlauf']['geschafft'] > fz['durch']['geschafft'], fz['vonAnlauf'])
+        pruefe('Kleber: festgeklebt (Tempo 0, Optik an, Meldung „Festgeklebt! 🍯")', fz['kleber']['kmh'] == 0 and fz['kleber']['optik'] and 'Festgeklebt' in fz['kleber']['meldung'], fz['kleber'])
+        pruefe('Kleber: nach 5 s gelöst (Optik aus, Schonzeit)', fz['geloest']['klebt'] == 0 and not fz['geloest']['optik'] and fz['geloest']['frei'] > 0, fz['geloest'])
         pruefe('Ball-Treffer: Tempo −60 % (25 → 10 m/s = 36 km/h), Meldung', abs(fz['ball']['kmhNachher'] - 36) <= 3 and fz['ball']['meldung'] != '', fz['ball'])
         pruefe('Wasser-Treffer: Tempo −40 % (≈ 54 km/h) + Schlingern', abs(fz['wasser']['kmhNachher'] - 54) <= 4 and abs(fz['wasser']['vQuer']) > 2, fz['wasser'])
     au = z['abseits_untergrund']

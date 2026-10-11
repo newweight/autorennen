@@ -1,7 +1,10 @@
 // ============================================================
 // Kollisionen (2D auf der Bodenebene, ohne Three.js → Node-Tests)
 //
-// 1) bande():   unsichtbare, weiche Bande bei |seitenabstand| > strecke.seitenabstandMax.
+// 1) bande():   unsichtbare, weiche Bande bei |seitenabstand| > strecke.grenzeBei(s) (sonst seitenabstandMax).
+//               Runde 5: geprüft wird die KAROSSERIE (4 Ecken), nicht nur die Mitte – kein Blech mehr durch
+//               Zaun, Geländer, Leitplanke oder Tunnelwand (die Deko steht genau an der Grenze). Dazu feste
+//               Säulen (strecke.saeulen: Startbogen-Masten, Looping-Beine).
 //               Das Auto wird zurückgeschoben, verliert Tempo, dreht leicht zur Straße.
 //               Kein Game Over, kein Durchfallen.
 // 2) autoAuto(): Auto gegen Auto. Jedes Auto = Kapsel aus 2 Kreisen (vorne/hinten).
@@ -29,57 +32,102 @@
   const BANDE_SCHLEIFEN = 0.996; // pro Schritt, solange das Auto an der Bande schleift
 
   /**
-   * Weiche Bande. Aufruf nach vehicle.schritt().
+   * Bande (Runde 5: Karosserie statt Mittelpunkt). Aufruf nach vehicle.schritt().
+   * Geprüft werden die 4 Ecken der Karosserie (laenge × breite): keine Ecke darf weiter als grenzeBei(s) von der
+   * Mitte ihres Streckenstücks sein (Zaun-Deko, Geländer, Tunnelwand und Leitplanke stehen genau dort). Die
+   * tiefste Ecke wird zurückgeschoben (bis zu 3 Durchgänge), das Tempo in die Bande weggenommen, der Rest
+   * gedämpft, das Auto leicht zur Straße gedreht. Kein Game Over, kein Durchfallen.
+   * Runde 5: zusätzlich feste Säulen (strecke.saeulen: Startbogen-Masten, Looping-Beine) als Kreise.
    * @param {Vehicle} vehicle
-   * @param {Strecke} strecke (braucht spline + seitenabstandMax)
-   * @param {object} [nah] Ergebnis von spline.naechster()/strecke.abfrage() für die
-   *                       aktuelle Position (spart eine Suche); sonst wird gesucht.
+   * @param {Strecke} strecke (braucht spline + seitenabstandMax, optional grenzeBei/saeulen)
+   * @param {object} [nah] Ergebnis von spline.naechster()/strecke.abfrage() für die aktuelle Position
+   *                       (spart eine Suche); sonst wird gesucht.
    * @returns {number} Aufprall-Stärke in m/s (0 = keine Berührung)
    */
   function bande(vehicle, strecke, nah) {
     if (vehicle.imLooping) { vehicle._anBande = false; return 0; }   // im Looping: keine Bande
     const sp = strecke.spline;
-    let max = strecke.seitenabstandMax !== undefined ? strecke.seitenabstandMax : strecke.breite / 2 + 40;
+    const maxStd = strecke.seitenabstandMax !== undefined ? strecke.seitenabstandMax : strecke.breite / 2 + 40;
+    const grenze = (s) => (strecke.grenzeBei ? strecke.grenzeBei(s) : maxStd);
     const n = nah || sp.naechster(vehicle.x, vehicle.z, vehicle._bandeIndex);
     vehicle._bandeIndex = n.index;
-    // Brücken/Tunnel: Bande direkt am Geländer bzw. an der Tunnelwand (strecke.grenzeBei)
-    if (strecke.grenzeBei) max = strecke.grenzeBei(n.s);
-    const abstand = Math.abs(n.seitenabstand);
-    if (abstand <= max) { vehicle._anBande = false; return 0; }
+    const pk = sp.punkte, d = vehicle.daten;
+    const hl = (d.laenge || 4.4) / 2, hb = (d.breite || 1.8) / 2;
+    let staerke = 0, beruehrt = false, tx = 0, tz = 0, ax = 0, az = 0;
+    /** Tiefste Ecke (oder Mitte) über der Grenze zurückschieben, Tempo in die Bande weg; true = es gab etwas. */
+    const schieben = () => {
+      const r = vehicle.richtung(), q = vehicle.rechts();
+      let tief = 0, best = null;
+      for (let k = 0; k < 5; k++) {
+        const la = k === 4 ? 0 : (k < 2 ? hl : -hl), qa = k === 4 ? 0 : (k % 2 ? hb : -hb);
+        const x = vehicle.x + r.x * la + q.x * qa, z = vehicle.z + r.z * la + q.z * qa;
+        const e = sp.naechster(x, z, vehicle._bandeIndex);
+        const ue = Math.abs(e.seitenabstand) - grenze(e.s);
+        if (ue > tief) { tief = ue; best = e; }
+      }
+      if (!best) return false;
+      // Normale an der Projektionsstelle (interpoliert), nach außen gerichtet
+      const a = pk[best.index], b = pk[(best.index + 1) % pk.length];
+      let nx = a.nx + (b.nx - a.nx) * best.t, nz = a.nz + (b.nz - a.nz) * best.t;
+      const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;
+      const vz = best.seitenabstand > 0 ? 1 : -1;
+      ax = nx * vz; az = nz * vz;
+      tx = a.tx + (b.tx - a.tx) * best.t; tz = a.tz + (b.tz - a.tz) * best.t;
+      // 1) zurück hinter die Grenze schieben (+1 cm, damit es nicht flackert)
+      vehicle.x -= ax * (tief + 0.01); vehicle.z -= az * (tief + 0.01);
+      // 2) Tempo: Anteil gegen die Bande weg
+      const v = vehicle.weltGeschwindigkeit();
+      const vn = v.x * ax + v.z * az;                  // > 0 = fährt in die Bande
+      if (vn > 0) { vehicle.weltGeschwindigkeitSetzen(v.x - ax * vn, v.z - az * vn); staerke = Math.max(staerke, vn); }
+      return true;
+    };
+    for (let runde = 0; runde < 3 && schieben(); runde++) beruehrt = true;
+    if (beruehrt) {
+      // Rest längs der Bande dämpfen (erster Kontakt kräftiger, Schleifen schwach)
+      const neu = !vehicle._anBande;
+      const faktor = neu && staerke > 0.5 ? BANDE_PARALLEL : BANDE_SCHLEIFEN;
+      const v = vehicle.weltGeschwindigkeit();
+      vehicle.weltGeschwindigkeitSetzen(v.x * faktor, v.z * faktor);
+      // 3) Heading leicht Richtung Straße drehen: Ziel = Tangente, etwas nach innen geneigt
+      const r = vehicle.richtung();
+      if (tx * r.x + tz * r.z < 0) { tx = -tx; tz = -tz; }
+      const zx = tx - ax * 0.35, zz = tz - az * 0.35;
+      const hZiel = Math.atan2(-zx, -zz);
+      const diff = R.Vehicle.winkelDiff(hZiel, vehicle.heading);
+      const vw = vehicle.weltGeschwindigkeit();      // Geschwindigkeit nicht mitdrehen
+      vehicle.heading += Math.max(-0.04, Math.min(0.04, diff * 0.08));
+      vehicle.weltGeschwindigkeitSetzen(vw.x, vw.z);
+      // Drehen schiebt evtl. eine Ecke wieder hinaus → nochmal zurückschieben (Auto „rollt" an der Bande ab)
+      for (let runde = 0; runde < 2 && schieben(); runde++);
+    }
+    vehicle._anBande = beruehrt;
+    // Säulen (Startbogen, Looping-Beine)
+    const sa = strecke.saeulen;
+    if (sa && sa.length) staerke = Math.max(staerke, saeulen(vehicle, sa));
+    return staerke;
+  }
 
-    // Normale an der Projektionsstelle (interpoliert), nach außen gerichtet
-    const pk = sp.punkte, a = pk[n.index], b = pk[(n.index + 1) % pk.length];
-    let nx = a.nx + (b.nx - a.nx) * n.t, nz = a.nz + (b.nz - a.nz) * n.t;
-    const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;
-    const vz = n.seitenabstand > 0 ? 1 : -1;
-    const ax = nx * vz, az = nz * vz;                 // "außen"
-
-    // 1) zurück auf die Grenze schieben
-    const tief = abstand - max;
-    vehicle.x -= ax * tief; vehicle.z -= az * tief;
-
-    // 2) Tempo: Anteil gegen die Bande weg, Anteil längs der Bande gedämpft
-    const v = vehicle.weltGeschwindigkeit();
-    const vn = v.x * ax + v.z * az;                    // > 0 = fährt in die Bande
-    let px = v.x, pz = v.z, staerke = 0;
-    if (vn > 0) { px -= ax * vn; pz -= az * vn; staerke = vn; }
-    const neu = !vehicle._anBande;
-    const faktor = neu && staerke > 0.5 ? BANDE_PARALLEL : BANDE_SCHLEIFEN;
-    vehicle.weltGeschwindigkeitSetzen(px * faktor, pz * faktor);
-    vehicle._anBande = true;
-
-    // 3) Heading leicht Richtung Straße drehen: Ziel = Tangente (die Richtung, in die
-    //    das Auto ohnehin grob schaut), etwas nach innen geneigt
-    let tx = a.tx + (b.tx - a.tx) * n.t, tz = a.tz + (b.tz - a.tz) * n.t;
-    const r = vehicle.richtung();
-    if (tx * r.x + tz * r.z < 0) { tx = -tx; tz = -tz; }
-    const zx = tx - ax * 0.35, zz = tz - az * 0.35;    // leicht nach innen
-    const hZiel = Math.atan2(-zx, -zz);
-    const diff = R.Vehicle.winkelDiff(hZiel, vehicle.heading);
-    // Geschwindigkeit nicht mitdrehen: Welt-Tempo merken, Heading drehen, neu zerlegen
-    const vw = vehicle.weltGeschwindigkeit();
-    vehicle.heading += Math.max(-0.04, Math.min(0.04, diff * 0.08));
-    vehicle.weltGeschwindigkeitSetzen(vw.x, vw.z);
+  /** Feste Säulen { x, z, r }: Auto-Kapsel herausschieben, Tempo in die Säule weg. Liefert die Stoßstärke. */
+  function saeulen(vehicle, liste) {
+    let staerke = 0;
+    const gr = vehicle.daten.laenge / 2 + 1.5;
+    for (let i = 0; i < liste.length; i++) {
+      const s = liste[i], gx = vehicle.x - s.x, gz = vehicle.z - s.z;
+      if (gx * gx + gz * gz > (gr + s.r) * (gr + s.r)) continue;
+      const ka = kapsel(vehicle);
+      for (const c of ka.kreise) {
+        const dx = c.x - s.x, dz = c.z - s.z, dd = Math.hypot(dx, dz), g = ka.rad + s.r;
+        if (dd >= g) continue;
+        let nx, nz;
+        if (dd > 1e-6) { nx = dx / dd; nz = dz / dd; } else { const r = vehicle.richtung(); nx = -r.x; nz = -r.z; }
+        vehicle.x += nx * (g - dd + 0.01); vehicle.z += nz * (g - dd + 0.01);
+        const vw = vehicle.weltGeschwindigkeit(), vn = vw.x * nx + vw.z * nz;
+        if (vn < 0) {
+          vehicle.weltGeschwindigkeitSetzen((vw.x - nx * vn) * BANDE_PARALLEL, (vw.z - nz * vn) * BANDE_PARALLEL);
+          staerke = Math.max(staerke, -vn);
+        }
+      }
+    }
     return staerke;
   }
 

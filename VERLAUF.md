@@ -220,3 +220,75 @@
   Gegner bis 10, Emmy 🦁 Jonas 🐯 (Kerle → 🐺). Doku aktualisiert. Übertragen auf den Mac.
   Offen/Fragen: F1 Rundenzeit mittel 104–112 s statt ≥110 (weiter verlängern?); F5–F8 (PLAN_RUNDE4.md);
   Leistung auf dem Mac mit 10 Gegnern + Wetterpartikeln ungemessen; stunt_/schaden_screenshot.py doppelter Einbau (nur Testskripte).
+
+## Runde 5 (11.10.2026) – siehe PLAN_RUNDE5.md
+- Rückmeldung: schwerer fahrbar, zu zweit kaum; Versionen sichern; Looping/Schanze-Anlauf; Zaun; dann Dino, Polizei, F1, Kleber
+- Schritt 1: Versionen auf dem Mac anlegen; Schritt 2: Messung in Sebastians Chrome über Artefakt-Seite
+- 11.10. Messung auf Sebastians Mac (Artefakt-Seite in seinem Chrome, Overlay H): Solo Wiese 60 fps, 1,32 ms/Frame
+  (physik 0,21, render 0,95), Draw-Calls 63, pixelRatio 1,5, Qualität voll. Zu zweit Wald Klassisch: 60 fps,
+  1,91 ms/Frame, Draw-Calls 144, pixelRatio 1,0 → Leistung ist NICHT die Ursache (H1 widerlegt, Fenster 1200×1449;
+  Vollbild ungemessen). Ursache: H2 Fahrphysik (Tempo/Lenkung/Streckenskalierung), zu zweit durch halbe Sicht verschärft.
+  H3 Ghosting bleibt offen (Handgriff). Versionen v1–v4 in _versionen/ gesichert.
+- Welle Fix gestartet: A Fahrbarkeit (Tempo-Klasse, Lenkung, Kamera, Physikschritt), B Anlauf/Zaun/Kleber (Opus ×2)
+- 11.10. Agent B (Fix-B: Anlauf/Zaun/Kleber, Opus) – fertig:
+  Zaun-Lücken (tests/zaun_test.js, 4 Strecken × alle Welten, 40 Stellen, 20/45/75 m/s × 15/45/90°, 10 080 Läufe/Welt-Satz):
+  (1) Hauptursache: Bande prüfte nur die AUTO-MITTE → Blech ragte bis 3,7 m durch Zaun/Geländer/Leitplanke/Tunnelwand
+  (90°-Aufprall: halbe Länge). Fix collisions.bande: 4 Karosserie-Ecken (+ Mitte) gegen grenzeBei(s), tiefste Ecke
+  zurückschieben (bis 3 Durchgänge), Tempo in die Bande weg, nach dem Eindrehen nochmal nachschieben (kein Hängenbleiben).
+  Jetzt max. 0,02 m. Mitte entkam nie (kein Tunneln: Grenze ist ein Halbraum je Streckenstück, kein dünnes Segment).
+  (2) Zaun-Deko bis 1 m an Stellen, wo ein anderes Streckenstück näher lag (dort keine Bande) → zaunPunkte ok nur, wenn der
+  Punkt zum eigenen Stück gehört. (3) Startbogen-Masten + Looping-Gerüstbeine waren durchfahrbar → strecke.saeulen (feste Kreise).
+  Bande im Flug/Looping-Austritt aktiv (bestätigt). Leitplanke/Geländer/Tunnelwand liegen an der Grenze (Karosserie stößt an).
+  Anlauf (neu src/track/anlauf.js, config.anlauf): weiche Bremse (5 m/s²) bis 10 m vor Looping-Einfahrt/Rampe, wenn
+  Vorhersage < Mindesttempo; ausgerollt davor stehen = gleicher Zustand; HUD „Zu langsam! 🐢 / Zurück und Anlauf nehmen –
+  oder R: Anlaufposition" (Spieler 2: T, hud.meldung kann jetzt 2 Zeilen); R/T → Anlaufposition (freie Stelle, 8 m, sonst
+  10 m zurück). Notstopp in looping.einfahrt/schanze.nachSchritt (nie mehr unten durch / auf den Keil). Looping oben:
+  Arcade-Hilfe mit Gas ab 0,9·nötigem Tempo. KI: in der Anlauf-Zone Vollgas bis vMin+10 % (kiHilfe – Gummiband bremste
+  sie sonst unter vMin → Endlosschleife), nach 2 s Stillstand selbst auf Anlaufposition. Schanze-Mindesttempo 14 m/s.
+  Anlauf-Abstände: Loopings 160 m (berechnet: Multivan/Normal braucht 149 m bis 96 km/h), alle Schanzen 150 m (Standard,
+  braucht 43 m). Katalog-Feld `anlauf` überschreibt.
+  Kleber (neu src/world/kleber.js, config.kleber, Schicht 'kleber' nur Fantasie beide Welten): 4 Abschnitte
+  (220–270 L, 470–530 beide, 975–1035 L, 1170–1230 R), Untergrund 'kleber' (grip 0,7, roll 8, vMax 0,6), > 2 s → 5 s
+  festgeklebt (Fäden/Blasen, HUD-Countdown), „Gelöst! 💨" + 2 m/s zur Mitte + 3 s Schonzeit (Streifen = Rand; sonst
+  käme der Multivan/Normal mit Roll 8 nie herunter). main.js: nur Looping/Flug-Block (+1 Zeile Untergrund), Meldungen,
+  Reset-Funktionen. Autorennen.html: anlauf.js, kleber.js.
+  Tests: neu zaun_test.js (38 OK, ~75 s), test_kleber.js; test_looping/test_schanze erweitert (Stopp, rückwärts, R,
+  Vollgas aller 8 Autos × Klassen + Worst Case, Mindest-Anlauf); alle 16 Node-Tests grün, screenshot_test fantasie
+  (Bilder 25/25b/26/27/27b angesehen), rennen_test fantasie, welten_test 97 OK.
+  Schwächen: Fantasie-Pilze/Schilder zwischen Straße und Zaun bleiben durchfahrbar (Deko, keine Zäune); Kleber-Streifen
+  ähnelt den grünen Regenbogen-Randsteinen (glänzt + Tropfen); Schanze von der Seite weiter „durch den Keil".
+- 11.10. Agent A (Fix-A Fahrbarkeit, Opus) – fertig:
+  1. Tempo-Klasse: config.tempoKlassen { normal: vMax ×0,70, Beschl. ×0,85, Bremsen ×0,9 | schnell: Katalog },
+     tempoKlasseStandard 'normal'; Einstellung `tempoKlasse` (standardEinstellungen/einstellungenPruefen), Menü-Zeile
+     „🏎️ Tempo: Normal / Schnell (220–270 km/h)" rechts unter Schaden (Fokus-Reihenfolge …schaden, tempo, start).
+     vehicle.js: new Vehicle(daten, { tempoKlasse }) rechnet die Faktoren einmal in daten ein (vor schaden.datenBasis,
+     Turbo bleibt multiplikativ); ohne Option Vehicle.klasseStandard (null = Katalog; Tests setzen sie). main.js:
+     streckeAufbauen(opt.tempoKlasse) → this.tempoKlasse → fahrzeugHinzufuegen (Spieler + KI gleich). normal = 154–189 km/h.
+  2. Lenkung: config.physik.lenkung { rateVmax 0,52, rateHalb 0,80 rad/s, bezug 1,8, ueberDrift 0,35, ueberBremsen 0,15,
+     einschwingen 9, zurueck 12 }. drehrateMax = min(langsam, max(Haftgrenze, Arcade-Untergrenze × √(Wendigkeit/bezug))).
+     Über der Haftgrenze: Rutschen nach außen + Tempoverlust (Untersteuern). Standard-Auto: vMax 0,35 → 0,52 rad/s
+     (normal 0,44 → 0,52), 50 % vMax 0,56 → 0,80 (normal 0,75 → 0,80); Volleinschlag 2 s bei vMax max. 1,13 rad (Mini).
+  3. Kamera (cameras.js, config.kamera): Abstand 9→12 m, Höhe 3,6→4,6 m, Vorausblick 5→9 m linear mit Tempo/vMax
+     (geglättet), Blick folgt Fahrtrichtung inkl. Drift + Lenk-Vorgriff 0,12 rad, eigene blickWeichheit 7; weit/cockpit
+     analog leicht; fovSplitScreen 70→74.
+  4. frame(): maxSchritteProFrame 3→4, Frame > 80 ms (physik.frameVerwerfenMs) → Rest verworfen; Eingabe wird je
+     physikSchritt aus dem aktuellen Tastenzustand gelesen, frameEnde() danach (geprüft).
+  5. KI driver.js: Mindesttempo-Bereiche vor Schanzen (80 m vorher bis Kante ≥ 27 m/s, gedeckelt auf 100-%-Ideallinie;
+     Katalog-Feld minTempoBereiche optional) – vorher Wald-Schanze 2082 nach Kurve: „leicht" 74 km/h.
+  Tests: test_physik (neue Erwartungen je Klasse, alle Autos, Lenktempo, Lenkhilfe-gegen-Spieler, Fingerabdruck neu),
+  test_rundenzeit + test_ki laufen je Klasse (TEMPO_KLASSE, ohne = beide), neu tests/test_welten_ki.js (4 Strecken ×
+  alle Welten × 7 Stufen × 2 Runden, Absprung ≥ 90 km/h außer Start-Schanze Runde 1, Loopings), neu
+  tests/fahrbarkeit_test.py (Tastatur-Hold, Wiese/Wald, Solo + Split P1 Pfeile / P2 WASD: 100 % auf der Straße),
+  interpolation_test (Toleranz 0,12 + bereinigte Kennzahl, s. u.), menu_test 130 OK, welten_test 97 OK, 17 Node-Tests grün.
+  Rundenzeiten KI mittel (Runde 2): normal Wiese 113,9 / Wald 115,2 / Wüste 113,5 / Fantasie 62,2 s;
+  schnell 108,0 / 112,3 / 103,6 / 59,0 s.
+  Schwächen: Rundenzeit normal nur ~5 % langsamer (Kurven bestimmen sie, Geraden kurz); Verfolger-Kamera hinkt
+  weiterhin ~v/4,5 m nach (exponentielles Nachziehen) – effektiver Abstand bei Tempo größer als 12 m; Tacho-Balken
+  bleibt bei 280 km/h Vollausschlag (normal ~60 %); welten_test-Abschlepp-Prüfung ist lageabhängig (1× rot im
+  Parallel-Lauf: KI im Flug beschädigt bzw. Reset kurz vor Looping, Wiederholung grün); Start-Schanze (Runde 1)
+  aus dem Stand nur 80–96 km/h; interpolation_test: Roh-Kennzahl 0,12–0,13 kommt vom echten Beschleunigen in „normal"
+  (bereinigt 0,001) → Kriterium bereinigt < 0,05.
+- 11.10. Runde 5a abgeschlossen (Fable-Prüfung): Tempo-Klasse Normal (Standard, 154–189 km/h) / Schnell;
+  Lenkung direkter (vMax 0,52 rad/s statt 0,35), Kamera tempoabhängig; Anlauf-Mechanik Looping+Schanze (R/T =
+  Anlaufposition 150–160 m), Zaun dicht (4-Ecken-Bande, Masten fest), Fantasie-Kleberstreifen.
+  17 Node-Tests + zaun_test + menu/welten/rennen grün. → Version v5.

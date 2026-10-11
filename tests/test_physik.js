@@ -1,6 +1,6 @@
 // Node-Test der Fahrphysik: node tests/test_physik.js
 const { ladeModule } = require('./lade');
-const R = ladeModule(['src/config.js', 'src/physics/vehicle.js']);
+const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/cars/carCatalog.js']);
 const dt = R.config.physik.schritt;
 let fehler = 0;
 function pruefe(name, ok, info) { console.log((ok ? 'OK   ' : 'FEHL ') + name + (info ? '  (' + info + ')' : '')); if (!ok) fehler++; }
@@ -53,11 +53,38 @@ function drehrate(vehicle, tempo) {
   pruefe('Drehrate links bei ~20 m/s: 0,7 .. 1,1 rad/s', rate > 0.7 && rate < 1.1, rate.toFixed(2) + ' rad/s');
   pruefe('Links = Heading nimmt zu, x wird negativ', v.x < 0, 'x=' + v.x.toFixed(1));
 }
-// 4b) Bei Höchsttempo deutlich träger (stabil): < 0,45 rad/s und < 50 % der Rate bei 20 m/s
-{
-  const r20 = drehrate(new R.Vehicle({}), 20), rMax = drehrate(new R.Vehicle({}), 240 / 3.6);
-  pruefe('Drehrate bei vMax < 0,45 rad/s und < 50 % von 20 m/s', rMax < 0.45 && rMax < 0.5 * r20,
+// 4b) Runde 5: bei hohem Tempo direkter als Runde 3/4 (dort 0,35 rad/s bei vMax, „deutlich schwieriger"),
+//     aber weiter träger als langsam: je Tempo-Klasse vMax 0,5 .. 0,6 rad/s, 50 % vMax ≥ 0,75 rad/s
+//     (Untergrenze config.physik.lenkung; Runde 2 – „fühlte sich gut an" – hatte ≈ 0,8 bei vMax).
+for (const k of ['normal', 'schnell']) {
+  const vm = new R.Vehicle({}, { tempoKlasse: k }).daten.vMax;
+  const r20 = drehrate(new R.Vehicle({}, { tempoKlasse: k }), 20), rMax = drehrate(new R.Vehicle({}, { tempoKlasse: k }), vm);
+  const rHalb = drehrate(new R.Vehicle({}, { tempoKlasse: k }), vm / 2);
+  pruefe(`[${k}] Drehrate bei vMax (${(vm * 3.6).toFixed(0)} km/h) 0,5 .. 0,6 rad/s und < 65 % von 20 m/s`, rMax >= 0.5 && rMax < 0.6 && rMax < 0.65 * r20,
     rMax.toFixed(2) + ' vs ' + r20.toFixed(2) + ' rad/s');
+  pruefe(`[${k}] Drehrate bei 50 % vMax ≥ 0,75 rad/s`, rHalb >= 0.75, rHalb.toFixed(2) + ' rad/s');
+}
+// 4b') Tempo-Klasse: normal = Katalog × 0,70 / 0,85 / 0,9, schnell = Katalog; ohne Option = Vehicle.klasseStandard (null)
+{
+  const n = new R.Vehicle({ vMax: 70, beschleunigung: 6, bremsen: 20 }, { tempoKlasse: 'normal' });
+  const s = new R.Vehicle({ vMax: 70, beschleunigung: 6, bremsen: 20 }, { tempoKlasse: 'schnell' });
+  const o = new R.Vehicle({ vMax: 70, beschleunigung: 6, bremsen: 20 });
+  pruefe('Tempo-Klasse normal: vMax × 0,7, Beschleunigung × 0,85, Bremsen × 0,9', Math.abs(n.daten.vMax - 49) < 1e-9 &&
+    Math.abs(n.daten.beschleunigung - 5.1) < 1e-9 && Math.abs(n.daten.bremsen - 18) < 1e-9 && n.tempoKlasse === 'normal',
+    (n.daten.vMax * 3.6).toFixed(0) + ' km/h');
+  pruefe('Tempo-Klasse schnell / ohne Option: Katalogwerte', s.daten.vMax === 70 && o.daten.vMax === 70 && o.tempoKlasse === null);
+  const kmh = R.carCatalog.map(a => new R.Vehicle(a.fahrwerte, { tempoKlasse: 'normal' }).daten.vMax * 3.6);
+  pruefe('Tempo-Klasse normal: Katalog 150–190 km/h', Math.min(...kmh) >= 150 && Math.max(...kmh) <= 190,
+    Math.min(...kmh).toFixed(0) + '–' + Math.max(...kmh).toFixed(0) + ' km/h');
+}
+// 4b'') Lenkung spricht schneller an: 90 % des Volleinschlags nach ≤ 0,27 s (einschwingen 9/s), zurück auf < 10 % in ≤ 0,2 s (12/s)
+{
+  const v = new R.Vehicle({}); v.vLaengs = 20;
+  let t = 0;
+  while (v.lenkung < 0.9 && t < 2) { v.schritt(dt, { gas: 1, bremse: 0, lenkung: 1 }); t += dt; }
+  let t2 = 0;
+  while (v.lenkung > 0.1 && t2 < 2) { v.schritt(dt, { gas: 1, bremse: 0, lenkung: 0 }); t2 += dt; }
+  pruefe('Lenkung: 90 % nach ≤ 0,27 s, zurück < 10 % nach ≤ 0,2 s', t <= 0.27 && t2 <= 0.2, t.toFixed(3) + ' s / ' + t2.toFixed(3) + ' s');
 }
 // 4c) Haarnadel (Radius 25 m) mit 65 km/h fahrbar: Volleinschlag ergibt einen Kreis < 25 m
 {
@@ -65,21 +92,24 @@ function drehrate(vehicle, tempo) {
   const tempo = 65 / 3.6, rate = drehrate(v, tempo);
   pruefe('Haarnadel: Kreisradius bei 65 km/h < 25 m', tempo / rate < 25, (tempo / rate).toFixed(1) + ' m');
 }
-// 4d) Volleinschlag bei 200 km/h: sauber untersteuern – Drehrate an der Haftgrenze, kaum Drift,
-//     Tempo sinkt (Reifen radieren), kein Wegdrehen
-{
-  const v = new R.Vehicle({});
-  v.vLaengs = 200 / 3.6;
-  let maxQuer = 0;
-  for (let i = 0; i < 120; i++) { v.schritt(dt, { gas: 1, bremse: 0, lenkung: 1 }); maxQuer = Math.max(maxQuer, Math.abs(v.vQuer)); }
-  const aQuer = v.querBeschleunigungMax(200 / 3.6);
-  pruefe('200 km/h Volleinschlag: Heading-Änderung in 2 s < 1 rad (kein Spin)', Math.abs(v.heading) < 1, v.heading.toFixed(2) + ' rad');
-  pruefe('200 km/h Volleinschlag: Querbeschleunigung ≤ Haftgrenze, Drift < 1 m/s', maxQuer < 1 && aQuer < 30,
-    'aQuer ' + aQuer.toFixed(1) + ' m/s², Drift ' + maxQuer.toFixed(2) + ' m/s');
-  const g = new R.Vehicle({}); g.vLaengs = 200 / 3.6;
-  for (let i = 0; i < 120; i++) g.schritt(dt, gerade);
-  pruefe('200 km/h Volleinschlag: Reifen radieren (≥ 1 m/s langsamer als geradeaus)', v.vLaengs < g.vLaengs - 1,
-    (v.vLaengs * 3.6).toFixed(0) + ' vs ' + (g.vLaengs * 3.6).toFixed(0) + ' km/h');
+// 4d) Runde 5: Volleinschlag bei vMax, JEDES Katalog-Auto × beide Tempo-Klassen: kein Spin (Heading-Änderung in 2 s
+//     < 1,3 rad), Drift < 1,5 m/s; über der Haftgrenze spürbar untersteuern: Drift > 0,1 m/s nach außen und
+//     Tempoverlust gegenüber geradeaus (≥ 0,3 m/s beim trägsten Auto, Bus in „normal"; Sportwagen deutlich mehr) (vorher: Drehrate exakt an der Haftgrenze, < 1 rad, kaum Drift)
+for (const k of ['normal', 'schnell']) {
+  let schlimmsterH = 0, schlimmsterD = 0, minDrift = Infinity, minVerlust = Infinity, wer = '';
+  for (const a of R.carCatalog) {
+    const v = new R.Vehicle(a.fahrwerte, { tempoKlasse: k }), g = new R.Vehicle(a.fahrwerte, { tempoKlasse: k });
+    v.vLaengs = g.vLaengs = v.daten.vMax;
+    let maxQuer = 0;
+    for (let i = 0; i < 120; i++) { v.schritt(dt, { gas: 1, bremse: 0, lenkung: 1 }); g.schritt(dt, gerade); maxQuer = Math.max(maxQuer, Math.abs(v.vQuer)); }
+    if (Math.abs(v.heading) > schlimmsterH) { schlimmsterH = Math.abs(v.heading); wer = a.id; }
+    schlimmsterD = Math.max(schlimmsterD, maxQuer); minDrift = Math.min(minDrift, maxQuer);
+    minVerlust = Math.min(minVerlust, g.vLaengs - v.vLaengs);
+  }
+  pruefe(`[${k}] vMax Volleinschlag (alle Autos): Heading in 2 s < 1,3 rad, Drift < 1,5 m/s`, schlimmsterH < 1.3 && schlimmsterD < 1.5,
+    'max ' + schlimmsterH.toFixed(2) + ' rad (' + wer + '), Drift max ' + schlimmsterD.toFixed(2) + ' m/s');
+  pruefe(`[${k}] vMax Volleinschlag: untersteuert spürbar (Drift > 0,1 m/s, ≥ 0,3 m/s langsamer als geradeaus)`, minDrift > 0.1 && minVerlust >= 0.3,
+    'Drift min ' + minDrift.toFixed(2) + ' m/s, Tempoverlust min ' + minVerlust.toFixed(1) + ' m/s');
 }
 // 5) Im Stand kein Drehen
 {
@@ -162,6 +192,20 @@ function drehrate(vehicle, tempo) {
   pruefe('vMax + Lenkimpuls 0,3 s: Heading-Änderung < 0,6 rad', maxH < 0.6, maxH.toFixed(3) + ' rad');
   pruefe('vMax + Lenkimpuls: Drift klingt in < 2 s ab', driftEnde !== null && driftEnde < 2, driftEnde === null ? 'nie' : driftEnde.toFixed(2) + ' s');
 }
+// 13b) Runde 5: Lenkhilfe 'wenig' arbeitet nicht gegen den Spieler: Spieler lenkt 1 s nach links (Überholen) bei
+//      Tempo-Klasse normal / 120 km/h – mit Hilfe (auf 30 % reduziert) mindestens 80 % des Versatzes ohne Hilfe
+{
+  const versatz = (staerke) => {
+    const v = new R.Vehicle({}, { tempoKlasse: 'normal' });
+    v.setzen(0, 0, 0); v.vLaengs = 120 / 3.6;
+    const hilfe = { lenkhilfe: staerke, bremshilfe: 0, tangente: { tx: 0, tz: -1 }, zieltempo: 0 };
+    for (let i = 0; i < 60; i++) { hilfe.seitenabstand = v.x; v.schritt(dt, { gas: 1, bremse: 0, lenkung: -0.6 }, hilfe); }
+    return -v.x;
+  };
+  const ohne = versatz(0), mit = versatz(R.config.fahrhilfen.wenig.lenkhilfe);
+  pruefe('Lenkhilfe wenig (normal): Spielerlenkung wirkt ≥ 80 % (Hilfe auf 30 % reduziert)', mit >= 0.8 * ohne && ohne > 1,
+    mit.toFixed(2) + ' m vs ' + ohne.toFixed(2) + ' m ohne Hilfe');
+}
 // 13) Lenkhilfe "viel" und "wenig" bei 250 km/h, 2 m neben der Mitte, Spieler lenkt nicht:
 //     zieht zur Mitte, ohne aufzuschaukeln (höchstens 1 Nulldurchgang, Überschwingen < 0,5 m)
 for (const [name, staerke] of [['viel', 0.7], ['wenig', 0.3]]) {
@@ -182,6 +226,8 @@ for (const [name, staerke] of [['viel', 0.7], ['wenig', 0.3]]) {
 // ---------------- Runde 4: Umwelt (Wetter/Wind) – optionales 4. Argument von schritt() ----------------
 // 14) Ohne umwelt identisch wie vor Runde 4: Fingerabdruck einer festen Fahrt (Gas/Bremse/Lenkung/Gras/Fahrhilfe),
 //     aufgenommen mit vehicle.js VOR dem Einbau (11.10.2026). Ändert sich config.physik, muss er neu erzeugt werden.
+//     Runde 5 (11.10.2026): neu erzeugt nach Lenkgefühl-Änderung (Drehrate/Lenktempo/Untersteuern) – nur der
+//     Vergleich ohne/neutral umwelt ist die eigentliche Aussage.
 function fingerabdruck(umwelt) {
   const v = new R.Vehicle({ grip: 0.8 });
   for (let i = 0; i < 1500; i++) {
@@ -193,7 +239,7 @@ function fingerabdruck(umwelt) {
   return [v.x, v.z, v.heading, v.vLaengs, v.vQuer].map(x => x.toPrecision(17)).join(',');
 }
 {
-  const VORHER = '62.449828835206183,-3.0875188764072736,-1.6375436679295485,1.9191817441917385,0.0000000000000000';
+  const VORHER = '63.569917157452885,-4.4506437793157909,-1.6991742455600745,2.4872273895626793,0.0000000000000000';   // Runde 5 neu
   const ohne = fingerabdruck('ohne');
   pruefe('Ohne umwelt: bitgenau wie vor Runde 4', ohne === VORHER, ohne === VORHER ? '' : ohne);
   pruefe('umwelt undefined / neutral {1,1,Wind 0}: identisch', fingerabdruck(undefined) === ohne &&

@@ -10,15 +10,34 @@
 //    dazu die Stunt-Welt (enge/breite Spuren): im Ziel, abseits < 3 %, kein Reset, an engen Stellen auf der Fahrbahn.
 // b) "Perfekte Fahrt": Mittellinien-Fahrer (Pure-Pursuit-Lenkung) mit Ideallinien-Tempo 100 %
 //    (Driver.tempoProfil, gleiches Auto, ohne Bonus) – Referenz, bleibt auf Straße + Randstreifen.
+// Runde 5: ohne TEMPO_KLASSE läuft der Test für beide Tempo-Klassen (normal, schnell) als eigene Prozesse.
+if (!process.env.TEMPO_KLASSE) {
+  const { spawnSync } = require('child_process');
+  let rc = 0;
+  for (const k of ['normal', 'schnell']) {
+    console.log('\n##### Tempo-Klasse ' + k + ' #####');
+    const r = spawnSync(process.execPath, [__filename].concat(process.argv.slice(2)),
+      { stdio: 'inherit', env: Object.assign({}, process.env, { TEMPO_KLASSE: k }) });
+    rc = rc || r.status;
+  }
+  console.log(rc ? '\nFEHLER in mindestens einer Tempo-Klasse' : '\nBEIDE TEMPO-KLASSEN OK');
+  process.exit(rc);
+  return;
+}
+const KLASSE = process.env.TEMPO_KLASSE;
 const { ladeModule } = require('./lade');
 const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/track/spline.js',
   'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/looping.js', 'src/race/raceManager.js', 'src/physics/collisions.js', 'src/ai/driver.js']);
+R.Vehicle.klasseStandard = KLASSE;   // Runde 5: alle new R.Vehicle({}) dieses Laufs in dieser Tempo-Klasse
 // Loopings (Fantasie): Fahrzeugschritt über Looping.fahrzeugSchritt (wie main.js, ohne Fahrhilfe)
 const LP = R.Looping;
 // Erwartungen je Strecke (Spanne leicht – unschlagbar je Runde); Fantasie ist kurz (1,4 km)
 const SPANNE = { fantasie: 12 };
 // Runde 4: Rundenzeit KI „mittel" (Runde 2) je Strecke
-const MITTEL = { wiese: [100, 130], wald: [100, 130], wueste: [100, 130], fantasie: [50, 70] };
+// Runde 5: je Tempo-Klasse – normal (vMax × 0,7) Ziel 110–140 s (2-Minuten-Vorgabe), schnell wie Runde 4
+const MITTEL = KLASSE === 'normal'
+  ? { wiese: [110, 140], wald: [110, 140], wueste: [110, 140], fantasie: [55, 75] }
+  : { wiese: [100, 130], wald: [100, 130], wueste: [100, 130], fantasie: [50, 70] };
 
 const dt = R.config.physik.schritt;
 const nurId = process.argv[2];
@@ -144,7 +163,7 @@ for (const daten of R.trackCatalog) {
   tabelle.push(zeile);
   }
 }
-console.log('\nRunde 2 (fliegend), Standard-Auto 240 km/h');
+console.log('\nRunde 2 (fliegend), Standard-Auto 240 km/h, Tempo-Klasse ' + KLASSE + ' (vMax ' + (new R.Vehicle({}).daten.vMax * 3.6).toFixed(0) + ' km/h)');
 console.log('Strecke        Länge  ' + STUFEN.map((s) => s.slice(0, 7).padStart(8)).join('') + '  perfekt');
 tabelle.forEach((z) => console.log(z.id.padEnd(14), (z.laenge.toFixed(0) + ' m').padEnd(6),
   STUFEN.concat(['perfekt']).map((s) => fmt(z[s]).padStart(8)).join('')));

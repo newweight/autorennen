@@ -4,9 +4,11 @@
 //    hoeheAuf(s); Rampe nur von vorne auf der Fahrbahn; imFlug während des Flugs.
 // b) KI: alle 7 Stufen fahren 1 Runde Wiese/Wald/Wüste (Welt „Stunt"), fliegen über JEDE Schanze und landen auf der Straße.
 // c) Welten: Schanzen nur in Stunt/Verrückt.
+// d) Runde 5 (Anlauf, track/anlauf.js): unter config.anlauf.schanzeMin kein Auffahren (Notstopp bzw. sanfte Anlauf-Bremse
+//    10 m davor), rückwärts löst, R → Anlaufposition, Vollgas von dort → fliegt (jedes Auto × Klasse, alle Schanzen).
 const { ladeModule } = require('./lade');
-const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/track/spline.js', 'src/track/trackCatalog.js',
-  'src/track/trackBuilder.js', 'src/track/schanze.js', 'src/race/raceManager.js', 'src/physics/collisions.js', 'src/ai/driver.js']);
+const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/cars/carCatalog.js', 'src/track/spline.js', 'src/track/trackCatalog.js',
+  'src/track/trackBuilder.js', 'src/track/schanze.js', 'src/track/anlauf.js', 'src/race/raceManager.js', 'src/physics/collisions.js', 'src/ai/driver.js']);
 
 let fehler = 0;
 function pruefe(name, ok, info) { console.log((ok ? 'OK   ' : 'FEHL ') + name + (info ? '  (' + info + ')' : '')); if (!ok) fehler++; }
@@ -70,12 +72,18 @@ function fahren(strecke, a, steuerung, n, halten) {
   pruefe('Danach normal weiter (Nicken klingt ab, auf dem Boden)', nach.every(x => !x.luft && Math.abs(x.y - x.boden) < 1e-9) && Math.abs(nach[nach.length - 1].nick) < 0.005);
 }
 
-// ---------- 10 m/s: kurzer Hüpfer ----------
+// ---------- 15 m/s (knapp über dem Mindesttempo): kurzer Hüpfer; 10 m/s: Notstopp (Runde 5) ----------
 {
-  const a = aufstellen(wiese, sch12, 10, 1);
-  const vl = fahren(wiese, a, { gas: 0 }, 600, 10);
-  pruefe('10 m/s / 12°: kurzer Hüpfer (< 1 s, < 12 m), sauber', vl[vl.length - 1].e === 'landung' && a.fz.letzteFlugzeit < 1 && a.fz.letzteWeite < 12,
+  const a = aufstellen(wiese, sch12, 15, 1);
+  const vl = fahren(wiese, a, { gas: 0 }, 600, 15);
+  pruefe('15 m/s / 12°: kurzer Hüpfer (< 1,2 s, < 18 m), sauber', vl[vl.length - 1].e === 'landung' && a.fz.letzteFlugzeit < 1.2 && a.fz.letzteWeite < 18,
     a.fz.letzteFlugzeit.toFixed(2) + ' s, ' + a.fz.letzteWeite.toFixed(1) + ' m, sprung-Meldung ' + vl.some(x => x.e === 'sprung'));
+  const b = aufstellen(wiese, sch12, 10, 1);
+  const vb = fahren(wiese, b, { gas: 0 }, 120, undefined);
+  const nb = sp.naechster(b.v.x, b.v.z);
+  pruefe('10 m/s (unter schanzeMin, ohne Anlauf-Bremse): kein Auffahren, Notstopp vor der Rampe', vb.some(x => x.e === 'zuLangsam') &&
+    b.fz.fluege === 0 && vb.every(x => !x.rampe && !x.luft) && sp.differenzS(nb.s, sch12.s) < 0 && b.v.vLaengs === 0,
+    'steht ' + (-sp.differenzS(nb.s, sch12.s)).toFixed(2) + ' m vor der Rampe');
 }
 // ---------- 8°-Schanze 30 m/s ----------
 {
@@ -159,6 +167,67 @@ function fahren(strecke, a, steuerung, n, halten) {
   });
 });
 
+// ---------- Runde 5: Anlauf-Bremse, Anlaufposition, Vollgas von dort ----------
+{
+  const AN = R.Anlauf, CA = R.config.anlauf, klassen = Object.keys(R.config.tempoKlassen || { schnell: 1 });
+  /** Spurhalter (Tangente + Mitte). */
+  const spur = (st, v, gas) => {
+    const n = st.spline.naechster(v.x, v.z), p = st.spline.punktBei(n.s + 4);
+    const fehler = R.Vehicle.winkelDiff(v.heading, R.headingAus(p.tx, p.tz));
+    return { gas, bremse: 0, lenkung: Math.max(-1, Math.min(1, fehler * 2.5 - n.seitenabstand * 0.08)) };
+  };
+  ['wiese', 'wald', 'wueste'].forEach((id) => {
+    const st = new R.Strecke(katalog(id), { welt: 'stunt' }), stl = AN.stellen(st), ssp = st.spline;
+    pruefe(`${id}: Anlauf-Stellen = Schanzen`, stl.length === S.liste(st).length && stl.every(x => x.art === 'schanze'),
+      stl.map(x => 's=' + x.s.toFixed(0) + ' ' + x.abstand + ' m (' + x.quelle + ')').join(' | '));
+    stl.forEach((sx, nr) => {
+      // a) 50 m davor mit 10 m/s ohne Gas → sanfter Stopp 10 m davor
+      {
+        const p = ssp.punktBei(sx.s - 50), v = new R.Vehicle({});
+        v.setzen(p.x, p.z, R.headingAus(p.tx, p.tz)); v.vLaengs = 10;
+        const az = AN.zustand(), fz = S.zustand(); let index = -1, ev = [], maxV = 0, vAlt = 10;
+        for (let k = 0; k < 60 * 8; k++) {
+          const r = S.fahrzeugSchritt(fz, v, st, spur(st, v, 0), dt, index, undefined, az); index = r.index; if (r.ereignis) ev.push(r.ereignis);
+          if (az.bremst && vAlt > 1.5) maxV = Math.max(maxV, (vAlt - v.vLaengs) / dt); vAlt = v.vLaengs;
+        }
+        const d = ssp.differenzS(sx.s, ssp.naechster(v.x, v.z).s);
+        // (je nach Rollwiderstand bremst die Anlauf-Bremse auf 10 m, oder das Auto rollt vorher von selbst aus → gleicher Zustand)
+        pruefe(`${id} Schanze ${nr + 1}: 10 m/s → Stopp ${CA.stopp}–${CA.stopp + 5} m davor, kein Flug, R-Zustand`, (ev[0] === 'zuLangsam' || ev[0] === 'gestoppt') &&
+          fz.fluege === 0 && d > CA.stopp - 0.6 && d < CA.stopp + 5 && v.vLaengs === 0 && maxV <= CA.bremsVerz + 0.6 && AN.aktiv(az),
+          d.toFixed(2) + ' m, ' + maxV.toFixed(1) + ' m/s², ' + ev.join(','));
+        // rückwärts, dann R → Anlaufposition
+        for (let k = 0; k < 120; k++) { const r = S.fahrzeugSchritt(fz, v, st, Object.assign(spur(st, v, 0), { lenkung: 0, bremse: 1 }), dt, index, undefined, az); index = r.index; }
+        const dz = ssp.differenzS(sx.s, ssp.naechster(v.x, v.z).s);
+        const pose = AN.zurAnlaufposition(az, v, st, []);
+        const nP = ssp.naechster(pose.x, pose.z);
+        pruefe(`${id} Schanze ${nr + 1}: rückwärts möglich, R → Anlaufposition ${sx.abstand} m davor`, dz > CA.stopp + 3 &&
+          Math.abs(ssp.differenzS(sx.s, nP.s) - sx.abstand) < 0.6 && v.vLaengs === 0, 'rückwärts bis ' + dz.toFixed(1) + ' m, dann ' + ssp.differenzS(sx.s, nP.s).toFixed(1) + ' m');
+      }
+      // b) Von der Anlaufposition Vollgas (Spurhalter): alle Autos × Klassen fliegen, Absprung ≥ schanzeMin + 10 %
+      {
+        const pose = AN.position(st, sx, [], null);
+        let alle = 0, ok = 0, minV = Infinity, wer = '', schlecht = [];
+        R.carCatalog.forEach((auto) => klassen.concat(['worst']).forEach((k) => {
+          const v = new R.Vehicle(auto.fahrwerte, { tempoKlasse: k === 'worst' ? null : k });
+          if (k === 'worst') { v.daten.vMax = auto.fahrwerte.vMax * 0.7; v.daten.beschleunigung = auto.fahrwerte.beschleunigung * 0.85; }
+          v.setzen(pose.x, pose.z, pose.heading);
+          const az = AN.zustand(), fz = S.zustand(); let index = -1, vAb = null;
+          for (let i = 0; i < 60 * 20 && fz.landungen === 0; i++) {
+            const r = S.fahrzeugSchritt(fz, v, st, spur(st, v, 1), dt, index, undefined, az); index = r.index;
+            if (r.ereignis === 'abflug' && vAb === null) vAb = v.vLaengs;
+          }
+          alle++;
+          const gut = fz.fluege >= 1 && az.eingriffe === 0 && vAb >= sx.vMin * (1 + CA.reserve);
+          if (gut) ok++; else schlecht.push(auto.id + '/' + k + ' ' + (vAb ? (vAb * 3.6).toFixed(0) + ' km/h' : 'kein Flug, Eingriffe ' + az.eingriffe));
+          if (vAb !== null && vAb < minV) { minV = vAb; wer = auto.id + '/' + k; }
+        }));
+        pruefe(`${id} Schanze ${nr + 1}: von der Anlaufposition mit Vollgas fliegen alle (${alle} Läufe)`, ok === alle,
+          `langsamster Absprung ${(minV * 3.6).toFixed(0)} km/h (${wer})` + (schlecht.length ? ' | FEHL: ' + schlecht.join('; ') : ''));
+      }
+    });
+  });
+}
+
 // ---------- KI: alle 7 Stufen, 1 Runde, jede Schanze geflogen und auf der Straße gelandet ----------
 const STUFEN = Object.keys(R.config.schwierigkeiten).sort((x, y) => R.config.schwierigkeiten[x].rang - R.config.schwierigkeiten[y].rang);
 ['wiese', 'wald', 'wueste'].forEach((id) => {
@@ -169,18 +238,18 @@ const STUFEN = Object.keys(R.config.schwierigkeiten).sort((x, y) => R.config.sch
     v.setzen(start.x, start.z, start.heading);
     const rennen = new R.RaceManager(strecke, [{ vehicle: v, name: 'KI', istSpieler: false }], { runden: 1, countdown: 0 });
     const d = new R.Driver(v, strecke, { schwierigkeit: stufe, seed: 11, name: 'KI' });
-    const t = rennen.teilnehmer[0], fz = S.zustand();
+    const t = rennen.teilnehmer[0], fz = S.zustand(), az = R.Anlauf.zustand();
     let index = -1, vMin = Infinity, vMaxAb = 0;
     for (let k = 0; k < 60 * 240 && !t.imZiel; k++) {
       const s = d.steuerung(dt, { andere: [], spielerFortschrittMax: null, eigenerFortschritt: t.fortschritt, laeuft: true });
       if (d.brauchtReset) break;
-      const r = S.fahrzeugSchritt(fz, v, strecke, s, dt, index);
+      const r = S.fahrzeugSchritt(fz, v, strecke, s, dt, index, undefined, az);
       index = r.index;
       if (r.ereignis === 'abflug') { vMin = Math.min(vMin, v.vLaengs); vMaxAb = Math.max(vMaxAb, v.vLaengs); }
       rennen.schritt(dt);
     }
     pruefe(`KI ${id} ${stufe}: Runde fertig, ${n}/${n} Schanzen geflogen, alle sauber auf der Straße`,
-      t.imZiel && fz.fluege === n && fz.landungen === n && fz.schraeg === 0 && fz.abseits === 0,
+      t.imZiel && fz.fluege === n && fz.landungen === n && fz.schraeg === 0 && fz.abseits === 0 && az.eingriffe === 0,
       `${t.rundenzeiten.map(z => z.toFixed(1)).join('/')} s | Flüge ${fz.fluege}, schräg ${fz.schraeg}, abseits ${fz.abseits} | ` +
       `Absprung ${(vMin * 3.6).toFixed(0)}–${(vMaxAb * 3.6).toFixed(0)} km/h | max. Flug ${fz.maxFlugzeit.toFixed(2)} s`);
   });

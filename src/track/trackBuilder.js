@@ -35,10 +35,11 @@
   const SPUR_UEBERGANG = 40;             // m weicher Übergang vor s0 und nach s1
   const BODEN_HALB = 800, BODEN_SICHT = 450;   // Bodenplatte mind. ±800 m, sonst Strecke + 450 m Rand
   // Alle Schichten einer Welt (Katalog welten[name] = { schicht: bool })
-  const SCHICHTEN = ['hindernisse', 'wracks', 'strohballen', 'spuren', 'schanzen', 'baelle', 'wasserstrahlen', 'boost', 'schild', 'loopings'];
+  const SCHICHTEN = ['hindernisse', 'wracks', 'strohballen', 'spuren', 'schanzen', 'baelle', 'wasserstrahlen', 'boost', 'schild', 'loopings', 'kleber'];
   // Katalogfeld je Schicht (Liste der Einträge)
   const SCHICHT_FELD = { hindernisse: 'hindernisse', wracks: 'wracks', strohballen: 'strohballen', spuren: 'spuren',
-    schanzen: 'schanzen', baelle: 'baelle', wasserstrahlen: 'wasserstrahlen', boost: 'boostFelder', schild: 'schilde', loopings: 'loopings' };
+    schanzen: 'schanzen', baelle: 'baelle', wasserstrahlen: 'wasserstrahlen', boost: 'boostFelder', schild: 'schilde', loopings: 'loopings',
+    kleber: 'kleber' };
 
   /** Weicher Übergang 0 → 1 zwischen a und b. */
   function glatt(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
@@ -132,8 +133,20 @@
       this.schanzen = kopie(sicht.schanzen);        // [{ s, winkel: 8 | 12, laenge }]
       this.boostFelder = kopie(sicht.boostFelder);  // [{ s, seitenabstand, laenge }]
       this.schilde = kopie(sicht.schilde);          // [{ s, seitenabstand }]
+      // Runde 5: Klebe-Seitenstreifen (Fantasie): [{ s0, s1, seite: -1 | 1 | 0 (beide) }] → Untergrund 'kleber' auf dem Rand
+      this.kleber = (sicht.kleber || []).map(e => ({ s0: this.spline.wrapS(e.s0), s1: this.spline.wrapS(e.s1), seite: e.seite || 0 }));
       this.checkpoints = this._checkpointsBerechnen(daten.checkpointAbstand || 120);
       this.idealLinie = this._idealLinieBerechnen();
+      // Runde 5: feste Säulen für die Bande (collisions.js): Startbogen-Masten + Looping-Beine
+      const pS = this.spline.punktBei(0), weite = this.breite / 2 + this.randBreite + 1.2;
+      this.saeulen = [-1, 1].map(sg => ({ x: pS.x + pS.nx * weite * sg, z: pS.z + pS.nz * weite * sg, r: 0.35, art: 'startbogen' }));
+      if (this.loopings.length && R.Looping && R.Looping.beine) this.saeulen = this.saeulen.concat(R.Looping.beine(this));
+    }
+
+    /** Runde 5: Klebestreifen an Bogenlänge s auf der Seite sg (−1 links, 1 rechts) oder null. */
+    kleberBei(s, sg) {
+      for (const k of this.kleber) if ((k.seite === 0 || k.seite === sg) && this._inBereich(k, s)) return k;
+      return null;
     }
 
     // ---------------------------------------------------------- Abfragen
@@ -296,7 +309,7 @@
         }
         return 'strasse';
       }
-      if (a <= b2 + this.randBreite) return 'rand';
+      if (a <= b2 + this.randBreite) return (s !== undefined && this.kleber.length && this.kleberBei(s, seitenabstand > 0 ? 1 : -1)) ? 'kleber' : 'rand';
       // Holzsteg: bis zum Geländer fährt man auf Brettern (wie Randstreifen)
       if (s !== undefined && this._aufBruecke(s) && a <= this.seitenabstandMax) return 'rand';
       return this.abseitsUntergrund;
@@ -497,6 +510,8 @@
       // Runde 4 (W2-D): Sprungschanzen und Turbo-Felder (nur wenn die Welt sie einschaltet)
       if (this.aktiveSchichten.schanzen && this.schanzen.length) gruppe.add(this.schanzenBauen(thema));
       if (this.aktiveSchichten.boost && this.boostFelder.length) gruppe.add(this.boostBauen());
+      // Runde 5: Klebe-Seitenstreifen (Fantasie), Grafik in world/kleber.js
+      if (this.kleber.length && R.Kleber && R.Kleber.bauen) gruppe.add(R.Kleber.bauen(this));
       return gruppe;
     }
 
@@ -755,7 +770,9 @@
         const g = this.grenzeBei(p.s), q = g * seite;     // vor Brücken/Tunneln trichterförmig enger
         const x = p.x + p.nx * q, z = p.z + p.nz * q;
         const n = sp.naechster(x, z);
-        const ok = n.abstand >= g - 1.0;
+        // Runde 5: nur, wenn der Punkt wirklich zu SEINEM Streckenstück gehört (dort hält die Bande genau hier);
+        // vorher reichte „Abstand ≥ g − 1 m" → bis zu 1 m Zaun, hinter dem ein anderes Stück näher lag (keine Bande)
+        const ok = n.abstand >= g - 0.05 && Math.abs(sp.differenzS(n.s, p.s)) < 6;
         return { x, z, y: this.hoeheAn(x, z), ok, s: p.s };
       });
     }

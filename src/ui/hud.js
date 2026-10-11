@@ -209,6 +209,10 @@
       const m = this.eMeldung;
       if (!m) return;
       clearTimeout(this.meldungTimer);
+      // Runde 5: lange Meldungen (mit Zeilenumbruch \n, z. B. Anlauf-Hinweis) umbrechen + kleiner, passt auch im Split-Screen
+      const lang = String(text).indexOf('\n') >= 0;
+      Object.assign(m.style, lang ? { whiteSpace: 'pre-line', width: '86%', boxSizing: 'border-box', textAlign: 'center', fontSize: '1.55em', lineHeight: '1.25' }
+        : { whiteSpace: 'nowrap', width: '', textAlign: '', fontSize: '2.3em', lineHeight: '' });
       m.textContent = text;
       m.style.opacity = '1'; m.style.transform = 'translateX(-50%) scale(1)';
       this.meldungText = text;

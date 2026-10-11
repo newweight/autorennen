@@ -15,6 +15,8 @@
 //   Landung: y ≤ hoeheAn(x, z) → Tempo × 0,95 (sauber) bzw. × 0,8 (Heading ≠ Tangente > 25° oder abseits),
 //          kurzer Nick-Impuls (Bug runter), Ereignis für Kamerawackeln/HUD.
 //   Ereignisse: 'abflug' | 'sprung' (Flugzeit > 0,8 s → HUD „Sprung! ✈️") | 'landung' | 'landungSchraeg'.
+//   Runde 5: unter config.anlauf.schanzeMin kein Auffahren mehr ('zuLangsam', Notstopp vor der Rampe);
+//   die weiche Anlauf-Bremse davor macht track/anlauf.js.
 // Der RaceManager-Fortschritt läuft normal weiter (x/z bewegen sich im Flug weiter).
 // Pose: vehicle.y = Schanzen.hoehe(f.flug, vehicle, strecke) (Rampe/Flug/Boden), Nicken zusätzlich
 // anzeigeNicken(f.flug, alpha); im Flug ersetzt es die Straßensteigung (inLuft()).
@@ -111,11 +113,23 @@
           const aA = sp.differenzS(sAlt, S.s);
           if (aA <= 0.05 && aN >= 0 && aN <= S.laenge && Math.abs(q) <= halb && vehicle.vLaengs > 0) {
             const r = vehicle.richtung();
-            if (r.x * pt.tx + r.z * pt.tz > 0.5) { neu = S; a = aN; }
+            if (r.x * pt.tx + r.z * pt.tz > 0.5) {
+              // Runde 5: zu langsam → nicht auf die Rampe (sonst bleibt es auf dem Keil hängen): Notstopp davor.
+              // Normalerweise hat die Anlauf-Bremse (track/anlauf.js) das Auto schon 10 m davor angehalten.
+              const vMin = (R.config.anlauf && R.config.anlauf.schanzeMin) || 0;
+              if (vehicle.vLaengs < vMin) {
+                const pz = sp.punktBei(S.s - 0.5);
+                vehicle.x = pz.x + pz.nx * q; vehicle.z = pz.z + pz.nz * q; vehicle.vLaengs = 0; vehicle.vQuer = 0;
+                fz.zuLangsam = (fz.zuLangsam || 0) + 1;
+                ereignis = 'zuLangsam';
+                continue;
+              }
+              neu = S; a = aN;
+            }
           }
         }
       }
-      if (ereignis) return ereignis;
+      if (ereignis && ereignis !== 'zuLangsam') return ereignis;
       fz.rampe = neu; fz.rampenH = neu ? a * neu.tan : 0;
       if (neu) {
         ziel = neu.winkel;
@@ -201,7 +215,7 @@
    * Kompletter Fahrzeugschritt wie in main.js (für Node-Tests und Simulationen): im Flug flugSchritt,
    * sonst vehicle.schritt + nachSchritt; setzt vehicle.y. Liefert { ereignis, index, untergrund }.
    */
-  function fahrzeugSchritt(fz, vehicle, strecke, steuerung, dt, index, umwelt) {
+  function fahrzeugSchritt(fz, vehicle, strecke, steuerung, dt, index, umwelt, anlauf) {
     if (fz.aktiv) {
       const e = flugSchritt(fz, vehicle, strecke, steuerung, dt);
       const n = strecke.abfrage(vehicle.x, vehicle.z, index);
@@ -212,7 +226,9 @@
     vehicle.untergrund = n.untergrund;
     const xAlt = vehicle.x, zAlt = vehicle.z;
     vehicle.schritt(dt, steuerung, undefined, umwelt);
-    const e = nachSchritt(fz, vehicle, strecke, n, xAlt, zAlt, dt);
+    // Runde 5: Anlauf-Bremse (track/anlauf.js) vor der Rampe, wie in main.js (anlauf = Anlauf.zustand(), optional)
+    const ea = anlauf && R.Anlauf ? R.Anlauf.nachSchritt(anlauf, vehicle, strecke, n, xAlt, zAlt, steuerung, dt) : null;
+    const e = nachSchritt(fz, vehicle, strecke, n, xAlt, zAlt, dt) || ea;
     vehicle.y = hoehe(fz, vehicle, strecke);
     return { ereignis: e, index: n.index, untergrund: n.untergrund };
   }

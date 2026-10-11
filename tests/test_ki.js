@@ -1,8 +1,24 @@
 // Node-Test KI-Fahrer (Abschnitt 5): node tests/test_ki.js
 // Reine Mathematik, Schrittweite 1/60, ohne Kollisionsphysik.
+// Runde 5: ohne TEMPO_KLASSE läuft der Test für beide Tempo-Klassen (normal, schnell) als eigene Prozesse.
+if (!process.env.TEMPO_KLASSE) {
+  const { spawnSync } = require('child_process');
+  let rc = 0;
+  for (const k of ['normal', 'schnell']) {
+    console.log('\n##### Tempo-Klasse ' + k + ' #####');
+    const r = spawnSync(process.execPath, [__filename].concat(process.argv.slice(2)),
+      { stdio: 'inherit', env: Object.assign({}, process.env, { TEMPO_KLASSE: k }) });
+    rc = rc || r.status;
+  }
+  console.log(rc ? '\nFEHLER in mindestens einer Tempo-Klasse' : '\nBEIDE TEMPO-KLASSEN OK');
+  process.exit(rc);
+  return;
+}
+const KLASSE = process.env.TEMPO_KLASSE;
 const { ladeModule } = require('./lade');
 const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/track/spline.js',
   'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/looping.js', 'src/race/raceManager.js', 'src/physics/collisions.js', 'src/ai/driver.js']);
+R.Vehicle.klasseStandard = KLASSE;   // Runde 5: alle new R.Vehicle({}) dieses Laufs in dieser Tempo-Klasse
 
 let fehler = 0;
 function pruefe(name, ok, info) { console.log((ok ? 'OK   ' : 'FEHL ') + name + (info ? '  (' + info + ')' : '')); if (!ok) fehler++; }

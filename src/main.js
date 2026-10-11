@@ -21,6 +21,8 @@
       schwierigkeit: c.schwierigkeitStandard, fahrhilfe: [c.fahrhilfeStandard, c.fahrhilfeStandard],
       // Runde 4: Welt je Strecke ('' = Standard der Strecke), Jahreszeit/Wetter/Wind, Schaden (Standard = wie bisher)
       welt: '', jahreszeit: 'sommer', wetter: 'klar', windStaerke: 0, windRichtung: 'zufall', schaden: false,
+      // Runde 5: Tempo-Klasse 'normal' (≈ 155–190 km/h) | 'schnell' (Katalog 220–270 km/h), Spieler und KI gleich
+      tempoKlasse: c.tempoKlasseStandard || 'normal',
     };
   }
 
@@ -48,6 +50,7 @@
       windStaerke: r.windStaerke === 'zufall' ? 'zufall' : zahl(r.windStaerke, 0, 5, 0),
       windRichtung: Number.isFinite(+r.windRichtung) && r.windRichtung !== '' && r.windRichtung !== null ? +r.windRichtung : 'zufall',
       schaden: r.schaden === true,
+      tempoKlasse: c.tempoKlassen && c.tempoKlassen[r.tempoKlasse] ? r.tempoKlasse : std.tempoKlasse,
     };
   }
 
@@ -340,7 +343,7 @@
       this.pausiert = false;
       this.streckeAufbauen(e.streckeId, {
         spieler: zwei ? 2 : 1, autoIds: e.autoIds, fahrer: e.fahrer, gegner: e.gegner, runden: e.runden,
-        schwierigkeit: e.schwierigkeit, fahrhilfe: e.fahrhilfe, schaden: e.schaden === true,
+        schwierigkeit: e.schwierigkeit, fahrhilfe: e.fahrhilfe, schaden: e.schaden === true, tempoKlasse: e.tempoKlasse,
       });
       for (let i = 0; i < (zwei ? 2 : 1); i++) this.kameraHinzufuegen(this.fahrzeuge[i]);
       const split = zwei;
@@ -404,7 +407,9 @@
       const opt = Object.assign({
         gegner: 3, runden: R.config.rennen.rundenStandard, spieler: 1, autoIds: ['troc-cabrio', 'multivan'],
         fahrhilfe: [R.config.fahrhilfeStandard, R.config.fahrhilfeStandard],
+        tempoKlasse: R.config.tempoKlasseStandard || 'normal',
       }, optionen);
+      this.tempoKlasse = opt.tempoKlasse;      // Runde 5: fahrzeugHinzufuegen rechnet die Klasse in die Fahrwerte ein
       const strecke = this.streckeSzeneBauen(trackId);
       // Namen: Spieler = gewählte Fahrer, Computer = nicht gewählte Fahrer (Schumacher, Senna, ...)
       const spielerNamen = (opt.fahrer || R.config.fahrerStandard).slice(0, opt.spieler);
@@ -479,7 +484,8 @@
 
     /** Fahrzeug aus einem Katalog-Eintrag anlegen (Physik + 3D-Modell). */
     fahrzeugHinzufuegen(auto, x, z, heading) {
-      const vehicle = new R.Vehicle(auto.fahrwerte);
+      // Runde 5: Tempo-Klasse (normal/schnell) VOR jeder Schaden-Kopie (datenBasis) einrechnen
+      const vehicle = new R.Vehicle(auto.fahrwerte, { tempoKlasse: this.tempoKlasse || R.config.tempoKlasseStandard || 'normal' });
       vehicle.setzen(x, z, heading);
       const mesh = R.carBuilder.bauen(auto);
       this.szene.add(mesh);
@@ -519,15 +525,20 @@
       this.uhr.letzte = jetzt;
       if (dt > 0.25) dt = 0.25;              // Tab war im Hintergrund
       const aktiv = this.zustand !== 'menue' && !this.pausiert;
+      // Runde 5: ein Frame > frameVerwerfenMs (80 ms) wird nicht nachgeholt – höchstens so viel Spielzeit
+      // wie maxSchritteProFrame Schritte, der Rest verfällt (kein Eingabe-Lag durch Nachholen).
       if (aktiv) this.uhr.rest += dt; else this.uhr.rest = 0;
+      const langerFrame = dt * 1000 > (p.frameVerwerfenMs || 80);
       let schritte = 0;
+      // Eingabe: input.steuerung() wird in jedem physikSchritt aus dem aktuellen Tastenzustand gelesen
+      // (gleicher Frame, vor dem ersten Schritt aktualisiert durch die Key-Events); frameEnde() erst danach.
       while (this.uhr.rest >= p.schritt && schritte < p.maxSchritteProFrame) {
         this.physikSchritt(p.schritt);
         this.uhr.rest -= p.schritt;
         schritte++;
       }
-      // Zu langsam (> maxSchritte·16,7 ms): Rest verwerfen statt nachzuholen → keine Spirale
-      if (schritte === p.maxSchritteProFrame && this.uhr.rest >= p.schritt) this.uhr.rest = 0;
+      // Zu langsam (> maxSchritte·16,7 ms) oder langer Frame: Rest verwerfen statt nachzuholen → keine Spirale
+      if ((schritte === p.maxSchritteProFrame || langerFrame) && this.uhr.rest >= p.schritt) this.uhr.rest = this.uhr.rest % p.schritt;
       this.input.frameEnde();
       const t1 = performance.now();
 
@@ -723,7 +734,7 @@
         this._meldung(i, 'Mehr Anlauf! 🚀', 2200);
         if (R.Audio && f.istSpieler) R.Audio.kollision(4);
       } else if (ereignis === 'zuLangsam') {
-        this._meldung(i, 'Schneller für den Looping!', 1800);
+        this._anlaufEreignis(i, 'zuLangsam');     // Runde 5: Notstopp an der Einfahrt (sonst Anlauf-Bremse davor)
       } else if (ereignis === 'start') {
         this._meldung(i, 'Looping! 🌀', 1200);
       } else if (ereignis === 'geschafft') {
@@ -789,6 +800,11 @@
           if (fahrer.brauchtReset) { this.zuruecksetzen(i); fahrer.zurueckgesetzt(); return; }
         }
         if (countdown) s = { gas: 0, bremse: s.bremse, lenkung: s.lenkung };
+        // --- Runde 5: Klebestreifen (world/kleber.js): festgeklebt → Eingabe ignorieren; Anlauf-Zustand (track/anlauf.js) ---
+        const kz = R.Kleber && strecke && strecke.kleber && strecke.kleber.length ? (f.kleber || (f.kleber = R.Kleber.zustand())) : null;
+        if (kz && R.Kleber.gesperrt(kz)) s = { gas: 0, bremse: 0, lenkung: 0 };
+        const az = R.Anlauf && strecke ? (f.anlauf || (f.anlauf = R.Anlauf.zustand())) : null;
+        if (az && fahrer && (!f.istSpieler || f.autopilot) && !countdown && f.nah) s = R.Anlauf.kiHilfe(az, v, strecke, f.nah, s);   // KI: Anlauf nehmen
         // --- 3. Im Looping (oder beim Zurückfallen) übernimmt track/looping.js statt vehicle.schritt ---
         const lp = f.looping;
         if (lp && (lp.aktiv || lp.fallen) && strecke) {
@@ -813,7 +829,7 @@
         if (strecke) {
           const n = strecke.abfrage(v.x, v.z, f.index);
           f.index = n.index;
-          v.untergrund = n.untergrund;
+          v.untergrund = kz ? R.Kleber.untergrund(kz, n.untergrund) : n.untergrund;   // Runde 5: Schonzeit nach dem Lösen
           f.nah = n;
           const hilfeStufe = R.config.fahrhilfen[f.fahrhilfe] || R.config.fahrhilfen.aus;
           if (f.istSpieler && !f.autopilot && (hilfeStufe.lenkhilfe > 0 || hilfeStufe.bremshilfe > 0)) {
@@ -835,6 +851,16 @@
         v.schritt(dt, s, hilfe, this.wetter ? this.wetter.umwelt() : undefined);
         if (turbo) { dd.vMax = vm0; dd.beschleunigung = b0; }
         f.bremst = v.letzteSteuerung.bremse > 0 && v.vLaengs > 0.5;
+        // --- 6a. Runde 5: Anlauf-Bremse vor Looping/Schanze (VOR Rampe/Einfahrt), KI stellt sich nach kiWarten s selbst
+        //         auf die Anlaufposition; Klebestreifen (kleben/lösen) ---
+        if (az && f.nah) {
+          this._anlaufEreignis(i, R.Anlauf.nachSchritt(az, v, strecke, f.nah, xAlt, zAlt, s, dt));
+          if ((!f.istSpieler || f.autopilot) && R.Anlauf.aktiv(az) && az.stehZeit > ((R.config.anlauf && R.config.anlauf.kiWarten) || 2)) {
+            this._zurAnlauf(i); return;
+          }
+        }
+        if (kz && f.nah) this._kleberEreignis(i, R.Kleber.nachSchritt(kz, v, strecke, f.nah, dt));
+        if (az && az.bremst && v.vLaengs > 0.5) f.bremst = true;          // Bremslicht, solange die Anlauf-Bremse wirkt
         // --- 6. Schanze: Rampe hochfahren / Absprung (f.nah = Abfrage VOR dem Schritt) ---
         if (fz && strecke && f.nah) this._flugEreignis(i, R.Schanzen.nachSchritt(fz, v, strecke, f.nah, xAlt, zAlt, dt));
         // Looping-Einfahrt: s vorwärts überquert? (Bogenlänge nach dem Schritt aus der Verschiebung längs der Tangente)
@@ -941,6 +967,7 @@
     _flugEreignis(i, e) {
       if (!e) return;
       const f = this.fahrzeuge[i];
+      if (e === 'zuLangsam') { this._anlaufEreignis(i, 'zuLangsam'); return; }   // Runde 5: Notstopp vor der Rampe
       if (e === 'sprung') this._meldung(i, 'Sprung! ✈️', 1300);
       else if (e === 'landung' || e === 'landungSchraeg') {
         if (f.istSpieler) {
@@ -949,6 +976,54 @@
           if (R.Audio) R.Audio.kollision(Math.min(6, 2 + f.flug.landeStaerke / 2));
         }
         if (e === 'landungSchraeg') this._meldung(i, 'Rumms! 😬', 1000);
+      }
+    }
+
+    /**
+     * Runde 5 (M6): Anlauf-Ereignis (track/anlauf.js): 'zuLangsam' (Bremse greift / Notstopp) und 'gestoppt'
+     * (steht an der Linie) → HUD „Zu langsam! Zurück und Anlauf nehmen – oder R: Anlaufposition" (Spieler 2: T).
+     */
+    _anlaufEreignis(i, e) {
+      if (e !== 'zuLangsam' && e !== 'gestoppt') return;
+      const f = this.fahrzeuge[i];
+      if (!f || !f.istSpieler) return;
+      const T = R.config.tasten, code = f.spielerNr === 1 ? T.resetSpieler2 : T.resetSpieler1;
+      const taste = String(code || '').replace(/^Key/, '') || (f.spielerNr === 1 ? 'T' : 'R');
+      this._meldung(i, 'Zu langsam! 🐢\nZurück und Anlauf nehmen – oder ' + taste + ': Anlaufposition', 3500);
+    }
+
+    /** Runde 5 (M6): Fahrzeug i auf die Anlaufposition vor dem Looping/der Schanze setzen (Tempo 0). */
+    _zurAnlauf(i) {
+      const f = this.fahrzeuge[i];
+      if (!f || !this.strecke || !R.Anlauf || !R.Anlauf.aktiv(f.anlauf)) return false;
+      if (f.looping && (f.looping.aktiv || f.looping.fallen)) { f.looping.aktiv = false; f.looping.fallen = false; f.vehicle.imLooping = false; }
+      if (f.flug) R.Schanzen.abbrechen(f.flug, f.vehicle);
+      if (f.kleber) { R.Kleber.abbrechen(f.kleber); R.Kleber.optik(f, false); }
+      const pose = R.Anlauf.zurAnlaufposition(f.anlauf, f.vehicle, this.strecke, this.fahrzeuge);
+      if (!pose) return false;
+      if (this.rennen) this.rennen.verfolgungSetzen(i, pose.x, pose.z);
+      this._vorherAngleichen(f);
+      f.index = -1;
+      f.stehZeit = 0; f.resetHinweis = false; f.falschHerum = false; f.falschZeit = 0;
+      if (f.driver && f.driver.zurueckgesetzt) f.driver.zurueckgesetzt();
+      if (f.autopilot && f.autopilot.zurueckgesetzt) f.autopilot.zurueckgesetzt();
+      this._meldung(i, 'Anlauf! Jetzt Vollgas! 🚀', 2000);
+      return true;
+    }
+
+    /** Runde 5: Klebestreifen-Ereignis (world/kleber.js): Meldung + Kleber-Optik am Auto. */
+    _kleberEreignis(i, e) {
+      if (!e) return;
+      const f = this.fahrzeuge[i];
+      if (e.typ === 'klebt') {
+        R.Kleber.optik(f, true);
+        this._meldung(i, 'Festgeklebt! 🍯 ' + e.rest + ' s', 1100);
+        if (R.Audio && f.istSpieler && R.Audio.kollision) R.Audio.kollision(2);
+      } else if (e.typ === 'tick') {
+        this._meldung(i, 'Festgeklebt! 🍯 ' + e.rest + ' s', 1100);
+      } else if (e.typ === 'geloest') {
+        R.Kleber.optik(f, false);
+        this._meldung(i, 'Gelöst! 💨', 1300);
       }
     }
 
@@ -981,6 +1056,9 @@
     spielerZuruecksetzen(nr) {
       const i = this.fahrzeuge.findIndex(f => f.istSpieler && f.spielerNr === nr);
       if (i >= 0 && this.schaden && this.schaden.gesperrt(i)) return;   // liegengeblieben: der Abschleppwagen kommt gleich
+      if (i >= 0 && this.fahrzeuge[i].kleber && R.Kleber.gesperrt(this.fahrzeuge[i].kleber)) return;   // Runde 5: festgeklebt
+      // Runde 5 (M6): vor Looping/Schanze gestoppt → Anlaufposition statt letztem Checkpoint
+      if (i >= 0 && R.Anlauf && R.Anlauf.aktiv(this.fahrzeuge[i].anlauf) && this._zurAnlauf(i)) return;
       if (i >= 0) this.zuruecksetzen(i);
     }
 
@@ -1017,6 +1095,8 @@
       }
       if (f.looping && (f.looping.aktiv || f.looping.fallen)) { f.looping.aktiv = false; f.looping.fallen = false; f.vehicle.imLooping = false; }
       if (f.flug) R.Schanzen.abbrechen(f.flug, f.vehicle);   // Runde 4: Flug/Rampe abbrechen (sonst landet es am alten Ort)
+      if (f.kleber) { R.Kleber.abbrechen(f.kleber); R.Kleber.optik(f, false); }   // Runde 5: Kleber lösen
+      if (f.anlauf) f.anlauf = R.Anlauf.zustand();                                // Runde 5: Anlauf-Bremse aus
       f.vehicle.setzen(pose.x, pose.z, pose.heading);
       f.vehicle.y = this.strecke.hoeheAn(pose.x, pose.z);
       this._vorherAngleichen(f);

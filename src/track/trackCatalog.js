@@ -24,7 +24,9 @@
 //   (x, z, r) um den Schwerpunkt skaliert, Höhen h unverändert (Steigung ≤ 8 % bleibt), alle s-Werte × Faktor.
 //   Fantasie unverändert.
 // - Welten (Add-on je Strecke, Menü Strecke → Welt): welten { name: { schicht: bool } }, weltStandard.
-//   Schichten: hindernisse, wracks, strohballen, spuren, schanzen, baelle, wasserstrahlen, boost, schild (+ loopings).
+//   Schichten: hindernisse, wracks, strohballen, spuren, schanzen, baelle, wasserstrahlen, boost, schild (+ loopings, kleber).
+//   Runde 5: kleber [{ s0, s1, seite: -1 | 1 | 0 }]  Klebe-Seitenstreifen auf dem Rand (nur Fantasie, world/kleber.js);
+//            loopings/schanzen optional `anlauf` (m) = Anlaufposition (Override, sonst config.anlauf / berechnet).
 //   new R.Strecke(daten, { welt }) filtert (trackBuilder.js). Namen/Texte fürs Menü: R.weltInfo.
 // - Neue Listen (Bogenlänge s in m; Grafik/Physik folgt in Welle 2):
 //   spuren:      [{ s0, s1, spuren: 1 | 3 }]       1 Spur = 5 m mit Leitplanke, 3 Spuren = 15 m; 40 m Übergang
@@ -50,7 +52,7 @@
   };
   // Bausteine: jede Welt baut auf der vorigen auf (Klassisch → Hindernisse → Stunt → Verrückt)
   const AUS = { hindernisse: false, wracks: false, strohballen: false, spuren: false, schanzen: false,
-    baelle: false, wasserstrahlen: false, boost: false, schild: false, loopings: false };
+    baelle: false, wasserstrahlen: false, boost: false, schild: false, loopings: false, kleber: false };
   const W_KLASSISCH = Object.assign({}, AUS);
   const W_HINDERNISSE = Object.assign({}, W_KLASSISCH, { hindernisse: true, wracks: true, strohballen: true });
   const W_STUNT = Object.assign({}, W_HINDERNISSE, { spuren: true, schanzen: true });
@@ -369,13 +371,21 @@
       // Runde 4: eigene Welten – „Fantasie" (Stand Runde 3) und „Verrückt" (+ Turbo, Schild, Strohballen)
       weltStandard: 'fantasie',
       welten: {
-        fantasie: Object.assign({}, AUS, { loopings: true, hindernisse: true, baelle: true, wasserstrahlen: true }),
+        fantasie: Object.assign({}, AUS, { loopings: true, hindernisse: true, baelle: true, wasserstrahlen: true, kleber: true }),
         verrueckt: Object.assign({}, AUS, { loopings: true, hindernisse: true, baelle: true, wasserstrahlen: true,
-          boost: true, schild: true, strohballen: true }),
+          boost: true, schild: true, strohballen: true, kleber: true }),
       },
       spuren: [],
       wracks: [],
       schanzen: [],
+      // Runde 5: Klebe-Seitenstreifen (world/kleber.js) auf dem Randstreifen: seite −1 links, 1 rechts, 0 beide.
+      // Nicht in den Anlauf-Zonen der Loopings (10–170, 640–800) und mind. 30 m weg von den Bällen.
+      kleber: [
+        { s0: 220, s1: 270, seite: -1 },     // vor der Rechtskurve, Außenseite
+        { s0: 470, s1: 530, seite: 0 },      // Gerade nach der S-Kurve, beidseits
+        { s0: 975, s1: 1035, seite: -1 },    // enge Rechtskurve, Außenseite
+        { s0: 1170, s1: 1230, seite: 1 },    // Gerade vor dem Ast
+      ],
       strohballen: [
         { s: 295, von: 1, intervall: 10, tempo: 4 },
         { s: 1295, von: -1, intervall: 12, tempo: 4 },

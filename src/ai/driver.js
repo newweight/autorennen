@@ -26,6 +26,10 @@
 // Keine Abhängigkeit von Three.js (Node-Tests).
 // Runde 4: Fahrbahnbreite je Stelle (strecke.breiteBei, Spuren 1/3) – der seitliche Versatz wird
 // am Auto und am Zielpunkt auf ±max(0,5; breiteBei/2 − SPUR_GRENZE_RAND) begrenzt (enge Stellen: Mitte).
+// Runde 5: Mindesttempo-Bereiche (this.minTempoBereiche): vor jeder Sprungschanze (strecke.schanzen) ab
+// SCHANZE_VORLAUF m bis zur Kante mindestens SCHANZE_TEMPO – gedeckelt auf das 100-%-Ideallinientempo an der Stelle
+// (nie schneller als die Kurve erlaubt). Katalog-Feld minTempoBereiche [{ s0, s1, v }] wird zusätzlich übernommen.
+// Grund: in Tempo-Klasse „normal" und auf „leicht" sprang die KI sonst mit ~75 km/h (Hüpfer) – Ziel ≥ 90 km/h.
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -40,6 +44,8 @@
   const ROLLEN_BAND = 1.5;         // m/s über dem Zieltempo: nur rollen, nicht bremsen
   const VERSATZ_MAX = 3;           // m seitlicher Grundversatz (± aus dem Seed)
   const SPUR_GRENZE_RAND = 2.2;    // m Abstand der Auto-Mitte zum Straßenrand (mindestens)
+  const SCHANZE_VORLAUF = 80;      // m vor der Rampe beginnt der Mindesttempo-Bereich (Runde 5)
+  const SCHANZE_TEMPO = 27;        // m/s (≈ 97 km/h) Mindest-Zieltempo bis zur Kante (Reserve über 90 km/h)
 
   // --- Gummiband ---
   const GUMMI_TOTZONE = 60;        // m – darunter kein Effekt
@@ -185,6 +191,20 @@
       this.falschHerum = false;
       this.streckenHindernisse = [];
       this.hindernisseSetzen(strecke.hindernisse);
+      // Runde 5: Mindesttempo vor Schanzen (+ optional aus dem Katalog)
+      this.minTempoBereiche = (strecke.schanzen || []).map((e) => ({ s0: e.s - SCHANZE_VORLAUF, s1: e.s + (e.laenge || 10), v: SCHANZE_TEMPO }))
+        .concat(((strecke.daten && strecke.daten.minTempoBereiche) || []).map((b) => ({ s0: b.s0, s1: b.s1, v: b.v })));
+    }
+
+    /** Runde 5: Mindest-Zieltempo an Bogenlänge s (0 = keins). */
+    _minTempo(s) {
+      let v = 0;
+      const sp = this.spline;
+      for (const b of this.minTempoBereiche) {
+        const d = sp.wrapS(s - b.s0);
+        if (d <= b.s1 - b.s0 && b.v > v) v = b.v;
+      }
+      return v;
     }
 
     /**
@@ -432,6 +452,11 @@
           Math.sin(2 * Math.PI * this.zeit / SCHWANKUNG_PERIODE + this.schwankungPhase);
       }
       let soll = this._zieltempo(n.s + Math.max(0, tempo) * 0.1, Math.max(0, tempo), faktor);
+      // Runde 5: Mindesttempo vor Schanzen (nie über dem 100-%-Ideallinientempo hier)
+      if (this.minTempoBereiche.length) {
+        const mt = this._minTempo(n.s);
+        if (mt > soll) soll = Math.max(soll, Math.min(mt, this.profil.tempoBei(n.s + Math.max(0, tempo) * 0.1)));
+      }
       soll *= hindernisFaktor;
       if (langsamVoraus) soll *= LANGSAM_FAKTOR;   // vorsichtig vorbei, aber weiterfahren
       if (kriechen) soll = Math.min(soll, KRIECH_TEMPO);

@@ -63,6 +63,15 @@ Rennspiel.config = {
   },
   schwierigkeitStandard: 'mittel',
 
+  // --- Runde 5: Tempo-Klasse (Einstellung tempoKlasse, Spieler und KI gleich) ---
+  // Faktoren auf die Katalog-Fahrwerte (vehicle.js rechnet sie beim Anlegen in vehicle.daten ein).
+  // normal: 220–270 km/h × 0,7 ≈ 155–190 km/h, etwas sanfter beschleunigen/bremsen; schnell: Katalog.
+  tempoKlassen: {
+    normal:  { name: 'Normal',  vMax: 0.70, beschleunigung: 0.85, bremsen: 0.9 },
+    schnell: { name: 'Schnell', vMax: 1.0,  beschleunigung: 1.0,  bremsen: 1.0 },
+  },
+  tempoKlasseStandard: 'normal',
+
   // --- Fahrhilfen (für jüngere Kinder umschaltbar) ---
   // lenkhilfe: zieht zur Straßenmitte/Tangente; bremshilfe: bremst vor zu schnellen Kurven.
   // Ab Runde 3 ist die Lenkhilfe tempounabhängig gedämpft (Vorausblick wächst mit dem Tempo).
@@ -96,7 +105,7 @@ Rennspiel.config = {
     schatten: false,           // echte Schatten kosten viel; Blob-Schatten unter Autos
     sichtweite: 420,           // Nebel-Ende in Metern
     fov: 62,
-    fovSplitScreen: 70,
+    fovSplitScreen: 74,        // Runde 5: 70 → 74 (halbe Breite: Kurven früher sichtbar)
     // Adaptive Qualität: fps über `sekunden` unter fpsUnten → eine Stufe runter
     // (pixelRatio nächster Wert, Nebel-Sichtweite −20 %); über fpsOben → wieder hoch.
     adaptiv: true,
@@ -116,13 +125,21 @@ Rennspiel.config = {
   // sauber, statt wegzudrehen). Langsam begrenzt weiter fahrwerte.wendigkeit.
   physik: {
     schritt: 1 / 60,           // fester Physikschritt
-    maxSchritteProFrame: 3,    // Schutz gegen Zeitsprung/Spirale bei langsamen Frames (> 50 ms)
+    maxSchritteProFrame: 4,    // Runde 5: 3 → 4 (bis 15 fps ohne Zeitlupe); Schutz gegen Spirale
+    frameVerwerfenMs: 80,      // Runde 5: Frame länger als 80 ms → Rest verwerfen (kein Nachholen = kein Eingabe-Lag)
     querGrip: 16,              // m/s² Querbeschleunigung bei grip 1,0 (Arcade, ~1,6 g)
     abtriebTempo: 110,         // m/s – Querhaftung × (1 + v/abtriebTempo) ("Abtrieb", sonst bei 250 km/h unfahrbar)
     kurvenWiderstand: 0.04,    // Anteil der Querbeschleunigung, der als Bremswirkung (Reifen radieren) wirkt
     kraftAbfall: 0.3,          // Antriebskraft × (1 − kraftAbfall · v/vMax)
     endKraft: 0.2,             // Netto-Beschleunigung bei vMax als Anteil von `beschleunigung` (vMax wird sicher erreicht)
     abseitsBremsen: 22,        // m/s² – so schnell sinkt das Tempo auf den Abseits-Deckel (statt Sprung)
+    // Runde 5 – Lenkgefühl (vehicle.js drehrateMax/schritt):
+    // Drehrate (rad/s) nie unter rateVmax bei vMax bzw. rateHalb bei 50 % vMax (linear im Tempo-Anteil), für ein Auto
+    // mit Langsam-Drehrate `bezug` (Passat ≈ 1,8); andere Autos × √(Langsam-Drehrate / bezug).
+    // Standard-Auto: vMax ≈ 0,52 rad/s (vorher 0,35–0,44), 50 % ≈ 0,80 rad/s (vorher 0,56–0,75).
+    // Über der Haftgrenze: ueberDrift × Überschuss als Rutschen nach außen, ueberBremsen × Überschuss als Bremsung.
+    // einschwingen/zurueck: Lenk-Glättung je s (vorher 6/9).
+    lenkung: { rateVmax: 0.52, rateHalb: 0.80, bezug: 1.8, ueberDrift: 0.35, ueberBremsen: 0.15, einschwingen: 9, zurueck: 12 },
     // grip/rollwiderstand: Haftung und Widerstand; vMaxFaktor: Deckel relativ zu vMax
     // (fehlt er: 0,25 + 0,75·grip²); vMaxAbs: zusätzlicher Deckel in m/s
     untergrund: {
@@ -318,12 +335,44 @@ Rennspiel.config = {
     },
   },
 
+  // --- Runde 5 (M6): Anlauf-Hilfe vor Loopings und Schanzen (Logik: src/track/anlauf.js) ---
+  // Zu langsam → sanfte Bremse bis Stopp-Linie `stopp` m vor der Einfahrt, HUD-Hinweis; R/T = Anlaufposition
+  // `abstand` m vor der Einfahrt (oder mehr, falls das langsamste Auto mehr braucht: Mindesttempo × (1 + reserve)).
+  anlauf: {
+    abstand: 150,              // m Anlaufposition vor Looping-Einfahrt / Rampenanfang (Katalog-Feld `anlauf` überschreibt)
+    reserve: 0.1,              // aus dem Stand mit Vollgas muss Mindesttempo + 10 % erreicht werden
+    stopp: 10,                 // m: hier steht ein zu langsames Auto spätestens
+    bremsVerz: 5,              // m/s² weiche Anlauf-Bremse
+    bremsMax: 30,              // m/s² Notbremse, falls die Entscheidung spät fällt
+    marge: 0.02,               // Vorhersage < Mindesttempo × (1 + marge) → Bremse
+    schanzeMin: 14,            // m/s (50 km/h) Mindesttempo auf eine Sprungschanze
+    frei: 8,                   // m Abstand zu anderen Autos an der Anlaufposition (sonst 10 m weiter zurück)
+    kiWarten: 2,               // s: KI steht so lange an der Linie → setzt sich selbst auf die Anlaufposition
+    loopingHilfe: 0.9,         // Looping oben: ab Tempo ≥ 0,9 · nötiges Tempo schiebt die Arcade-Hilfe (mit Gas) nach
+  },
+  // --- Runde 5: Fantasie-Klebestreifen (Katalog kleber [{ s0, s1, seite }], Logik + Optik: src/world/kleber.js) ---
+  // Untergrund 'kleber' auf dem Randstreifen; > sekunden am Stück darauf → dauer s festgeklebt (Steuerung aus,
+  // Tempo 0), danach Rückstoß zur Fahrbahnmitte und frei s Schonzeit (Streifen wirkt dann wie ein normaler Rand).
+  kleber: {
+    sekunden: 2,
+    dauer: 5,
+    rueckstoss: 2,             // m/s Richtung Fahrbahnmitte beim Lösen
+    frei: 3,                   // s Schonzeit nach dem Lösen
+    untergrund: { grip: 0.7, rollwiderstand: 8, vMaxFaktor: 0.6 },
+    farbe: 0x3ddc5a,
+  },
+
   // --- Kamera ---
   kamera: {
     modi: ['verfolger', 'cockpit', 'weit'],
-    verfolger: { abstand: 9.0, hoehe: 3.6, vorausblick: 5.0, weichheit: 4.5 },
-    weit:      { abstand: 16.0, hoehe: 7.0, vorausblick: 6.0, weichheit: 3.5 },
-    cockpit:   { hoehe: 1.15, vor: 0.4 },
+    // Runde 5: tempoabhängig (linear mit tempoAnteil = Tempo / vMax): abstand → abstandSchnell,
+    // hoehe → hoeheSchnell, vorausblick → vorausblickSchnell. Der Blickpunkt folgt der Fahrtrichtung
+    // (Geschwindigkeitsvektor inkl. Drift) und greift mit lenkVorgriff (rad × Lenkwert × tempoAnteil) in die Kurve vor.
+    verfolger: { abstand: 9.0, abstandSchnell: 12.0, hoehe: 3.6, hoeheSchnell: 4.6, vorausblick: 5.0, vorausblickSchnell: 9.0,
+                 weichheit: 4.5, blickWeichheit: 7.0, lenkVorgriff: 0.12 },
+    weit:      { abstand: 16.0, abstandSchnell: 18.0, hoehe: 7.0, hoeheSchnell: 7.8, vorausblick: 6.0, vorausblickSchnell: 10.0,
+                 weichheit: 3.5, blickWeichheit: 6.0, lenkVorgriff: 0.10 },
+    cockpit:   { hoehe: 1.15, vor: 0.4, blickWeite: 30, blickWeiteSchnell: 45, lenkVorgriff: 0.08 },
   },
 
   // --- Oberfläche (Menü, HUD) ---

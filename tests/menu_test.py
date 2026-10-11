@@ -320,7 +320,7 @@ with sync_playwright() as p:
     # Einstellungen-Schritt (solo)
     page.click('[data-a="schritt:4"]'); page.wait_for_timeout(300)
     zl = page.evaluate('Rennspiel.spiel.menue.zeilen()')
-    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'jahreszeit', 'wetter', 'wind', 'schaden', 'start'], zl)
+    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'start'], zl)
     pj = texte('[data-a="fokus:4"] .pille')
     pruefe('Jahreszeit-Pillen (Wiese): Frühling, Sommer, Herbst, Winter, Zufall; Sommer aktiv', len(pj) == 5 and 'Sommer' in pj[1] and 'Zufall' in pj[4]
            and 'Sommer' in texte('[data-a="fokus:4"] .pille.aktiv')[0], pj)
@@ -376,6 +376,11 @@ with sync_playwright() as p:
     taste('ArrowRight'); taste('ArrowDown'); taste('ArrowLeft')
     pruefe('Tastatur: Schaden ← = aus', E()['schaden'] is False, E()['schaden'])
     taste('ArrowRight'); taste('ArrowDown')
+    # Runde 5: Tempo-Klasse (Standard normal, → schnell, ← normal)
+    pruefe('Tempo: Standard Normal', E()['tempoKlasse'] == 'normal' and 'Normal' in texte('[data-a="fokus:8"] .pille.aktiv')[0], E().get('tempoKlasse'))
+    taste('ArrowRight')
+    pruefe('Tastatur: Tempo → = schnell', E()['tempoKlasse'] == 'schnell', E().get('tempoKlasse'))
+    taste('ArrowLeft'); taste('ArrowDown')
     pruefe('Tastatur: ↓ erreicht Start (Fokus-Ring), Schaden wieder an', page.locator('.start-knopf.fokus').count() == 1 and E()['schaden'] is True)
     # Layout ohne Überlauf: solo/zwei × Tafel zu/auf × 1280×800 / 1440×900
     LAYOUT = """(() => { const m = document.querySelector('.m-inhalt'), fuss = document.querySelector('.m-fuss').getBoundingClientRect().top;

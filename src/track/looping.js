@@ -93,7 +93,14 @@
       if (Math.abs(seitenabstand) > strecke.breite / 2) return null;          // nicht auf der Fahrbahn
       const p = sp.punktBei(L.s), r = vehicle.richtung();
       if (r.x * p.tx + r.z * p.tz < 0.7 || vehicle.vLaengs <= 0) return null; // nicht vorwärts
-      if (vehicle.vLaengs < L.vMin) { lp.zuLangsam++; return 'zuLangsam'; }
+      if (vehicle.vLaengs < L.vMin) {
+        // Runde 5: nicht mehr unten durchfahren – Notstopp kurz vor der Einfahrt (normalerweise hat die
+        // Anlauf-Bremse (track/anlauf.js) das Auto schon 10 m davor sanft angehalten)
+        lp.zuLangsam++;
+        const pz = sp.punktBei(L.s - 1), qz = Math.max(-strecke.breite / 2 + 1, Math.min(strecke.breite / 2 - 1, seitenabstand));
+        vehicle.x = pz.x + pz.nx * qz; vehicle.z = pz.z + pz.nz * qz; vehicle.vLaengs = 0; vehicle.vQuer = 0;
+        return 'zuLangsam';
+      }
       lp.aktiv = true; lp.looping = L;
       lp.winkel = Math.min(0.2, b / L.radius); lp.winkelVorher = lp.winkel;
       lp.v = vehicle.vLaengs;
@@ -126,8 +133,17 @@
       - wert(c.reibung, 0.5) - wert(c.luft, 0.002) * lp.v * lp.v;
     lp.v = Math.min(vehicle.daten.vMax, lp.v + a * dt);
     lp.winkel += Math.max(0, lp.v) / r * dt;
+    // Runde 5: Arcade-Hilfe in der oberen Hälfte – nötiges Tempo vNoetig = sqrt(−g·r·cos w) (oben sqrt(g·r)).
+    // Mit Gas und v ≥ loopingHilfe (0,9) · vNoetig schiebt sie auf vNoetig nach → wer mit Mindesttempo und
+    // Gas einfährt, kommt immer durch (Reibung/Luft kosten sonst ein paar Prozent).
+    const oben = lp.winkel > Math.PI / 2 && lp.winkel < 1.5 * Math.PI;
+    if (oben && (s.gas || 0) > 0) {
+      const vNoetig = Math.sqrt(Math.max(0, -G * r * Math.cos(lp.winkel)));
+      const tol = wert(R.config.anlauf && R.config.anlauf.loopingHilfe, 0.9);
+      if (lp.v < vNoetig && lp.v >= tol * vNoetig) { lp.v = vNoetig; lp.geschoben = (lp.geschoben || 0) + 1; }
+    }
     const andruck = lp.v * lp.v / r + G * Math.cos(lp.winkel);
-    if (lp.v <= 0.5 || (andruck < 0 && lp.winkel > Math.PI / 2 && lp.winkel < 1.5 * Math.PI)) {
+    if (lp.v <= 0.5 || (andruck < -1e-9 && oben)) {
       fallen(lp, vehicle, strecke);
       return 'gefallen';
     }
@@ -154,6 +170,24 @@
     vehicle.y = strecke.hoeheAn(vehicle.x, vehicle.z);
     lp.aktiv = false; lp.fallen = true; lp.fallZeit = 0; lp.v = 0; lp.gefallen++;
     vehicle.imLooping = true;      // während der Fall-Animation keine Kollisionen
+  }
+
+  /**
+   * Runde 5: Standorte der Gerüst-Beine (je Looping 3 Portale × 2 Beine) als feste Säulen { x, z, r } für
+   * collisions.bande (gleiche Rechnung wie bauen(), ohne THREE).
+   */
+  function beine(strecke) {
+    const l = [], aussen = strecke.breite / 2 + strecke.randBreite + 1.4, tiefe = 0.8;
+    (strecke.loopings || []).forEach((L) => {
+      [Math.PI / 2, Math.PI, 1.5 * Math.PI].forEach((w) => {
+        const m = bahn(strecke, L, w, bandQ(L, w));
+        const p = strecke.spline.punktBei(L.s + m.a);
+        const aVers = -(m.ux * p.tx + m.uz * p.tz) * tiefe;
+        const pt = strecke.spline.punktBei(L.s + m.a + aVers);
+        [-aussen, aussen].forEach((q) => l.push({ x: pt.x + pt.nx * q, z: pt.z + pt.nz * q, r: 0.5, art: 'loopingBein' }));
+      });
+    });
+    return l;
   }
 
   /** Fortschritt entlang der Strecke während des Loopings (m, monoton): s + (w/2π)·versatz. */
@@ -349,10 +383,10 @@
 
   /**
    * Kompletter Fahrzeugschritt wie in main.js, aber ohne Fahrhilfe (für Node-Tests und Simulationen):
-   * im Looping Looping.schritt, sonst vehicle.schritt + Einfahrt prüfen.
+   * im Looping Looping.schritt, sonst vehicle.schritt + (optional Anlauf-Bremse, anlauf = Anlauf.zustand()) + Einfahrt prüfen.
    * @returns {{ereignis:string|null, index:number, untergrund:string}}
    */
-  function fahrzeugSchritt(lp, vehicle, strecke, steuerung, dt, index) {
+  function fahrzeugSchritt(lp, vehicle, strecke, steuerung, dt, index, anlauf) {
     if (lp.aktiv || lp.fallen) {
       const e = schritt(lp, vehicle, strecke, steuerung, dt);
       const n = strecke.abfrage(vehicle.x, vehicle.z, index);
@@ -365,12 +399,14 @@
     vehicle.schritt(dt, steuerung);
     vehicle.y = strecke.hoeheAn(vehicle.x, vehicle.z);
     let e = null;
+    // Runde 5: Anlauf-Bremse (track/anlauf.js) vor der Einfahrt-Prüfung, wie in main.js
+    if (anlauf && R.Anlauf) e = R.Anlauf.nachSchritt(anlauf, vehicle, strecke, n, xAlt, zAlt, steuerung, dt);
     if (strecke.loopings && strecke.loopings.length) {
       const pt = strecke.spline.punktBei(n.s), dx = vehicle.x - xAlt, dz = vehicle.z - zAlt;
-      e = einfahrt(lp, vehicle, strecke, n.s, n.s + dx * pt.tx + dz * pt.tz, n.seitenabstand + dx * pt.nx + dz * pt.nz);
+      e = einfahrt(lp, vehicle, strecke, n.s, n.s + dx * pt.tx + dz * pt.tz, n.seitenabstand + dx * pt.nx + dz * pt.nz) || e;
     }
     return { ereignis: e, index: n.index, untergrund: n.untergrund };
   }
 
-  R.Looping = { zustand, einfahrt, schritt, fahrzeugSchritt, bahn, bandQ, autoQ, fortschrittS, anzeigePose, kameraPose, bauen, G };
+  R.Looping = { zustand, einfahrt, schritt, fahrzeugSchritt, bahn, bandQ, autoQ, fortschrittS, anzeigePose, kameraPose, bauen, beine, G };
 })();
