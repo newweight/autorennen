@@ -21,6 +21,9 @@
     { id: 'auto', name: 'Auto' },
     { id: 'start', name: 'Los!' },
   ];
+  // Bühne drehen (Auto-Schritt): Spieler 1 mit , und . — Spieler 2 mit Q und E (im Solo-Modus gelten beide)
+  const DREH_TASTEN = { Comma: [0, -1], Period: [0, 1], KeyQ: [1, -1], KeyE: [1, 1] };
+  const BUEHNE = { solo: { w: 480, h: 300 }, zwei: { w: 380, h: 240 } };   // Renderauflösung der Bühne
   const HEX = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0');
 
   // ---------- Hilfsfunktionen ----------
@@ -87,6 +90,8 @@
         const t = e.target.closest('[data-a]');
         if (t) this.aktion(t.dataset.a);
       });
+      // Kachelbilder der Autos einmal im Leerlauf erzeugen (danach nur Cache)
+      if (R.AutoVorschau) setTimeout(() => { try { R.AutoVorschau.alleKacheln(); } catch (e) { /* egal */ } }, 600);
     }
 
     get e() { return this.spiel.einstellungen; }
@@ -100,7 +105,10 @@
       this.spiel.menueHintergrund(this.e.streckeId);
       this.zeichnen();
     }
-    verstecken() { this.sichtbar = false; this.wurzel.style.display = 'none'; }
+    verstecken() {
+      this.sichtbar = false; this.wurzel.style.display = 'none';
+      if (R.AutoVorschau) R.AutoVorschau.stoppen();
+    }
 
     zeilen() {
       const z = ['runden', 'gegner', 'schwierigkeit', 'hilfe0'];
@@ -129,6 +137,11 @@
       if (code === T.pause) { this.zurueck(); return true; }
       if (T.bestaetigen.includes(code)) { this.weiter(); return true; }
       const id = SCHRITTE[this.schritt].id;
+      if (id === 'auto' && DREH_TASTEN[code] && R.AutoVorschau) {
+        const [sp, r] = DREH_TASTEN[code];
+        R.AutoVorschau.drehen(this.zwei ? sp : 0, r);
+        return true;
+      }
       const rich = richtung(code);
       if (!rich) return false;
       const [dx, dy] = rich;
@@ -260,8 +273,8 @@
         titel = this.zwei ? 'Wählt eure Autos!' : 'Welches Auto fährst du?';
         inhalt = this.htmlAuto();
         hinweis = this.zwei
-          ? 'Spieler 1: <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> · Spieler 2: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · <kbd>Enter</kbd> weiter'
-          : '<kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> auswählen · <kbd>Enter</kbd> weiter · <kbd>Esc</kbd> zurück';
+          ? '① <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> <kbd>,</kbd><kbd>.</kbd> drehen · ② <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>Enter</kbd> weiter'
+          : '<kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> wählen · <kbd>,</kbd><kbd>.</kbd> / <kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>Enter</kbd> weiter';
       }
       if (id === 'start') { titel = 'Fast geschafft!'; inhalt = this.htmlStart(); hinweis = '<kbd>↑</kbd><kbd>↓</kbd> Zeile · <kbd>←</kbd><kbd>→</kbd> ändern · <kbd>Enter</kbd> weiter / Start · <kbd>Esc</kbd> zurück'; }
 
@@ -272,6 +285,22 @@
         `<div class="m-untertitel">${R.config.untertitel}</div></div><div class="m-schritte">${kopf}</div></div>` +
         `<div class="m-inhalt"><h1>${titel}</h1>${inhalt}</div>` +
         `<div class="m-fuss"><div class="m-nav">${nav}</div><div class="m-hinweis">${hinweis}</div></div>`;
+      if (id === 'auto') this.buehnenBinden();
+      else if (R.AutoVorschau) R.AutoVorschau.stoppen();
+    }
+
+    /** 3D-Bühnen (Canvas pro Spieler) mit dem Vorschau-Renderer verbinden. */
+    buehnenBinden() {
+      const AV = R.AutoVorschau;
+      if (!AV) return;
+      const felder = this.wurzel.querySelectorAll('canvas.buehne');
+      AV.behalten(felder.length);
+      const g = BUEHNE[this.zwei ? 'zwei' : 'solo'];
+      felder.forEach((c) => {
+        const sp = +c.dataset.sp;
+        const auto = R.carCatalog.find((a) => a.id === this.e.autoIds[sp]) || R.carCatalog[0];
+        AV.binden(sp, c, auto, g.w, g.h);
+      });
     }
 
     htmlModus() {
@@ -285,13 +314,22 @@
     }
 
     htmlStrecke() {
-      const farben = { wiese: ['#7ed957', '#3a8f2f'], wald: ['#2f7a3a', '#143d1f'], wueste: ['#f2c768', '#c98a34'] };
-      return `<div class="reihe">` + R.trackCatalog.map((s) => {
+      const farben = { wiese: ['#7ed957', '#3a8f2f'], wald: ['#2f7a3a', '#143d1f'], wueste: ['#f2c768', '#c98a34'], fantasie: ['#ff8fd8', '#9b5de5'] };
+      const labels = { leicht: 'leicht', mittel: 'mittel', schnell: 'schnell', spass: 'spaß' };
+      return `<div class="reihe strecken">` + R.trackCatalog.map((s) => {
         const f = farben[s.thema] || farben.wiese;
-        return `<div class="karte strecke${this.e.streckeId === s.id ? ' gewaehlt' : ''}" data-a="strecke:${s.id}">` +
-          `<div class="strecken-bild" style="background:linear-gradient(180deg,#8fc8ff 0%,#8fc8ff 35%,${f[0]} 35%,${f[1]} 100%)">` +
-          `<div class="strasse"></div></div>` +
-          `<div class="karten-name">${s.name}</div><div class="karten-sub">${s.beschreibung}</div></div>`;
+        const himmel = s.thema === 'fantasie' ? '#b48cff' : '#8fc8ff';
+        // Hinweis aus den Katalogdaten (Fantasie: Loopings, Bälle, Wasserstrahl)
+        const teile = [];
+        if (s.loopings && s.loopings.length) teile.push(s.loopings.length + ' Loopings');
+        if (s.baelle && s.baelle.length) teile.push('Bälle');
+        if (s.wasserstrahlen && s.wasserstrahlen.length) teile.push('Wasserstrahl');
+        const hinweis = teile.length ? `<div class="strecken-hinweis">🎡 ${teile.join(', ')}</div>` : '';
+        const pille = s.schwierigkeit ? `<span class="s-pille s-${s.schwierigkeit}">${labels[s.schwierigkeit] || s.schwierigkeit}</span>` : '';
+        return `<div class="karte strecke t-${s.thema}${this.e.streckeId === s.id ? ' gewaehlt' : ''}" data-a="strecke:${s.id}">` +
+          `<div class="strecken-bild" style="background:linear-gradient(180deg,${himmel} 0%,${himmel} 35%,${f[0]} 35%,${f[1]} 100%)">` +
+          `<div class="strasse"></div>${pille}</div>` +
+          `<div class="karten-name">${s.name}</div><div class="karten-sub">${s.beschreibung}</div>${hinweis}</div>`;
       }).join('') + `</div>`;
     }
 
@@ -314,23 +352,36 @@
     }
 
     htmlAuto() {
+      const AV = R.AutoVorschau, dreid = !!(AV && AV.verfuegbar);
       const spieler = this.zwei ? [0, 1] : [0];
+      const bar = (a, k, emoji, name, extra) =>
+        `<div class="bar"><span class="b-ico">${emoji}</span>${name ? `<span class="b-name">${name}</span>` : ''}` +
+        `<div class="spur"><i style="width:${Math.round(this.norm(a, k) * 100)}%"></i></div>${extra ? `<span class="b-wert">${extra}</span>` : ''}</div>`;
       const panels = spieler.map((sp) => {
         const wahl = R.carCatalog.find((a) => a.id === this.e.autoIds[sp]) || R.carCatalog[0];
+        const g = BUEHNE[this.zwei ? 'zwei' : 'solo'];
         const karten = R.carCatalog.map((a) => {
-          const bar = (k, emoji) => `<div class="bar"><span>${emoji}</span><div class="spur"><i style="width:${Math.round(this.norm(a, k) * 100)}%"></i></div></div>`;
+          const url = dreid ? AV.kachel(a) : null;
+          const bild = url ? `<img src="${url}" alt="${a.name}" draggable="false">` : autoSvg(a);
+          // Im Solo-Modus Balken auf jeder Karte; zu zweit nur im Infofeld der Bühne (Platz)
+          const balken = this.zwei ? '' : bar(a, 'tempo', '🚀') + bar(a, 'start', '⚡') + bar(a, 'kurven', '🌀');
           return `<div class="karte auto${a.id === wahl.id ? ' gewaehlt' : ''}" data-a="auto:${sp}:${a.id}">` +
-            `<div class="auto-bild">${autoSvg(a)}</div><div class="karten-name">${a.name}</div>` +
-            bar('tempo', '🚀') + bar('start', '⚡') + bar('kurven', '🌀') + `</div>`;
+            `<div class="auto-bild">${bild}</div><div class="karten-name">${a.name}</div>${balken}</div>`;
         }).join('');
         const kopf = this.zwei
           ? `<h2 class="p${sp + 1}"><span class="marke">${sp + 1}</span> ${R.fahrerEmoji(this.e.fahrer[sp])} ${this.e.fahrer[sp]}</h2>`
           : '';
-        return `<div class="m-spieler p${sp + 1}">${kopf}<div class="raster">${karten}</div>` +
+        const kmh = Math.round(wahl.fahrwerte.vMax * 3.6);
+        const buehne = dreid
+          ? `<div class="buehne-rahmen"><canvas class="buehne" data-sp="${sp}" width="${g.w}" height="${g.h}" title="Ziehen zum Drehen"></canvas>` +
+            `<div class="buehne-tipp">↔ ziehen · ${this.zwei ? (sp === 0 ? ', .' : 'Q E') : ', . / Q E'}</div></div>`
+          : `<div class="buehne-rahmen svg">${autoSvg(wahl)}</div>`;
+        const info = `<div class="a-info"><div class="a-name">${wahl.name}</div>` +
+          bar(wahl, 'tempo', '🚀', 'Tempo', kmh + ' km/h') + bar(wahl, 'start', '⚡', 'Beschleunigung') + bar(wahl, 'kurven', '🌀', 'Wendigkeit') +
           `<p class="beschreibung">${wahl.beschreibung}</p></div>`;
+        return `<div class="m-spieler p${sp + 1}">${kopf}<div class="a-oben">${buehne}${info}</div><div class="raster">${karten}</div></div>`;
       }).join('');
-      return `<div class="m-autos${this.zwei ? ' zwei' : ''}">${panels}</div>` +
-        `<div class="legende">🚀 Tempo &nbsp; ⚡ Beschleunigung &nbsp; 🌀 Wendigkeit</div>`;
+      return `<div class="m-autos auto3d${this.zwei ? ' zwei' : ''}">${panels}</div>`;
     }
 
     htmlStart() {
@@ -343,8 +394,8 @@
         `<span class="zahl">${wert}</span><span class="rund" data-a="stepper:${zeile}:1">+</span>` +
         `<span class="extra">${extra || ''}</span></div></div>`;
       const pillen = (zeile, emoji, name, liste, aktuell) =>
-        `<div class="zeile${fk(zeile)}" ${fz(zeile)}><div class="z-label">${emoji} ${name}</div><div class="z-wert">` +
-        Object.keys(liste).map((k) => `<span class="pille${k === aktuell ? ' aktiv' : ''}" data-a="wert:${zeile}:${k}">${liste[k].name}</span>`).join('') +
+        `<div class="zeile${fk(zeile)}${Object.keys(liste).length > 4 ? ' viele' : ''}" ${fz(zeile)}><div class="z-label">${emoji} ${name}</div><div class="z-wert">` +
+        Object.keys(liste).sort((x, y) => (liste[x].rang || 0) - (liste[y].rang || 0)).map((k) => `<span class="pille${k === aktuell ? ' aktiv' : ''}${k === 'unschlagbar' ? ' tod' : ''}" data-a="wert:${zeile}:${k}">${k === 'unschlagbar' ? '💀 ' : ''}${liste[k].name}</span>`).join('') +
         `</div></div>`;
       const cfg = R.config;
       const name1 = this.zwei ? 'Fahrhilfe ' + e.fahrer[0] : 'Fahrhilfe';

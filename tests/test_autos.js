@@ -13,8 +13,10 @@ pruefe('ids eindeutig', new Set(ids).size === ids.length);
 
 const pflichtTexte = ['id', 'name', 'marke', 'modell', 'farbeName', 'karosserie', 'beschreibung', 'generischerName'];
 const pflichtWerte = ['vMax', 'beschleunigung', 'bremsen', 'rueckwaertsMax', 'wendigkeit', 'grip', 'masse', 'laenge', 'breite'];
+// Runde 3: vMax 220–270 km/h (61,1–75 m/s), Bremsen stärker (18–26 m/s²); beschleunigung ist jetzt die
+// Antriebskraft bei Stillstand (fällt zum vMax hin ab), darum kleinere Zahlen als früher.
 const bereiche = {
-  vMax: [34, 48], beschleunigung: [6, 12], bremsen: [15, 22], rueckwaertsMax: [5, 12],
+  vMax: [61, 75.01], beschleunigung: [4, 9], bremsen: [18, 26], rueckwaertsMax: [5, 12],
   wendigkeit: [1.5, 2.3], grip: [0.78, 0.95], masse: [900, 2500], laenge: [3.5, 5.2], breite: [1.6, 2.1],
 };
 const erlaubt = ['cabrio', 'van', 'limousine', 'sportwagen', 'coupe', 'kombi', 'kleinwagen', 'suv'];
@@ -37,29 +39,49 @@ for (const a of katalog) {
 
 // Pflichtautos vorhanden, Extremwerte wie vorgegeben
 const vmaxe = katalog.map((a) => a.fahrwerte.vMax);
-pruefe('vMax-Spanne 34 .. 48', Math.min(...vmaxe) === 34 && Math.max(...vmaxe) === 48, vmaxe.join('/'));
+const sollKmh = { 'multivan': 220, 'troc-cabrio': 230, 'mini-cooper': 235, 'passat': 240, 'audi-rs6': 255, 'bmw-m4': 260, 'amg-gt': 265, 'porsche-911': 270 };
+pruefe('vMax je Auto wie vorgegeben (220 … 270 km/h)', katalog.every((a) => Math.abs(a.fahrwerte.vMax * 3.6 - sollKmh[a.id]) < 0.01),
+  vmaxe.map((x) => (x * 3.6).toFixed(0)).join('/'));
 pruefe('Alle erlaubten Typen Pflicht: cabrio/van/limousine/sportwagen/coupe/kombi/kleinwagen vorhanden',
   ['cabrio', 'van', 'limousine', 'sportwagen', 'coupe', 'kombi', 'kleinwagen'].every((t) => katalog.some((a) => a.karosserie === t)));
 pruefe('KAROSSERIEN-Liste im Katalog stimmt', JSON.stringify(katalog.KAROSSERIEN) === JSON.stringify(erlaubt));
 pruefe('finde() liefert Auto', katalog.finde('passat') && katalog.finde('passat').karosserie === 'limousine');
 
 // --- Fahrverhalten je Auto ---
-console.log('\nAuto               0-100 km/h   vMax erreicht');
+console.log('\nAuto               0-100   100-200   200-0   R(65 km/h)  Gras-max');
 const zeiten = [];
 for (const a of katalog) {
   const v = new R.Vehicle(a.fahrwerte);
   let t = 0;
   while (v.vLaengs * 3.6 < 100 && t < 30) { v.schritt(dt, { gas: 1, bremse: 0, lenkung: 0 }); t += dt; }
-  zeiten.push(t);
-  pruefe(`${a.id}: 0-100 km/h in 3.5 .. 10 s`, t >= 3.5 && t <= 10, t.toFixed(2) + ' s');
+  const t100 = t;
+  while (v.vLaengs * 3.6 < 200 && t < 60) { v.schritt(dt, { gas: 1, bremse: 0, lenkung: 0 }); t += dt; }
+  const t200 = t - t100;
+  zeiten.push(t100);
+  pruefe(`${a.id}: 0-100 km/h in 4 .. 9 s`, t100 >= 4 && t100 <= 9, t100.toFixed(2) + ' s');
+  pruefe(`${a.id}: 100-200 km/h in 6 .. 14 s`, t200 >= 6 && t200 <= 14, t200.toFixed(2) + ' s');
   for (let i = 0; i < 60 * 60; i++) v.schritt(dt, { gas: 1, bremse: 0, lenkung: 0 });
   const vm = a.fahrwerte.vMax;
   pruefe(`${a.id}: erreicht vMax (>= 98 %) und überschreitet es nicht`,
-    v.vLaengs >= vm * 0.98 && v.vLaengs <= vm + 0.01, v.vLaengs.toFixed(1) + ' / ' + vm + ' m/s');
+    v.vLaengs >= vm * 0.98 && v.vLaengs <= vm + 0.01, (v.vLaengs * 3.6).toFixed(1) + ' / ' + (vm * 3.6).toFixed(0) + ' km/h');
+  // Bremsen 200 → 0
+  const b = new R.Vehicle(a.fahrwerte); b.vLaengs = 200 / 3.6;
+  let tb = 0;
+  while (b.vLaengs > 0 && tb < 20) { b.schritt(dt, { gas: 0, bremse: 1, lenkung: 0 }); tb += dt; }
+  pruefe(`${a.id}: 200 → 0 km/h in < 6 s`, tb < 6, tb.toFixed(2) + ' s');
+  // Haarnadel 25 m mit 65 km/h: Kreisradius bei Volleinschlag
+  const h = new R.Vehicle(a.fahrwerte), vh = 65 / 3.6;
+  const radius = vh / h.drehrateMax(vh);
+  pruefe(`${a.id}: Haarnadel (25 m) mit 65 km/h fahrbar`, radius < 25, radius.toFixed(1) + ' m');
+  console.log('  ' + a.id.padEnd(16) + [t100, t200, tb].map((x) => (x.toFixed(2) + ' s').padStart(8)).join('') +
+    (radius.toFixed(1) + ' m').padStart(11) + ((h.vMaxAuf('gras') * 3.6).toFixed(0) + ' km/h').padStart(10));
 }
 const schnell = Math.min(...zeiten), langsam = Math.max(...zeiten);
 pruefe('Spürbarer Unterschied Schnellster/Langsamster (>= 1.5 s), aber nicht hoffnungslos (<= 2.5-fach)',
   langsam - schnell >= 1.5 && langsam / schnell <= 2.5, schnell.toFixed(2) + ' .. ' + langsam.toFixed(2) + ' s');
+const multivan = zeiten[katalog.findIndex((a) => a.id === 'multivan')], porsche = zeiten[katalog.findIndex((a) => a.id === 'porsche-911')];
+pruefe('Multivan beschleunigt am langsamsten, Porsche am schnellsten', multivan === langsam && porsche === schnell,
+  multivan.toFixed(2) + ' / ' + porsche.toFixed(2) + ' s');
 
 
 // --- 3D-Modelle (carBuilder v2) mit Three.js in Node ---

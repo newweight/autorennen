@@ -127,7 +127,19 @@ kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1
 .karte.gross { width: 11em; padding: 1em .8em; }
 .karte.gross .emoji { font-size: 3.6em; line-height: 1.1; }
 .karte.gross .karten-name { font-size: 1.15em; margin-top: .2em; }
-.karte.strecke { width: 16em; }
+.reihe.strecken { gap: .8em; flex-wrap: nowrap; }
+.karte.strecke { width: 12.2em; padding: .5em; }
+.karte.strecke .karten-name { font-size: 1.15em; }
+.karte.strecke .karten-sub { font-size: .75em; }
+.strecken-hinweis { margin-top: .4em; font-size: .78em; font-weight: 900; background: rgba(255,255,255,.18); border-radius: .8em; padding: .15em .4em; }
+.s-pille { position: absolute; top: .35em; left: .35em; font-size: .72em; font-weight: 900; padding: .1em .6em; border-radius: 1em;
+  background: var(--gruen); color: #10351b; border: .1em solid #fff; letter-spacing: .02em; }
+.s-pille.s-mittel { background: var(--gelb); color: #3a2c00; }
+.s-pille.s-schnell { background: #ff6a3a; color: #fff; }
+.s-pille.s-spass { background: #ff5fc8; color: #fff; }
+.karte.strecke.t-fantasie { border-color: #d28bff; background: rgba(90, 40, 140, .72); }
+.karte.strecke.t-fantasie .strecken-hinweis { background: rgba(255,120,220,.4); }
+.karte.strecke.t-fantasie.gewaehlt { background: rgba(130, 60, 190, .9); }
 .strecken-bild { height: 6em; border-radius: .7em; margin-bottom: .5em; position: relative; overflow: hidden; }
 .strecken-bild .strasse { position: absolute; left: 50%; bottom: 0; width: 6em; height: 65%; transform: translateX(-50%) perspective(8em) rotateX(40deg);
   transform-origin: bottom; background: #555; border-left: .3em solid #fff; border-right: .3em solid #fff; }
@@ -172,6 +184,12 @@ kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1
 .pille { padding: .15em .6em; border-radius: 1em; background: rgba(255,255,255,.18); border: .12em solid transparent; cursor: pointer; }
 .pille:hover { background: rgba(255,255,255,.3); }
 .pille.aktiv { background: var(--gruen); border-color: #fff; }
+/* 7 Stärke-Pillen: kleinere Schrift, Umbruch in 2 Zeilen erlaubt */
+.zeile.viele { flex-wrap: wrap; }
+.zeile.viele .z-wert { flex-wrap: wrap; justify-content: flex-end; gap: .25em; }
+.zeile.viele .pille { font-size: .82em; padding: .12em .5em; white-space: nowrap; }
+.pille.tod { background: rgba(214,40,40,.55); border-color: #ff6b6b; font-weight: 900; }
+.pille.tod.aktiv { background: #d62828; border-color: #fff; box-shadow: 0 0 .8em rgba(255,60,60,.8); }
 .start-knopf { margin-top: .3em; padding: .45em 1em; border-radius: 1.2em; text-align: center; font-size: 1.5em; font-weight: 900; cursor: pointer;
   background: linear-gradient(#41e06a, #1fae45); border: .12em solid #fff; box-shadow: 0 .2em 0 rgba(0,0,0,.35); }
 .start-knopf:hover, .start-knopf.fokus { transform: scale(1.04); filter: brightness(1.1); }
@@ -232,3 +250,51 @@ kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1
   font-size: .8em; background: var(--p1); }
 .karte.fahrer .vergeben-marke.p2 { background: var(--p2); }
 .fahrer-name-gross { font-size: 1.1em; }
+
+/* ============================================================
+   Autowahl mit 3D-Bühne (autoVorschau.js)
+   Solo: links Bühne + Info, rechts 4×2-Raster. Zwei: je Spieler Bühne + Info nebeneinander, darunter 4×2-Raster.
+   Alles in em → skaliert mit der Fensterhöhe (passt in 1280×800 und 1440×900 ohne Scrollen).
+   ============================================================ */
+.m-autos.auto3d { align-items: flex-start; gap: 1.4em; }
+.m-autos.auto3d .m-spieler { flex: 1 1 0; min-width: 0; }
+.m-autos.auto3d:not(.zwei) .m-spieler { flex: 1 1 100%; display: grid; grid-template-columns: 24em minmax(0, 1fr); gap: .5em 1.2em; align-items: start; }
+.m-autos.auto3d:not(.zwei) .a-oben { display: block; }
+.m-autos.auto3d.zwei .a-oben { display: flex; gap: .7em; align-items: flex-start; margin-bottom: .4em; }
+.m-autos.auto3d.zwei .m-spieler h2 { margin-bottom: .2em; }
+
+.buehne-rahmen { position: relative; border-radius: 1em; overflow: hidden; border: .18em solid rgba(255,255,255,.4);
+  background: radial-gradient(ellipse at 50% 85%, rgba(120,150,255,.55) 0%, rgba(30,45,110,.78) 70%), rgba(14,24,58,.8);
+  pointer-events: auto; cursor: grab; touch-action: none; flex: none; }
+.buehne-rahmen:active { cursor: grabbing; }
+.m-spieler.p1 .buehne-rahmen { border-color: var(--p1); }
+.m-spieler.p2 .buehne-rahmen { border-color: var(--p2); }
+.m-autos.auto3d.zwei .m-spieler:not(.p2) .buehne-rahmen { border-color: var(--p1); }
+.m-autos.auto3d:not(.zwei) .m-spieler.p1 .buehne-rahmen { border-color: rgba(255,255,255,.5); }
+canvas.buehne { display: block; width: 100%; height: auto; aspect-ratio: 1.6; }
+.m-autos.auto3d:not(.zwei) .buehne-rahmen { width: 24em; }
+.m-autos.auto3d.zwei .buehne-rahmen { width: 15.4em; }
+.buehne-rahmen.svg { padding: 1em; box-sizing: border-box; }
+.buehne-rahmen.svg svg { width: 100%; height: auto; display: block; }
+.buehne-tipp { position: absolute; left: 0; right: 0; bottom: .25em; text-align: center; font-size: .6em; font-weight: 800; opacity: .75; pointer-events: none; }
+
+.a-info { min-width: 0; flex: 1; }
+.a-name { font-size: 1.15em; font-weight: 900; margin: .25em 0 .2em; line-height: 1.1; }
+.m-autos.auto3d.zwei .a-name { font-size: .95em; margin-top: 0; }
+.a-info .bar { font-size: .8em; margin-top: .15em; }
+.a-info .bar .b-name { width: 8.4em; flex: none; text-align: left; font-size: .9em; white-space: nowrap; }
+.a-info .bar .b-wert { font-size: .8em; opacity: .9; white-space: nowrap; min-width: 4.2em; text-align: right; }
+.m-autos.auto3d.zwei .a-info .bar { font-size: .66em; }
+.m-autos.auto3d.zwei .a-info .bar .b-name { width: 8.6em; }
+.a-info .beschreibung { max-width: none; font-size: .7em; min-height: 0; margin-top: .45em; }
+.m-autos.auto3d.zwei .a-info .beschreibung { font-size: .58em; }
+
+/* Karten im Raster: Kachelbild statt Emoji-Silhouette */
+.m-autos.auto3d .raster { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .4em; }
+.m-autos.auto3d:not(.zwei) .m-spieler .raster { grid-column: 2; grid-row: 1; gap: .5em; align-self: start; }
+.m-autos.auto3d .karte.auto { padding: .25em .3em .3em; }
+.m-autos.auto3d .karte.auto:hover { transform: none; }
+.m-autos.auto3d .auto-bild img, .m-autos.auto3d .auto-bild svg { width: 100%; height: auto; display: block; aspect-ratio: 1.6; object-fit: contain; }
+.m-autos.auto3d .karte.auto .karten-name { font-size: .78em; min-height: 2.2em; }
+.m-autos.auto3d.zwei .karte.auto .karten-name { font-size: .6em; min-height: 2.3em; }
+.m-autos.auto3d:not(.zwei) .karte.auto .bar { font-size: .66em; }

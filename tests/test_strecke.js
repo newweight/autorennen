@@ -8,11 +8,15 @@ function pruefe(name, ok, info) { console.log((ok ? 'OK   ' : 'FEHL ') + praefix
 
 
 // Erwartungen je Strecke (Charakter): Kurvenzahl, lange Geraden, Höhe
+// Runde 3: Wald/Wüste kräftiger (bis ±14 m), Wiese sanft (±6 m), Steigung überall ≤ 8 %
 const ERWARTUNG = {
-  wiese:  { kurven: [10, 14], geraden: { min: 150, anzahl: [2, 3] }, hoehe: 6 },
-  wald:   { kurven: [16, 30], geraden: { min: 200, anzahl: [0, 0] }, hoehe: 10, hoeheMin: 8 },
-  wueste: { kurven: [8, 16], geraden: { min: 250, anzahl: [2, 4] }, hoehe: 10 },
+  wiese:  { kurven: [10, 14], geraden: { min: 150, anzahl: [2, 3] }, hoehe: 6, hoeheMin: 5 },
+  wald:   { kurven: [16, 30], geraden: { min: 200, anzahl: [0, 0] }, hoehe: 14, hoeheMin: 18 },
+  wueste: { kurven: [8, 16], geraden: { min: 250, anzahl: [2, 4] }, hoehe: 14, hoeheMin: 15 },
+  // Fantasie (Runde 3): kürzer, 2 Loopings auf langen Geraden, nur 1–2 Hindernisse
+  fantasie: { kurven: [4, 12], geraden: { min: 150, anzahl: [2, 3] }, hoehe: 10, laenge: [1300, 1500], hindernisse: [1, 2] },
 };
+const STEIGUNG_MAX = 0.08;
 const nurId = process.argv[2];
 for (const daten of R.trackCatalog) {
 if (nurId && daten.id !== nurId) continue;
@@ -23,7 +27,8 @@ const strecke = new R.Strecke(daten);
 const sp = strecke.spline, N = sp.anzahl, L = strecke.laenge;
 
 // ---------- Geometrie ----------
-pruefe('Streckenlänge 1900–2400 m', L >= 1900 && L <= 2400, L.toFixed(1) + ' m');
+const lg = erw.laenge || [1900, 2400];
+pruefe('Streckenlänge ' + lg[0] + '–' + lg[1] + ' m', L >= lg[0] && L <= lg[1], L.toFixed(1) + ' m');
 
 let minR = Infinity, minRs = 0;
 sp.punkte.forEach(p => { const r = 1 / Math.max(1e-9, Math.abs(p.kruemmung)); if (r < minR) { minR = r; minRs = p.s; } });
@@ -79,7 +84,7 @@ pruefe('Abstand nicht benachbarter Teile ≥ 40 m (keine Überschneidung)', minA
   }
   pruefe('Höhe |y| ≤ ' + erw.hoehe + ' m', maxY <= erw.hoehe, maxY.toFixed(2) + ' m');
   if (erw.hoeheMin) pruefe('Höhenunterschied ≥ ' + erw.hoeheMin + ' m', yMax - yMin >= erw.hoeheMin, yMin.toFixed(1) + ' … ' + yMax.toFixed(1) + ' m');
-  pruefe('Steigung < 6 %', maxSteig < 0.06, (maxSteig * 100).toFixed(2) + ' %');
+  pruefe('Steigung ≤ ' + STEIGUNG_MAX * 100 + ' %', maxSteig <= STEIGUNG_MAX, (maxSteig * 100).toFixed(2) + ' %');
   // Spline-Höhe passt zum Gelände (Straße liegt auf dem Boden)
   let maxAbw = 0;
   sp.punkte.forEach(p => { maxAbw = Math.max(maxAbw, Math.abs(p.y - strecke.gelaendeHoehe(p.x, p.z))); });
@@ -127,11 +132,154 @@ pruefe('Start auf einer Geraden', [-40, -20, 0, 20, 40].every(d => Math.abs(sp.p
   pruefe('Untergrund breite/2+4 m = ' + ab, an(b2 + 4) === ab && an(-b2 - 4) === ab, an(b2 + 4));
   const nAb = strecke.abfrage(p.x + p.nx * (b2 + 4), p.z + p.nz * (b2 + 4));
   pruefe('abfrage() liefert Themen-Untergrund', nAb.untergrund === ab, nAb.untergrund);
-  if (daten.bruecke) {
-    const pb = sp.punktBei((daten.bruecke.von + daten.bruecke.bis) / 2);
-    const aufSteg = strecke.untergrundAn(pb.x + pb.nx * (b2 + 5), pb.z + pb.nz * (b2 + 5));
-    pruefe('Brücke: neben der Straße Bretter (rand)', aufSteg === 'rand', aufSteg);
+}
+
+// ---------- Brücken und Tunnel (Runde 3) ----------
+{
+  const b2 = strecke.breite / 2, rb = strecke.randBreite;
+  const bereiche = strecke.bruecken.map(b => Object.assign({ was: 'Brücke' }, b)).concat(strecke.tunnel.map(t => Object.assign({ was: 'Tunnel' }, t)));
+  bereiche.forEach((b) => {
+    pruefe(b.was + ' ' + b.s0 + '–' + b.s1 + ' liegt auf der Strecke (30–150 m, ≥ 60 m vom Start)',
+      b.s0 >= 60 && b.s1 <= L - 60 && b.s1 - b.s0 >= 30 && b.s1 - b.s0 <= 150, (b.s1 - b.s0) + ' m');
+    const m = sp.punktBei(b.mitte);
+    pruefe(b.was + ': Bande in der Mitte = Geländer/Wand an der Fahrbahnkante', Math.abs(strecke.grenzeBei(b.mitte) - strecke.grenzeEng) < 1e-6 &&
+      strecke.grenzeEng < b2 + rb + 1, strecke.grenzeBei(b.mitte).toFixed(2) + ' m');
+    pruefe(b.was + ': Trichter davor (Bande 30 m vorher wieder normal)', Math.abs(strecke.grenzeBei(b.s0 - 30) - strecke.seitenabstandMax) < 1e-6);
+    pruefe(b.was + ': Mitte der Fahrbahn = strasse', strecke.untergrundAn(m.x, m.z) === 'strasse');
+  });
+  for (let i = 0; i < bereiche.length; i++) for (let j = i + 1; j < bereiche.length; j++) {
+    const a = bereiche[i], c = bereiche[j];
+    pruefe('Brücken/Tunnel überlappen nicht (mit 40 m Abstand)', a.s1 + 40 < c.s0 || c.s1 + 40 < a.s0, a.s0 + '/' + c.s0);
   }
+  strecke.bruecken.forEach((b) => {
+    const m = sp.punktBei(b.mitte);
+    const tief = strecke.hoeheAn(m.x, m.z) - strecke.bodenHoehe(m.x, m.z);
+    pruefe('Brücke ' + b.art + ': Senke darunter ≥ 3 m', tief >= 3, tief.toFixed(2) + ' m');
+    // Boden an den Brückenenden wieder auf Straßenhöhe (Widerlager)
+    const e0 = sp.punktBei(b.s0), e1 = sp.punktBei(b.s1);
+    const rest = Math.max(strecke.senkeTiefe(e0.x, e0.z), strecke.senkeTiefe(e1.x, e1.z));
+    pruefe('Brücke: Senke endet an den Brückenenden (< 5 cm)', rest < 0.05, (rest * 100).toFixed(1) + ' cm');
+  });
+  // Die Senke darf keine andere Stelle der Strecke absenken (Straße schwebt sonst)
+  let maxAbs = 0, wo = -1;
+  sp.punkte.forEach((p) => {
+    if (strecke.brueckeBei(p.s, 2)) return;
+    for (const q of [-b2 - rb, 0, b2 + rb]) {
+      const t = strecke.senkeTiefe(p.x + p.nx * q, p.z + p.nz * q);
+      if (t > maxAbs) { maxAbs = t; wo = p.s; }
+    }
+  });
+  pruefe('Senken nur unter Brücken (Straße sonst auf dem Boden, < 2 cm)', maxAbs < 0.02, (maxAbs * 100).toFixed(1) + ' cm bei s=' + wo.toFixed(0));
+  // imTunnel
+  strecke.tunnel.forEach((t) => {
+    const ok = strecke.imTunnel(t.s0 + 1) && strecke.imTunnel(t.mitte) && strecke.imTunnel(t.s1 - 1) &&
+      !strecke.imTunnel(t.s0 - 1) && !strecke.imTunnel(t.s1 + 1) && strecke.imTunnel(t.s0 - 3, 5) && !strecke.imTunnel(t.s0 - 6, 5) &&
+      strecke.imTunnel(t.s0 + L) && strecke.tunnelBei(t.mitte) === t;
+    pruefe('imTunnel(s) korrekt (Grenzen, Zugabe, Rundenübergang)', ok);
+  });
+  if (!strecke.tunnel.length) pruefe('imTunnel(s) ohne Tunnel immer false', [0, 300, 900].every(s => !strecke.imTunnel(s)));
+  // Auf der Brücke neben der Straße: Randstreifen (Bretter/Gehweg) bis zum Geländer
+  strecke.bruecken.forEach((b) => {
+    const p = sp.punktBei(b.mitte), q = b2 + rb + 0.2;
+    const u = strecke.untergrundAn(p.x + p.nx * q, p.z + p.nz * q);
+    pruefe('Brücke: zwischen Randstreifen und Geländer = rand', u === 'rand', u);
+  });
+}
+
+// ---------- Hindernisse (Runde 3) ----------
+{
+  const ANZAHL = { wiese: { sand: 1, ast: 1, baustelle: 1 }, wald: { oel: 1, ast: 1, baustelle: 1, sand: 1 },
+    wueste: { sand: 2, oel: 1, baustelle: 1 }, fantasie: { oel: 1, ast: 1 } }[daten.id];
+  const hs = strecke.hindernisse, b2 = strecke.breite / 2, hz = erw.hindernisse || [3, 5];
+  pruefe(hz[0] + '–' + hz[1] + ' Hindernisse', hs.length >= hz[0] && hs.length <= hz[1], hs.map(h => h.typ + '@' + Math.round(h.s)).join(', '));
+  if (ANZAHL) {
+    const ist = {}; hs.forEach(h => { ist[h.typ] = (ist[h.typ] || 0) + 1; });
+    pruefe('Hindernis-Typen wie geplant', Object.keys(ANZAHL).every(k => ist[k] === ANZAHL[k]) && Object.keys(ist).every(k => ANZAHL[k]), JSON.stringify(ist));
+  }
+  // Haarnadeln: zusammenhängende Kurve mit ≥ 150° Richtungsänderung → Scheitel = stärkste Krümmung
+  const haarnadeln = [];
+  {
+    const N2 = sp.anzahl, start = sp.punkte.findIndex(p => Math.abs(p.kruemmung) < 1 / 400);
+    let winkel = 0, vz = 0, best = null;
+    for (let k = 0; k <= N2; k++) {
+      const p = sp.punkte[(start + k) % N2], kurve = Math.abs(p.kruemmung) > 1 / 150;
+      if (kurve && Math.sign(p.kruemmung) === vz) { winkel += Math.abs(p.kruemmung) * sp.ds; if (Math.abs(p.kruemmung) > Math.abs(best.kruemmung)) best = p; }
+      else {
+        if (vz && winkel * 180 / Math.PI >= 150) haarnadeln.push(best.s);
+        winkel = kurve ? Math.abs(p.kruemmung) * sp.ds : 0; vz = kurve ? Math.sign(p.kruemmung) : 0; best = kurve ? p : null;
+      }
+    }
+  }
+  const sperr = [];
+  hs.forEach((h) => {
+    const name = h.typ + '@' + Math.round(h.s);
+    // auf der Fahrbahn
+    pruefe(name + ': liegt auf der Fahrbahn', Math.abs(h.seitenabstand) + Math.min(h.halbbreite, 1) <= b2 + 0.01 && h.halbbreite > 0.5,
+      'q=' + h.seitenabstand.toFixed(1) + ' ±' + h.halbbreite.toFixed(1));
+    const p = sp.punktBei(h.s), mx = p.x + p.nx * h.seitenabstand, mz = p.z + p.nz * h.seitenabstand;
+    if (h.typ !== 'baustelle') pruefe(name + ': Grund unter dem Hindernis = Straße', strecke.untergrundAn(p.x, p.z) !== 'gras' && strecke.untergrundAn(p.x, p.z) !== 'sand');
+    // nicht auf Start/Ziel, nicht in Tunnel/Brücke (± 20 m), nicht direkt vor einer Haarnadel
+    const s0 = h.s0, s1 = sp.wrapS(h.s0 + h.laenge);
+    const nahStart = Math.min(Math.abs(sp.differenzS(s0, 0)), Math.abs(sp.differenzS(s1, 0))) < 60 || s1 < s0;
+    const inEng = strecke._engstellen.some(b => [s0, h.s, s1].some(s => strecke._inBereich(b, s, 20)));
+    const vorHaar = haarnadeln.find(a => { const d = sp.differenzS(a, s1); return d > -10 && d < 50; });
+    pruefe(name + ': nicht am Start, nicht in Tunnel/Brücke, nicht vor einer Haarnadel', !nahStart && !inEng && vorHaar === undefined,
+      'Haarnadeln ' + haarnadeln.map(Math.round).join('/'));
+    sperr.push([s0, s1]);
+    if (h.untergrund) {
+      pruefe(name + ': untergrundAn Mitte = ' + h.untergrund, strecke.untergrundAn(mx, mz) === h.untergrund, strecke.untergrundAn(mx, mz));
+      const q2 = h.seitenabstand + (h.seitenabstand > 0 ? -1 : 1) * (h.halbbreite + 1);
+      const u2 = strecke.untergrundAn(p.x + p.nx * q2, p.z + p.nz * q2);
+      const pv = sp.punktBei(h.s + h.halblaenge + 2), u3 = strecke.untergrundAn(pv.x + pv.nx * h.seitenabstand, pv.z + pv.nz * h.seitenabstand);
+      pruefe(name + ': daneben / dahinter wieder strasse', u2 === 'strasse' && u3 === 'strasse', u2 + '/' + u3);
+      const n = strecke.abfrage(mx, mz);
+      pruefe(name + ': abfrage() liefert den Fleck-Untergrund', n.untergrund === h.untergrund);
+    }
+    if (h.typ === 'baustelle') {
+      let gerade = true;
+      for (let s = h.s0; s <= h.s0 + h.laenge; s += 2) if (Math.abs(sp.punktBei(s).kruemmung) > 1 / 300) gerade = false;
+      if (daten.id === 'wiese') pruefe(name + ': Baustelle auf einer Geraden', gerade);
+      pruefe(name + ': Pylonen + Bake vorhanden, gesperrte Hälfte', h.pylonen.length >= 10 && h.segmente.length === 1 &&
+        h.pylonen.every(pp => { const n = sp.naechster(pp.x, pp.z); return Math.abs(n.seitenabstand) <= b2 && Math.sign(n.seitenabstand) === h.seite; }));
+    }
+    if (h.typ === 'oel' && daten.id === 'wald') pruefe(name + ': Öl liegt in einer Kurve', Math.abs(p.kruemmung) > 1 / 150, 'R ' + (1 / Math.abs(p.kruemmung)).toFixed(0) + ' m');
+  });
+  // Hindernisse überlappen sich nicht (≥ 30 m Abstand)
+  let ueber = false;
+  for (let i = 0; i < sperr.length; i++) for (let j = i + 1; j < sperr.length; j++) {
+    const a = sperr[i], c = sperr[j];
+    if (!(sp.differenzS(c[0], a[1]) > 30 || sp.differenzS(a[0], c[1]) > 30)) ueber = true;
+  }
+  pruefe('Hindernisse mit ≥ 30 m Abstand zueinander', !ueber);
+}
+
+// ---------- Loopings, Bälle, Wasserstrahlen (Fantasie, Runde 3) ----------
+if (strecke.loopings.length || daten.baelle || daten.wasserstrahlen) {
+  const gerade = (s0, s1) => { for (let s = s0; s <= s1; s += 2) if (Math.abs(sp.punktBei(s).kruemmung) > 1 / 500) return false; return true; };
+  if (daten.id === 'fantasie') pruefe('Fantasie: genau 2 Loopings', strecke.loopings.length === 2);
+  strecke.loopings.forEach((l) => {
+    const name = 'Looping@' + Math.round(l.s);
+    pruefe(name + ': Radius 12 m, vMin ≈ 87 km/h', l.radius === 12 && Math.abs(l.vMin * 3.6 - 87.3) < 0.5, (l.vMin * 3.6).toFixed(1) + ' km/h');
+    pruefe(name + ': auf einer Geraden mit ≥ 120 m Anlauf (bis Ausfahrt + 20 m gerade)', gerade(l.s - 120, l.s + l.versatz + 20));
+    let anlauf = 0; while (anlauf < 600 && gerade(l.s - anlauf - 2, l.s)) anlauf += 2;
+    console.log('     Anlauf vor ' + name + ': ' + anlauf + ' m gerade');
+    pruefe(name + ': nicht am Start (≥ 60 m), nicht in Tunnel/Brücke', Math.abs(sp.differenzS(l.s, 0)) >= 60 && !strecke._engstellen.some(b => strecke._inBereich(b, l.s, 30)));
+    pruefe(name + ': keine Hindernisse im Anlauf (60 m) und im Looping', hs_frei(l.s - 60, l.s1 + 10));
+    const dyn = (daten.baelle || []).map(b => b.s).concat((daten.wasserstrahlen || []).map(w => w.s));
+    pruefe(name + ': Bälle/Wasser ≥ 80 m vor und 30 m nach dem Looping', dyn.every(s => { const d = sp.differenzS(s, l.s); return d < -80 || d > l.versatz + 30; }),
+      dyn.map(Math.round).join('/'));
+  });
+  function hs_frei(a, b) { return strecke.hindernisse.every(h => sp.differenzS(h.s1, a) < 0 || sp.differenzS(h.s0, b) > 0); }
+  for (let i = 0; i < strecke.loopings.length; i++) for (let j = i + 1; j < strecke.loopings.length; j++)
+    pruefe('Loopings weit auseinander (≥ 200 m)', Math.abs(sp.differenzS(strecke.loopings[i].s, strecke.loopings[j].s)) >= 200);
+  (daten.baelle || []).forEach((b) => {
+    pruefe('Ballstelle@' + b.s + ': nicht am Start, abRunde gültig, Seite ±1', Math.abs(sp.differenzS(b.s, 0)) >= 60 && (b.abRunde === 'letzte' || b.abRunde >= 2) && (b.von === -1 || b.von === 1));
+  });
+  (daten.wasserstrahlen || []).forEach((w) => {
+    const pkt = sp.punktBei(w.s), x = pkt.x + pkt.nx * w.seitenabstand, z = pkt.z + pkt.nz * w.seitenabstand;
+    pruefe('Wasserstrahl@' + w.s + ': Düse auf der Fahrbahn, ≥ 30 m von Hindernissen', strecke.untergrundAn(x, z) === 'strasse' &&
+      hs_frei(w.s - 30, w.s + 30), 'q=' + w.seitenabstand);
+  });
 }
 
 // ---------- Startaufstellung ----------

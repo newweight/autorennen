@@ -84,3 +84,30 @@
   Deko-Chunks, Leistungs-Overlay (H); (2) Automodelle v2 mit echten Maßen (5–7k Dreiecke/Auto, 10 Meshes);
   (3) Titel "Jonas Hot Steering Wheel", Fahrerwahl (12 Fahrer, KI nimmt Restnamen). Alle Tests grün.
   Offen: M4/AMG-Front zu flach; Messung auf dem Mac (H-Overlay) fehlt
+
+## Runde 3 (11.10.2026) – siehe PLAN_RUNDE3.md
+- Rückmeldung: "super" + 6 neue Wünsche (3D-Autowahl drehbar, 220–270 km/h, Berg/Brücke/Tunnel mit Licht,
+  Hindernisse Öl/Baustelle/Sand/Ast, 3 weitere KI-Stufen, Fantasie-Strecke mit 2 Loopings, Bällen, Wasserstrahl)
+- Offene Fragen F1–F4 in PLAN_RUNDE3.md; Entscheidungen vorläufig getroffen
+- Welle 1 gestartet: A Tempo/Schwierigkeit (Opus), B Streckenelemente (Opus), D 3D-Autowahl (Sonnet)
+- 11.10. Agent B (Opus) – Streckenelemente + Hindernisse: Höhen neu (Wald −11…14 m, Wüste −8…13 m, Wiese −2…6 m, ≤ 8 %),
+  Brücken (Wiese Stein über Teich, Wald Holz über Bach, Wüste Beton/Stahl über Schlucht; Senke = bodenHoehe),
+  Tunnel (Wald Fels 690–780, Wüste Sandstein 130–220; Lampen, 3 Punkt- + 2 Spotlichter nur im Tunnel, Licht je Ansicht gedimmt),
+  Hindernisse (config.hindernisse, trackCatalog.hindernisse, Kollisionen.hindernisse), Nicken nach Steigung.
+  Neue Tests: tests/test_hindernisse.js, test_strecke.js (Brücken/Tunnel/Hindernisse), screenshot_test.py Bilder 13–18.
+  Offen (Agent A/driver.js): KI weicht noch nicht aus → Schumacher hängt auf der Wiese an der Baustellen-Bake (s≈820),
+  rennen_test 400 s: nur 1 Runde. Struktur strecke.hindernisse an Agent A gemeldet; main.js ruft driver.hindernisseSetzen() falls vorhanden.
+- 11.10. Agent C (Opus) – Strecke „Fantasie“ fertig: trackCatalog 'fantasie' (1.388 m, Breite 14, Bauplan tests/bauplan/fantasie.json),
+  Thema 'fantasie' (lila Himmel, Pastell-Felder, Riesenpilze, Zuckerwatte-Bäume, Ballons, Pastell-Hügel, Regenbogen, Regenbogen-Randsteine).
+  2 Loopings (s=170 Start-Gerade, s=800 Süd-Gerade, r=12, vMin 87 km/h) – neu src/track/looping.js (Helix-Band, Gerüst, Fahrlogik
+  Spieler=KI, Sturz → zurück vor die Einfahrt „Mehr Anlauf! 🚀“, zu langsam → unten durch „Schneller für den Looping!“, Kamera rollt mit).
+  Bälle (3 Stellen, ab Runde 2 bzw. letzte Runde, −60 %) + Wasserfontänen (2, alle 20 s, −40 % + Schlingern) – neu src/world/dynamik.js.
+  HUD.meldung() oben; Kollisionen ignorieren Autos im Looping (vehicle.imLooping). Autorennen.html: 2 neue <script>-Zeilen.
+  Tests: neu test_looping.js, test_dynamik.js; test_strecke/test_rundenzeit/test_ki/screenshot_test/rennen_test/menu_test auf Fantasie erweitert.
+  KI Runde 2: leicht 65,4 s … unschlagbar 49,0 s, alle 7 Stufen 4/4 Loopings, 0 Stürze. rennen_test fantasie: 3 KI × 3 Runden in 400 s.
+  Offen (nicht meine Dateien): menu.js Kartenfarbe für Thema fantasie fehlt (Karte grün wie Wiese); 4. Streckenkarte bricht bei 1280 px
+  in Zeile 2 um und wird unten abgeschnitten (styles.css .karte.strecke { width: 16em } → z. B. 13.5em).
+- 11.10. – Runde 3 abgeschlossen (Hauptmodell geprüft): 10 Node-Testdateien + menu_test (alle Prüfungen) +
+  rennen_test wiese/fantasie grün. V_DECKEL Ideallinie 45→78 m/s, Tacho 280. Screenshots Looping/Bälle/
+  Tunnel/Baustelle angesehen. Offen: Fragen F1–F4 in PLAN_RUNDE3.md; Leistung mit Tunnel-Lichtern auf dem
+  Mac ungemessen; M4/AMG-Front weiter flach.

@@ -209,7 +209,7 @@
       const autoMeshes = new Set(this.fahrzeuge.map(f => f.mesh));
       const freigeben = (m) => { if (m.map) m.map.dispose(); m.dispose(); };
       this.szene.children.slice().forEach((o) => {
-        if (o.isLight) return;
+        if (o.isLight && !o.userData.tunnelLicht) return;     // Sonne/Himmel bleiben, Tunnel-Lichter gehören zur Strecke
         this.szene.remove(o);
         if (autoMeshes.has(o)) {
           // Auto-Geometrien/-Materialien liegen im Katalog-Cache; nur der Schatten-Quad gehört dem Auto
@@ -223,6 +223,8 @@
         });
       });
       this.fahrzeuge = []; this.kameras = [];
+      this.tunnelLichter = null;
+      this.dynamik = null;
       this.rennen = null; this.strecke = null; this.ergebnis = null;
       this.stoesse = [];
       if (R.Audio) { R.Audio.motorAlleEntfernen(); R.Audio.bremsen(false); }
@@ -236,6 +238,14 @@
       // Strecke + Deko bewegen sich nie: Instanzen in Regionen teilen (Culling je Kamera), Matrizen einfrieren
       this.szene.add(R.themes.statischVorbereiten(strecke.bauen()));
       this.szene.add(R.themes.statischVorbereiten(R.themes.dekoBauen(daten.thema, strecke)));
+      // Hindernisse (Öl, Sand, Baustelle, Ast) – eigene Gruppe, die Pylonen ändern sich im Rennen
+      this.szene.add(R.themes.statischVorbereiten(strecke.hindernisseBauen(), 1));
+      // Fantasie: rollende Bälle und Wasserfontänen (bewegen sich → nicht statisch)
+      this.dynamik = null;
+      if (R.Dynamik && ((daten.baelle && daten.baelle.length) || (daten.wasserstrahlen && daten.wasserstrahlen.length))) {
+        this.dynamik = new R.Dynamik(strecke, { seed: 4242 });
+        this.szene.add(this.dynamik.bauen());
+      }
       // Thema: Himmel, Nebel, Licht
       const thema = R.themes[daten.thema] || R.themes.wiese;
       const sicht = thema.sichtweite || R.config.grafik.sichtweite;
@@ -247,6 +257,11 @@
       if (this.halbkugelLicht && thema.lichtHimmel !== undefined) this.halbkugelLicht.color.setHex(thema.lichtHimmel);
       if (this.sonne && thema.sonnenFarbe !== undefined) this.sonne.color.setHex(thema.sonnenFarbe);
       if (this.sonne && thema.sonnenIntensitaet !== undefined) this.sonne.intensity = thema.sonnenIntensitaet;
+      // Grundhelligkeit merken: im Tunnel wird sie je Ansicht gedimmt (zeichnen)
+      if (this._himmelStandard === undefined) this._himmelStandard = this.halbkugelLicht.intensity;
+      this.halbkugelLicht.intensity = this._himmelStandard;
+      this._lichtBasis = { himmel: this.halbkugelLicht.intensity, sonne: this.sonne.intensity };
+      if (strecke.tunnel.length) this._tunnelLichterAnlegen();
       return strecke;
     }
 
@@ -331,6 +346,7 @@
       f.autopilot = new R.Driver(f.vehicle, this.strecke, {
         schwierigkeit: 'mittel', seed: 7000 + spielerIndex, name: 'Autopilot ' + (spielerIndex + 1),
       });
+      if (typeof f.autopilot.hindernisseSetzen === 'function') f.autopilot.hindernisseSetzen(this.strecke.hindernisse);
       return true;
     }
 
@@ -377,6 +393,13 @@
       });
       this.fahrhilfeStufe = opt.fahrhilfe[0] || this.fahrhilfeStufe;
       this.rennen = new R.RaceManager(strecke, teilnehmer, { runden: opt.runden });
+      // Umgefahrene Pylonen stehen wieder, sobald der Verursacher eine Runde beendet hat
+      this.rennen.bei('runde', (t) => strecke.pylonenZurueck(t.nr));
+      // Computerfahrer kennen die Hindernisse (falls der Fahrer das unterstützt)
+      this.fahrzeuge.forEach((f) => {
+        if (f.driver && typeof f.driver.hindernisseSetzen === 'function') f.driver.hindernisseSetzen(strecke.hindernisse);
+      });
+      if (this.tunnelLichter) this._tunnelLichterVorkompilieren();
       return strecke;
     }
 
@@ -387,6 +410,8 @@
       const mesh = R.carBuilder.bauen(auto);
       this.szene.add(mesh);
       const eintrag = { vehicle, mesh, auto, radwinkel: 0 };
+      // Looping-Zustand je Fahrzeug (track/looping.js): { aktiv, winkel, v, … }
+      eintrag.looping = R.Looping ? R.Looping.zustand() : null;
       // Zustand vor dem letzten Physikschritt + interpolierte Darstellung (Mesh und Kamera nutzen sie).
       // Ohne Interpolation springt ein Auto bei 0 oder 2 Physikschritten pro Frame sichtbar ("Ruckeln").
       eintrag.vorher = { x: x, y: 0, z: z, heading, nicken: 0, neigung: 0 };
@@ -432,14 +457,30 @@
 
       // Grafik an Physik angleichen: zwischen vorletztem und letztem Physikzustand interpolieren
       const alpha = aktiv ? Math.min(1, this.uhr.rest / p.schritt) : 1;
+      const pose = this._loopPose || (this._loopPose = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), vor: new THREE.Vector3(), oben: new THREE.Vector3() });
       for (let i = 0; i < this.fahrzeuge.length; i++) {
         const f = this.fahrzeuge[i], v = f.vehicle, a = f.vorher, d = f.anzeige, mesh = f.mesh;
         d.x = a.x + (v.x - a.x) * alpha; d.y = a.y + (v.y - a.y) * alpha; d.z = a.z + (v.z - a.z) * alpha;
         d.heading = a.heading + R.Vehicle.winkelDiff(v.heading, a.heading) * alpha;
         d.nicken = a.nicken + (v.nicken - a.nicken) * alpha; d.neigung = a.neigung + (v.neigung - a.neigung) * alpha;
-        mesh.position.set(d.x, d.y, d.z);
-        // YXZ: erst Heading (Hochachse), dann Nicken (Querachse), dann Wanken (Längsachse) – alles lokal
-        mesh.rotation.set(d.nicken, d.heading, d.neigung, 'YXZ');
+        // Looping: Pose (Position + Drehung, Dach zum Kreismittelpunkt) kommt aus track/looping.js
+        if (this.strecke && f.looping && R.Looping.anzeigePose(this.strecke, f.looping, alpha, pose)) {
+          mesh.position.copy(pose.pos);
+          mesh.quaternion.copy(pose.quat);
+          d.x = pose.pos.x; d.y = pose.pos.y; d.z = pose.pos.z;
+          f.loopAnzeige = true;
+        } else {
+          f.loopAnzeige = false;
+          mesh.position.set(d.x, d.y, d.z);
+        }
+        // Längsneigung nach der Straßensteigung: Höhe 1,6 m vor und hinter der (interpolierten) Mitte
+        let steigung = 0;
+        if (this.strecke) {
+          const st = this.strecke, r = d.richtung();
+          steigung = Math.atan2(st.hoeheAn(d.x + r.x * 1.6, d.z + r.z * 1.6) - st.hoeheAn(d.x - r.x * 1.6, d.z - r.z * 1.6), 3.2);
+        }
+        // YXZ: erst Heading (Hochachse), dann Nicken (Querachse, > 0 = Bug hoch), dann Wanken (Längsachse) – alles lokal
+        if (!f.loopAnzeige) mesh.rotation.set(d.nicken + steigung, d.heading, d.neigung, 'YXZ');
         // Räder rollen und lenken, Bremslicht
         f.radwinkel -= v.vLaengs * dt / 0.34;   // Rolldrehung (Radradius ≈ 0,34 m)
         R.carBuilder.dreheRaeder(mesh, f.radwinkel);
@@ -447,7 +488,10 @@
         R.carBuilder.setzeBremslicht(mesh, !!f.bremst);
       }
       if (this.zustand === 'menue') this.menueKameraFlug(dt);
-      else if (!this.pausiert) for (let i = 0; i < this.kameras.length; i++) this.kameras[i].update(dt);
+      else if (!this.pausiert) for (let i = 0; i < this.kameras.length; i++) { this.kameras[i].update(dt); this._loopingKamera(this.kameras[i], dt, alpha); }
+      if (this.strecke) this.strecke.hindernisseAnimieren(this._physikZeit || 0);
+      if (this.dynamik) this.dynamik.animieren();
+      if (this.tunnelLichter) this._tunnelLichterAktualisieren();
       const t2 = performance.now();
       if (R.Audio) this.tonAktualisieren(dt);
       const t3 = performance.now();
@@ -532,6 +576,77 @@
       A.bremsen(bremst);
     }
 
+    /**
+     * Kamera im Looping: Verfolger läuft auf dem Kreis hinter dem Auto her, "oben" = Auto-oben (weich).
+     * Danach dreht sich "oben" sanft zurück auf die Senkrechte. Cockpit: an der Auto-Pose festgemacht.
+     */
+    _loopingKamera(k, dt, alpha) {
+      const kam = k.kamera, Y = this._oben || (this._oben = new THREE.Vector3(0, 1, 0));
+      const f = this._fahrzeugVon(k.ziel), lp = f && f.looping;
+      if (!lp || !lp.aktiv || !this.strecke) {
+        // zurück zur normalen Kamera: "oben" weich auf die Senkrechte, Blick neu ausrichten
+        if (kam.up.y < 0.9999) {
+          kam.up.lerp(Y, 1 - Math.exp(-5 * dt)).normalize();
+          if (kam.up.y > 0.9999) kam.up.copy(Y);
+          kam.lookAt(k.blick);
+        }
+        k._imLooping = false;
+        return;
+      }
+      const L = k._loop || (k._loop = { pos: new THREE.Vector3(), blick: new THREE.Vector3(), oben: new THREE.Vector3(),
+        zPos: new THREE.Vector3(), zBlick: new THREE.Vector3(), zOben: new THREE.Vector3() });
+      const ziel = { pos: L.zPos, blick: L.zBlick, oben: L.zOben };
+      if (k.modus === 'cockpit') {
+        const p = this._loopPose;
+        R.Looping.anzeigePose(this.strecke, lp, alpha, p);
+        L.zPos.copy(p.pos).addScaledVector(p.oben, 1.15).addScaledVector(p.vor, 0.4);
+        L.zBlick.copy(L.zPos).addScaledVector(p.vor, 30).addScaledVector(p.oben, -0.5);
+        L.zOben.copy(p.oben);
+        L.pos.copy(L.zPos); L.blick.copy(L.zBlick); L.oben.copy(L.zOben);
+      } else {
+        R.Looping.kameraPose(this.strecke, lp, alpha, k.modus === 'weit' ? 4.5 : 3, ziel);
+        if (!k._imLooping) { L.pos.copy(kam.position); L.blick.copy(k.blick); L.oben.copy(kam.up); }
+        const t = 1 - Math.exp(-9 * dt);
+        L.pos.lerp(L.zPos, t); L.blick.lerp(L.zBlick, Math.min(1, t * 1.6)); L.oben.lerp(L.zOben, t).normalize();
+      }
+      k._imLooping = true;
+      kam.position.copy(L.pos); kam.up.copy(L.oben); kam.lookAt(L.blick);
+      // Verfolger-Zustand mitführen: nach der Ausfahrt geht es nahtlos weiter
+      k.pos.copy(L.pos); k.blick.copy(L.blick);
+    }
+
+    /** Fahrzeug-Eintrag zu einem Vehicle (für Kameras). */
+    _fahrzeugVon(vehicle) {
+      for (let i = 0; i < this.fahrzeuge.length; i++) if (this.fahrzeuge[i].vehicle === vehicle) return this.fahrzeuge[i];
+      return null;
+    }
+
+    /** HUD-Meldung (oben) für das Spielerauto i (nur Spieler haben ein HUD). */
+    _meldung(i, text, ms) {
+      const f = this.fahrzeuge[i];
+      if (!f || !f.istSpieler) return;
+      const hd = this.huds[f.spielerNr];
+      if (hd && hd.meldung) hd.meldung(text, ms);
+    }
+
+    /** Looping-Ereignis eines Fahrzeugs: Meldung, Ton, Rennleitung nachführen. */
+    _loopingEreignis(i, ereignis) {
+      if (!ereignis) return;
+      const f = this.fahrzeuge[i];
+      if (ereignis === 'gefallen') {
+        if (this.rennen) this.rennen.verfolgungSetzen(i, f.vehicle.x, f.vehicle.z);
+        this._vorherAngleichen(f); f.index = -1;
+        this._meldung(i, 'Mehr Anlauf! 🚀', 2200);
+        if (R.Audio && f.istSpieler) R.Audio.kollision(4);
+      } else if (ereignis === 'zuLangsam') {
+        this._meldung(i, 'Schneller für den Looping!', 1800);
+      } else if (ereignis === 'start') {
+        this._meldung(i, 'Looping! 🌀', 1200);
+      } else if (ereignis === 'geschafft') {
+        this._meldung(i, 'Super Looping! 🎉', 1500);
+      }
+    }
+
     /** Nur für Tests: Spielzeit ohne Zeichnen vorspulen (Sekunden). */
     schnellvorlauf(sekunden) {
       const dt = R.config.physik.schritt;
@@ -568,6 +683,16 @@
           if (fahrer.brauchtReset) { this.zuruecksetzen(i); fahrer.zurueckgesetzt(); return; }
         }
         if (countdown) s = { gas: 0, bremse: s.bremse, lenkung: s.lenkung };
+        // Im Looping (oder beim Zurückfallen) übernimmt track/looping.js statt vehicle.schritt
+        const lp = f.looping;
+        if (lp && (lp.aktiv || lp.fallen) && strecke) {
+          const erg = R.Looping.schritt(lp, v, strecke, s, dt);
+          const n = strecke.abfrage(v.x, v.z, f.index);
+          f.index = n.index; f.nah = n; v.untergrund = 'strasse';
+          f.bremst = false;
+          this._loopingEreignis(i, erg);
+          return;
+        }
         let hilfe;
         if (strecke) {
           const n = strecke.abfrage(v.x, v.z, f.index);
@@ -585,13 +710,46 @@
             };
           }
         }
+        const xAlt = v.x, zAlt = v.z;
         v.schritt(dt, s, hilfe);
         f.bremst = v.letzteSteuerung.bremse > 0 && v.vLaengs > 0.5;
+        // Looping-Einfahrt: s vorwärts überquert? (Bogenlänge nach dem Schritt aus der Verschiebung längs der Tangente)
+        if (lp && strecke && strecke.loopings.length && f.nah) {
+          const n = f.nah, pt = strecke.spline.punktBei(n.s), dx = v.x - xAlt, dz = v.z - zAlt;
+          const erg = R.Looping.einfahrt(lp, v, strecke, n.s, n.s + dx * pt.tx + dz * pt.tz, n.seitenabstand + dx * pt.nx + dz * pt.nz);
+          this._loopingEreignis(i, erg);
+        }
       });
 
       // Kollisionen nach allen Fahrzeug-Schritten
+      this._physikZeit = (this._physikZeit || 0) + dt;
       if (strecke) this.fahrzeuge.forEach(f => R.Kollisionen.bande(f.vehicle, strecke));
       this.stoesse = R.Kollisionen.autoAuto(this.fahrzeuge, { countdown });
+      // Hindernisse (Pylonen, Bake, Ast): Stöße wie Auto-Auto (Ton + Kamerawackeln für Spieler)
+      const hs = strecke ? R.Kollisionen.hindernisse(this.fahrzeuge, strecke, { dt, zeit: this._physikZeit, countdown }) : [];
+      for (let k = 0; k < hs.length; k++) {
+        const f = this.fahrzeuge[hs[k].nr];
+        if (!f || !f.istSpieler) continue;
+        if (R.Audio && hs[k].staerke >= 1.5) R.Audio.kollision(Math.min(12, hs[k].staerke));
+        if (hs[k].staerke >= 3) this.kameras.forEach((kam) => { if (kam.ziel === f.vehicle) kam.wackeln(Math.min(8, hs[k].staerke)); });
+      }
+      this.hindernisStoesse = hs;
+      // Fantasie: Bälle und Wasserstrahlen (nur wenn das Rennen läuft)
+      if (this.dynamik && rennen && rennen.gasErlaubt) {
+        let fuehrend = spielerMax;
+        if (fuehrend === null) for (let i = 0; i < tn.length; i++) if (fuehrend === null || tn[i].fortschritt > fuehrend) fuehrend = tn[i].fortschritt;
+        const e = this.dynamik.schritt(dt, { fortschritt: fuehrend === null ? 0 : fuehrend, runden: rennen.runden });
+        if (e.baelleKommen) this.fahrzeuge.forEach((f, i) => this._meldung(i, '⚠️ Bälle kommen!', 2500));
+        const ds = this.dynamik.kollisionen(this.fahrzeuge);
+        for (let k = 0; k < ds.length; k++) {
+          const f = this.fahrzeuge[ds[k].nr];
+          if (!f || !f.istSpieler) continue;
+          if (R.Audio) R.Audio.kollision(Math.min(12, ds[k].staerke));
+          this.kameras.forEach((kam) => { if (kam.ziel === f.vehicle) kam.wackeln(Math.min(8, Math.max(4, ds[k].staerke))); });
+          this._meldung(ds[k].nr, ds[k].typ === 'ball' ? 'Bumm! ⚽' : 'Platsch! 💦', 1000);
+        }
+        this.dynamikStoesse = ds;
+      }
       if (R.Audio) this.stoesse.forEach((st) => {
         if (st.staerke >= 1.5 && (this.fahrzeuge[st.a].istSpieler || this.fahrzeuge[st.b].istSpieler)) R.Audio.kollision(st.staerke);
       });
@@ -604,7 +762,14 @@
 
       this.fahrzeuge.forEach((f) => {
         const v = f.vehicle;
-        if (strecke) v.y = strecke.hoeheAn(v.x, v.z);
+        if (strecke && !v.imLooping) v.y = strecke.hoeheAn(v.x, v.z);
+        // Hüpfer (Ast): kleine Sprungbewegung, nur Optik
+        if (v.huepfer) { f.hoppV = v.huepfer; v.huepfer = 0; f.hoppY = f.hoppY || 0; }
+        if (f.hoppV || f.hoppY > 0) {
+          f.hoppV -= 9.81 * dt; f.hoppY += f.hoppV * dt;
+          if (f.hoppY <= 0) { f.hoppY = 0; f.hoppV = 0; }
+          v.y += f.hoppY;
+        }
         this._feststeckenPruefen(f, dt, countdown);
       });
       if (rennen) rennen.schritt(dt);
@@ -661,6 +826,17 @@
         }
         this.rennen.verfolgungSetzen(i, pose.x, pose.z);
       }
+      // Nicht direkt vor/in eine Baustelle oder einen Ast setzen: dann auf die freie Fahrbahnhälfte
+      const nr = sp.naechster(pose.x, pose.z);
+      for (const h of this.strecke.hindernisse) {
+        if (!h.seite || (h.typ !== 'baustelle' && h.typ !== 'ast')) continue;
+        const d = sp.differenzS(nr.s, h.s0);
+        if (d > -30 && d < h.laenge + 2) {
+          const p = sp.punktBei(nr.s), q = -h.seite * this.strecke.breite / 4;
+          pose = { x: p.x + p.nx * q, z: p.z + p.nz * q, heading: R.headingAus(p.tx, p.tz) };
+        }
+      }
+      if (f.looping && (f.looping.aktiv || f.looping.fallen)) { f.looping.aktiv = false; f.looping.fallen = false; f.vehicle.imLooping = false; }
       f.vehicle.setzen(pose.x, pose.z, pose.heading);
       f.vehicle.y = this.strecke.hoeheAn(pose.x, pose.z);
       this._vorherAngleichen(f);
@@ -676,6 +852,7 @@
       this.szene.updateMatrixWorld();
       const ks = this.zustand === 'menue' ? [] : this.kameras;
       if (ks.length < 2) {
+        this._tunnelDimmen(ks.length ? 0 : -1);
         r.setScissorTest(false);
         r.setViewport(0, 0, w, h);
         r.render(this.szene, ks.length ? ks[0].kamera : this.menueKamera);
@@ -688,9 +865,101 @@
         const x = i === 0 ? 0 : links, breite = i === 0 ? links : w - links;
         r.setViewport(x, 0, breite, h);
         r.setScissor(x, 0, breite, h);
+        this._tunnelDimmen(i);
         r.render(this.szene, k.kamera);
       });
       r.setScissorTest(false);
+    }
+
+    // ---------- Tunnel: Licht ----------
+    /**
+     * Tunnel-Lichter (nur auf Strecken mit Tunnel): 3 Punktlichter (an den 3 Deckenlampen, die einer
+     * Kamera im Tunnel am nächsten sind) + 2 Spots als Scheinwerfer (Solo: links/rechts am Spielerauto,
+     * zu zweit: je einer pro Spielerauto). Außerhalb des Tunnels unsichtbar (visible = false → der
+     * Shader rechnet sie nicht). Nie mehr als 3 Punkt- + 2 Spotlichter.
+     */
+    _tunnelLichterAnlegen() {
+      const L = { punkte: [], spots: [] };
+      for (let i = 0; i < 3; i++) {
+        const l = new THREE.PointLight(0xffd8a0, 18, 20, 1.6);
+        l.userData.tunnelLicht = true; l.visible = false; l.name = 'Tunnellampe';
+        this.szene.add(l); L.punkte.push(l);
+      }
+      for (let i = 0; i < 2; i++) {
+        const s = new THREE.SpotLight(0xfff2d8, 900, 75, 0.42, 0.5, 1.3);
+        s.userData.tunnelLicht = true; s.visible = false; s.name = 'Scheinwerfer';
+        s.target.name = 'ScheinwerferZiel';
+        this.szene.add(s); this.szene.add(s.target); L.spots.push(s);
+      }
+      L.kamIndex = [-1, -1, -1]; L.dunkel = [0, 0, 0];
+      this.tunnelLichter = L;
+    }
+
+    /** Shader einmal mit eingeschalteten Tunnel-Lichtern übersetzen (kein Ruckler bei der ersten Einfahrt). */
+    _tunnelLichterVorkompilieren() {
+      const L = this.tunnelLichter;
+      if (!L || !this.renderer.compile) return;
+      L.punkte.concat(L.spots).forEach(l => { l.visible = true; });
+      try { this.renderer.compile(this.szene, this.kameras[0] ? this.kameras[0].kamera : this.menueKamera); } catch (e) { /* egal */ }
+      L.punkte.concat(L.spots).forEach(l => { l.visible = false; });
+    }
+
+    /** Je Frame: Spots an die Spielerautos, Punktlichter an die nächsten Lampen, Dunkel-Faktor je Kamera. */
+    _tunnelLichterAktualisieren() {
+      const L = this.tunnelLichter, st = this.strecke, sp = st.spline;
+      // Kameras: im Tunnel? (Dunkel-Faktor 0 außen … 1 ab 18 m tief drin)
+      const kams = this.zustand === 'menue' ? [this.menueKamera] : this.kameras.map(k => k.kamera);
+      let refX = 0, refZ = 0, refAn = false, bestD = Infinity;
+      for (let i = 0; i < 3; i++) L.dunkel[i] = 0;
+      for (let i = 0; i < kams.length; i++) {
+        const c = kams[i].position, n = sp.naechster(c.x, c.z, L.kamIndex[i] >= 0 ? L.kamIndex[i] : undefined);
+        L.kamIndex[i] = n.index;
+        const t = st.tunnelBei(n.s, 2);
+        if (!t || Math.abs(n.seitenabstand) > st.grenzeEng + 0.5 || c.y > st.hoeheAn(c.x, c.z) + 6.4) continue;
+        const tief = Math.min(sp.differenzS(n.s, t.s0), sp.differenzS(t.s1, n.s));
+        L.dunkel[this.zustand === 'menue' ? 2 : i] = Math.max(0, Math.min(1, (tief + 2) / 18));
+        refAn = true;
+        // Punktlichter: Lampen nahe der Kamera, die am tiefsten drin ist
+        if (-tief < bestD) { bestD = -tief; refX = c.x; refZ = c.z; }
+      }
+      // Punktlichter an die 3 nächsten Lampen
+      const lampen = st.tunnelLampen || [];
+      if (refAn && lampen.length) {
+        const nah = this._lampenNah || (this._lampenNah = []);
+        nah.length = 0;
+        for (let i = 0; i < lampen.length; i++) nah.push(lampen[i]);
+        nah.sort((a, b) => ((a.x - refX) ** 2 + (a.z - refZ) ** 2) - ((b.x - refX) ** 2 + (b.z - refZ) ** 2));
+        for (let i = 0; i < 3; i++) {
+          const l = L.punkte[i], la = nah[i];
+          l.visible = !!la;
+          if (la) l.position.set(la.x, la.y, la.z);
+        }
+      } else for (let i = 0; i < 3; i++) L.punkte[i].visible = false;
+      // Scheinwerfer: nur Spielerautos, nur im Tunnel (± 8 m)
+      const spieler = this._spielerListe || (this._spielerListe = []);
+      spieler.length = 0;
+      for (let i = 0; i < this.fahrzeuge.length; i++) if (this.fahrzeuge[i].istSpieler) spieler.push(this.fahrzeuge[i]);
+      for (let k = 0; k < 2; k++) {
+        const s = L.spots[k], f = spieler.length === 1 ? spieler[0] : spieler[k];
+        const an = !!f && this.zustand !== 'menue' && !!f.nah && st.imTunnel(f.nah.s, 8);
+        s.visible = an;
+        if (!an) continue;
+        const d = f.anzeige, r = d.richtung(), seite = spieler.length === 1 ? (k === 0 ? -0.7 : 0.7) : 0;
+        const rx = -r.z, rz = r.x;            // rechts
+        s.position.set(d.x + r.x * 2.1 + rx * seite, d.y + 0.75, d.z + r.z * 2.1 + rz * seite);
+        s.target.position.set(d.x + r.x * 24 + rx * seite * 2, d.y - 0.4, d.z + r.z * 24 + rz * seite * 2);
+        s.target.updateMatrixWorld();
+      }
+    }
+
+    /** Himmels- und Sonnenlicht für Ansicht i dimmen, wenn deren Kamera im Tunnel ist (i = -1: Menü). */
+    _tunnelDimmen(i) {
+      const b = this._lichtBasis;
+      if (!b) return;
+      const L = this.tunnelLichter;
+      const f = L ? L.dunkel[i < 0 ? 2 : i] || 0 : 0;
+      this.halbkugelLicht.intensity = b.himmel * (1 - 0.9 * f);
+      this.sonne.intensity = b.sonne * (1 - 0.96 * f);
     }
 
     hudAktualisieren() {

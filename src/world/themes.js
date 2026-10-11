@@ -78,6 +78,24 @@
       seed: 29,
       deko: { saguaros: 230, kugelkakteen: 160, felsen: 190, tafelberge: 12, gestruepp: 220, palmen: 9 },
     },
+    fantasie: {
+      name: 'Fantasie',
+      boden: 0x9fe0a0,           // Pastell-Mint
+      boden2: 0xf6bfe0,          // rosa Felder
+      himmel: 0xc9a2f2,          // lila Himmel
+      nebel: 0xe6c6f6,           // rosa-lila Dunst
+      sichtweite: 520,
+      lichtHimmel: 0xfff0ff,
+      lichtBoden: 0xb08ad0,
+      sonnenFarbe: 0xfff2fa,
+      sonnenIntensitaet: 1.1,
+      asphalt: 0x5d5470,         // lila-grauer Asphalt
+      zaun: { latten: 0xff9ad5, pfosten: 0xffffff },
+      regenbogen: [0xff4d6d, 0xff9f43, 0xffe14a, 0x4cd97b, 0x4da6ff, 0xa66bff],   // Randsteine + Looping
+      loopingBand: 0x6a5a8e,
+      seed: 41,
+      deko: { pilze: 70, ballons: 70, zuckerbaeume: 200, fernBaeume: 220, huegel: 36, blumen: 300 },
+    },
   };
 
   // ------------------------------------------------------------------ Helfer
@@ -144,7 +162,10 @@
 
   /** Liegt (x, z) frei genug? (|Seitenabstand| zu ALLEN Streckenteilen ≥ frei) */
   function istFrei(strecke, x, z, frei) {
-    return Math.abs(strecke.spline.naechster(x, z).seitenabstand) >= frei;
+    const n = strecke.spline.naechster(x, z);
+    if (Math.abs(n.seitenabstand) < frei) return false;
+    // Tunnelhügel und Brückensenke frei halten (sonst stechen Bäume durch Hügel/Brücke)
+    return !(strecke.dekoSperre && strecke.dekoSperre(x, z, n));
   }
 
   /**
@@ -162,7 +183,7 @@
       const d = abstandMin + (abstandMax - abstandMin) * Math.pow(rnd(), hochzahl || 1.6);
       const x = p.x + p.nx * d * seite, z = p.z + p.nz * d * seite;
       if (!istFrei(strecke, x, z, frei)) continue;
-      return { x, z, y: strecke.hoeheAn(x, z), winkel: rnd() * Math.PI * 2, s, seite, d };
+      return { x, z, y: strecke.bodenHoehe(x, z), winkel: rnd() * Math.PI * 2, s, seite, d };
     }
     return null;
   }
@@ -214,10 +235,10 @@
       let hMin = Infinity, hMax = -Infinity;
       for (let k = 0; k < 12; k++) {
         const w = k / 12 * Math.PI * 2;
-        const h = strecke.hoeheAn(st.x + Math.cos(w) * radius, st.z + Math.sin(w) * radius);
+        const h = strecke.bodenHoehe(st.x + Math.cos(w) * radius, st.z + Math.sin(w) * radius);
         hMin = Math.min(hMin, h); hMax = Math.max(hMax, h);
       }
-      const h0 = strecke.hoeheAn(st.x, st.z);
+      const h0 = strecke.bodenHoehe(st.x, st.z);
       hMin = Math.min(hMin, h0); hMax = Math.max(hMax, h0);
       const guete = hMax - hMin;
       if (!beste || guete < beste.guete) beste = Object.assign(st, { guete, hMin, hMax });
@@ -371,7 +392,7 @@
         const w = waldZentren[Math.floor(rnd() * waldZentren.length)];
         for (let v = 0; v < 8 && !st; v++) {
           const x = w.x + (rnd() - 0.5) * 60, z = w.z + (rnd() - 0.5) * 60;
-          if (istFrei(strecke, x, z, b2 + 6 + 3)) st = { x, z, y: strecke.hoeheAn(x, z), winkel: rnd() * Math.PI * 2 };
+          if (istFrei(strecke, x, z, b2 + 6 + 3)) st = { x, z, y: strecke.bodenHoehe(x, z), winkel: rnd() * Math.PI * 2 };
         }
       } else {
         st = stelleSuchen(strecke, rnd, 14, 250, b2 + 6 + 3);
@@ -435,7 +456,7 @@
       const anzahl = 1 + Math.floor(rnd() * 3);
       for (let k = 0; k < anzahl && ballen.length < thema.deko.heuballen; k++) {
         const x = st.x + Math.cos(st.winkel) * k * 1.4, z = st.z - Math.sin(st.winkel) * k * 1.4;
-        ballen.push({ x, z, y: strecke.hoeheAn(x, z), winkel: st.winkel });
+        ballen.push({ x, z, y: strecke.bodenHoehe(x, z), winkel: st.winkel });
       }
     }
     instanzMesh(gruppe, 'Heuballen', heuGeo, new THREE.MeshLambertMaterial({ color: 0xd9b24a }), ballen, (b, d) => {
@@ -494,7 +515,7 @@
         const x = st.x + (rnd() - 0.5) * 9, z = st.z + (rnd() - 0.5) * 9;
         if (!istFrei(strecke, x, z, b2 + 6.5)) continue;
         if (teich && Math.hypot(x - teich.x, z - teich.z) < teich.radius + 2) continue;
-        blumen.push({ x, z, y: strecke.hoeheAn(x, z), winkel: rnd() * 6.28, farbe: rnd() < 0.7 ? farbe : Math.floor(rnd() * 6) });
+        blumen.push({ x, z, y: strecke.bodenHoehe(x, z), winkel: rnd() * 6.28, farbe: rnd() < 0.7 ? farbe : Math.floor(rnd() * 6) });
       }
     }
     const FARBEN = [0xffe14a, 0xffffff, 0xff7fbf, 0xb68cff, 0xff5a4a, 0xffb347];
@@ -517,7 +538,7 @@
     const b2 = strecke.breite / 2, zaun = hinterZaun(strecke), grenze = dekoGrenze(strecke);
     const mitte = streckenMitte(strecke);
     const tunnel = strecke.daten.baumtunnel || null;
-    const br = strecke.daten.bruecke || null;
+    const br = strecke.bruecke || null;
     const imTunnel = (s) => tunnel && s >= tunnel.von - 6 && s <= tunnel.bis + 6;
     // Bachbett unter der Brücke freihalten (Bach läuft quer, ~±8 m um die Brückenmitte)
     const bachMitte = br ? sp.punktBei((br.von + br.bis) / 2) : null;
@@ -533,7 +554,7 @@
     const baeume = [];
     const neu = (x, z, groesse, tanne) => {
       if (amBach(x, z)) return;
-      baeume.push({ x, z, y: strecke.hoeheAn(x, z), winkel: rnd() * Math.PI * 2, groesse, tanne });
+      baeume.push({ x, z, y: strecke.bodenHoehe(x, z), winkel: rnd() * Math.PI * 2, groesse, tanne });
     };
     for (let s = 0; s < L; s += thema.deko.bandAbstand) {
       if (imTunnel(s)) continue;
@@ -580,7 +601,7 @@
           if (!istFrei(strecke, x, z, zaun)) return;
           // lokale +x-Achse zeigt zur Straßenmitte
           const rx = -p.nx * seite, rz = -p.nz * seite;
-          tunnelBaeume.push({ x, z, y: strecke.hoeheAn(x, z), drehung: Math.atan2(-rz, rx), d });
+          tunnelBaeume.push({ x, z, y: strecke.bodenHoehe(x, z), drehung: Math.atan2(-rz, rx), d });
         });
       }
     }
@@ -622,7 +643,7 @@
           const d = strecke.seitenabstandMax + 4 + k * 8 + rnd() * 4;
           const q = (rnd() < 0.5 ? -1 : 1) * (6 + rnd() * 2);
           const x = bachMitte.x + bachMitte.nx * d * seite + bachMitte.tx * q, z = bachMitte.z + bachMitte.nz * d * seite + bachMitte.tz * q;
-          if (istFrei(strecke, x, z, zaun)) felsen.push({ x, z, y: strecke.hoeheAn(x, z), winkel: rnd() * 6.28, klein: true });
+          if (istFrei(strecke, x, z, zaun)) felsen.push({ x, z, y: strecke.bodenHoehe(x, z), winkel: rnd() * 6.28, klein: true });
         }
       });
     }
@@ -655,7 +676,7 @@
       const n = 2 + Math.floor(rnd() * 4);
       for (let k = 0; k < n; k++) {
         const x = st.x + (rnd() - 0.5) * 2.4, z = st.z + (rnd() - 0.5) * 2.4;
-        if (istFrei(strecke, x, z, grenze)) pilze.push({ x, z, y: strecke.hoeheAn(x, z), winkel: rnd() * 6.28 });
+        if (istFrei(strecke, x, z, grenze)) pilze.push({ x, z, y: strecke.bodenHoehe(x, z), winkel: rnd() * 6.28 });
       }
     }
     instanzMesh(gruppe, 'Pilze', pilzGeo(), vertexMaterial(false), pilze, (b, d) => {
@@ -683,12 +704,12 @@
         const w = i / thema.deko.palmen * Math.PI * 2 + rnd() * 0.4, r = 16 + rnd() * 5;
         const x = oase.x + Math.cos(w) * r, z = oase.z + Math.sin(w) * r;
         if (!istFrei(strecke, x, z, zaun)) continue;
-        palmen.push({ x, z, y: strecke.hoeheAn(x, z), winkel: rnd() * 6.28 });
+        palmen.push({ x, z, y: strecke.bodenHoehe(x, z), winkel: rnd() * 6.28 });
       }
       for (let i = 0; i < 34; i++) {
         const w = rnd() * Math.PI * 2, r = 14.5 + rnd() * 9;
         const x = oase.x + Math.cos(w) * r, z = oase.z + Math.sin(w) * r;
-        if (istFrei(strecke, x, z, grenze + 1)) gruen.push({ x, z, y: strecke.hoeheAn(x, z), winkel: rnd() * 6.28, oase: true });
+        if (istFrei(strecke, x, z, grenze + 1)) gruen.push({ x, z, y: strecke.bodenHoehe(x, z), winkel: rnd() * 6.28, oase: true });
       }
     }
     instanzMesh(gruppe, 'Palmen', palmeGeo(), vertexMaterial(true), palmen, (b, d) => {
@@ -771,13 +792,162 @@
     return { oase: !!oase, palmen: palmen.length, gestruepp: gruen.length, saguaros: saguaros.length, kugelkakteen: kugeln.length, felsen: felsen.length, tafelberge: berge.length };
   }
 
+
+  // ------------------------------------------------------------------ Fantasie
+
+  /** Riesenpilz (Ursprung am Stielfuß, ~0,8 m hoch – wird groß skaliert): Hut in einer Farbe, weiße Punkte. */
+  function riesenpilzGeo(hutFarbe) {
+    const stiel = new THREE.CylinderGeometry(0.11, 0.17, 0.52, 9); stiel.translate(0, 0.26, 0);
+    const ring = new THREE.CylinderGeometry(0.15, 0.13, 0.05, 9); ring.translate(0, 0.38, 0);
+    const hut = new THREE.SphereGeometry(0.46, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2); hut.scale(1, 0.7, 1); hut.translate(0, 0.48, 0);
+    const unten = new THREE.CircleGeometry(0.46, 12); unten.rotateX(Math.PI / 2); unten.translate(0, 0.48, 0);
+    const teile = [{ geo: stiel, farbe: 0xfff6ea }, { geo: ring, farbe: 0xffe6f2 }, { geo: hut, farbe: hutFarbe }, { geo: unten, farbe: 0xf3e2d0 }];
+    [[0, 0.81, 0], [0.26, 0.7, 0.1], [-0.22, 0.7, 0.17], [0.06, 0.68, -0.29], [-0.2, 0.72, -0.15], [0.17, 0.62, 0.3], [-0.33, 0.58, 0.02]].forEach(([x, y, z]) => {
+      const p = new THREE.IcosahedronGeometry(0.065, 0); p.translate(x, y, z);
+      teile.push({ geo: p, farbe: 0xffffff });
+    });
+    return vereinen(teile);
+  }
+
+  /** Zuckerwatte-Baum: weißer Stiel, drei weiche Bälle (Farbe per Instanz). */
+  function zuckerbaumGeo() {
+    const stiel = new THREE.CylinderGeometry(0.16, 0.24, 3.0, 7); stiel.translate(0, 1.5, 0);
+    const k1 = new THREE.IcosahedronGeometry(1.9, 1); k1.translate(0, 4.2, 0);
+    const k2 = new THREE.IcosahedronGeometry(1.3, 1); k2.translate(1.1, 5.0, 0.3);
+    const k3 = new THREE.IcosahedronGeometry(1.2, 1); k3.translate(-1.0, 4.9, -0.4);
+    return vereinen([{ geo: stiel, farbe: 0xd8c8b8 }, { geo: k1, farbe: 0xffffff }, { geo: k2, farbe: 0xf4f4f4 }, { geo: k3, farbe: 0xfafafa }]);
+  }
+
+  /** Großer Regenbogen (Halbkreis aus 6 Bändern) als EIN Mesh, Ursprung = Bogenmitte am Boden, Bogen in der xy-Ebene. */
+  function regenbogenGeo(radius, dicke, farben) {
+    const teile = farben.map((f, i) => {
+      const g = new THREE.TorusGeometry(radius - i * dicke, dicke / 2, 6, 64, Math.PI);
+      return { geo: g, farbe: f };
+    });
+    return vereinen(teile);
+  }
+
+  function fantasieDeko(gruppe, thema, strecke, rnd) {
+    const b2 = strecke.breite / 2, grenze = dekoGrenze(strecke), zaun = hinterZaun(strecke);
+    const mitte = streckenMitte(strecke), sp = strecke.spline;
+    const PASTELL = [0xff9ad5, 0xb79cff, 0x8fd3ff, 0xffd27a, 0x9cf0c0, 0xffb0a0, 0xfff38a];
+    const farbeAus = (f, liste) => f.setHex(liste[Math.floor(rnd() * liste.length)]);
+
+    // ---------- Riesenpilze (hinter dem Zaun, 4 Hutfarben je ein InstancedMesh) ----------
+    const HUTE = [0xff4f8b, 0xa66bff, 0x45a8ff, 0xff9f43];
+    const pilze = HUTE.map(() => []);
+    for (let i = 0; i < thema.deko.pilze; i++) {
+      const g = 6 + rnd() * 7;                   // Skalierung → 5–10 m hoch, Hut-Radius 2,8–6 m
+      const st = stelleSuchen(strecke, rnd, zaun + g * 0.5, 160, zaun + g * 0.5, 20, 1.4);
+      if (!st) continue;
+      st.groesse = g;
+      pilze[i % HUTE.length].push(st);
+    }
+    HUTE.forEach((farbe, k) => {
+      instanzMesh(gruppe, 'Riesenpilze', riesenpilzGeo(farbe), vertexMaterial(false), pilze[k], (b, d, f) => {
+        d.position.set(b.x, b.y - 0.05, b.z);
+        d.rotation.set((rnd() - 0.5) * 0.12, b.winkel, (rnd() - 0.5) * 0.12);
+        d.scale.setScalar(b.groesse);
+        f.setHSL(0, 0, 0.9 + rnd() * 0.1);
+      });
+    });
+
+    // ---------- Zuckerwatte-Bäume (nah hinter dem Zaun und in der Ferne) ----------
+    const baeume = [];
+    for (let i = 0; i < thema.deko.zuckerbaeume; i++) {
+      const st = stelleSuchen(strecke, rnd, zaun + 2, 150, zaun + 2, 20, 1.6);
+      if (st) { st.groesse = 0.8 + rnd() * 0.6; baeume.push(st); }
+    }
+    for (let i = 0; i < thema.deko.fernBaeume; i++) {
+      const st = stelleSuchen(strecke, rnd, 150, 420, 120, 10, 1);
+      if (st && aufBoden(mitte, st.x, st.z)) { st.groesse = 1.2 + rnd() * 0.8; baeume.push(st); }
+    }
+    instanzMesh(gruppe, 'Zuckerbaeume', zuckerbaumGeo(), vertexMaterial(false), baeume, (b, d, f) => {
+      d.position.set(b.x, b.y - 0.1, b.z);
+      d.rotation.set(0, b.winkel, 0);
+      d.scale.setScalar(b.groesse);
+      farbeAus(f, PASTELL);
+    });
+
+    // ---------- Pastell-Hügel in der Ferne (flache Halbkugeln) ----------
+    const huegel = [];
+    for (let i = 0; i < thema.deko.huegel; i++) {
+      const st = stelleSuchen(strecke, rnd, 160, 520, 140, 10, 1);
+      if (st && aufBoden(mitte, st.x, st.z, 40)) huegel.push(st);
+    }
+    const huegelGeo = new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+    instanzMesh(gruppe, 'PastellHuegel', huegelGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), huegel, (b, d, f) => {
+      const r = 25 + rnd() * 45;
+      d.position.set(b.x, b.y - 2, b.z);
+      d.rotation.set(0, b.winkel, 0);
+      d.scale.set(r, r * (0.3 + rnd() * 0.25), r * (0.7 + rnd() * 0.5));
+      farbeAus(f, [0xffc4e4, 0xd8c4ff, 0xbfe9ff, 0xffe2b8, 0xc8f5d8]);
+    });
+
+    // ---------- Schwebende Kugeln und Ballons (mit Schnur) ----------
+    const ballons = [];
+    for (let i = 0; i < thema.deko.ballons; i++) {
+      const st = stelleSuchen(strecke, rnd, grenze + 4, 260, grenze + 4, 20, 1.3);
+      if (!st) continue;
+      st.r = 1.0 + rnd() * 2.2;
+      st.hoch = 10 + rnd() * 28;
+      st.schnur = rnd() < 0.65;                 // ein Drittel schwebt frei ("Zauberkugeln")
+      ballons.push(st);
+    }
+    const kugelGeo = new THREE.SphereGeometry(1, 16, 12);
+    kugelGeo.scale(1, 1.12, 1);
+    instanzMesh(gruppe, 'Ballons', kugelGeo, new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 70, specular: 0x666666 }), ballons, (b, d, f) => {
+      d.position.set(b.x, b.y + b.hoch, b.z);
+      d.scale.setScalar(b.r);
+      farbeAus(f, [0xff4f8b, 0xffe14a, 0x45a8ff, 0x4cd97b, 0xa66bff, 0xff9f43, 0xffffff]);
+    });
+    const schnurGeo = new THREE.CylinderGeometry(0.03, 0.03, 1, 4); schnurGeo.translate(0, -0.5, 0);
+    instanzMesh(gruppe, 'Ballons', schnurGeo, new THREE.MeshLambertMaterial({ color: 0xf2f2f2 }), ballons.filter(b => b.schnur), (b, d) => {
+      d.position.set(b.x, b.y + b.hoch - b.r * 1.1, b.z);
+      d.scale.set(1, 3 + b.r * 2, 1);
+    });
+
+    // ---------- Riesenblumen (bunte Scheiben auf den Wiesen) ----------
+    const blumen = [];
+    for (let i = 0; i < thema.deko.blumen / 6; i++) {
+      const st = stelleSuchen(strecke, rnd, b2 + 9, 110, b2 + 8, 10, 1.3);
+      if (!st) continue;
+      for (let k = 0; k < 6; k++) {
+        const x = st.x + (rnd() - 0.5) * 10, z = st.z + (rnd() - 0.5) * 10;
+        if (istFrei(strecke, x, z, b2 + 6.5)) blumen.push({ x, z, y: strecke.bodenHoehe(x, z), winkel: rnd() * 6.28 });
+      }
+    }
+    const blumenGeo = new THREE.CircleGeometry(1, 6); blumenGeo.rotateX(-Math.PI / 2);
+    instanzMesh(gruppe, 'Blumen', blumenGeo, new THREE.MeshLambertMaterial({
+      color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), blumen, (b, d, f) => {
+      const g = 1.2 + rnd() * 1.8;
+      d.position.set(b.x, b.y + 0.06, b.z);
+      d.rotation.set(0, b.winkel, 0);
+      d.scale.set(g, 1, g);
+      farbeAus(f, [0xff5fa2, 0xffffff, 0xffe14a, 0xb68cff, 0x6fd0ff, 0xff9f43]);
+    });
+
+    // ---------- Großer Regenbogen hinter der Start-Geraden (Blickrichtung beim Start) ----------
+    const start = sp.punktBei(0), rx = mitte.x, rz = mitte.z;
+    // Lage: in Startrichtung hinter der Strecke, quer zur Startrichtung ausgerichtet
+    let fern = 0;
+    sp.punkte.forEach((p) => { fern = Math.max(fern, (p.x - mitte.x) * start.tx + (p.z - mitte.z) * start.tz); });
+    const bx = rx + start.tx * (fern + 150), bz = rz + start.tz * (fern + 150);
+    const bogen = new THREE.Mesh(regenbogenGeo(130, 4.5, thema.regenbogen), new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8 }));
+    bogen.position.set(bx, strecke.gelaendeHoehe(bx, bz) - 6, bz);
+    bogen.rotation.y = Math.atan2(-start.tx, -start.tz);
+    bogen.name = 'Regenbogen';
+    gruppe.add(bogen);
+    return { pilze: pilze.reduce((s, l) => s + l.length, 0), zuckerbaeume: baeume.length, huegel: huegel.length, ballons: ballons.length, blumen: blumen.length, regenbogen: 1 };
+  }
+
   /** Baut alle Deko-Objekte eines Themas als THREE.Group. */
   function dekoBauen(themaName, strecke) {
     const thema = themes[themaName] || themes.wiese;
     const rnd = zufall(textSeed(strecke.id || 'strecke') ^ thema.seed);
     const gruppe = new THREE.Group();
     gruppe.name = 'Deko ' + themaName;
-    const bauer = { wiese: wieseDeko, wald: waldDeko, wueste: wuesteDeko }[themaName] || wieseDeko;
+    const bauer = { wiese: wieseDeko, wald: waldDeko, wueste: wuesteDeko, fantasie: fantasieDeko }[themaName] || wieseDeko;
     const anzahl = bauer(gruppe, thema, strecke, rnd);
     // Instanzen bewegen sich nicht: Begrenzungskugeln einmal berechnen
     gruppe.children.forEach((m) => {

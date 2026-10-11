@@ -144,6 +144,7 @@
         '<div class="hud-countdown"></div>' +
         '<div class="hud-banner"></div>' +
         '<div class="hud-hinweis"></div>' +
+        '<div class="hud-meldung"></div>' +
         '<div class="hud-tacho"><div class="kmh"><b>0</b><span>km/h</span></div>' +
           '<div class="balken"><i></i></div></div>';
       wurzel.appendChild(el);
@@ -154,6 +155,12 @@
       this.ePlatz = q('.hud-platz b'); this.ePlatzVon = q('.hud-platz span');
       this.eAktuell = q('.z-aktuell'); this.eLetzte = q('.z-letzte'); this.eBeste = q('.z-beste');
       this.eCountdown = q('.hud-countdown'); this.eBanner = q('.hud-banner'); this.eHinweis = q('.hud-hinweis');
+      // Meldung oben (Looping, Bälle, Wasser): Stil hier inline, damit styles.css unverändert bleibt
+      this.eMeldung = q('.hud-meldung'); this.meldungTimer = null;
+      Object.assign(this.eMeldung.style, { position: 'absolute', left: '50%', top: '19%', transform: 'translateX(-50%) scale(.6)',
+        whiteSpace: 'nowrap', fontSize: '2.3em', fontWeight: '900', color: '#fff', padding: '.2em .9em', borderRadius: '1em',
+        background: 'linear-gradient(90deg, rgba(255,90,170,.9), rgba(150,110,255,.9))', border: '.08em solid #fff',
+        opacity: '0', transition: 'opacity .18s, transform .25s cubic-bezier(.3,1.6,.6,1)', pointerEvents: 'none' });
       this.eKmh = q('.kmh b'); this.eBalken = q('.balken i');
       if (this.eName) setzeText(this.eName, R.fahrerEmoji(this.t.name) + ' ' + this.t.name);
 
@@ -182,6 +189,17 @@
       b.className = 'hud-banner an' + (klasse ? ' ' + klasse : '');
       this.bannerFest = !ms;
       if (ms) this.bannerTimer = setTimeout(() => { b.className = 'hud-banner'; }, ms);
+    }
+
+    /** Kurze Meldung oben in der Mitte (Looping, Bälle, Wasserstrahl), ms Anzeigedauer. */
+    meldung(text, ms) {
+      const m = this.eMeldung;
+      if (!m) return;
+      clearTimeout(this.meldungTimer);
+      m.textContent = text;
+      m.style.opacity = '1'; m.style.transform = 'translateX(-50%) scale(1)';
+      this.meldungText = text;
+      this.meldungTimer = setTimeout(() => { m.style.opacity = '0'; m.style.transform = 'translateX(-50%) scale(.6)'; this.meldungText = ''; }, ms || 1800);
     }
 
     /** Schriftgröße an die Größe der Ansicht anpassen. */
@@ -239,7 +257,7 @@
     }
 
     zerstoeren() {
-      clearTimeout(this.bannerTimer);
+      clearTimeout(this.bannerTimer); clearTimeout(this.meldungTimer);
       if (this.el.parentNode) this.el.parentNode.removeChild(this.el);
     }
   }

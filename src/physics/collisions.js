@@ -7,6 +7,10 @@
 // 2) autoAuto(): Auto gegen Auto. Jedes Auto = Kapsel aus 2 Kreisen (vorne/hinten).
 //               Trennung nach Masse, Stoß längs der Verbindungslinie (Restitution 0,3),
 //               Reibung quer dazu. Leichtere/langsamere Autos weichen stärker aus.
+// 3) hindernisse(): Pylonen, Baken und Äste auf der Fahrbahn (strecke.hindernisse) → Stöße-Liste.
+//               Öl- und Sandflecken wirken nicht hier, sondern über den Untergrund (strecke.untergrundAn).
+// Autos im Looping (vehicle.imLooping, track/looping.js) sind von allen drei Prüfungen ausgenommen.
+// Auf Brücken und in Tunneln liegt die Bande direkt hinter dem Randstreifen (strecke.grenzeBei(s)).
 //
 // Vorzeichen wie überall: seitenabstand > 0 = rechts der Mitte, Normale (nx, nz) nach rechts.
 // ============================================================
@@ -27,10 +31,13 @@
    * @returns {number} Aufprall-Stärke in m/s (0 = keine Berührung)
    */
   function bande(vehicle, strecke, nah) {
+    if (vehicle.imLooping) { vehicle._anBande = false; return 0; }   // im Looping: keine Bande
     const sp = strecke.spline;
-    const max = strecke.seitenabstandMax !== undefined ? strecke.seitenabstandMax : strecke.breite / 2 + 40;
+    let max = strecke.seitenabstandMax !== undefined ? strecke.seitenabstandMax : strecke.breite / 2 + 40;
     const n = nah || sp.naechster(vehicle.x, vehicle.z, vehicle._bandeIndex);
     vehicle._bandeIndex = n.index;
+    // Brücken/Tunnel: Bande direkt am Geländer bzw. an der Tunnelwand (strecke.grenzeBei)
+    if (strecke.grenzeBei) max = strecke.grenzeBei(n.s);
     const abstand = Math.abs(n.seitenabstand);
     if (abstand <= max) { vehicle._anBande = false; return 0; }
 
@@ -99,6 +106,7 @@
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
         const A = autos[i], B = autos[j], ka = kapseln[i], kb = kapseln[j];
+        if (A.imLooping || B.imLooping) continue;      // Auto im Looping (track/looping.js): keine Auto-Auto-Stöße
         const grenze = ka.rad + kb.rad;
         // Grobtest: Mittelpunkte weiter auseinander als halbe Längen + Radien
         const dxg = B.x - A.x, dzg = B.z - A.z;
@@ -149,5 +157,102 @@
     return stoesse;
   }
 
-  R.Kollisionen = { bande, autoAuto, kapsel };
+  /** Nächster Punkt auf der Strecke a→b zu (x, z): { x, z, d (Abstand) }. */
+  function segmentPunkt(ax, az, bx, bz, x, z) {
+    const sx = bx - ax, sz = bz - az, l2 = sx * sx + sz * sz || 1;
+    const t = Math.max(0, Math.min(1, ((x - ax) * sx + (z - az) * sz) / l2));
+    const px = ax + sx * t, pz = az + sz * t;
+    return { x: px, z: pz, d: Math.hypot(x - px, z - pz) };
+  }
+
+  /**
+   * Hindernisse auf der Fahrbahn (strecke.hindernisse, siehe trackBuilder._hindernisseBerechnen).
+   * Öl/Sand wirken über den Untergrund (strecke.untergrundAn) – hier nur die festen Dinge:
+   *   baustelle: Pylonen (Kreis) – umfahren = kleiner Stoß, Tempo × pylonTempo, Pylone fällt um
+   *              (p.weg, blinkt in der Grafik, kommt nach der nächsten Runde des Verursachers zurück);
+   *              Bake (Strecke) = wie eine Bande: zurückschieben, Tempo in die Bake weg.
+   *   ast:       Kontakt = Tempo × tempoFaktor (−40 %) + Hüpfer (vehicle.huepfer = Startgeschwindigkeit
+   *              nach oben in m/s, main.js macht daraus eine kleine Sprungbewegung); danach sperrZeit s Ruhe.
+   * @param {Array} fahrzeugListe Vehicles oder Einträge mit .vehicle
+   * @param {Strecke} strecke
+   * @param {{dt?:number, zeit?:number, countdown?:boolean}} [optionen]
+   * @returns {{nr:number, typ:string, staerke:number, hindernis:number}[]} Stöße (für Ton/Kamerawackeln)
+   */
+  function hindernisse(fahrzeugListe, strecke, optionen) {
+    const stoesse = [], liste = strecke && strecke.hindernisse;
+    const opt = optionen || {};
+    if (!liste || !liste.length || opt.countdown) return stoesse;
+    const C = (R.config && R.config.hindernisse) || {};
+    const CB = C.baustelle || {}, CA = C.ast || {};
+    const dt = opt.dt || 1 / 60, zeit = opt.zeit || 0;
+    for (let i = 0; i < fahrzeugListe.length; i++) {
+      const f = fahrzeugListe[i], v = (f && f.vehicle) ? f.vehicle : f;
+      if (v._astSperre > 0) v._astSperre -= dt;
+      if (v.imLooping) continue;                       // im Looping über der Straße
+      for (let k = 0; k < liste.length; k++) {
+        const h = liste[k];
+        if (!h.segmente && !h.pylonen) continue;
+        const gx = v.x - h.x, gz = v.z - h.z, gr = h.radius + v.daten.laenge;
+        if (gx * gx + gz * gz > gr * gr) continue;
+        const ka = kapsel(v);
+        // Pylonen
+        if (h.pylonen) {
+          const pr = CB.pylonRadius || 0.35;
+          for (const p of h.pylonen) {
+            if (p.weg) continue;
+            for (const c of ka.kreise) {
+              const dx = p.x - c.x, dz = p.z - c.z;
+              if (dx * dx + dz * dz > (ka.rad + pr) * (ka.rad + pr)) continue;
+              p.weg = true; p.wegZeit = zeit; p.von = i;
+              const vw = v.weltGeschwindigkeit(), l = Math.hypot(vw.x, vw.z) || 1;
+              p.kx = -vw.z / l; p.kz = vw.x / l;               // Kippachse quer zur Fahrtrichtung
+              const staerke = v.tempo * 0.3;
+              v.vLaengs *= (CB.pylonTempo !== undefined ? CB.pylonTempo : 0.88);
+              strecke.pylonenGeaendert = true;
+              stoesse.push({ nr: i, typ: 'pylone', staerke, hindernis: k });
+              break;
+            }
+          }
+        }
+        // Bake (fest) und Ast
+        if (h.segmente) {
+          for (const sg of h.segmente) {
+            const dicke = sg.art === 'ast' ? (sg.dicke || 0.28) : 0.15;
+            for (const c of ka.kreise) {
+              const n = segmentPunkt(sg.ax, sg.az, sg.bx, sg.bz, c.x, c.z);
+              const grenze = ka.rad + dicke;
+              if (n.d >= grenze) continue;
+              if (sg.art === 'ast') {
+                if (v._astSperre > 0) break;
+                const staerke = v.tempo * 0.4;
+                v.vLaengs *= (CA.tempoFaktor !== undefined ? CA.tempoFaktor : 0.6);
+                v.vQuer *= 0.7;
+                v.huepfer = CA.huepfer !== undefined ? CA.huepfer : 2.2;
+                v._astSperre = CA.sperrZeit || 0.8;
+                stoesse.push({ nr: i, typ: 'ast', staerke, hindernis: k });
+                break;
+              }
+              // Bake: wie eine Bande – aus der Bake schieben, Tempo in die Bake wegnehmen, Rest dämpfen
+              let nx, nz;
+              if (n.d > 1e-6) { nx = (c.x - n.x) / n.d; nz = (c.z - n.z) / n.d; }
+              else { const r = v.richtung(); nx = -r.x; nz = -r.z; }
+              const tief = grenze - n.d + 0.01;
+              v.x += nx * tief; v.z += nz * tief;
+              const vw = v.weltGeschwindigkeit();
+              const vn = vw.x * nx + vw.z * nz;                 // < 0 = fährt in die Bake
+              if (vn < 0) {
+                const px = vw.x - nx * vn, pz = vw.z - nz * vn;
+                v.weltGeschwindigkeitSetzen(px * BANDE_PARALLEL, pz * BANDE_PARALLEL);
+                if (-vn > 0.5) stoesse.push({ nr: i, typ: 'bake', staerke: -vn, hindernis: k });
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
+    return stoesse;
+  }
+
+  R.Kollisionen = { bande, autoAuto, kapsel, hindernisse };
 })();
