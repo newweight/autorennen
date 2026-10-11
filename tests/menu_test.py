@@ -2,6 +2,7 @@
 """Menü-/Modus-Test (Playwright, headless Chromium):
 a) Menü-Screenshot, b) per Tastatur: zu zweit, Strecke, Fahrer (P1 Senna, P2 versucht Senna -> springt weiter), Autos (P1 Porsche, P2 Multivan), Runden 1, Gegner 2, Start
    -> Split-Screen-Screenshot, c) Autopilot für beide, Schnellvorlauf bis 'ergebnis' -> Ergebnis-Screenshot + Prüfung,
+e) Runde 4: Welt-Pillen je Strecke, Jahreszeit/Wetter/Wind/Schaden/Gegner(10) im Einstellungen-Schritt, Emojis Emmy 🦁 / Jonas 🐯, Layout ohne Überlauf
 d) Titel "Jonas Hot Steering Wheel" im Menü, Fahrernamen in HUD/Meldungen/Ergebnis, KI-Namen aus der Restliste; Enter = Nochmal, Esc = Pause, Weiter, Hauptmenü, keine JS-Fehler, Draw-Calls im Split-Screen < 120.
 Aufruf: python3 tests/menu_test.py [ausgabeordner]"""
 import sys, os, json
@@ -188,7 +189,7 @@ with sync_playwright() as p:
     taste('ArrowDown'); taste('ArrowRight')   # Schwierigkeit
     snap('menu_4_einstellungen.png')
     # Start: bis zur Start-Zeile mit Enter, dann Enter
-    for _ in range(8):
+    for _ in range(16):
         if zustand() != 'menue': break
         taste('Enter'); page.wait_for_timeout(100)
     page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=15000)
@@ -277,9 +278,145 @@ with sync_playwright() as p:
     page.click('#pause [data-a="menue"]'); page.wait_for_timeout(500)
     pruefe('Hauptmenü aus Pause', zustand() == 'menue')
     snap('menu_10_zurueck_im_menue.png')
+
+    # ---------- Runde 4: Welt, Jahreszeit, Wetter, Wind, Schaden, Gegner, Emojis ----------
+    E = lambda: page.evaluate('Rennspiel.spiel.einstellungen')
+    texte = lambda sel: page.evaluate("(s) => Array.from(document.querySelectorAll(s)).map(e => e.textContent.trim())", sel)
+    page.click('[data-a="modus:solo"]'); page.wait_for_timeout(150)
+    page.click('[data-a="strecke:wiese"]'); page.wait_for_timeout(300)
+    w = texte('.m-welt .pille')
+    pruefe('Welt-Pillen Wiese: 4 (Klassisch, Hindernisse, Stunt, Verrückt)', len(w) == 4 and 'Klassisch' in w[0] and 'Verrückt' in w[3], w)
+    pruefe('Welt Standard: Klassisch aktiv, Standard-Marke, Name in der Erklärung', 'Klassisch' in texte('.m-welt .pille.aktiv')[0] and 'Standard' in w[0]
+           and 'Klassisch' in texte('.m-welt .welt-text')[0] and E()['welt'] == '', [texte('.m-welt .welt-text'), E()['welt']])
+    page.click('[data-a="welt:stunt"]'); page.wait_for_timeout(300)
+    pruefe('Welt Stunt: gespeichert + Erklärung', E()['welt'] == 'stunt' and 'Sprungschanzen' in texte('.m-welt .welt-text')[0], E()['welt'])
+    snap('menu_r4_strecke_welt.png')
+    page.click('[data-a="welt:klassisch"]'); page.wait_for_timeout(100)
+    pruefe('Standard-Welt anklicken -> welt "" (Standard)', E()['welt'] == '', E()['welt'])
+    taste('ArrowDown'); taste('ArrowDown')
+    pruefe('Taste ↓ schaltet die Welt weiter (Klassisch -> Hindernisse -> Stunt)', E()['welt'] == 'stunt', E()['welt'])
+    taste('ArrowDown'); taste('ArrowUp'); taste('ArrowUp'); taste('ArrowUp')
+    pruefe('Taste ↑ schaltet zurück (… -> Klassisch = Standard)', E()['welt'] == '', E()['welt'])
+    page.click('[data-a="welt:stunt"]')
+    taste('ArrowRight'); page.wait_for_timeout(200)
+    pruefe('Streckenwechsel setzt Welt auf Standard zurück', E()['streckeId'] == 'wald' and E()['welt'] == '', E())
+    page.click('[data-a="welt:verrueckt"]'); page.click('[data-a="strecke:fantasie"]'); page.wait_for_timeout(300)
+    w = texte('.m-welt .pille')
+    pruefe('Welt-Pillen Fantasie: 2 (Fantasie Standard, Verrückt), Welt zurückgesetzt', len(w) == 2 and 'Fantasie' in w[0] and 'Verrückt' in w[1] and E()['welt'] == '', [w, E()['welt']])
+    snap('menu_r4_strecke_fantasie_welt.png')
+    for vw, vh in ((1280, 800), (1440, 900)):
+        page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(300)
+        l = page.evaluate("""(() => { const m = document.querySelector('.m-inhalt'), r = document.querySelector('.m-welt').getBoundingClientRect();
+          return { scroll: m.scrollHeight <= m.clientHeight + 1, ok: r.left >= 0 && r.right <= innerWidth && r.bottom <= document.querySelector('.m-fuss').getBoundingClientRect().top }; })()""")
+        pruefe(f'Strecke+Welt {vw}×{vh}: ohne Scrollen, Welt-Zeile im Bild', l['scroll'] and l['ok'], l)
+    page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
+    page.click('[data-a="strecke:wiese"]'); page.click('[data-a="welt:stunt"]')
+    # Fahrer-Emojis
+    page.click('[data-a="weiter"]'); page.wait_for_timeout(200)
+    em = page.evaluate("""(() => { const f = (n) => document.querySelector('[data-a="fahrer:0:' + n + '"] .avatar').textContent;
+      const alle = Array.from(document.querySelectorAll('.karte.fahrer .avatar')).map(a => a.textContent);
+      return { emmy: f('Emmy'), jonas: f('Jonas'), einmalig: new Set(alle).size === alle.length, n: alle.length }; })()""")
+    pruefe('Emmy-Karte 🦁, Jonas-Karte 🐯, alle 12 Emojis verschieden', em['emmy'] == '🦁' and em['jonas'] == '🐯' and em['einmalig'] and em['n'] == 12, em)
+    # Einstellungen-Schritt (solo)
+    page.click('[data-a="schritt:4"]'); page.wait_for_timeout(300)
+    zl = page.evaluate('Rennspiel.spiel.menue.zeilen()')
+    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'jahreszeit', 'wetter', 'wind', 'schaden', 'start'], zl)
+    pj = texte('[data-a="fokus:4"] .pille')
+    pruefe('Jahreszeit-Pillen (Wiese): Frühling, Sommer, Herbst, Winter, Zufall; Sommer aktiv', len(pj) == 5 and 'Sommer' in pj[1] and 'Zufall' in pj[4]
+           and 'Sommer' in texte('[data-a="fokus:4"] .pille.aktiv')[0], pj)
+    pruefe('Wetter-Pillen Sommer: Klar, Regen, Zufall (kein Schnee)', page.locator('[data-a="wert:wetter:schnee"]').count() == 0 and page.locator('[data-a="wert:wetter:regen"]').count() == 1)
+    page.click('[data-a="wert:jahreszeit:winter"]'); page.wait_for_timeout(200)
+    pruefe('Winter: Wetter-Pillen enthalten Schnee + Hagel, Wetter auf Klar', page.locator('[data-a="wert:wetter:schnee"]').count() == 1
+           and page.locator('[data-a="wert:wetter:hagel"]').count() == 1 and E()['jahreszeit'] == 'winter' and E()['wetter'] == 'klar', E())
+    page.click('[data-a="wert:wetter:schnee"]'); page.wait_for_timeout(100)
+    pruefe('Wetter Schnee gewählt', E()['wetter'] == 'schnee', E()['wetter'])
+    page.click('[data-a="wert:jahreszeit:herbst"]'); page.wait_for_timeout(200)
+    pruefe('Jahreszeitwechsel setzt Wetter auf Klar; Herbst: Nebel ja, Schnee nein', E()['wetter'] == 'klar' and page.locator('[data-a="wert:wetter:nebel"]').count() == 1
+           and page.locator('[data-a="wert:wetter:schnee"]').count() == 0, E())
+    page.click('[data-a="wert:jahreszeit:zufall"]'); page.wait_for_timeout(100)
+    pruefe('Jahreszeit Zufall: Wetter Klar/Zufall', texte('[data-a="fokus:5"] .pille') == ['☀️ Klar', '🎲 Zufall'] or len(texte('[data-a="fokus:5"] .pille')) == 2, texte('[data-a="fokus:5"] .pille'))
+    page.click('[data-a="wert:jahreszeit:winter"]'); page.click('[data-a="wert:wetter:schnee"]')
+    # Wüste: Winter -> Sandsturm-Zeit, kein Schnee
+    page.evaluate("Rennspiel.spiel.menue.streckeWaehlen('wueste'); Rennspiel.spiel.menue.zeichnen()"); page.wait_for_timeout(300)
+    pw = texte('[data-a="fokus:5"] .pille'); pjw = texte('[data-a="fokus:4"] .pille')
+    pruefe('Wüste: Schnee-Wetter zurück auf Klar, Winter heißt Sandsturm-Zeit, Wetter ohne Schnee/Hagel', E()['wetter'] == 'klar' and any('Sandsturm-Zeit' in t for t in pjw)
+           and page.locator('[data-a="wert:wetter:schnee"]').count() == 0, [pjw, pw])
+    page.click('[data-a="wert:jahreszeit:winter"]'); page.wait_for_timeout(200)
+    pw = texte('[data-a="fokus:5"] .pille')
+    pruefe('Wüste Winter: Wetter-Pillen Klar, Sandsturm, Zufall – kein Schnee', page.locator('[data-a="wert:wetter:sandsturm"]').count() == 1 and page.locator('[data-a="wert:wetter:schnee"]').count() == 0, pw)
+    page.evaluate("Rennspiel.spiel.menue.streckeWaehlen('wiese'); Rennspiel.spiel.menue.zeichnen()"); page.wait_for_timeout(200)
+    pruefe('Zurück zur Wiese: Welt zurückgesetzt (Streckenwechsel)', E()['welt'] == '', E()['welt'])
+    page.click('[data-a="schritt:1"]'); page.click('[data-a="welt:stunt"]'); page.click('[data-a="schritt:4"]'); page.wait_for_timeout(200)
+    # Wind
+    for i in range(5): page.click('[data-a="stepper:wind:1"]')
+    pruefe('Wind-Stepper bis 5', E()['windStaerke'] == 5 and page.inner_text('[data-a="fokus:6"] .zahl') == '5', E()['windStaerke'])
+    page.click('[data-a="stepper:wind:1"]')
+    pruefe('Wind-Stepper nach 5: Zufall (🎲)', E()['windStaerke'] == 'zufall' and page.inner_text('[data-a="fokus:6"] .zahl') == '🎲', E()['windStaerke'])
+    page.click('[data-a="stepper:wind:-1"]'); page.click('[data-a="stepper:wind:-1"]')
+    pruefe('Wind-Stepper zurück 5 -> 4', E()['windStaerke'] == 4, E()['windStaerke'])
+    page.click('[data-a="wert:wind:zufall"]')
+    pruefe('Wind-Pille 🎲 = Zufall', E()['windStaerke'] == 'zufall', E()['windStaerke'])
+    page.click('[data-a="stepper:wind:-1"]'); page.click('[data-a="stepper:wind:-1"]'); page.click('[data-a="stepper:wind:-1"]')
+    pruefe('Wind 3 per Stepper (für den Rennstart)', E()['windStaerke'] == 3, E()['windStaerke'])
+    # Schaden
+    tip = page.get_attribute('[data-a="fokus:7"]', 'title')
+    pruefe('Schaden: Standard aus, Tooltip', E()['schaden'] is False and 'Abschleppwagen' in (tip or '') and 'Energie' in (tip or ''), tip)
+    page.click('[data-a="wert:schaden:an"]')
+    pruefe('Schaden an gespeichert', E()['schaden'] is True and 'An' in texte('[data-a="fokus:7"] .pille.aktiv')[0], E()['schaden'])
+    # Gegner bis 10
+    for i in range(14): page.click('[data-a="stepper:gegner:1"]')
+    pruefe('Gegner-Stepper bis 10 (nicht darüber)', E()['gegner'] == 10 and page.inner_text('[data-a="fokus:1"] .zahl') == '10', E()['gegner'])
+    # Tastatur: ↓ bis Start, Werte per ←/→ in Jahreszeit/Wind/Schaden
+    page.evaluate('Rennspiel.spiel.menue.fokus = 0; Rennspiel.spiel.menue.zeichnen()')
+    for i in range(4): taste('ArrowDown')
+    taste('ArrowRight')   # Jahreszeit eine Pille weiter (Winter -> Zufall)
+    pruefe('Tastatur: Fokus auf Jahreszeit, → wählt nächste Pille', page.evaluate('Rennspiel.spiel.menue.fokus') == 4 and E()['jahreszeit'] == 'zufall', E()['jahreszeit'])
+    taste('ArrowLeft'); taste('ArrowDown'); taste('ArrowDown'); taste('ArrowLeft')   # Winter; Wetter; Wind 3 -> 2
+    pruefe('Tastatur: Wind ← = 2', E()['windStaerke'] == 2 and E()['jahreszeit'] == 'winter', E())
+    taste('ArrowRight'); taste('ArrowDown'); taste('ArrowLeft')
+    pruefe('Tastatur: Schaden ← = aus', E()['schaden'] is False, E()['schaden'])
+    taste('ArrowRight'); taste('ArrowDown')
+    pruefe('Tastatur: ↓ erreicht Start (Fokus-Ring), Schaden wieder an', page.locator('.start-knopf.fokus').count() == 1 and E()['schaden'] is True)
+    # Layout ohne Überlauf: solo/zwei × Tafel zu/auf × 1280×800 / 1440×900
+    LAYOUT = """(() => { const m = document.querySelector('.m-inhalt'), fuss = document.querySelector('.m-fuss').getBoundingClientRect().top;
+      const r = Array.from(document.querySelectorAll('.zeile, .start-knopf, .m-aktionen .knopf, .tafel, .z-wert .pille, .z-wert .rund')).map(e => e.getBoundingClientRect());
+      const zeilen = Array.from(document.querySelectorAll('.zeile')).map(e => [e.scrollWidth <= e.clientWidth + 1, e.getBoundingClientRect().width > 100]);
+      return { scroll: m.scrollHeight <= m.clientHeight + 1, innen: r.every(a => a.left >= 0 && a.right <= innerWidth && a.top >= 0 && a.bottom <= fuss + 2),
+               breitenOk: zeilen.every(z => z[0] && z[1]), n: r.length, h: [m.scrollHeight, m.clientHeight] }; })()"""
+    for modus in ('solo', 'zwei'):
+        page.evaluate(f"Rennspiel.spiel.einstellungen.modus = '{modus}'; Rennspiel.spiel.menue.einstellungenFix(); Rennspiel.spiel.menue.tafelOffen = false; Rennspiel.spiel.menue.zeichnen()")
+        for tafel in (False, True):
+            for vw, vh in ((1280, 800), (1440, 900)):
+                page.evaluate(f"Rennspiel.spiel.menue.tafelOffen = {'true' if tafel else 'false'}; Rennspiel.spiel.menue.zeichnen()")
+                page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(300)
+                l = page.evaluate(LAYOUT)
+                pruefe(f'Einstellungen {modus} {"Tafel auf" if tafel else "Tafel zu"} {vw}×{vh}: ohne Scrollen, nichts abgeschnitten', l['scroll'] and l['innen'] and l['breitenOk'], l)
+                snap(f'menu_r4_einstellungen_{modus}_{"tafel" if tafel else "zu"}_{vw}.png')
+    page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
+    page.evaluate("Rennspiel.spiel.einstellungen.modus = 'solo'; Rennspiel.spiel.menue.einstellungenFix(); Rennspiel.spiel.menue.tafelOffen = false; Rennspiel.spiel.menue.zeichnen()")
+    # Start mit den gewählten Welt-Einstellungen
+    page.click('[data-a="start"]', force=True)      # fokussierter Knopf wackelt (Animation) -> nicht „stabil“
+    page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=20000)
+    st = page.evaluate("""(() => { const s = Rennspiel.spiel; return { welt: s.strecke.welt, schadenAn: !!(s.schaden && s.schaden.an), fz: s.fahrzeuge.length,
+      jz: s.wetter ? s.wetter.jahreszeit : null, wetter: s.wetter ? s.wetter.wetterName || s.wetter.wetter : null }; })()""")
+    pruefe('Start: Welt Stunt, Schaden an, 11 Autos (10 Gegner)', st['welt'] == 'stunt' and st['schadenAn'] is True and st['fz'] == 11, st)
+    pruefe('Start: Jahreszeit Winter im Wetter-Objekt', st['jz'] == 'winter', st)
+    pruefe('Rennspiel.spiel.schaden.an true', page.evaluate('Rennspiel.spiel.schaden.an') is True)
+    gesp = page.evaluate('localStorage.getItem(Rennspiel.config.ui.speicherSchluessel)')
+    pruefe('Welt/Jahreszeit/Wind/Schaden in localStorage', all(x in gesp for x in ('"welt":"stunt"', '"jahreszeit":"winter"', '"windStaerke":3', '"schaden":true')), gesp)
+    snap('menu_r4_rennen_stunt_winter.png')
+    # rennenStarten mit Argumenten: welt wird übernommen, ungültige Welt -> Standard der Strecke
+    page.evaluate("Rennspiel.spiel.rennenStarten({ streckeId: 'wald', welt: 'stunt', jahreszeit: 'sommer', wetter: 'klar', windStaerke: 0, schaden: false, gegner: 3 })")
+    pruefe('rennenStarten: Wald + Stunt', page.evaluate('Rennspiel.spiel.strecke.welt') == 'stunt' and page.evaluate('!(Rennspiel.spiel.schaden && Rennspiel.spiel.schaden.an)'))
+    page.evaluate("Rennspiel.spiel.rennenStarten({ streckeId: 'fantasie', welt: 'stunt' })")
+    pruefe('rennenStarten: Fantasie + ungültige Welt -> Fantasie', page.evaluate('Rennspiel.spiel.strecke.welt') == 'fantasie', page.evaluate('Rennspiel.spiel.strecke.welt'))
+    # Aufräumen: Standardwerte wie vor dem Block (spätere Tests erwarten Sommer/klar/kein Wind)
+    page.evaluate("Rennspiel.spiel.rennenStarten({ streckeId: 'wiese', welt: '', jahreszeit: 'sommer', wetter: 'klar', windStaerke: 0, schaden: false, gegner: 3, modus: 'solo' })")
+    page.evaluate("Rennspiel.spiel.zumMenue()"); page.wait_for_timeout(500)
     # Maus im Menü: Solo wählen, bis Start klicken
     page.click('[data-a="modus:solo"]'); page.wait_for_timeout(150)
     page.click('[data-a="strecke:wiese"]'); page.wait_for_timeout(150)
+    page.click('[data-a="weiter"]'); page.wait_for_timeout(150)      # Runde 4: Klick auf die Karte bleibt im Schritt (darunter: Welt)
     page.click('[data-a="fahrer:0:Kerle"]'); page.wait_for_timeout(150)
     snap('menu_10b_fahrer_solo.png')
     pruefe('Maus: Fahrer Kerle gewählt, Solo-Raster 12 Karten', page.evaluate('Rennspiel.spiel.einstellungen.fahrer[0]') == 'Kerle'

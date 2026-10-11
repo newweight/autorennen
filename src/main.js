@@ -4,6 +4,9 @@
 // (Countdown, Runden, Checkpoints). Gegner stehen noch still (KI folgt).
 // Abschnitt 4: Bande + Auto-Auto-Kollisionen, Fahrhilfen, Kamerawackeln,
 // Reset auf freie Stelle (R / T), Hinweis "R drücken" wenn ein Auto feststeckt.
+// Runde 4: Sprungschanzen (f.flug, track/schanze.js), Turbo-Felder + Schutzschild (this.pickups, world/pickups.js),
+// Schaden-System (this.schaden, physics/schaden.js; Einstellung schaden, Standard aus), Wracks/Strohballen.
+// Alles nur aktiv, wenn Welt/Einstellung es einschaltet – Klassisch + Standard-Einstellungen = Verhalten wie Runde 3.
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -16,6 +19,8 @@
       fahrer: c.fahrerStandard.slice(),
       runden: c.rennen.rundenStandard, gegner: c.rennen.gegnerStandard,
       schwierigkeit: c.schwierigkeitStandard, fahrhilfe: [c.fahrhilfeStandard, c.fahrhilfeStandard],
+      // Runde 4: Welt je Strecke ('' = Standard der Strecke), Jahreszeit/Wetter/Wind, Schaden (Standard = wie bisher)
+      welt: '', jahreszeit: 'sommer', wetter: 'klar', windStaerke: 0, windRichtung: 'zufall', schaden: false,
     };
   }
 
@@ -37,6 +42,12 @@
       gegner: zahl(r.gegner, 0, c.rennen.gegnerMax, std.gegner),
       schwierigkeit: c.schwierigkeiten[r.schwierigkeit] ? r.schwierigkeit : std.schwierigkeit,
       fahrhilfe: [0, 1].map(i => (c.fahrhilfen[hilfe[i]] ? hilfe[i] : std.fahrhilfe[i])),
+      welt: typeof r.welt === 'string' ? r.welt : '',          // gültig für die Strecke? → streckeSzeneBauen prüft
+      jahreszeit: (c.jahreszeiten && c.jahreszeiten[r.jahreszeit]) || r.jahreszeit === 'zufall' ? r.jahreszeit : 'sommer',
+      wetter: (c.wetter && c.wetter[r.wetter]) || r.wetter === 'zufall' ? r.wetter : 'klar',
+      windStaerke: r.windStaerke === 'zufall' ? 'zufall' : zahl(r.windStaerke, 0, 5, 0),
+      windRichtung: Number.isFinite(+r.windRichtung) && r.windRichtung !== '' && r.windRichtung !== null ? +r.windRichtung : 'zufall',
+      schaden: r.schaden === true,
     };
   }
 
@@ -176,7 +187,7 @@
       }
       // Nebel: je Stufe −20 % Sichtweite; Kameras zeichnen nichts hinter dem Nebel
       const sicht = q.sicht * Math.pow(g.nebelJeStufe, q.stufe);
-      if (this.szene.fog) { this.szene.fog.near = sicht * 0.55; this.szene.fog.far = sicht; }
+      if (this.szene.fog) { this.szene.fog.near = sicht * (this.wetter && this.wetter.nebelNahAnteil ? this.wetter.nebelNahAnteil : 0.55); this.szene.fog.far = sicht; }
       this.kameras.forEach(k => k.sichtweiteSetzen(sicht + 20));
     }
 
@@ -204,6 +215,9 @@
     // ---------- Szene auf- und abbauen ----------
     /** Alles außer Licht entfernen und Speicher freigeben (Katalog-Caches der Autos bleiben). */
     szeneAbbauen() {
+      // Runde 4: Teile an den Auto-Meshes (Schild-Hülle, Turbo-Flammen, Rauch) zuerst lösen – die Meshes sind Katalog-Caches
+      if (this.pickups) { this.pickups.zerstoeren(); this.pickups = null; }
+      if (this.schaden) { this.schaden.zerstoeren(); this.schaden = null; }
       this.huds.forEach(h => h.zerstoeren());
       this.huds = [];
       const autoMeshes = new Set(this.fahrzeuge.map(f => f.mesh));
@@ -225,6 +239,7 @@
       this.fahrzeuge = []; this.kameras = [];
       this.tunnelLichter = null;
       this.dynamik = null;
+      if (this.wetter) { this.wetter.zerstoeren(); this.wetter = null; }
       this.rennen = null; this.strecke = null; this.ergebnis = null;
       this.stoesse = [];
       if (R.Audio) { R.Audio.motorAlleEntfernen(); R.Audio.bremsen(false); }
@@ -233,18 +248,40 @@
     /** Nur die Strecke samt Deko und Himmel aufbauen (Menühintergrund und Rennen). */
     streckeSzeneBauen(trackId) {
       const daten = R.trackCatalog.find(t => t.id === trackId) || R.trackCatalog[0];
-      const strecke = new R.Strecke(daten);
+      // Runde 4: Welt (Schichten) je Strecke – ungültige/leere Welt → Standard der Strecke
+      const e = this.einstellungen || {};
+      const welt = R.Strecke.weltName ? R.Strecke.weltName(daten, e.welt) : (daten.weltStandard || undefined);
+      const strecke = new R.Strecke(daten, { welt });
       this.strecke = strecke;
+      // Runde 4: Wetter/Jahreszeit/Wind (Standard Sommer/klar/0 = wie bisher)
+      this.wetter = null;
+      if (R.Wetter) {
+        this._wetterSeed = Math.floor(Math.random() * 1e9);
+        this.wetter = new R.Wetter(this.szene, {
+          jahreszeit: e.jahreszeit || 'sommer', wetter: e.wetter || 'klar',
+          wind: { staerke: e.windStaerke === undefined ? 0 : e.windStaerke, richtung: e.windRichtung === undefined ? 'zufall' : e.windRichtung },
+          thema: daten.thema, seed: this._wetterSeed, strecke,
+        });
+      }
       // Strecke + Deko bewegen sich nie: Instanzen in Regionen teilen (Culling je Kamera), Matrizen einfrieren
       this.szene.add(R.themes.statischVorbereiten(strecke.bauen()));
-      this.szene.add(R.themes.statischVorbereiten(R.themes.dekoBauen(daten.thema, strecke)));
+      this.szene.add(R.themes.statischVorbereiten(R.themes.dekoBauen(daten.thema, strecke, this.wetter ? this.wetter.jahreszeit : undefined)));
       // Hindernisse (Öl, Sand, Baustelle, Ast) – eigene Gruppe, die Pylonen ändern sich im Rennen
       this.szene.add(R.themes.statischVorbereiten(strecke.hindernisseBauen(), 1));
       // Fantasie: rollende Bälle und Wasserfontänen (bewegen sich → nicht statisch)
+      // Runde 4: auch Strecken/Welten, die NUR Strohballen haben (strecke.strohballen ist nach Welt gefiltert)
       this.dynamik = null;
-      if (R.Dynamik && ((daten.baelle && daten.baelle.length) || (daten.wasserstrahlen && daten.wasserstrahlen.length))) {
+      const strohDa = !!(strecke.strohballen && strecke.strohballen.length) && !(strecke.aktiveSchichten && strecke.aktiveSchichten.strohballen === false);
+      const dd = strecke.daten || daten;     // nach Welt gefiltert (Wiese Klassisch: keine Bälle, obwohl der Katalog welche hat)
+      if (R.Dynamik && ((dd.baelle && dd.baelle.length) || (dd.wasserstrahlen && dd.wasserstrahlen.length) || strohDa)) {
         this.dynamik = new R.Dynamik(strecke, { seed: 4242 });
         this.szene.add(this.dynamik.bauen());
+      }
+      // Runde 4: Turbo-Felder + Schild-Kugeln (Welt „Verrückt"); die Feld-Grafik baut strecke.bauen() schon
+      this.pickups = null;
+      if (R.Pickups && ((strecke.boostFelder && strecke.boostFelder.length) || (strecke.schilde && strecke.schilde.length))) {
+        this.pickups = new R.Pickups(strecke);
+        this.szene.add(this.pickups.bauen());
       }
       // Thema: Himmel, Nebel, Licht
       const thema = R.themes[daten.thema] || R.themes.wiese;
@@ -260,6 +297,11 @@
       // Grundhelligkeit merken: im Tunnel wird sie je Ansicht gedimmt (zeichnen)
       if (this._himmelStandard === undefined) this._himmelStandard = this.halbkugelLicht.intensity;
       this.halbkugelLicht.intensity = this._himmelStandard;
+      if (this.wetter) {
+        const we = this.wetter.anwenden(thema, { halbkugel: this.halbkugelLicht, sonne: this.sonne });
+        if (we && we.sicht && this.qualitaet) { this.qualitaet.sicht = we.sicht; if (this.qualitaetAnwenden) this.qualitaetAnwenden(true); }
+        this.wetter.partikelBauen(1);
+      }
       this._lichtBasis = { himmel: this.halbkugelLicht.intensity, sonne: this.sonne.intensity };
       if (strecke.tunnel.length) this._tunnelLichterAnlegen();
       return strecke;
@@ -298,7 +340,7 @@
       this.pausiert = false;
       this.streckeAufbauen(e.streckeId, {
         spieler: zwei ? 2 : 1, autoIds: e.autoIds, fahrer: e.fahrer, gegner: e.gegner, runden: e.runden,
-        schwierigkeit: e.schwierigkeit, fahrhilfe: e.fahrhilfe,
+        schwierigkeit: e.schwierigkeit, fahrhilfe: e.fahrhilfe, schaden: e.schaden === true,
       });
       for (let i = 0; i < (zwei ? 2 : 1); i++) this.kameraHinzufuegen(this.fahrzeuge[i]);
       const split = zwei;
@@ -306,6 +348,9 @@
         rennen: this.rennen, teilnehmer: this.rennen.teilnehmer[i], fahrzeug: this.fahrzeuge[i], nr: i, split,
       }));
       this.rennen.bei('fertig', () => this.rennenFertig());
+      if (this.wetter) { this.wetter.partikelBauen(this.kameras.length); this.huds.forEach(h => h.wetterSetzen && h.wetterSetzen(this.wetter)); }
+      // Runde 4: Gesundheitsbalken (HUD i gehört zu Fahrzeug i – Spieler stehen vorne); aus = versteckt
+      this.huds.forEach((h, i) => h.schadenSetzen && h.schadenSetzen(this.schaden, i));
       // Ton: Motoren je Auto, Ereignisse
       if (R.Audio) {
         const A = R.Audio; this._tonCd = -1;
@@ -353,7 +398,7 @@
     /**
      * Strecke aus dem Katalog aufbauen: Grafik, Deko, Thema (Himmel/Nebel),
      * Fahrzeuge auf die Startplätze, Rennleitung.
-     * optionen: { spieler (1|2), autoIds, gegner, runden, schwierigkeit, fahrhilfe[] }
+     * optionen: { spieler (1|2), autoIds, gegner, runden, schwierigkeit, fahrhilfe[], schaden (Runde 4, Standard aus) }
      */
     streckeAufbauen(trackId, optionen) {
       const opt = Object.assign({
@@ -399,8 +444,37 @@
       this.fahrzeuge.forEach((f) => {
         if (f.driver && typeof f.driver.hindernisseSetzen === 'function') f.driver.hindernisseSetzen(strecke.hindernisse);
       });
+      // Runde 4: Schaden-System (Spieler und KI gleich). Aus → keine Wirkung, keine Kopie der Fahrwerte, kein Rauch.
+      this.schaden = null;
+      if (R.Schaden) {
+        this.schaden = new R.Schaden(this.fahrzeuge, { an: opt.schaden === true });
+        if (this.schaden.an) {
+          this.fahrzeuge.forEach((f, i) => this.schaden.meshBauen(i, f.mesh));
+          this.schaden.bei((e) => this._schadenEreignis(e));
+        }
+      }
       if (this.tunnelLichter) this._tunnelLichterVorkompilieren();
       return strecke;
+    }
+
+    /** Runde 4: Ereignis des Schaden-Systems → Ton, HUD-Meldung, Abschleppen (= Reset am letzten Checkpoint). */
+    _schadenEreignis(e) {
+      const f = this.fahrzeuge[e.i];
+      if (!f) return;
+      const A = R.Audio, spieler = !!f.istSpieler;
+      if (e.art === 'treffer') { if (A && spieler) A.schadenTreffer(e.stufe); }
+      else if (e.art === 'liegengeblieben') {
+        this._meldung(e.i, 'Liegengeblieben! 💥', 2400);
+        if (A && spieler) A.liegengeblieben();
+      } else if (e.art === 'abschleppwagen') {
+        this._meldung(e.i, 'Abschleppwagen kommt! 🚛', 2000);
+        if (A && spieler) A.abschleppen();
+      } else if (e.art === 'abschleppen') {
+        this.zuruecksetzen(e.i);
+        if (f.driver) f.driver.zurueckgesetzt();
+        if (f.autopilot && f.autopilot.zurueckgesetzt) f.autopilot.zurueckgesetzt();
+        this._meldung(e.i, 'Weiter geht\'s! 🔧 ' + e.prozent + ' %', 1600);
+      }
     }
 
     /** Fahrzeug aus einem Katalog-Eintrag anlegen (Physik + 3D-Modell). */
@@ -412,6 +486,8 @@
       const eintrag = { vehicle, mesh, auto, radwinkel: 0 };
       // Looping-Zustand je Fahrzeug (track/looping.js): { aktiv, winkel, v, … }
       eintrag.looping = R.Looping ? R.Looping.zustand() : null;
+      // Runde 4: Sprungschanzen-Zustand je Fahrzeug (track/schanze.js): Rampe, Flug, Statistik (fluege, landungen)
+      eintrag.flug = R.Schanzen ? R.Schanzen.zustand() : null;
       // Zustand vor dem letzten Physikschritt + interpolierte Darstellung (Mesh und Kamera nutzen sie).
       // Ohne Interpolation springt ein Auto bei 0 oder 2 Physikschritten pro Frame sichtbar ("Ruckeln").
       eintrag.vorher = { x: x, y: 0, z: z, heading, nicken: 0, neigung: 0 };
@@ -479,8 +555,12 @@
           const st = this.strecke, r = d.richtung();
           steigung = Math.atan2(st.hoeheAn(d.x + r.x * 1.6, d.z + r.z * 1.6) - st.hoeheAn(d.x - r.x * 1.6, d.z - r.z * 1.6), 3.2);
         }
+        // Runde 4: in der Luft ersetzt das Flug-Nicken die Straßensteigung; Rampe/Landung: Zusatz-Nicken (interpoliert)
+        const fz = f.flug;
+        if (fz && fz.aktiv) steigung = 0;
+        const flugNicken = fz ? R.Schanzen.anzeigeNicken(fz, alpha) : 0;
         // YXZ: erst Heading (Hochachse), dann Nicken (Querachse, > 0 = Bug hoch), dann Wanken (Längsachse) – alles lokal
-        if (!f.loopAnzeige) mesh.rotation.set(d.nicken + steigung, d.heading, d.neigung, 'YXZ');
+        if (!f.loopAnzeige) mesh.rotation.set(d.nicken + steigung + flugNicken, d.heading, d.neigung, 'YXZ');
         // Räder rollen und lenken, Bremslicht
         f.radwinkel -= v.vLaengs * dt / 0.34;   // Rolldrehung (Radradius ≈ 0,34 m)
         R.carBuilder.dreheRaeder(mesh, f.radwinkel);
@@ -490,7 +570,11 @@
       if (this.zustand === 'menue') this.menueKameraFlug(dt);
       else if (!this.pausiert) for (let i = 0; i < this.kameras.length; i++) { this.kameras[i].update(dt); this._loopingKamera(this.kameras[i], dt, alpha); }
       if (this.strecke) this.strecke.hindernisseAnimieren(this._physikZeit || 0);
+      if (this.wetter) this.wetter.update(dt, this.zustand === 'menue' ? [this.menueKamera] : this.kameras);
       if (this.dynamik) this.dynamik.animieren();
+      // Runde 4: Turbo-Pfeile/Schild-Kugeln/Hülle/Flammen; Schaden-Rauch + Warnblinker (NACH setzeBremslicht oben)
+      if (this.pickups) this.pickups.animieren(this._physikZeit || 0, this.fahrzeuge);
+      if (this.schaden && this.schaden.an) this.schaden.update(this.pausiert || this.zustand === 'menue' ? 0 : dt);
       if (this.tunnelLichter) this._tunnelLichterAktualisieren();
       const t2 = performance.now();
       if (R.Audio) this.tonAktualisieren(dt);
@@ -653,9 +737,29 @@
       for (let t = 0; t < sekunden; t += dt) this.physikSchritt(dt);
     }
 
+    /**
+     * Ein fester Physikschritt (1/60 s). Reihenfolge (Runde 4, verbindlich):
+     *   1. Eingabe je Auto: Spieler (Tastatur) / Computerfahrer (KI, Autopilot); Countdown → kein Gas.
+     *   2. gesperrt?  Schaden: liegengebliebenes Auto bekommt nur Bremse (KI wird nicht gefragt → kein KI-Reset).
+     *   3. Looping (track/looping.js) bzw. Flug über eine Schanze (track/schanze.js) ERSETZEN vehicle.schritt → fertig.
+     *   4. Faktoren: Turbo (pickups.faktoren) multipliziert vehicle.daten.vMax/beschleunigung NUR um vehicle.schritt
+     *      herum und schreibt danach exakt die alten Werte zurück (Schaden tauscht vehicle.daten nur außerhalb).
+     *   5. vehicle.schritt (mit Fahrhilfe + Wetter-Umwelt).
+     *   6. nachSchritt: Schanze (Rampe hoch / Absprung), Looping-Einfahrt.
+     *   7. y: Rampe/Flug (Schanzen.hoehe) bzw. Straßenhöhe – wird nach den Kollisionen nochmal gesetzt (+ Ast-Hüpfer).
+     *   8. Kollisionen: Bande (auch im Flug) → Auto-Auto (nicht Looping/Flug) → Hindernisse inkl. Wracks und
+     *      Dynamik (Bälle, Wasser, Strohballen). Für Hindernisse/Dynamik merkt der Schild vorher Tempo/Drift
+     *      (vorTreffern) und nimmt abgefangene Treffer danach zurück (nachTreffern).
+     *   9. Schaden: Schild fängt zählende Bande/Auto-Treffer ab, dann stoesseAuswerten + schritt
+     *      (Liegenbleiben, Abschleppen → zuruecksetzen).
+     *  10. Pickups.schritt: Turbo-Felder überfahren, Schild-Kugeln aufsammeln (Meldungen, Töne).
+     *  11. Höhe, Feststecken, Rennen.schritt (Runden, Checkpoints, Plätze).
+     */
     physikSchritt(dt) {
       const strecke = this.strecke, rennen = this.rennen;
       const countdown = !!rennen && !rennen.gasErlaubt;
+      const schaden = this.schaden && this.schaden.an ? this.schaden : null;
+      const pickups = this.pickups;
       // Fortschritt der Spieler für das Gummiband der KI
       const tn = rennen ? rennen.teilnehmer : [];
       let spielerMax = null;
@@ -670,9 +774,11 @@
 
       this.fahrzeuge.forEach((f, i) => {
         const v = f.vehicle;
+        // --- 1./2. Eingabe (liegengeblieben: nur Bremse, Computerfahrer wird nicht gefragt) ---
         let s = { gas: 0, bremse: 0, lenkung: 0 };
         const fahrer = f.driver || f.autopilot;       // Computerfahrer (KI oder Autopilot)
-        if (f.istSpieler && tn[i] && tn[i].imZiel) s = { gas: 0, bremse: 0.6, lenkung: 0 };   // im Ziel: ausrollen
+        if (schaden && schaden.gesperrt(i)) s = { gas: 0, bremse: 1, lenkung: 0 };
+        else if (f.istSpieler && tn[i] && tn[i].imZiel) s = { gas: 0, bremse: 0.6, lenkung: 0 };   // im Ziel: ausrollen
         else if (f.istSpieler && f.spielerNr >= 0 && !f.autopilot) s = this.input.steuerung(f.spielerNr);
         else if (fahrer && rennen) {
           const t = tn[i];
@@ -683,7 +789,7 @@
           if (fahrer.brauchtReset) { this.zuruecksetzen(i); fahrer.zurueckgesetzt(); return; }
         }
         if (countdown) s = { gas: 0, bremse: s.bremse, lenkung: s.lenkung };
-        // Im Looping (oder beim Zurückfallen) übernimmt track/looping.js statt vehicle.schritt
+        // --- 3. Im Looping (oder beim Zurückfallen) übernimmt track/looping.js statt vehicle.schritt ---
         const lp = f.looping;
         if (lp && (lp.aktiv || lp.fallen) && strecke) {
           const erg = R.Looping.schritt(lp, v, strecke, s, dt);
@@ -691,6 +797,16 @@
           f.index = n.index; f.nah = n; v.untergrund = 'strasse';
           f.bremst = false;
           this._loopingEreignis(i, erg);
+          return;
+        }
+        // --- 3. Im Flug (Sprungschanze) übernimmt track/schanze.js statt vehicle.schritt ---
+        const fz = f.flug;
+        if (fz && fz.aktiv && strecke) {
+          const e = R.Schanzen.flugSchritt(fz, v, strecke, s, dt);
+          const n = strecke.abfrage(v.x, v.z, f.index);
+          f.index = n.index; f.nah = n;
+          f.bremst = false;
+          this._flugEreignis(i, e);
           return;
         }
         let hilfe;
@@ -710,9 +826,17 @@
             };
           }
         }
+        // --- 4. Turbo-Faktoren nur für diesen Aufruf (danach exakt zurück) + 5. vehicle.schritt ---
         const xAlt = v.x, zAlt = v.z;
-        v.schritt(dt, s, hilfe);
+        const fk = pickups ? pickups.faktoren(i) : null, dd = v.daten;
+        const turbo = !!fk && (fk.vMax !== 1 || fk.beschleunigung !== 1);
+        const vm0 = dd.vMax, b0 = dd.beschleunigung;
+        if (turbo) { dd.vMax = vm0 * fk.vMax; dd.beschleunigung = b0 * fk.beschleunigung; }
+        v.schritt(dt, s, hilfe, this.wetter ? this.wetter.umwelt() : undefined);
+        if (turbo) { dd.vMax = vm0; dd.beschleunigung = b0; }
         f.bremst = v.letzteSteuerung.bremse > 0 && v.vLaengs > 0.5;
+        // --- 6. Schanze: Rampe hochfahren / Absprung (f.nah = Abfrage VOR dem Schritt) ---
+        if (fz && strecke && f.nah) this._flugEreignis(i, R.Schanzen.nachSchritt(fz, v, strecke, f.nah, xAlt, zAlt, dt));
         // Looping-Einfahrt: s vorwärts überquert? (Bogenlänge nach dem Schritt aus der Verschiebung längs der Tangente)
         if (lp && strecke && strecke.loopings.length && f.nah) {
           const n = f.nah, pt = strecke.spline.punktBei(n.s), dx = v.x - xAlt, dz = v.z - zAlt;
@@ -721,32 +845,40 @@
         }
       });
 
-      // Kollisionen nach allen Fahrzeug-Schritten
+      // --- 8. Kollisionen nach allen Fahrzeug-Schritten ---
       this._physikZeit = (this._physikZeit || 0) + dt;
-      if (strecke) this.fahrzeuge.forEach(f => R.Kollisionen.bande(f.vehicle, strecke));
+      const bandeSt = this._bandeSt || (this._bandeSt = []);
+      bandeSt.length = this.fahrzeuge.length;
+      for (let i = 0; i < this.fahrzeuge.length; i++) bandeSt[i] = strecke ? R.Kollisionen.bande(this.fahrzeuge[i].vehicle, strecke) : 0;
       this.stoesse = R.Kollisionen.autoAuto(this.fahrzeuge, { countdown });
-      // Hindernisse (Pylonen, Bake, Ast): Stöße wie Auto-Auto (Ton + Kamerawackeln für Spieler)
-      const hs = strecke ? R.Kollisionen.hindernisse(this.fahrzeuge, strecke, { dt, zeit: this._physikZeit, countdown }) : [];
+      // Hindernisse (Pylonen, Bake, Ast, Wracks): Stöße wie Auto-Auto (Ton + Kamerawackeln für Spieler)
+      let schild = !!pickups && pickups.vorTreffern(this.fahrzeuge) > 0;
+      let hs = strecke ? R.Kollisionen.hindernisse(this.fahrzeuge, strecke, { dt, zeit: this._physikZeit, countdown }) : [];
+      if (schild) hs = pickups.nachTreffern(this.fahrzeuge, hs);
       for (let k = 0; k < hs.length; k++) {
         const f = this.fahrzeuge[hs[k].nr];
         if (!f || !f.istSpieler) continue;
         if (R.Audio && hs[k].staerke >= 1.5) R.Audio.kollision(Math.min(12, hs[k].staerke));
         if (hs[k].staerke >= 3) this.kameras.forEach((kam) => { if (kam.ziel === f.vehicle) kam.wackeln(Math.min(8, hs[k].staerke)); });
+        if (hs[k].typ === 'brand') this._meldung(hs[k].nr, 'Heiß! 🔥', 1000);
       }
       this.hindernisStoesse = hs;
-      // Fantasie: Bälle und Wasserstrahlen (nur wenn das Rennen läuft)
+      // Fantasie: Bälle und Wasserstrahlen, Runde 4: Strohballen (nur wenn das Rennen läuft)
+      let ds = null;
       if (this.dynamik && rennen && rennen.gasErlaubt) {
         let fuehrend = spielerMax;
         if (fuehrend === null) for (let i = 0; i < tn.length; i++) if (fuehrend === null || tn[i].fortschritt > fuehrend) fuehrend = tn[i].fortschritt;
         const e = this.dynamik.schritt(dt, { fortschritt: fuehrend === null ? 0 : fuehrend, runden: rennen.runden });
         if (e.baelleKommen) this.fahrzeuge.forEach((f, i) => this._meldung(i, '⚠️ Bälle kommen!', 2500));
-        const ds = this.dynamik.kollisionen(this.fahrzeuge);
+        schild = !!pickups && pickups.vorTreffern(this.fahrzeuge) > 0;
+        ds = this.dynamik.kollisionen(this.fahrzeuge);
+        if (schild) ds = pickups.nachTreffern(this.fahrzeuge, ds);
         for (let k = 0; k < ds.length; k++) {
           const f = this.fahrzeuge[ds[k].nr];
           if (!f || !f.istSpieler) continue;
           if (R.Audio) R.Audio.kollision(Math.min(12, ds[k].staerke));
           this.kameras.forEach((kam) => { if (kam.ziel === f.vehicle) kam.wackeln(Math.min(8, Math.max(4, ds[k].staerke))); });
-          this._meldung(ds[k].nr, ds[k].typ === 'ball' ? 'Bumm! ⚽' : 'Platsch! 💦', 1000);
+          this._meldung(ds[k].nr, ds[k].typ === 'ball' ? 'Bumm! ⚽' : ds[k].typ === 'stroh' ? 'Stroh! 🌾' : 'Platsch! 💦', 1000);
         }
         this.dynamikStoesse = ds;
       }
@@ -760,9 +892,39 @@
         });
       });
 
+      // --- 9. Schaden: Schild fängt zählende Bande-/Auto-Treffer ab, dann auswerten + Logik-Uhr ---
+      if (schaden) {
+        if (pickups) {
+          const fang = (i, art, st) => {
+            if (pickups.hatSchild(i) && schaden.zaehlt(i, art, st) && pickups.schildVerbrauchen(i)) schaden.abfangen(i);
+          };
+          for (let i = 0; i < bandeSt.length; i++) if (bandeSt[i] > 0) fang(i, 'bande', bandeSt[i]);
+          for (let k = 0; k < this.stoesse.length; k++) { const st = this.stoesse[k]; fang(st.a, 'auto', st.staerke); fang(st.b, 'auto', st.staerke); }
+        }
+        schaden.stoesseAuswerten({ bande: bandeSt, auto: this.stoesse, hindernis: hs, dynamik: ds || [] });
+        schaden.schritt(dt);
+      }
+
+      // --- 10. Pickups: zuerst geplatzte Schilde dieses Schritts melden (schritt() leert die Liste), dann Felder/Kugeln
+      //         (erst ab Rennfreigabe – kein Turbo im Countdown) ---
+      if (pickups && (!rennen || rennen.gasErlaubt)) {
+        for (let k = 0; k < pickups.geplatzt.length; k++) {
+          const g = pickups.geplatzt[k];
+          this._meldung(g.nr, 'Schild weg! 💥', 1000);
+          if (this.fahrzeuge[g.nr] && this.fahrzeuge[g.nr].istSpieler) pickups.ton('platzen');
+        }
+        const ev = pickups.schritt(dt, this.fahrzeuge);
+        for (let k = 0; k < ev.length; k++) {
+          const e = ev[k], spieler = this.fahrzeuge[e.nr] && this.fahrzeuge[e.nr].istSpieler;
+          if (e.typ === 'turbo') { this._meldung(e.nr, 'TURBO! 🔥', 1200); if (spieler) pickups.ton('turbo'); }
+          else { this._meldung(e.nr, 'Schutzschild! 🛡️', 1200); if (spieler) pickups.ton('schild'); }
+        }
+      }
+
+      // --- 11. Höhe (Rampe/Flug/Straße + Ast-Hüpfer), Feststecken, Rennleitung ---
       this.fahrzeuge.forEach((f) => {
         const v = f.vehicle;
-        if (strecke && !v.imLooping) v.y = strecke.hoeheAn(v.x, v.z);
+        if (strecke && !v.imLooping) v.y = f.flug ? R.Schanzen.hoehe(f.flug, v, strecke) : strecke.hoeheAn(v.x, v.z);
         // Hüpfer (Ast): kleine Sprungbewegung, nur Optik
         if (v.huepfer) { f.hoppV = v.huepfer; v.huepfer = 0; f.hoppY = f.hoppY || 0; }
         if (f.hoppV || f.hoppY > 0) {
@@ -775,6 +937,21 @@
       if (rennen) rennen.schritt(dt);
     }
 
+    /** Runde 4: Schanzen-Ereignis eines Fahrzeugs: Meldung, Kamerawackeln + Aufsetz-Geräusch bei der Landung. */
+    _flugEreignis(i, e) {
+      if (!e) return;
+      const f = this.fahrzeuge[i];
+      if (e === 'sprung') this._meldung(i, 'Sprung! ✈️', 1300);
+      else if (e === 'landung' || e === 'landungSchraeg') {
+        if (f.istSpieler) {
+          const w = (R.config.stunt && R.config.stunt.schanze && R.config.stunt.schanze.kameraWackeln) || 2.5;
+          this.kameras.forEach((k) => { if (k.ziel === f.vehicle) k.wackeln(w); });
+          if (R.Audio) R.Audio.kollision(Math.min(6, 2 + f.flug.landeStaerke / 2));
+        }
+        if (e === 'landungSchraeg') this._meldung(i, 'Rumms! 😬', 1000);
+      }
+    }
+
     /**
      * Steckt ein Auto fest? (> 4 s fast Stillstand und abseits der Straße oder falsch herum)
      * Setzt f.resetHinweis – für Spieler als Hinweis im HUD, für die KI später Auto-Reset.
@@ -784,7 +961,7 @@
       if (!st || !n || countdown) { f.stehZeit = 0; f.resetHinweis = false; f.falschHerum = false; f.falschZeit = 0; return; }
       const p = st.spline.punkte[n.index];
       const winkel = Math.abs(R.Vehicle.winkelDiff(R.headingAus(p.tx, p.tz), v.heading));
-      const abseits = n.abstand > st.breite / 2 + st.randBreite;
+      const abseits = n.abstand > (st.breiteBei ? st.breiteBei(n.s) : st.breite) / 2 + st.randBreite;
       const falschHerum = winkel > Math.PI * 2 / 3;   // > 120°
       if (v.tempo < 1 && (abseits || falschHerum)) f.stehZeit += dt; else f.stehZeit = 0;
       f.resetHinweis = f.stehZeit > 4;
@@ -803,6 +980,7 @@
     /** Reset-Taste von Spieler nr (0 = R, 1 = T). */
     spielerZuruecksetzen(nr) {
       const i = this.fahrzeuge.findIndex(f => f.istSpieler && f.spielerNr === nr);
+      if (i >= 0 && this.schaden && this.schaden.gesperrt(i)) return;   // liegengeblieben: der Abschleppwagen kommt gleich
       if (i >= 0) this.zuruecksetzen(i);
     }
 
@@ -826,17 +1004,19 @@
         }
         this.rennen.verfolgungSetzen(i, pose.x, pose.z);
       }
-      // Nicht direkt vor/in eine Baustelle oder einen Ast setzen: dann auf die freie Fahrbahnhälfte
+      // Nicht direkt vor/in eine Baustelle, einen Ast oder ein Wrack setzen: dann auf die freie Fahrbahnhälfte
       const nr = sp.naechster(pose.x, pose.z);
       for (const h of this.strecke.hindernisse) {
-        if (!h.seite || (h.typ !== 'baustelle' && h.typ !== 'ast')) continue;
+        if (!h.seite || (h.typ !== 'baustelle' && h.typ !== 'ast' && h.typ !== 'wrack' && h.typ !== 'brand')) continue;
         const d = sp.differenzS(nr.s, h.s0);
         if (d > -30 && d < h.laenge + 2) {
-          const p = sp.punktBei(nr.s), q = -h.seite * this.strecke.breite / 4;
+          const b = this.strecke.breiteBei ? this.strecke.breiteBei(nr.s) : this.strecke.breite;   // Runde 4: Spuren
+          const p = sp.punktBei(nr.s), q = -h.seite * b / 4;
           pose = { x: p.x + p.nx * q, z: p.z + p.nz * q, heading: R.headingAus(p.tx, p.tz) };
         }
       }
       if (f.looping && (f.looping.aktiv || f.looping.fallen)) { f.looping.aktiv = false; f.looping.fallen = false; f.vehicle.imLooping = false; }
+      if (f.flug) R.Schanzen.abbrechen(f.flug, f.vehicle);   // Runde 4: Flug/Rampe abbrechen (sonst landet es am alten Ort)
       f.vehicle.setzen(pose.x, pose.z, pose.heading);
       f.vehicle.y = this.strecke.hoeheAn(pose.x, pose.z);
       this._vorherAngleichen(f);

@@ -2,8 +2,11 @@
 // Menü, Ergebnis-Tafel und Pause als HTML-Overlay über dem Canvas.
 //
 // Hauptmenü in 5 Schritten (alles per Tastatur UND Maus):
-//   1 Modus  2 Strecke  3 Fahrer (je Spieler)  4 Auto (je Spieler)  5 Einstellungen + Start
+//   1 Modus  2 Strecke (+ Welt)  3 Fahrer (je Spieler)  4 Auto (je Spieler)  5 Einstellungen + Start
 // Tasten: Pfeile bzw. WASD bewegen, Enter/Leertaste = weiter, Esc = zurück.
+// Runde 4: Strecken-Schritt hat eine Zeile „Welt“ (←→ Strecke, ↑↓ Welt; einstellungen.welt, '' = Standard der Strecke).
+// Einstellungen-Schritt in zwei Spalten: links Rennen (Runden, Gegner bis 10, Stärke, Fahrhilfe),
+// rechts Welt-Extras (Jahreszeit, Wetter je Jahreszeit+Thema aus wetter.js, Wind 0–5/🎲, Schaden aus/an).
 // Im Fahrer- und Auto-Schritt steuert Spieler 1 mit den Pfeilen, Spieler 2 mit WASD.
 // Zwei Spieler können nicht denselben Fahrer wählen (der Bewegende springt weiter).
 // Das Menü ändert nur spiel.einstellungen (und speichert sie); gestartet
@@ -25,6 +28,7 @@
   const DREH_TASTEN = { Comma: [0, -1], Period: [0, 1], KeyQ: [1, -1], KeyE: [1, 1] };
   const BUEHNE = { solo: { w: 480, h: 300 }, zwei: { w: 380, h: 240 } };   // Renderauflösung der Bühne
   const HEX = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0');
+  const WIND_FOLGE = [0, 1, 2, 3, 4, 5, 'zufall'];   // Runde 4: Reihenfolge des Wind-Steppers (🎲 = zufällig)
 
   // ---------- Hilfsfunktionen ----------
 
@@ -85,6 +89,8 @@
       this.schritt = 0;
       this.fokus = 0;               // Zeile im Einstellungs-Schritt
       this.sichtbar = false;
+      this.tafelOffen = false;      // Runde 4: Steuerungs-Tafel im Einstellungen-Schritt aufgeklappt?
+      this._bgTimer = null;
       this.norm = normiert();
       this.wurzel.addEventListener('click', (e) => {
         const t = e.target.closest('[data-a]');
@@ -102,6 +108,7 @@
       this.schritt = schritt === undefined ? 0 : schritt;
       this.fokus = 0;
       this.wurzel.style.display = '';
+      this.weltFix();
       this.spiel.menueHintergrund(this.e.streckeId);
       this.zeichnen();
     }
@@ -110,11 +117,77 @@
       if (R.AutoVorschau) R.AutoVorschau.stoppen();
     }
 
+    /** Fokus-Reihenfolge: linke Spalte (Rennen), rechte Spalte (Welt-Extras), dann Start. */
     zeilen() {
       const z = ['runden', 'gegner', 'schwierigkeit', 'hilfe0'];
       if (this.zwei) z.push('hilfe1');
-      z.push('start');
+      z.push('jahreszeit', 'wetter', 'wind', 'schaden', 'start');
       return z;
+    }
+
+    // ---------- Runde 4: Welt / Jahreszeit / Wetter ----------
+    streckeDaten(id) { return R.trackCatalog.find((s) => s.id === (id || this.e.streckeId)) || R.trackCatalog[0]; }
+    /** Gültige Welt der gewählten Strecke: Name oder '' (= Standard). */
+    weltGueltig() {
+      const d = this.streckeDaten(), w = this.e.welt;
+      return w && d.welten && d.welten[w] && w !== d.weltStandard ? w : '';
+    }
+    /** Welten der Strecke: [{ k, info, standard }] in Katalogreihenfolge. */
+    weltListe(id) {
+      const d = this.streckeDaten(id), info = R.weltInfo || {};
+      return Object.keys(d.welten || {}).map((k) => ({
+        k, info: info[k] || { name: k, emoji: '🌍', beschreibung: '' }, standard: k === d.weltStandard,
+      }));
+    }
+    /** Jahreszeit-Pillen für das Thema der Strecke (Wüste: Winter = Sandsturm-Zeit). */
+    jahreszeitListe() {
+      const thema = this.streckeDaten().thema, J = R.config.jahreszeiten || {};
+      const erl = (jz) => (R.Wetter && R.Wetter.erlaubt ? R.Wetter.erlaubt(thema, jz) : (J[jz].wetter || ['klar']));
+      const liste = Object.keys(J).filter((k) => erl(k).length > 0).map((k) => {
+        const wuesteWinter = thema === 'wueste' && k === 'winter';
+        return { k, text: wuesteWinter ? '🌪️ Sandsturm-Zeit' : `${J[k].emoji} ${J[k].name}` };
+      });
+      liste.push({ k: 'zufall', text: '🎲 Zufall' });
+      return liste;
+    }
+    /** Wetter-Pillen für Thema + gewählte Jahreszeit (ungültige ausgeblendet). */
+    wetterListe() {
+      const thema = this.streckeDaten().thema, W = R.config.wetter || {}, jz = this.e.jahreszeit;
+      let ks = ['klar'];
+      if (jz !== 'zufall') ks = R.Wetter && R.Wetter.erlaubt ? R.Wetter.erlaubt(thema, jz) : ['klar'];
+      const liste = ks.map((k) => ({ k, text: `${W[k].emoji || '☀️'} ${W[k].name}` }));
+      liste.push({ k: 'zufall', text: '🎲 Zufall' });
+      return liste;
+    }
+    /** Ungültige Welt/Wetter-Kombinationen (z. B. nach Streckenwechsel) zurücksetzen. */
+    weltFix() {
+      const e = this.e;
+      e.welt = this.weltGueltig();
+      if (!this.jahreszeitListe().some((x) => x.k === e.jahreszeit)) e.jahreszeit = 'sommer';
+      if (!this.wetterListe().some((x) => x.k === e.wetter)) e.wetter = 'klar';
+    }
+    /** Menü-Hintergrund mit neuer Welt/Jahreszeit/Wetter neu aufbauen (kurz verzögert, damit Klicks nicht ruckeln). */
+    hintergrundNeu() {
+      clearTimeout(this._bgTimer);
+      this._bgTimer = setTimeout(() => {
+        if (!this.sichtbar || this.spiel.zustand !== 'menue') return;
+        try { this.spiel.szeneAbbauen(); this.spiel.menueHintergrund(this.e.streckeId); } catch (err) { /* Hintergrund ist nur Deko */ }
+      }, 250);
+    }
+    /** Streckenwechsel: Welt zurück auf Standard, Wetter prüfen. */
+    streckeWaehlen(id) {
+      if (this.e.streckeId !== id) { this.e.streckeId = id; this.e.welt = ''; this.weltFix(); }
+      this.spiel.menueHintergrund(id);
+    }
+    /** Welt der Strecke um `d` weiterschalten (Tastatur ↑↓). */
+    weltBewegen(d) {
+      const l = this.weltListe(), akt = this.weltGueltig() || this.streckeDaten().weltStandard;
+      const i = Math.max(0, l.findIndex((w) => w.k === akt));
+      this.weltSetzen(l[(i + d + l.length) % l.length].k);
+    }
+    weltSetzen(k) {
+      this.e.welt = k === this.streckeDaten().weltStandard ? '' : k;
+      this.hintergrundNeu();
     }
 
     aenderung() {
@@ -151,10 +224,11 @@
         this.einstellungenFix();
         this.aenderung();
       } else if (id === 'strecke') {
-        const liste = R.trackCatalog, i = liste.findIndex((s) => s.id === this.e.streckeId);
-        const n = liste[(i + (dx || dy) + liste.length * 2) % liste.length];
-        this.e.streckeId = n.id;
-        this.spiel.menueHintergrund(n.id);
+        if (dy) this.weltBewegen(dy);              // ↑↓ Welt, ←→ Strecke
+        else {
+          const liste = R.trackCatalog, i = liste.findIndex((s) => s.id === this.e.streckeId);
+          this.streckeWaehlen(liste[(i + dx + liste.length * 2) % liste.length].id);
+        }
         this.aenderung();
       } else if (id === 'auto' || id === 'fahrer') {
         const spieler = [];
@@ -209,7 +283,27 @@
         const aktuell = hilfe ? e.fahrhilfe[sp] : e.schwierigkeit;
         const neu = keys[klemme(keys.indexOf(aktuell) + dx, 0, keys.length - 1)];
         if (hilfe) e.fahrhilfe[sp] = neu; else e.schwierigkeit = neu;
+      } else if (zeile === 'jahreszeit' || zeile === 'wetter') {
+        const l = (zeile === 'jahreszeit' ? this.jahreszeitListe() : this.wetterListe()).map((x) => x.k);
+        const i = l.indexOf(e[zeile]);
+        this.wertSetzen(zeile, l[klemme((i < 0 ? 0 : i) + dx, 0, l.length - 1)]);
+      } else if (zeile === 'wind') {
+        const i = WIND_FOLGE.indexOf(e.windStaerke);
+        e.windStaerke = WIND_FOLGE[klemme((i < 0 ? 0 : i) + dx, 0, WIND_FOLGE.length - 1)];
+      } else if (zeile === 'schaden') {
+        if (dx) e.schaden = dx > 0;
       }
+    }
+
+    /** Pillen-Wert setzen (Maus und Tastatur). Jahreszeit-Wechsel setzt das Wetter auf klar. */
+    wertSetzen(zeile, k) {
+      const e = this.e;
+      if (zeile === 'schwierigkeit') e.schwierigkeit = k;
+      else if (zeile.startsWith('hilfe')) e.fahrhilfe[+zeile.slice(5)] = k;
+      else if (zeile === 'jahreszeit') { if (e.jahreszeit !== k) { e.jahreszeit = k; e.wetter = 'klar'; this.hintergrundNeu(); } }
+      else if (zeile === 'wetter') { if (e.wetter !== k) { e.wetter = k; this.hintergrundNeu(); } }
+      else if (zeile === 'wind') e.windStaerke = k === 'zufall' ? 'zufall' : +k;
+      else if (zeile === 'schaden') e.schaden = k === 'an';
     }
 
     weiter() {
@@ -230,7 +324,9 @@
       else if (art === 'weiter') return this.weiter();
       else if (art === 'zurueck') return this.zurueck();
       else if (art === 'modus') { e.modus = p1; this.einstellungenFix(); this.schritt = 1; }
-      else if (art === 'strecke') { e.streckeId = p1; this.spiel.menueHintergrund(p1); this.schritt = 2; }
+      else if (art === 'strecke') this.streckeWaehlen(p1);     // bleibt im Schritt: darunter die Welt wählen, dann „Weiter“
+      else if (art === 'welt') this.weltSetzen(p1);
+      else if (art === 'tafel') this.tafelOffen = !this.tafelOffen;
       else if (art === 'auto') e.autoIds[+p1] = p2;
       else if (art === 'fahrer') {
         const sp = +p1;
@@ -238,10 +334,8 @@
         if (this.zwei && e.fahrer[1 - sp] === p2) this.fahrerBewegen(sp, 1, 0);   // schon vergeben → weiterspringen
       }
       else if (art === 'stepper') this.zeilenWert(p1, +p2);
-      else if (art === 'wert') {
-        if (p1 === 'schwierigkeit') e.schwierigkeit = p2;
-        else e.fahrhilfe[+p1.slice(5)] = p2;
-      } else if (art === 'fokus') this.fokus = +p1;
+      else if (art === 'wert') this.wertSetzen(p1, p2);
+      else if (art === 'fokus') this.fokus = +p1;
       else if (art === 'start') return this.starten();
       else if (art === 'ton') { if (R.Audio) R.Audio.schalten(); }
       if (R.Audio) R.Audio.menueKlick();
@@ -261,7 +355,7 @@
         `<b>${i + 1}</b> ${s.name}</div>`).join('<span class="m-pfeil">›</span>');
       let inhalt = '', hinweis = '', titel = '';
       if (id === 'modus') { titel = 'Wie wollt ihr fahren?'; inhalt = this.htmlModus(); hinweis = '<kbd>←</kbd><kbd>→</kbd> auswählen · <kbd>Enter</kbd> weiter'; }
-      if (id === 'strecke') { titel = 'Welche Strecke?'; inhalt = this.htmlStrecke(); hinweis = '<kbd>←</kbd><kbd>→</kbd> auswählen · <kbd>Enter</kbd> weiter · <kbd>Esc</kbd> zurück'; }
+      if (id === 'strecke') { titel = 'Welche Strecke?'; inhalt = this.htmlStrecke(); hinweis = '<kbd>←</kbd><kbd>→</kbd> Strecke · <kbd>↑</kbd><kbd>↓</kbd> Welt · <kbd>Enter</kbd> weiter · <kbd>Esc</kbd> zurück'; }
       if (id === 'fahrer') {
         titel = this.zwei ? 'Wer fährt? Wählt eure Fahrer!' : 'Wer fährt?';
         inhalt = this.htmlFahrer();
@@ -283,7 +377,7 @@
       this.wurzel.innerHTML =
         `<div class="m-kopf"><div class="m-logo"><div class="m-titel">🔥 ${R.config.titel} 🏎️</div>` +
         `<div class="m-untertitel">${R.config.untertitel}</div></div><div class="m-schritte">${kopf}</div></div>` +
-        `<div class="m-inhalt"><h1>${titel}</h1>${inhalt}</div>` +
+        `<div class="m-inhalt">${id === 'start' && this.tafelOffen ? '' : `<h1>${titel}</h1>`}${inhalt}</div>` +
         `<div class="m-fuss"><div class="m-nav">${nav}</div><div class="m-hinweis">${hinweis}</div></div>`;
       if (id === 'auto') this.buehnenBinden();
       else if (R.AutoVorschau) R.AutoVorschau.stoppen();
@@ -321,16 +415,30 @@
         const himmel = s.thema === 'fantasie' ? '#b48cff' : '#8fc8ff';
         // Hinweis aus den Katalogdaten (Fantasie: Loopings, Bälle, Wasserstrahl)
         const teile = [];
-        if (s.loopings && s.loopings.length) teile.push(s.loopings.length + ' Loopings');
-        if (s.baelle && s.baelle.length) teile.push('Bälle');
-        if (s.wasserstrahlen && s.wasserstrahlen.length) teile.push('Wasserstrahl');
+        // nur, was in der Standard-Welt der Strecke aktiv ist (Runde 4: Wiese/Wald/Wüste haben Bälle erst in „Verrückt“)
+        const sw = (s.welten && s.welten[s.weltStandard]) || null, aktiv = (k) => !sw || sw[k];
+        if (s.loopings && s.loopings.length && aktiv('loopings')) teile.push(s.loopings.length + ' Loopings');
+        if (s.baelle && s.baelle.length && aktiv('baelle')) teile.push('Bälle');
+        if (s.wasserstrahlen && s.wasserstrahlen.length && aktiv('wasserstrahlen')) teile.push('Wasserstrahl');
         const hinweis = teile.length ? `<div class="strecken-hinweis">🎡 ${teile.join(', ')}</div>` : '';
         const pille = s.schwierigkeit ? `<span class="s-pille s-${s.schwierigkeit}">${labels[s.schwierigkeit] || s.schwierigkeit}</span>` : '';
         return `<div class="karte strecke t-${s.thema}${this.e.streckeId === s.id ? ' gewaehlt' : ''}" data-a="strecke:${s.id}">` +
           `<div class="strecken-bild" style="background:linear-gradient(180deg,${himmel} 0%,${himmel} 35%,${f[0]} 35%,${f[1]} 100%)">` +
           `<div class="strasse"></div>${pille}</div>` +
           `<div class="karten-name">${s.name}</div><div class="karten-sub">${s.beschreibung}</div>${hinweis}</div>`;
-      }).join('') + `</div>`;
+      }).join('') + `</div>` + this.htmlWelt();
+    }
+
+    /** Runde 4: Zeile „Welt“ unter den Strecken-Karten (Pillen je Strecke, eine Zeile Erklärung). */
+    htmlWelt() {
+      const liste = this.weltListe(), akt = this.weltGueltig() || this.streckeDaten().weltStandard;
+      const a = liste.find((w) => w.k === akt) || liste[0];
+      if (!a) return '';
+      const pillen = liste.map((w) =>
+        `<span class="pille welt${w.k === a.k ? ' aktiv' : ''}" data-a="welt:${w.k}" title="${w.info.beschreibung}">` +
+        `${w.info.emoji} ${w.info.name}${w.standard ? ' <small>Standard</small>' : ''}</span>`).join('');
+      return `<div class="m-welt"><div class="z-label">🌍 Welt</div><div class="z-wert">${pillen}</div>` +
+        `<div class="welt-text"><b>${a.info.emoji} ${a.info.name}${a.standard && !this.weltGueltig() ? ' (Standard)' : ''}:</b> ${a.info.beschreibung}</div></div>`;
     }
 
     htmlFahrer() {
@@ -393,28 +501,50 @@
         `<div class="z-wert"><span class="rund" data-a="stepper:${zeile}:-1">−</span>` +
         `<span class="zahl">${wert}</span><span class="rund" data-a="stepper:${zeile}:1">+</span>` +
         `<span class="extra">${extra || ''}</span></div></div>`;
+      // Pillen aus Konfig-Objekt (Stärke, Fahrhilfe): { schluessel: { name, rang } }
       const pillen = (zeile, emoji, name, liste, aktuell) =>
         `<div class="zeile${fk(zeile)}${Object.keys(liste).length > 4 ? ' viele' : ''}" ${fz(zeile)}><div class="z-label">${emoji} ${name}</div><div class="z-wert">` +
         Object.keys(liste).sort((x, y) => (liste[x].rang || 0) - (liste[y].rang || 0)).map((k) => `<span class="pille${k === aktuell ? ' aktiv' : ''}${k === 'unschlagbar' ? ' tod' : ''}" data-a="wert:${zeile}:${k}">${k === 'unschlagbar' ? '💀 ' : ''}${liste[k].name}</span>`).join('') +
         `</div></div>`;
+      // Pillen aus Liste [{ k, text }] (Jahreszeit, Wetter, Schaden)
+      const pillenL = (zeile, emoji, name, liste, aktuell, tipp) =>
+        `<div class="zeile viele${fk(zeile)}" ${fz(zeile)}${tipp ? ` title="${tipp}"` : ''}><div class="z-label">${emoji} ${name}</div><div class="z-wert">` +
+        liste.map((x) => `<span class="pille${x.k === aktuell ? ' aktiv' : ''}" data-a="wert:${zeile}:${x.k}">${x.text}</span>`).join('') +
+        `</div></div>`;
       const cfg = R.config;
       const name1 = this.zwei ? 'Fahrhilfe ' + e.fahrer[0] : 'Fahrhilfe';
-      let reihen =
+      let links =
         stepper('runden', '🔁', 'Runden', e.runden, e.runden === 1 ? '(kurz)' : '') +
         stepper('gegner', '🤖', 'Computer-Gegner', e.gegner, e.gegner === 0 ? '(keine)' : '') +
         pillen('schwierigkeit', '🎚️', 'Computer-Stärke', cfg.schwierigkeiten, e.schwierigkeit) +
         pillen('hilfe0', '🛟', name1, cfg.fahrhilfen, e.fahrhilfe[0]);
-      if (this.zwei) reihen += pillen('hilfe1', '🛟', 'Fahrhilfe ' + e.fahrer[1], cfg.fahrhilfen, e.fahrhilfe[1]);
+      if (this.zwei) links += pillen('hilfe1', '🛟', 'Fahrhilfe ' + e.fahrer[1], cfg.fahrhilfen, e.fahrhilfe[1]);
+      const windZahl = e.windStaerke === 'zufall' ? '🎲' : e.windStaerke;
+      const windExtra = e.windStaerke === 0 ? 'aus' : (e.windStaerke === 'zufall' ? '' : '💨');
+      const wind =
+        `<div class="zeile${fk('wind')}" ${fz('wind')}><div class="z-label">💨 Wind</div>` +
+        `<div class="z-wert"><span class="rund" data-a="stepper:wind:-1">−</span><span class="zahl">${windZahl}</span>` +
+        `<span class="rund" data-a="stepper:wind:1">+</span>` +
+        `<span class="pille${e.windStaerke === 'zufall' ? ' aktiv' : ''}" data-a="wert:wind:zufall" title="Zufälliger Wind">🎲</span>` +
+        `<span class="extra">${windExtra}</span></div></div>`;
+      const rechts =
+        pillenL('jahreszeit', '🍂', 'Jahreszeit', this.jahreszeitListe(), e.jahreszeit) +
+        pillenL('wetter', '🌦️', 'Wetter', this.wetterListe(), e.wetter) +
+        wind +
+        pillenL('schaden', '💥', 'Schaden', [{ k: 'aus', text: 'Aus' }, { k: 'an', text: 'An' }], e.schaden ? 'an' : 'aus',
+          'Treffer kosten Energie, bei 0 % kommt der Abschleppwagen');
       const tonAn = !R.Audio || R.Audio.an;
-      const start = `<div class="start-knopf${fk('start')}" data-a="start">🏁 LOS GEHT'S!</div>` +
-        `<div class="knopf klein ton" data-a="ton">${tonAn ? '🔊 Ton an' : '🔇 Ton aus'} <kbd>M</kbd></div>`;
-      const tafel =
-        `<div class="tafel"><h2>🎮 Steuerung</h2>` +
-        `<div class="t-zeile"><b>Menü: Fahrer &amp; Auto wählen</b><span>Spieler 1 <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd>${this.zwei ? ' · Spieler 2 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>' : ''} · <kbd>Enter</kbd> weiter</span></div>` +
-        `<div class="t-zeile p1"><b>${e.fahrer[0]} (Spieler 1)</b><span><kbd>↑</kbd> Gas <kbd>↓</kbd> Bremse <kbd>←</kbd><kbd>→</kbd> Lenken <kbd>R</kbd> zurück auf die Strecke</span></div>` +
-        `<div class="t-zeile p2${this.zwei ? '' : ' aus'}"><b>${e.fahrer[1]} (Spieler 2)</b><span><kbd>W</kbd> Gas <kbd>S</kbd> Bremse <kbd>A</kbd><kbd>D</kbd> Lenken <kbd>T</kbd> zurück auf die Strecke</span></div>` +
+      const aktionen = `<div class="m-aktionen"><div class="start-knopf${fk('start')}" data-a="start">🏁 LOS GEHT'S!</div>` +
+        `<div class="knopf klein ton" data-a="ton">${tonAn ? '🔊 Ton an' : '🔇 Ton aus'} <kbd>M</kbd></div>` +
+        `<div class="knopf klein ton" data-a="tafel">🎮 Steuerung ${this.tafelOffen ? '▴' : '▾'}</div></div>`;
+      const tafel = !this.tafelOffen ? '' :
+        `<div class="tafel"><div class="t-zeile"><b>Menü</b><span>${this.zwei ? '①' : ''} <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd>${this.zwei ? ' ② <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>' : ''} <kbd>Enter</kbd> weiter</span></div>` +
+        `<div class="t-zeile p1"><b>${e.fahrer[0]}</b><span><kbd>↑</kbd> Gas <kbd>↓</kbd> Bremse <kbd>←</kbd><kbd>→</kbd> Lenken <kbd>R</kbd> zurück</span></div>` +
+        `<div class="t-zeile p2${this.zwei ? '' : ' aus'}"><b>${e.fahrer[1]}</b><span><kbd>W</kbd> Gas <kbd>S</kbd> Bremse <kbd>A</kbd><kbd>D</kbd> Lenken <kbd>T</kbd> zurück</span></div>` +
         `<div class="t-zeile"><b>Alle</b><span><kbd>C</kbd> Kamera <kbd>F</kbd> Vollbild <kbd>Esc</kbd> Pause</span></div></div>`;
-      return `<div class="m-start"><div class="m-einstellungen">${reihen}${start}</div>${tafel}</div>`;
+      return `<div class="m-start"><div class="m-spalten">` +
+        `<div class="m-einstellungen"><h3>🏎️ Rennen</h3>${links}</div>` +
+        `<div class="m-einstellungen"><h3>🌍 Welt &amp; Wetter</h3>${rechts}</div></div>${aktionen}${tafel}</div>`;
     }
   }
 

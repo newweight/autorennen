@@ -119,5 +119,54 @@ pruefe('Fantasie: 2–3 Ballstellen, 1–2 Wasserstrahlen', daten.baelle.length 
   pruefe('10 m daneben: kein Treffer', d.kollisionen([weit]).length === 0);
 }
 
+// ---------- Runde 4: Strohballen (Wald, Welt „Hindernisse“) ----------
+{
+  const CS = R.config.strohballen;
+  const wald = R.trackCatalog.find(t => t.id === 'wald');
+  const stW = new R.Strecke(wald, { welt: 'hindernisse' }), spW = stW.spline;
+  pruefe('Fantasie-Standardwelt: keine Strohballen', new R.Dynamik(strecke).strohStellen.length === 0);
+  pruefe('Wald klassisch: keine Strohballen', new R.Dynamik(new R.Strecke(wald, { welt: 'klassisch' })).strohStellen.length === 0);
+  const d = new R.Dynamik(stW, { seed: 9 });
+  pruefe('Wald hindernisse: Strohballen-Stellen aus dem Katalog, keine Bälle/Düsen', d.strohStellen.length === wald.strohballen.length &&
+    d.stellen.length === 0 && d.duesen.length === 0, d.strohStellen.length + ' Stellen');
+  const st = d.strohStellen[0];
+  let b = null, t = 0;
+  while (!b && t < 20) { d.schritt(dt, { fortschritt: 10, runden: 3 }); t += dt; b = st.ballen[0]; }
+  pruefe('ab Runde 1: Ballen erscheint (≤ 5 s)', !!b && t <= 5.01, t.toFixed(2) + ' s');
+  const q0 = b.q, s0 = b.s;
+  for (let k = 0; k < 60; k++) d.schritt(dt, { fortschritt: 10, runden: 3 });
+  const dq = b.q - q0;
+  pruefe('Ballen rollt quer (1 s ≈ tempo, weg von Seite "von", s fest), dreht sich', Math.abs(Math.abs(dq) - st.tempo) < 0.1 &&
+    Math.sign(dq) === -st.von && b.s === s0 && Math.abs(b.winkel) > 1, 'dq=' + dq.toFixed(2) + ' m');
+  pruefe('Ballen liegt auf dem Boden (y = Straße + Radius)', Math.abs(b.y - (stW.hoeheAn(b.x, b.z) + b.radius)) < 1e-6);
+  // Treffer: Auto steht auf der Fahrbahnmitte, Ballen rollt hinein
+  const p = spW.punktBei(b.s), v = new R.Vehicle({});
+  v.setzen(p.x, p.z, R.headingAus(p.tx, p.tz));
+  let tr = [], k = 0;
+  while (!tr.length && k < 600) { v.vLaengs = 30; v.vQuer = 0; d.schritt(dt, { fortschritt: 10, runden: 3 }); tr = d.kollisionen([v]); k++; }
+  pruefe('Treffer Auto-Strohballen erkannt (typ stroh)', tr.length === 1 && tr[0].typ === 'stroh' && tr[0].nr === 0, JSON.stringify(tr));
+  pruefe('Treffer: Tempo −50 %', Math.abs(v.vLaengs - 15) < 1e-9, v.vLaengs.toFixed(2) + ' m/s');
+  pruefe('kein zweiter Treffer durch denselben Ballen', d.kollisionen([v]).length === 0);
+  // kippt und rutscht an den Rand, liegt dort, dann weg
+  for (let i = 0; i < Math.ceil(CS.kippZeit / dt) + 2; i++) d.schritt(dt, { fortschritt: 10, runden: 3 });
+  const nb = spW.naechster(b.x, b.z);
+  pruefe('Ballen gekippt (kipp = 1) und am Fahrbahnrand', b.zustand === 'gekippt' && b.kipp === 1 && Math.abs(nb.seitenabstand) > stW.breite / 2,
+    'q=' + nb.seitenabstand.toFixed(2) + ' m');
+  pruefe('gekippt: liegt auf der Stirnseite (y = Boden + halbe Breite)', Math.abs(b.y - (stW.hoeheAn(b.x, b.z) + b.breite / 2)) < 1e-6);
+  for (let i = 0; i < Math.round((CS.liegenZeit - 0.2) / dt); i++) d.schritt(dt, { fortschritt: 10, runden: 3 });
+  pruefe('liegt noch kurz vor Ablauf von liegenZeit', st.ballen.includes(b));
+  for (let i = 0; i < Math.round(0.4 / dt); i++) d.schritt(dt, { fortschritt: 10, runden: 3 });
+  pruefe('nach liegenZeit (3 s) verschwunden', !st.ballen.includes(b));
+  // nicht getroffen: rollt drüben raus
+  const d2 = new R.Dynamik(stW, { seed: 9 }), st2 = d2.strohStellen[0];
+  while (!st2.ballen.length) d2.schritt(dt, { fortschritt: 10, runden: 3 });
+  const b2 = st2.ballen[0];
+  let tw = 0;
+  while (st2.ballen.includes(b2) && tw < 20) { d2.schritt(dt, { fortschritt: 10, runden: 3 }); tw += dt; }
+  pruefe('ohne Treffer: verschwindet jenseits der Fahrbahn', !st2.ballen.includes(b2) && Math.abs(tw - 2 * Math.abs(st2.qStart) / st2.tempo) < 0.3,
+    tw.toFixed(1) + ' s');
+  pruefe('alleStrohballen() liefert Liste', Array.isArray(d2.alleStrohballen()));
+}
+
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');
 process.exit(fehler ? 1 : 0);

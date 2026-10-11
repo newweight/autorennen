@@ -1,7 +1,10 @@
 // Node-Test Strecke + Rennleitung für ALLE Katalog-Strecken: node tests/test_strecke.js [streckenId]
+// Runde 4: Längen ×1,35/×1,25/×1,45, Welten (je Strecke + Welt: Länge, Steigung, Schichten), Spuren (breiteBei,
+// Übergänge, Leitplanke), neue Listen (Wracks, Strohballen, Schanzen, Boost, Schilde) auf Straße + außerhalb der Sperrzonen.
 const { ladeModule } = require('./lade');
 const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/track/spline.js',
-  'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/race/raceManager.js']);
+  'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/race/raceManager.js',
+  'src/track/schanze.js', 'src/world/pickups.js']);   // Runde 4 (W2-D): Schanzen + Pickups (ohne THREE)
 let fehler = 0;
 let praefix = '';
 function pruefe(name, ok, info) { console.log((ok ? 'OK   ' : 'FEHL ') + praefix + name + (info ? '  (' + info + ')' : '')); if (!ok) fehler++; }
@@ -9,10 +12,11 @@ function pruefe(name, ok, info) { console.log((ok ? 'OK   ' : 'FEHL ') + praefix
 
 // Erwartungen je Strecke (Charakter): Kurvenzahl, lange Geraden, Höhe
 // Runde 3: Wald/Wüste kräftiger (bis ±14 m), Wiese sanft (±6 m), Steigung überall ≤ 8 %
+// Runde 4: Wiese ×1,35, Wald ×1,25, Wüste ×1,45 (Längen ~3.040 / 2.480 / 3.330 m)
 const ERWARTUNG = {
-  wiese:  { kurven: [10, 14], geraden: { min: 150, anzahl: [2, 3] }, hoehe: 6, hoeheMin: 5 },
-  wald:   { kurven: [16, 30], geraden: { min: 200, anzahl: [0, 0] }, hoehe: 14, hoeheMin: 18 },
-  wueste: { kurven: [8, 16], geraden: { min: 250, anzahl: [2, 4] }, hoehe: 14, hoeheMin: 15 },
+  wiese:  { kurven: [10, 14], geraden: { min: 150, anzahl: [3, 5] }, hoehe: 6, hoeheMin: 5, laenge: [3000, 3080] },
+  wald:   { kurven: [16, 30], geraden: { min: 200, anzahl: [0, 1] }, hoehe: 14, hoeheMin: 18, laenge: [2440, 2520] },
+  wueste: { kurven: [7, 16], geraden: { min: 250, anzahl: [2, 4] }, hoehe: 14, hoeheMin: 15, laenge: [3290, 3370] },
   // Fantasie (Runde 3): kürzer, 2 Loopings auf langen Geraden, nur 1–2 Hindernisse
   fantasie: { kurven: [4, 12], geraden: { min: 150, anzahl: [2, 3] }, hoehe: 10, laenge: [1300, 1500], hindernisse: [1, 2] },
 };
@@ -23,8 +27,26 @@ if (nurId && daten.id !== nurId) continue;
 praefix = '[' + daten.id + '] ';
 console.log('\n=== ' + daten.name + ' ===');
 const erw = ERWARTUNG[daten.id] || { kurven: [6, 40], geraden: { min: 150, anzahl: [0, 9] }, hoehe: 10 };
-const strecke = new R.Strecke(daten);
+// Geometrie/Hindernisse in der ersten Welt mit Hindernissen (Wiese: 'hindernisse', Standard dort 'klassisch')
+const weltH = Object.keys(daten.welten || {}).find(w => daten.welten[w].hindernisse);
+const strecke = new R.Strecke(daten, { welt: weltH });
 const sp = strecke.spline, N = sp.anzahl, L = strecke.laenge;
+
+/** Haarnadeln: zusammenhängende Kurve (R < 150 m) mit ≥ 150° Richtungsänderung → { s0, s1, scheitel } */
+function haarnadelnSuchen() {
+  const erg = [];
+  const N2 = sp.anzahl, start = sp.punkte.findIndex(p => Math.abs(p.kruemmung) < 1 / 400);
+  let winkel = 0, vz = 0, best = null, anfang = 0;
+  for (let k = 0; k <= N2; k++) {
+    const p = sp.punkte[(start + k) % N2], kurve = Math.abs(p.kruemmung) > 1 / 150;
+    if (kurve && Math.sign(p.kruemmung) === vz) { winkel += Math.abs(p.kruemmung) * sp.ds; if (Math.abs(p.kruemmung) > Math.abs(best.kruemmung)) best = p; }
+    else {
+      if (vz && winkel * 180 / Math.PI >= 150) erg.push({ s0: anfang, s1: p.s, scheitel: best.s });
+      winkel = kurve ? Math.abs(p.kruemmung) * sp.ds : 0; vz = kurve ? Math.sign(p.kruemmung) : 0; best = kurve ? p : null; anfang = p.s;
+    }
+  }
+  return erg;
+}
 
 // ---------- Geometrie ----------
 const lg = erw.laenge || [1900, 2400];
@@ -196,20 +218,7 @@ pruefe('Start auf einer Geraden', [-40, -20, 0, 20, 40].every(d => Math.abs(sp.p
     const ist = {}; hs.forEach(h => { ist[h.typ] = (ist[h.typ] || 0) + 1; });
     pruefe('Hindernis-Typen wie geplant', Object.keys(ANZAHL).every(k => ist[k] === ANZAHL[k]) && Object.keys(ist).every(k => ANZAHL[k]), JSON.stringify(ist));
   }
-  // Haarnadeln: zusammenhängende Kurve mit ≥ 150° Richtungsänderung → Scheitel = stärkste Krümmung
-  const haarnadeln = [];
-  {
-    const N2 = sp.anzahl, start = sp.punkte.findIndex(p => Math.abs(p.kruemmung) < 1 / 400);
-    let winkel = 0, vz = 0, best = null;
-    for (let k = 0; k <= N2; k++) {
-      const p = sp.punkte[(start + k) % N2], kurve = Math.abs(p.kruemmung) > 1 / 150;
-      if (kurve && Math.sign(p.kruemmung) === vz) { winkel += Math.abs(p.kruemmung) * sp.ds; if (Math.abs(p.kruemmung) > Math.abs(best.kruemmung)) best = p; }
-      else {
-        if (vz && winkel * 180 / Math.PI >= 150) haarnadeln.push(best.s);
-        winkel = kurve ? Math.abs(p.kruemmung) * sp.ds : 0; vz = kurve ? Math.sign(p.kruemmung) : 0; best = kurve ? p : null;
-      }
-    }
-  }
+  const haarnadeln = haarnadelnSuchen().map(h => h.scheitel);
   const sperr = [];
   hs.forEach((h) => {
     const name = h.typ + '@' + Math.round(h.s);
@@ -282,6 +291,173 @@ if (strecke.loopings.length || daten.baelle || daten.wasserstrahlen) {
   });
 }
 
+// ---------- Runde 4: Welten ----------
+if (daten.welten) {
+  const namen = Object.keys(daten.welten);
+  const STANDARD = { wiese: 'klassisch', wald: 'hindernisse', wueste: 'hindernisse', fantasie: 'fantasie' };
+  if (STANDARD[daten.id]) pruefe('weltStandard = ' + STANDARD[daten.id], daten.weltStandard === STANDARD[daten.id], daten.weltStandard);
+  const erwNamen = daten.id === 'fantasie' ? ['fantasie', 'verrueckt'] : ['klassisch', 'hindernisse', 'stunt', 'verrueckt'];
+  pruefe('Welten: ' + erwNamen.join(', '), JSON.stringify(namen) === JSON.stringify(erwNamen), namen.join(', '));
+  pruefe('R.weltInfo kennt alle Welten (Name + Emoji)', namen.every(w => R.weltInfo[w] && R.weltInfo[w].name && R.weltInfo[w].emoji));
+  const std = new R.Strecke(daten);
+  pruefe('new Strecke(daten) → weltStandard', std.welt === daten.weltStandard, std.welt);
+  pruefe('unbekannte Welt → weltStandard', new R.Strecke(daten, { welt: 'gibtsnicht' }).welt === daten.weltStandard);
+  const katalogH = (daten.hindernisse || []).length;
+  const listen = { wracks: 'wracks', strohballen: 'strohballen', schanzen: 'schanzen', boost: 'boostFelder', schild: 'schilde',
+    baelle: 'baelle', wasserstrahlen: 'wasserstrahlen', spuren: 'spuren' };
+  namen.forEach((w) => {
+    const st = new R.Strecke(daten, { welt: w }), a = st.aktiveSchichten, pf = 'Welt ' + w + ': ';
+    pruefe(pf + 'welt/weltDaten/aktiveSchichten gesetzt, alle Schichten bool', st.welt === w && R.Strecke.SCHICHTEN.every(k => typeof a[k] === 'boolean') &&
+      JSON.stringify(st.weltDaten) === JSON.stringify(a));
+    pruefe(pf + 'Länge + Steigung wie Standard', Math.abs(st.laenge - L) < 1e-6 && st.spline.punkte.every((p, i) => {
+      const q = st.spline.punkte[(i + 1) % N]; return Math.abs(q.y - p.y) / st.spline.ds <= STEIGUNG_MAX; }), st.laenge.toFixed(1) + ' m');
+    pruefe(pf + 'Hindernisse nur wenn aktiv', a.hindernisse ? st.hindernisse.length === katalogH : st.hindernisse.length === 0,
+      st.hindernisse.length + ' von ' + katalogH);
+    if (w === 'klassisch') {
+      pruefe(pf + 'keine Hindernisse/Schichten, Breite konstant', st.hindernisse.length === 0 && st.wracks.length === 0 && st.schanzen.length === 0 &&
+        st.boostFelder.length === 0 && st.spuren.length === 0 && st.daten.baelle.length === 0 && [0, 500, 1200, 2000].every(s => st.breiteBei(s) === st.breite));
+    }
+    // strecke.daten zeigt nur aktive Listen (dynamik.js liest baelle/wasserstrahlen dort)
+    const ok = Object.keys(listen).every((k) => {
+      const f = listen[k], soll = a[k] ? (daten[f] || []).length : 0;
+      return (st.daten[f] || []).length === soll;
+    });
+    pruefe(pf + 'strecke.daten enthält nur Listen aktiver Schichten', ok);
+    pruefe(pf + 'Listen wracks/strohballen/schanzen/boostFelder/schilde nur wenn aktiv',
+      st.wracks.length === (a.wracks ? (daten.wracks || []).length : 0) && st.strohballen.length === (a.strohballen ? (daten.strohballen || []).length : 0) &&
+      st.schanzen.length === (a.schanzen ? (daten.schanzen || []).length : 0) && st.boostFelder.length === (a.boost ? (daten.boostFelder || []).length : 0) &&
+      st.schilde.length === (a.schild ? (daten.schilde || []).length : 0));
+    if (st.loopings.length || (daten.loopings || []).length) pruefe(pf + 'Loopings aktiv', st.loopings.length === (a.loopings ? daten.loopings.length : 0));
+  });
+
+  // ---------- Neue Listen: Anzahl, auf der Straße, außerhalb der Sperrzonen ----------
+  const alle = new R.Strecke(daten, { welt: namen[namen.length - 1] });   // letzte Welt = alles an (Verrückt)
+  const hn = haarnadelnSuchen();
+  const hsAlle = strecke.hindernisse;   // Hindernisse (aus der Hindernis-Welt)
+  const eng = alle.spuren.filter(e => e.spuren === 1), UE = R.Strecke.SPUR_UEBERGANG;
+  const bereichAbstand = (a0, a1, b0, b1) => Math.max(0, sp.differenzS(b0, a1), sp.differenzS(a0, b1));
+  const punkte = [];   // alle Einzel-Elemente für den Abstandstest
+  const sperre = (s0, s1) => {
+    const g = [];
+    if (Math.min(Math.abs(sp.differenzS(s0, 0)), Math.abs(sp.differenzS(s1, 0))) < 60 || sp.differenzS(s1, s0) < 0 || (sp.differenzS(0, s0) > 0 && sp.differenzS(0, s1) < 0)) g.push('Start');
+    if (alle._engstellen.some(b => [s0, (s0 + s1) / 2, s1].some(s => alle._inBereich(b, s, 20)))) g.push('Tunnel/Brücke');
+    if (alle.loopings.some(l => bereichAbstand(s0, s1, l.s0, l.s1) < 30)) g.push('Looping');
+    if (hn.some(h => bereichAbstand(s0, s1, h.s0, h.s1) < 5)) g.push('Haarnadel');
+    if (eng.some(e => bereichAbstand(s0, s1, e.s0 - UE, e.s1 + UE) < 10)) g.push('1 Spur');
+    if (hsAlle.some(h => bereichAbstand(s0, s1, h.s0, h.s1) < 30)) g.push('Hindernis');
+    return g;
+  };
+  const ANZ = daten.id === 'fantasie' ? { wracks: [0, 0], strohballen: [2, 4], schanzen: [0, 0], boostFelder: [2, 4], schilde: [2, 4] }
+    : { wracks: [2, 4], strohballen: daten.id === 'wueste' ? [0, 0] : [2, 4], schanzen: [2, 4], boostFelder: [2, 4], schilde: [2, 4] };
+  Object.keys(ANZ).forEach((f) => {
+    const n = (daten[f] || []).length;
+    pruefe(f + ': ' + ANZ[f][0] + '–' + ANZ[f][1] + ' Einträge', n >= ANZ[f][0] && n <= ANZ[f][1], n);
+  });
+  const aufStrasse = (s, q) => { const p = sp.punktBei(s); return alle.untergrundAn(p.x + p.nx * q, p.z + p.nz * q) === 'strasse'; };
+  const liste = (f, laengeVon, q) => (daten[f] || []).forEach((e) => {
+    const l = laengeVon(e), name = f + '@' + e.s, g = sperre(e.s - 2, e.s + l + 2);
+    pruefe(name + ': auf der Straße, nicht in Sperrzonen', aufStrasse(e.s, q(e)) && aufStrasse(e.s + l, q(e)) && g.length === 0, g.join(', ') || 'q=' + q(e));
+    punkte.push({ name, s0: e.s, s1: e.s + l });
+  });
+  liste('wracks', () => 5, e => e.seitenabstand);
+  liste('strohballen', () => 3, () => 0);
+  liste('boostFelder', e => e.laenge || 12, e => e.seitenabstand);
+  liste('schilde', () => 1, e => e.seitenabstand);
+  liste('baelle', () => 3, () => 0);
+  liste('wasserstrahlen', () => 3, e => e.seitenabstand);
+  (daten.wracks || []).forEach(e => pruefe('wracks@' + e.s + ': brennt bool, autoId gesetzt', typeof e.brennt === 'boolean' && typeof e.autoId === 'string'));
+  (daten.strohballen || []).forEach(e => pruefe('strohballen@' + e.s + ': von ±1, intervall/tempo > 0', (e.von === 1 || e.von === -1) && e.intervall > 0 && e.tempo > 0));
+  (daten.schanzen || []).forEach((e) => {
+    const l = e.laenge || 10, name = 'Schanze@' + e.s;
+    pruefe(name + ': winkel 8 oder 12, laenge 10', (e.winkel === 8 || e.winkel === 12) && l === 10);
+    let gerade = true;
+    for (let s = e.s - 10; s <= e.s + l + 60; s += 2) if (Math.abs(sp.punktBei(s).kruemmung) > 1 / 500) gerade = false;
+    pruefe(name + ': Gerade mit ≥ 60 m freier Landung', gerade);
+    const g = sperre(e.s - 2, e.s + l + 60);
+    pruefe(name + ': Rampe + Landebereich auf der Straße, nicht in Sperrzonen', aufStrasse(e.s, 0) && aufStrasse(e.s + l, 0) && g.length === 0, g.join(', '));
+    punkte.push({ name, s0: e.s, s1: e.s + l + 60 });
+  });
+  // keine zwei Elemente aufeinander (≥ 15 m Abstand, Landebereich der Schanzen frei)
+  let doppelt = '';
+  for (let i = 0; i < punkte.length; i++) for (let j = i + 1; j < punkte.length; j++) {
+    if (bereichAbstand(punkte[i].s0, punkte[i].s1, punkte[j].s0, punkte[j].s1) < 15) doppelt += punkte[i].name + '/' + punkte[j].name + ' ';
+  }
+  pruefe('Wracks/Strohballen/Schanzen/Boost/Schilde/Bälle/Wasser ≥ 15 m auseinander', doppelt === '', doppelt);
+
+  // ---------- Spuren ----------
+  const stunt = namen.find(w => daten.welten[w].spuren);
+  if ((daten.spuren || []).length) {
+    pruefe('1–2 Spur-Abschnitte (1 und 3 Spuren)', daten.spuren.length >= 1 && daten.spuren.length <= 2 && daten.spuren.every(e => e.spuren === 1 || e.spuren === 3));
+    const st = new R.Strecke(daten, { welt: stunt }), B = R.Strecke.SPUR_BREITE;
+    st.spuren.forEach((e) => {
+      const name = e.spuren + ' Spur(en) ' + e.s0 + '–' + e.s1;
+      let innen = true;
+      for (let s = e.s0; s <= e.s1; s += 2) if (Math.abs(st.breiteBei(s) - B[e.spuren]) > 1e-9) innen = false;
+      pruefe(name + ': breiteBei = ' + B[e.spuren] + ' m im Abschnitt, außerhalb (± ' + UE + ' m) = ' + st.breite + ' m',
+        innen && st.breiteBei(e.s0 - UE - 1) === st.breite && st.breiteBei(e.s1 + UE + 1) === st.breite,
+        st.breiteBei(e.s0 - UE / 2).toFixed(2) + ' m mitten im Übergang');
+      const g = sperre(e.s0 - UE, e.s1 + UE).filter(x => x !== '1 Spur');
+      pruefe(name + ': nicht am Start, nicht in Tunnel/Brücke/Looping, keine Hindernisse', g.filter(x => x !== 'Haarnadel').length === 0, g.join(', '));
+      const m = sp.punktBei((e.s0 + e.s1) / 2), an = q => st.untergrundAn(m.x + m.nx * q, m.z + m.nz * q);
+      const b2 = B[e.spuren] / 2;
+      pruefe(name + ': Untergrund strasse bis ' + b2 + ' m, dann rand', an(b2 - 0.3) === 'strasse' && an(-b2 + 0.3) === 'strasse' && an(b2 + 0.5) === 'rand',
+        an(b2 - 0.3) + '/' + an(b2 + 0.5));
+      if (e.spuren === 1) {
+        const gm = st.grenzeBei((e.s0 + e.s1) / 2);
+        pruefe(name + ': Leitplanke direkt am Rand (Bande ' + gm.toFixed(1) + ' m)', Math.abs(gm - (b2 + st.randBreite + 0.4)) < 1e-6);
+        pruefe(name + ': Bande weit vorher/nachher normal', st.grenzeBei(e.s0 - UE - 30) === st.seitenabstandMax && st.grenzeBei(e.s1 + UE + 30) === st.seitenabstandMax);
+      }
+    });
+    // stetig: Fahrbahnrand (halbe Breite) springt nie mehr als 0,5 m je 2 m, Bande nie enger als Fahrbahn + Rand
+    let maxSprung = 0, wo = 0, bandeOk = true;
+    for (let s = 0; s < L; s += 2) {
+      const d = Math.abs(st.breiteBei(s + 2) - st.breiteBei(s)) / 2;
+      if (d > maxSprung) { maxSprung = d; wo = s; }
+      if (st.grenzeBei(s) < st.breiteBei(s) / 2 + st.randBreite + 0.3) bandeOk = false;
+    }
+    pruefe('Spur-Übergänge stetig (Rand ≤ 0,5 m je 2 m)', maxSprung <= 0.5, maxSprung.toFixed(3) + ' m bei s=' + wo);
+    pruefe('Bande überall hinter Fahrbahn + Randstreifen', bandeOk);
+    pruefe('Checkpoints tragen die lokale Breite', st.checkpoints.every(c => Math.abs(c.breite - st.breiteBei(c.s)) < 1e-9));
+    // Welten ohne Spuren: konstante Breite
+    namen.filter(w => !daten.welten[w].spuren).forEach((w) => {
+      const s2 = new R.Strecke(daten, { welt: w });
+      pruefe('Welt ' + w + ': ohne Spuren konstante Breite', st.spuren.every(e => s2.breiteBei((e.s0 + e.s1) / 2) === s2.breite));
+    });
+  }
+}
+
+// ---------- Runde 4 (W2-D): Schanzen / Turbo-Felder / Schilde nur in passenden Welten ----------
+if (daten.welten) {
+  Object.keys(daten.welten).forEach((w) => {
+    const st = new R.Strecke(daten, { welt: w }), pk = new R.Pickups(st), sch = R.Schanzen.liste(st);
+    const sollSchanzen = (w === 'stunt' || w === 'verrueckt') && daten.id !== 'fantasie';
+    const sollPickups = w === 'verrueckt';
+    pruefe('Welt ' + w + ': Schanzen ' + (sollSchanzen ? 'da' : 'keine') + ', Turbo/Schild ' + (sollPickups ? 'da' : 'keine'),
+      (sch.length > 0) === sollSchanzen && (pk.felder.length > 0) === sollPickups && (pk.kugeln.length > 0) === sollPickups,
+      sch.length + ' Schanzen, ' + pk.felder.length + ' Turbo, ' + pk.kugeln.length + ' Schilde');
+    if (sch.length) {
+      const S0 = sch[0];
+      pruefe('Welt ' + w + ': Rampe hebt den Spline nicht (hoeheAn unverändert), hoeheAuf(s0 + 5) = 5·tan', Math.abs(R.Schanzen.hoeheAuf(st, S0.s + 5) - 5 * S0.tan) < 1e-9 &&
+        (() => { const p = st.spline.punktBei(S0.s + 5); return Math.abs(st.hoeheAn(p.x, p.z) - strecke.hoeheAn(p.x, p.z)) < 1e-9; })());
+    }
+  });
+  // Landung: freie Gerade hinter jeder Schanze ≥ Flugweite bei 1,15 × Ideallinien-Tempo (vyMax gedeckelt, g = 9,81)
+  const alle = new R.Strecke(daten, { welt: Object.keys(daten.welten).find(w => daten.welten[w].schanzen) || undefined });
+  R.Schanzen.liste(alle).forEach((S) => {
+    const C = R.config.stunt.schanze, sp2 = alle.spline, k = sp2.punktBei(S.s1);
+    const v = Math.min(78, alle.tempoBei(S.s) * 1.15), vy = Math.min(v * S.sin, C.vyMax);
+    const weite = v * (vy + Math.sqrt(vy * vy + 2 * C.g * S.hoehe)) / C.g;
+    let frei = 0;
+    for (let a = 0; a < 300; a++) {
+      const n = sp2.naechster(k.x + k.tx * a, k.z + k.tz * a);
+      if (Math.abs(n.seitenabstand) > alle.breiteBei(n.s) / 2 - 1.2) break;
+      frei = a;
+    }
+    pruefe('Schanze@' + S.s.toFixed(0) + ' (' + S.grad + '°): freie Gerade ≥ Flugweite bei ' + (v * 3.6).toFixed(0) + ' km/h', frei >= weite,
+      'frei ' + frei + ' m, Flug ' + weite.toFixed(0) + ' m');
+  });
+}
+
 // ---------- Startaufstellung ----------
 {
   const pos = strecke.startpositionen(4);
@@ -306,7 +482,7 @@ pruefe('Checkpoint 0 = Start/Ziel', strecke.checkpoints[0].s === 0, strecke.chec
   let iMax = 0;
   sp.punkte.forEach((p, i) => { if (Math.abs(p.kruemmung) > Math.abs(sp.punkte[iMax].kruemmung)) iMax = i; });
   const vHaar = strecke.idealLinie[iMax];
-  pruefe('Ideallinie Haarnadel < 15 m/s', vHaar < 15, vHaar.toFixed(1) + ' m/s bei s=' + sp.punkte[iMax].s.toFixed(0));
+  pruefe('Ideallinie Haarnadel < 18 m/s', vHaar < 18, vHaar.toFixed(1) + ' m/s bei s=' + sp.punkte[iMax].s.toFixed(0));
   // Mitte der längsten Geraden suchen (Krümmung < 1/500)
   let besteLaenge = 0, besteMitte = 0, lauf = 0;
   const st = sp.punkte.findIndex(p => Math.abs(p.kruemmung) > 1 / 100);

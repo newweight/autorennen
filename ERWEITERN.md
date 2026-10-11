@@ -17,7 +17,11 @@ src/cars/carBuilder.js   Low-Poly-Karosserien je Typ (cabrio, van, limousine, sp
 src/track/spline.js      Catmull-Rom-Spline, Abtastung, nächster Punkt
 src/track/trackCatalog.js DATEN der Strecken         <- neue Strecke hier eintragen
 src/track/trackBuilder.js Straße, Randsteine, Zaun, Checkpoints, Ideallinie, Brücken, Tunnel, Hindernisse
-src/track/looping.js     Looping (Fantasie); src/world/dynamik.js: Bälle + Wasserstrahlen
+src/track/looping.js     Looping (Fantasie); src/world/dynamik.js: Bälle, Wasserstrahlen, Strohballen
+src/track/schanze.js     Runde 4: Sprungschanzen (R.Schanzen, Flugphysik)
+src/world/pickups.js     Runde 4: Turbo-Felder + Schutzschild (R.Pickups)
+src/world/wetter.js      Runde 4: Jahreszeit/Wetter/Wind (R.Wetter: erlaubt, aufloesen, umwelt, Partikel, Wolken)
+src/physics/schaden.js   Runde 4: Schaden/Gesundheit, Wracks-Grafik, Abschleppwagen (R.Schaden)
 src/world/themes.js      Wiese / Wald / Wüste / Fantasie: Farben, Nebel, Deko (InstancedMesh)
 src/ai/driver.js         Computerfahrer (Ideallinie, Skill, Gummiband, Ausweichen)
 src/race/raceManager.js  Countdown, Checkpoints, Runden, Platzierung
@@ -36,11 +40,11 @@ Vorschau: `tests/autos_vorschau.html?auto=<id>` im Browser öffnen.
 ## Neuer Fahrer
 In `src/config.js` unter `fahrer` einen Eintrag `{ name, emoji }` anhängen (Emoji als Avatar, keine Fotos/Logos). Das Menü-Raster passt sich an
 (Solo 6 Spalten, zu zweit je Spieler 3 Spalten – ab 13+ Fahrern wird es eng). `fahrerStandard` = Vorauswahl Spieler 1/2,
-`fahrerComputerVorrang` = Namen, die Computer-Gegner zuerst bekommen.
+`fahrerComputerVorrang` = Namen, die Computer-Gegner zuerst bekommen. Emojis dürfen sich nicht doppeln (Emmy 🦁, Jonas 🐯, Kerle 🐺).
 
 ## Neue Strecke
 In `src/track/trackCatalog.js` einen Eintrag kopieren: `punkte` = geschlossene Liste [x, y, z] in Fahrtrichtung, Start bei Index 0 auf einer Geraden.
-Regeln (werden von `node tests/test_strecke.js` geprüft): Radius ≥ 25 m, Abstand nicht benachbarter Teile ≥ 40 m, Steigung ≤ 8 %; Länge 1.900–2.400 m (Fantasie ist mit ~1.400 m bewusst kürzer).
+Regeln (werden von `node tests/test_strecke.js` geprüft): Radius ≥ 25 m, Abstand nicht benachbarter Teile ≥ 40 m, Steigung ≤ 8 %; Länge seit Runde 4 ca. 2.400–3.400 m (Fantasie bleibt mit ~1.400 m kurz).
 `thema`: wiese | wald | wueste | fantasie (neues Thema in themes.js anlegen), `abseitsUntergrund`: gras | sand,
 `schwierigkeit`: leicht | mittel | schnell | spass (Pille auf der Menükarte; Fantasie-Karte ist lila, siehe styles.css `.t-fantasie`).
 Optionale Felder (Position immer als Bogenlänge `s` in m; nicht auf Start/Ziel, nicht in Tunnel/Brücke ± 20 m):
@@ -52,6 +56,28 @@ Optionale Felder (Position immer als Bogenlänge `s` in m; nicht auf Start/Ziel,
 - `wasserstrahlen`: `[{ s, seitenabstand, intervall, dauer, vorwarnung }]` (Zeiten in s).
 Das Menü zeigt für Strecken mit `loopings`/`baelle`/`wasserstrahlen` automatisch einen Hinweis („2 Loopings, Bälle, Wasserstrahl“).
 `node tests/test_rundenzeit.js` zeigt die simulierte Rundenzeit. `tests/bauplan/` enthält einen Generator-Ansatz.
+
+## Runde 4: Welten, Wetter, Schaden
+**Welten-Datenmodell** (trackCatalog.js): jede Strecke hat `welten: { name: { schicht: bool } }` und `weltStandard: 'name'`.
+Schichten: `hindernisse, wracks, strohballen, spuren, schanzen, baelle, wasserstrahlen, boost, schild, loopings`. Die Hilfsfunktion
+`vierWelten({ ... })` erzeugt Klassisch → Hindernisse → Stunt → Verrückt (jede baut auf der vorigen auf; Änderungen wie `{ strohballen: false }` für alle). `R.weltInfo` = Name/Emoji/Text fürs Menü.
+`new R.Strecke(daten, { welt })` filtert die Listen nach den aktiven Schichten (`strecke.welt`, `strecke.weltDaten`, `strecke.daten`); ungültige/leere Welt → `weltStandard`. Fehlt `welten`, ist alles aktiv wie früher.
+`aktiveSchichten`: `R.Strecke.weltSchichten(daten, name)` liefert `{ schicht: bool }` (alle Schichten belegt). Die Menü-Pillen kommen aus `Object.keys(daten.welten)`.
+
+**Neue Katalogfelder** (s = Bogenlänge in m; Regeln in `tests/test_strecke.js`):
+- `spuren: [{ s0, s1, spuren: 1|3 }]` – 1 Spur = 5 m mit Leitplanke, 3 Spuren = 15 m, Übergang 40 m (Schicht `spuren`).
+- `schanzen: [{ s, winkel: 8|12, laenge }]` – nur auf Geraden mit ≥ 60 m freier Landung (Schicht `schanzen`).
+- `boostFelder: [{ s, seitenabstand, laenge }]` und `schilde: [{ s, seitenabstand }]` – Turbo +25 % für 2,5 s / Schild blockt 1 Treffer (Schichten `boost`, `schild`; Werte `config.stunt`).
+- `wracks: [{ s, seitenabstand, brennt, autoId }]` – liegengebliebenes/brennendes Auto (Schicht `wracks`; `config.hindernisse.wrack/brand`).
+- `strohballen: [{ s, von: -1|1, intervall, tempo }]` – rollende Ballen (Schicht `strohballen`; `config.strohballen`).
+
+**Module:** `wetter.js` (R.Wetter; erlaubtes Wetter je Jahreszeit+Thema: `config.jahreszeiten[jz].wetter` / `.wetterWueste`, Wirkung `config.wetter[...]`, Wind `config.wind`),
+`schaden.js` (R.Schaden; `config.schaden`), `schanze.js` (R.Schanzen; `config.stunt.schanze`), `pickups.js` (R.Pickups; `config.stunt.boost/schild`).
+
+**Einstellungsfelder** (`spiel.einstellungen`, gespeichert und in `main.js einstellungenPruefen` geprüft): `welt` ('' = Standard der Strecke), `jahreszeit` ('fruehling'|'sommer'|'herbst'|'winter'|'zufall'),
+`wetter` ('klar'|'regen'|'schnee'|'hagel'|'nebel'|'sandsturm'|'zufall'), `windStaerke` (0–5 oder 'zufall'), `windRichtung` ('zufall' oder Winkel), `schaden` (bool), `gegner` (0–`config.rennen.gegnerMax` = 10).
+Das Menü (`menu.js`) hält die Kombination gültig: Streckenwechsel setzt `welt` auf '', Jahreszeitwechsel setzt `wetter` auf 'klar'; die Wetter-Pillen kommen aus `R.Wetter.erlaubt(thema, jahreszeit)`
+(Wüste: Winter-Pille heißt „Sandsturm-Zeit“). Neue Welt = Eintrag in `welten` + `R.weltInfo`; neues Wetter = Eintrag in `config.wetter` und in die `wetter`-Listen der Jahreszeiten.
 
 ## Autos: Maße und Form
 Zusätzlich zu `fahrwerte` (vMax 220–270 km/h, notiert als `km/h / 3.6`) hat jedes Auto:

@@ -2,6 +2,10 @@
 // HUD: eine Anzeige pro Spieler-Ansicht (Tacho, Runde, Platz, Zeiten,
 // Countdown, Meldungen, Hinweise, Minimap). Reines DOM über dem Canvas.
 // Im Split-Screen gibt es zwei HUDs (links / rechts), je eine Bildhälfte.
+// Runde 4: wetterSetzen(wetter) → Wetter-Symbol + Windpfeil (relativ zur Fahrtrichtung, Stufe 1–5)
+// unter der Rundenanzeige; ohne Aufruf (oder klar + Wind 0) bleibt das HUD wie bisher.
+// Runde 4: schadenSetzen(schaden, index) → Gesundheitsbalken (❤️ + Balken grün→gelb→rot) unter der Rundenanzeige,
+// nur wenn schaden.an; liegengeblieben: Balken blinkt rot. Meldungen dazu kommen über meldung().
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -135,6 +139,10 @@
           '<div class="chip hud-links">' +
             '<div class="hud-name"></div>' +
             '<div class="hud-runde"></div>' +
+            '<div class="hud-gesundheit" style="display:none"><span class="g-herz">❤️</span>' +
+              '<span class="g-balken"><i></i></span><b class="g-zahl"></b></div>' +
+            '<div class="hud-wetter" style="display:none"><span class="w-symbol"></span>' +
+              '<span class="w-wind"><i class="w-pfeil">➜</i><b></b></span></div>' +
           '</div>' +
           '<div class="chip hud-platz"><b></b><span></span></div>' +
           '<div class="chip hud-zeiten">' +
@@ -162,6 +170,11 @@
         background: 'linear-gradient(90deg, rgba(255,90,170,.9), rgba(150,110,255,.9))', border: '.08em solid #fff',
         opacity: '0', transition: 'opacity .18s, transform .25s cubic-bezier(.3,1.6,.6,1)', pointerEvents: 'none' });
       this.eKmh = q('.kmh b'); this.eBalken = q('.balken i');
+      this.eWetter = q('.hud-wetter'); this.eWSymbol = q('.w-symbol'); this.eWind = q('.w-wind');
+      this.eWPfeil = q('.w-pfeil'); this.eWStufe = q('.w-wind b');
+      this.wetter = null;
+      this.eGesund = q('.hud-gesundheit'); this.eGBalken = q('.g-balken i'); this.eGZahl = q('.g-zahl');
+      this.schaden = null; this.schadenIndex = -1;
       if (this.eName) setzeText(this.eName, R.fahrerEmoji(this.t.name) + ' ' + this.t.name);
 
       // Meldungen bei Rennereignissen
@@ -200,6 +213,53 @@
       m.style.opacity = '1'; m.style.transform = 'translateX(-50%) scale(1)';
       this.meldungText = text;
       this.meldungTimer = setTimeout(() => { m.style.opacity = '0'; m.style.transform = 'translateX(-50%) scale(.6)'; this.meldungText = ''; }, ms || 1800);
+    }
+
+    /** Runde 4: Wetter-Objekt (R.Wetter) für Symbol + Windpfeil setzen; null = nichts anzeigen. */
+    wetterSetzen(wetter) {
+      this.wetter = wetter || null;
+      const w = this.wetter, symbol = w ? w.emoji : '', wind = w ? w.windStaerke : 0;
+      setzeText(this.eWSymbol, symbol);
+      setzeAnzeige(this.eWSymbol, !!symbol);
+      setzeText(this.eWStufe, wind ? String(wind) : '');
+      setzeAnzeige(this.eWind, wind > 0);
+      setzeAnzeige(this.eWetter, !!symbol || wind > 0);
+      this.eWind.title = 'Wind Stärke ' + wind;
+    }
+
+    /** Runde 4: Schaden-System (R.Schaden) + Fahrzeug-Index für den Gesundheitsbalken; null/aus = verstecken. */
+    schadenSetzen(schaden, index) {
+      this.schaden = schaden && schaden.an ? schaden : null;
+      this.schadenIndex = index;
+      setzeAnzeige(this.eGesund, !!this.schaden);
+    }
+
+    /** Gesundheitsbalken: Breite = Prozent, Farbe grün (> 60 %) → gelb (> 30 %) → rot; liegengeblieben blinkt. */
+    _gesundheitAnzeigen() {
+      const z = this.schaden.zustand(this.schadenIndex), p = z.prozent;
+      const breite = p + '%';
+      if (this.eGBalken._b !== breite) {
+        this.eGBalken._b = breite;
+        this.eGBalken.style.width = breite;
+        this.eGBalken.style.background = p > 60 ? '#3ddc6a' : p > 30 ? '#ffd23a' : '#ff4a3a';
+      }
+      setzeText(this.eGZahl, p + '%');
+      this.eGesund.classList.toggle('kaputt', !!z.liegengeblieben);
+    }
+
+    /** Windpfeil drehen: Pfeil zeigt, wohin der Wind weht (oben = Rückenwind, rechts = drückt nach rechts). */
+    _windAnzeigen(v) {
+      const w = this.wetter;
+      if (!w || !(w.windStaerke > 0)) return;
+      const r = w.windFuer(v);
+      const grad = Math.round(Math.atan2(r.seitlich, r.laengs) * 180 / Math.PI / 5) * 5;   // 5°-Schritte: wenig DOM-Arbeit
+      if (this.eWPfeil._grad !== grad) {
+        this.eWPfeil._grad = grad;
+        this.eWPfeil.style.transform = 'rotate(' + (grad - 90) + 'deg)';   // ➜ zeigt nach rechts → −90° = oben
+        // Seitenwind kräftig (> 60° zur Fahrtrichtung): Pfeil orange
+        const seit = Math.abs(Math.abs(grad) - 90) < 30;
+        this.eWind.classList.toggle('seite', seit);
+      }
     }
 
     /** Schriftgröße an die Größe der Ansicht anpassen. */
@@ -253,6 +313,8 @@
       setzeText(this.eHinweis, hinweis);
       setzeAnzeige(this.eHinweis, !!hinweis);
 
+      if (this.wetter) this._windAnzeigen(v);
+      if (this.schaden) this._gesundheitAnzeigen();
       if (this.minimap) this.minimap.zeichnen(r.teilnehmer, t);
     }
 

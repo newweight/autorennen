@@ -14,10 +14,10 @@ Rennspiel.config = {
   // --- Fahrer (Namen im Menü, HUD und Ergebnis) ---
   // Neuen Fahrer einfach unten anhängen: { name, emoji }. Emoji = Avatar auf der Karte (keine Fotos/Logos).
   fahrer: [
-    { name: 'Emmy',        emoji: '🦄' },
+    { name: 'Emmy',        emoji: '🦁' },
     { name: 'Sara',        emoji: '🌸' },
-    { name: 'Jonas',       emoji: '🦁' },
-    { name: 'Kerle',       emoji: '🐯' },
+    { name: 'Jonas',       emoji: '🐯' },
+    { name: 'Kerle',       emoji: '🐺' },
     { name: 'Opa',         emoji: '👴' },
     { name: 'Oma',         emoji: '👵' },
     { name: 'Elki',        emoji: '🐘' },
@@ -37,7 +37,7 @@ Rennspiel.config = {
     rundenMin: 1,
     rundenMax: 10,
     gegnerStandard: 3,      // Computer-Autos im Solo-Modus
-    gegnerMax: 5,
+    gegnerMax: 10,          // Runde 4: bis 10 Gegner (Startaufstellung 2 Spalten, Reihen je 9 m)
     countdownSekunden: 3,
   },
 
@@ -147,6 +147,43 @@ Rennspiel.config = {
                  blinkZeit: 0.3,         // s rot blinken, dann weg bis zur nächsten Runde des Verursachers
                  gefahr: 1.0 },
     ast:       { name: 'Ast', dicke: 0.28, tempoFaktor: 0.6, huepfer: 2.2, sperrZeit: 0.8, gefahr: 0.6 },
+    // Runde 4 (Welt „Hindernisse“, Katalog wracks [{ s, seitenabstand, brennt, autoId }]):
+    // liegengebliebenes Auto = feste Kapsel (wie die Bake), schräg um `schraeg` rad (Bug zum Rand),
+    // Warnblinker im blinkTakt (s an / s aus), Warndreieck dreieckAbstand m davor.
+    wrack:     { name: 'Liegengebliebenes Auto', schraeg: 0.28, blinkTakt: 0.5, dreieckAbstand: 9, gefahr: 1.0 },
+    // brennendes Wrack: wie wrack + Flammen/Rauch; Treffer kostet bei Schaden „an“ −10 % (config.schaden.brandVerlust)
+    brand:     { name: 'Brennendes Auto', schraeg: 0.28, blinkTakt: 0.5, dreieckAbstand: 12, gefahr: 1.0,
+                 flammen: 3, rauchTeilchen: 70, rauchHoehe: 11 },
+  },
+  // Runde 4: Strohballen (Dynamik, Katalog strohballen [{ s, von, intervall, tempo }], nur Welt mit strohballen)
+  strohballen: {
+    radius: 0.75,              // m (Rundballen 1,5 m Durchmesser)
+    breite: 1.25,              // m (Länge der Rolle, liegt längs zur Straße)
+    tempo: 5,                  // m/s Standard-Rolltempo quer
+    tempoFaktor: 0.5,          // Treffer: Tempo −50 %
+    kippZeit: 0.45,            // s kippt der getroffene Ballen um und rutscht zum Rand
+    liegenZeit: 3,             // s bleibt er am Rand liegen, dann weg
+    ueberstand: 8,             // m: Start/Ende so weit neben der Fahrbahnkante
+  },
+
+  // --- Runde 4: Schaden (Einstellung, Standard aus → keinerlei Wirkung). Logik: src/physics/schaden.js ---
+  // Treffer kostet trefferVerlust (5 %) – nur ab Mindest-Stoßstärke (m/s) je Art, höchstens einmal je abklingZeit s
+  // und Fahrzeug (Schleifen an der Bande zählt nicht dauernd). Je volle stufeJe (20 %) Verlust: Stufe +1 →
+  // vMax × (1 − vMaxJeStufe·Stufe), beschleunigung × (1 − beschleunigungJeStufe·Stufe), grip × (1 − gripJeStufe·Stufe).
+  // Unter rauchUnter Rauch aus der Motorhaube, unter qualmUnter dunkler Qualm + Warnblinker,
+  // 0 % = liegengeblieben: liegenZeit s Stillstand, dann Abschleppen zum letzten Checkpoint mit resetProzent.
+  schaden: {
+    standardAn: false,
+    trefferVerlust: 5,         // Prozentpunkte je Treffer
+    brandVerlust: 10,          // Prozentpunkte bei Treffer eines brennenden Wracks
+    mindest: { bande: 3, auto: 2, hindernis: 0, brand: 0, ball: 0, wasser: 0, stroh: 0 },
+    abklingZeit: 0.7,
+    stufeJe: 20,
+    vMaxJeStufe: 0.04, beschleunigungJeStufe: 0.06, gripJeStufe: 0.03,
+    rauchUnter: 40, qualmUnter: 20,
+    liegenZeit: 5, resetProzent: 60,
+    blinkTakt: 0.5,
+    rauchTeilchen: 36,
   },
 
   // --- Fantasie-Strecke (Runde 3): Looping, Bälle, Wasserstrahl ---
@@ -178,6 +215,106 @@ Rennspiel.config = {
       schlingern: 6,           // m/s Quer-Impuls (vQuer) bei einem Treffer
       radius: 2.2,             // m Trefferradius um die Düse
       hoehe: 8,                // m Höhe der Fontäne
+    },
+  },
+
+  // --- Runde 4: Jahreszeiten (Farben, Licht, erlaubtes Wetter; Logik in src/world/wetter.js) ---
+  // Standard = sommer → Spiel sieht aus wie vor Runde 4 (alle Mischanteile 0, Faktoren 1).
+  // *Misch: [Farbe, Anteil 0..1] – die Themenfarbe wird so weit zur Farbe hin gemischt.
+  // laub: Farben der Laubbaum-Kronen (zufällig gemischt), null = Themenfarben behalten.
+  // bluete: zusätzlich Blütenbäume (Anteil bluetenAnteil). tanneMisch/buschMisch: Tannen/Büsche/Farne.
+  // randSchnee: graue Randsteine werden weiß (Schneeränder). sonnenHoehe: Grad über dem Horizont
+  // (null = Licht wie bisher), lichtFarbe: Sonnenfarbe (null = Thema), lichtFaktor: × Helligkeit.
+  // wetter: erlaubte Wetter (Menü 'zufall' wählt daraus); wetterWueste: dasselbe für das Thema Wüste.
+  jahreszeitStandard: 'sommer',
+  jahreszeiten: {
+    fruehling: { name: 'Frühling', emoji: '🌷',
+      laub: [0x7cc04a, 0x8fd35a, 0x6fb341, 0x9bdc6a], bluete: [0xffb7d5, 0xffc9e3, 0xfff0f6, 0xff9fc6], bluetenAnteil: 0.3,
+      tanneMisch: null, buschMisch: [0x8fd35a, 0.35], bodenMisch: [0x7fc24a, 0.25],
+      himmelMisch: [0xb8e0ff, 0.3], nebelMisch: [0xdcefff, 0.35], sichtweiteFaktor: 0.9,
+      sonnenHoehe: 40, lichtFarbe: 0xfff8e8, lichtFaktor: 1.0,
+      wetter: ['klar', 'regen'], wetterWueste: ['klar', 'regen'] },
+    sommer: { name: 'Sommer', emoji: '☀️',
+      laub: null, bluete: null, bluetenAnteil: 0, tanneMisch: null, buschMisch: null, bodenMisch: null,
+      himmelMisch: null, nebelMisch: null, sichtweiteFaktor: 1, sonnenHoehe: null, lichtFarbe: null, lichtFaktor: 1,
+      wetter: ['klar', 'regen'], wetterWueste: ['klar', 'sandsturm'] },
+    herbst: { name: 'Herbst', emoji: '🍂',
+      laub: [0xe8742a, 0xf0ad35, 0xd8452a, 0xf6d457, 0xc9622a, 0x8fae42], bluete: null, bluetenAnteil: 0,
+      tanneMisch: null, buschMisch: [0xb8762e, 0.5], bodenMisch: [0x9a8a3a, 0.3],
+      himmelMisch: [0xc8cfd6, 0.35], nebelMisch: [0xd4d2c8, 0.55], sichtweiteFaktor: 0.75,
+      sonnenHoehe: 30, lichtFarbe: 0xffdcae, lichtFaktor: 0.92,
+      wetter: ['klar', 'regen', 'hagel', 'nebel'], wetterWueste: ['klar', 'regen', 'sandsturm'] },
+    winter: { name: 'Winter', emoji: '⛄',
+      laub: [0xeef2f6, 0xdfe6ec, 0xc9d2da, 0x8f7f70], bluete: null, bluetenAnteil: 0,
+      tanneMisch: [0xf4f8fb, 0.55], buschMisch: [0xf2f6fa, 0.6], bodenMisch: [0xf3f6fa, 0.82], randSchnee: true,
+      himmelMisch: [0xdde6ee, 0.45], nebelMisch: [0xe8eef4, 0.6], sichtweiteFaktor: 0.8,
+      sonnenHoehe: 18, lichtFarbe: 0xdfe9ff, lichtFaktor: 0.85,
+      // Wüste: kein Schnee – statt Winter Sandsturm-Zeit (Farben bleiben Wüste, nur Licht flacher)
+      wueste: { laub: null, tanneMisch: null, buschMisch: null, bodenMisch: null, randSchnee: false,
+                himmelMisch: [0xf2dcae, 0.2], nebelMisch: null, sichtweiteFaktor: 1 },
+      wetter: ['klar', 'schnee', 'hagel'], wetterWueste: ['klar', 'sandsturm'] },
+  },
+
+  // --- Runde 4: Wetter (Wirkung auf Fahrphysik über vehicle.schritt(dt, s, hilfe, umwelt)) ---
+  // gripFaktor: × Haftung (auch Kurventempo/KI-Planung), bremsFaktor: × Bremsverzögerung,
+  // sichtweiteFaktor: × Nebel-Sichtweite, nebelNah: Nebel-Beginn als Anteil der Sichtweite (Standard 0,55),
+  // nebelFarbe/himmelMisch: [Farbe, Anteil], lichtFaktor: × Sonne/Himmel, wolkenDecke: graue Wolken, Sonne weg.
+  // partikel: { art: 'striche'|'flocken'|'koerner'|'sand'|null, anzahl, tempo m/s, groesse m, farbe }
+  // geraeusch: Name für R.Audio.wetter(…) (null = still).
+  wetterStandard: 'klar',
+  wetter: {
+    klar:      { name: 'Klar',      emoji: '',   gripFaktor: 1,    bremsFaktor: 1,   sichtweiteFaktor: 1,
+                 lichtFaktor: 1, wolkenDecke: false, partikel: null, geraeusch: null },
+    regen:     { name: 'Regen',     emoji: '🌧️', gripFaktor: 0.85, bremsFaktor: 0.8, sichtweiteFaktor: 0.7,
+                 himmelMisch: [0x8e99a4, 0.65], nebelFarbe: [0x9aa3ab, 0.7], lichtFaktor: 0.7, wolkenDecke: true,
+                 partikel: { art: 'striche', anzahl: 2500, tempo: 19, groesse: 0.55, farbe: 0xd2deea }, geraeusch: 'regen' },
+    schnee:    { name: 'Schnee',    emoji: '❄️', gripFaktor: 0.6,  bremsFaktor: 0.6, sichtweiteFaktor: 0.6,
+                 himmelMisch: [0xc4ccd4, 0.6], nebelFarbe: [0xdde3ea, 0.75], lichtFaktor: 0.8, wolkenDecke: true,
+                 partikel: { art: 'flocken', anzahl: 1500, tempo: 1.6, groesse: 0.22, farbe: 0xffffff }, geraeusch: 'schnee' },
+    hagel:     { name: 'Hagel',     emoji: '🌨️', gripFaktor: 0.75, bremsFaktor: 0.7, sichtweiteFaktor: 0.75,
+                 himmelMisch: [0x7d8792, 0.6], nebelFarbe: [0x9aa1a8, 0.6], lichtFaktor: 0.7, wolkenDecke: true,
+                 partikel: { art: 'koerner', anzahl: 1200, tempo: 15, groesse: 0.13, farbe: 0xf2f6ff }, geraeusch: 'hagel' },
+    nebel:     { name: 'Nebel',     emoji: '🌫️', gripFaktor: 1,    bremsFaktor: 1,   sichtweiteFaktor: 0.38, nebelNah: 0.12,
+                 himmelMisch: [0xd0d4d6, 0.75], nebelFarbe: [0xd0d4d6, 0.85], lichtFaktor: 0.82, wolkenDecke: true,
+                 partikel: null, geraeusch: null },
+    sandsturm: { name: 'Sandsturm', emoji: '🌪️', gripFaktor: 0.9,  bremsFaktor: 0.9, sichtweiteFaktor: 0.3, nebelNah: 0.05,
+                 himmelMisch: [0xd9a05a, 0.75], nebelFarbe: [0xd39a55, 0.9], lichtFaktor: 0.8, wolkenDecke: true,
+                 partikel: { art: 'sand', anzahl: 3200, tempo: 22, groesse: 0.2, farbe: 0xe6b878 }, geraeusch: 'wind',
+                 windMin: 3 },       // Sandsturm ohne Wind wäre seltsam: mindestens Stufe 3
+  },
+  // Wind: Stärke 0–5 (Standard 0 = aus), Richtung fest je Rennen ('zufall' = aus dem Seed).
+  // seitK: seitliche Beschleunigung = seitK · Stufe · Tempo (m/s²), gierK: Drehrate = gierK · Stufe · Tempo (rad/s)
+  //   → Stufe 5 bei 200 km/h ohne Gegenlenken ≈ 3–4 m Versatz in 3 s, Stufe 1 ≈ 0,7 m (kaum).
+  // vMaxJeStufe: Gegenwind −3 %, Rückenwind +3 % Höchsttempo je Stufe (Projektion auf die Fahrtrichtung).
+  wind: { staerkeStandard: 0, staerkeMax: 5, richtungStandard: 'zufall', seitK: 0.019, gierK: 0.000036, vMaxJeStufe: 0.03 },
+
+  // --- Runde 4: Stunt (Sprungschanzen, Welt „Stunt"/„Verrückt") + Pickups (Turbo-Felder, Schild, Welt „Verrückt") ---
+  // Logik: src/track/schanze.js (R.Schanzen) und src/world/pickups.js (R.Pickups); Platzierung in trackCatalog.js.
+  stunt: {
+    schanze: {
+      g: 9.81,                 // m/s² Schwerkraft im Flug
+      vyMax: 5,                // m/s: Absprung-Steiggeschwindigkeit höchstens (v·sin(winkel) gedeckelt) → bei 270 km/h ≈ 100 m Flug
+      flugLenkung: 0.2,        // Lenkung im Flug: 20 % der normalen Drehrate
+      luft: 0.0006,            // × v² (m/s²) Luftwiderstand im Flug (klein)
+      landungSauber: 0.95,     // Tempo × 0,95 bei sauberer Landung
+      landungSchraeg: 0.8,     // Tempo × 0,8 bei schräger Landung (Heading ≠ Tangente > schraegGrad) oder abseits
+      schraegGrad: 25,
+      abseitsZugabe: 0.5,      // m neben der Fahrbahnkante zählt noch als „auf der Straße"
+      sprungMeldung: 0.8,      // s Flugzeit, ab der das HUD „Sprung! ✈️" zeigt
+      landeNicken: 0.07,       // rad Nick-Impuls (Bug runter) bei der Landung, klingt in ~0,3 s ab
+      kameraWackeln: 2.5,      // Stärke des Kamerawackelns bei der Landung (klein)
+    },
+    boost: {
+      dauer: 2.5,              // s Turbo nach dem Überfahren eines Turbo-Feldes
+      vMaxFaktor: 1.25,        // Höchsttempo × 1,25
+      beschleunigungFaktor: 1.5,
+      auslauf: 2,              // s: danach sinkt der vMax-Faktor gleichmäßig auf 1 (kein Tempo-Sprung)
+      halbbreite: 2,           // m: Feld = seitenabstand ± 2 m (Auto-Mitte darf zusätzlich 0,9 m daneben sein)
+    },
+    schild: {
+      radius: 2.6,             // m Aufsammel-Abstand (Auto-Mitte ↔ Kugel)
+      wiederDa: 10,            // s bis die Kugel wieder erscheint
+      hoehe: 1.3,              // m schwebt über der Straße
     },
   },
 

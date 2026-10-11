@@ -10,6 +10,8 @@ Bilder: 01_start, 02_fahrt, 03_links_abseits, 04_reset, 05_cockpit, 06_weit, 07_
         14b_bruecke_seite (Senke von der Seite), 15_hindernis_baustelle, 16_hindernis_oel, 17_hindernis_ast, 18_hindernis_sand
         Fantasie: 19_looping_aussen, 19b_looping2_aussen, 20_looping_auto (Verfolger kopfüber), 20b_looping_auto_aussen,
         20c_looping_cockpit, 21_ball (Ball auf der Straße), 21b_ball_treffer, 22_wasser_aktiv, 22b_wasser_blubbern
+        Runde 4 (Wiese/Wald/Wüste, Welt „Stunt"): 23_spur_eng (1 Spur + Leitplanke), 23b_spur_eng_oben, 24_spur_breit (3 Spuren)
+        – main.js kennt die Welt-Wahl noch nicht: der Test setzt vorher trackCatalog[...].weltStandard = 'stunt'.
 Prüft: keine JS-Fehler, Deko ≥ breite/2 + 6 m von der Mitte, Draw-Calls Strecke+Deko+Hindernisse ≤ 40, Minimap sichtbar,
        Tunnel innen dunkel (Helligkeit < 45 % von draußen) mit hellem Lichtkegel, höchstens 3 Punkt- + 2 Spotlichter,
        Senke unter der Brücke ≥ 3 m tief, Pylone fällt beim Anfahren um und kommt nach der Runde zurück."""
@@ -287,6 +289,11 @@ def lauf(browser, sid, out):
       f.vehicle.setzen(p.x + p.nx * q, p.z + p.nz * q, Rennspiel.headingAus(p.tx, p.tz)); f.index = -1;
       return { erwartet: st.abseitsUntergrund }; })()''')
     page.wait_for_timeout(400)
+    # Runde 4: bei langsamer Software-Grafik kann der nächste Physikschritt später kommen – bis 5 s warten
+    try:
+        page.wait_for_function('(u) => Rennspiel.spiel.fahrzeuge[0].vehicle.untergrund === u', arg=z['abseits_untergrund']['erwartet'], timeout=5000)
+    except Exception:
+        pass
     z['abseits_untergrund']['ist'] = page.evaluate('Rennspiel.spiel.fahrzeuge[0].vehicle.untergrund')
     page.keyboard.press('KeyR'); page.wait_for_timeout(800)
     snap('04_reset.png')
@@ -324,7 +331,7 @@ def lauf(browser, sid, out):
             page.evaluate(KAMERA_FREI, blick)
             page.wait_for_timeout(800)
             snap('11_oase.png')
-        page.evaluate(AUTO_NACH_S, 520)
+        page.evaluate(AUTO_NACH_S, 754)      # Runde 4: Wüste ×1,45 (vorher 520)
         page.wait_for_timeout(1500)
         snap('12_gerade.png')
     # Übersicht von schräg oben und Blick auf die engste Kurve (Haarnadel / Schikane)
@@ -377,6 +384,50 @@ def lauf(browser, sid, out):
     return z, pruef
 
 
+SPUR_INFO = '''(() => { const st = Rennspiel.spiel.strecke; let lp = 0;
+  Rennspiel.spiel.szene.traverse(o => { if (o.name === 'Leitplanken') lp++; });
+  return { welt: st.welt, spuren: st.spuren.map(e => ({ s0: e.s0, s1: e.s1, n: e.spuren, b: st.breiteBei((e.s0 + e.s1) / 2) })), leitplanken: lp }; })()'''
+KI_WEG = '''(() => { const s = Rennspiel.spiel; s.fahrzeuge.forEach((f, i) => { if (i > 0) { const p = s.strecke.spline.punktBei(-40 - 10 * i);
+  f.vehicle.setzen(p.x, p.z, Rennspiel.headingAus(p.tx, p.tz)); f.driver && (f.driver.steuerung = () => ({ gas: 0, bremse: 1, lenkung: 0 })); } }); })()'''
+
+
+def spur_lauf(browser, sid, out):
+    """Runde 4: Welt „Stunt" – enge (1 Spur, Leitplanke) und breite (3 Spuren) Stelle. Liefert (info, Prüfzeilen)."""
+    page = browser.new_page(viewport={'width': 1280, 'height': 800})
+    fehler = []
+    page.on('pageerror', lambda e: fehler.append(str(e)))
+    page.on('console', lambda m: fehler.append('console.' + m.type + ': ' + m.text) if m.type in ('error',) else None)
+    page.goto(url)
+    page.wait_for_timeout(1500)
+    # Vorab: Standardwelt der Strecke auf 'stunt' (bis main.js/menu.js die Welt-Wahl kennen)
+    page.evaluate("(id) => { Rennspiel.trackCatalog.find(t => t.id === id).weltStandard = 'stunt'; }", sid)
+    page.evaluate("(id) => Rennspiel.spiel.rennenStarten({ modus: 'solo', streckeId: id, autoIds: ['troc-cabrio', 'multivan'], runden: 3, gegner: 3, schwierigkeit: 'mittel', fahrhilfe: ['wenig', 'wenig'] })", sid)
+    page.wait_for_timeout(1000)
+    snap = lambda name: page.screenshot(path=os.path.join(out, name))
+    info = page.evaluate(SPUR_INFO)
+    page.evaluate(KI_WEG)
+    for e in info['spuren']:
+        if e['n'] == 1:
+            page.evaluate(AUTO_NACH_SQ, [e['s0'] - 30, 0]); page.wait_for_timeout(1500)
+            snap('23_spur_eng.png')
+            blick = page.evaluate(KAMERA_BEI_S, [e['s0'], 45, 16, 40])
+            page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(800)
+            snap('23b_spur_eng_oben.png')
+            page.evaluate('(() => { const s = Rennspiel.spiel, k = s.kameras[0]; delete k.update; k._erstesMal = true; })()')
+        else:
+            page.evaluate(AUTO_NACH_SQ, [e['s0'] + 10, 0]); page.wait_for_timeout(1500)
+            snap('24_spur_breit.png')
+    page.close()
+    zeilen = []
+
+    def pruefe(name, ok, info_=''):
+        zeilen.append(('OK   ' if ok else 'FEHL ') + '[' + sid + '/stunt] ' + name + (' – ' + str(info_) if info_ != '' else ''))
+    pruefe('keine JS-Fehler', not fehler, fehler[:3])
+    pruefe('Welt stunt aktiv, 1-Spur- und 3-Spur-Abschnitt', info['welt'] == 'stunt' and sorted(e['n'] for e in info['spuren']) == [1, 3], info)
+    pruefe('Leitplanken-Mesh gebaut', info['leitplanken'] == 1, info['leitplanken'])
+    return info, zeilen
+
+
 ids = ['wiese', 'wald', 'wueste', 'fantasie'] if wahl == 'alle' else [wahl]
 with sync_playwright() as p:
     browser = p.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
@@ -386,6 +437,10 @@ with sync_playwright() as p:
         z, pruef = lauf(browser, sid, out)
         print(json.dumps(z, indent=1, ensure_ascii=False))
         alle += pruef
+        if sid in ('wiese', 'wald', 'wueste'):
+            info, pruef = spur_lauf(browser, sid, out)
+            print(json.dumps({'stunt': info}, ensure_ascii=False))
+            alle += pruef
     browser.close()
     print('\n'.join(alle))
     sys.exit(0 if all(z.startswith('OK') for z in alle) else 1)

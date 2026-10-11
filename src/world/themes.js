@@ -9,6 +9,9 @@
 // je Objektart. Regel: jede Deko-Instanz steht ≥ breite/2 + 6 m von der
 // Straßenmitte (aller Streckenteile) entfernt; Bäume, Felsen und große
 // Kakteen sogar hinter dem Zaun (sonst führe man durch sie hindurch).
+//
+// Runde 4: dekoBauen(thema, strecke, jahreszeit) färbt Bäume/Büsche je Jahreszeit
+// (jahreszeitFarben/jahreszeitFaerben, eigener Zufall – Platzierung bleibt gleich).
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -941,8 +944,83 @@
     return { pilze: pilze.reduce((s, l) => s + l.length, 0), zuckerbaeume: baeume.length, huegel: huegel.length, ballons: ballons.length, blumen: blumen.length, regenbogen: 1 };
   }
 
-  /** Baut alle Deko-Objekte eines Themas als THREE.Group. */
-  function dekoBauen(themaName, strecke) {
+  // ------------------------------------------------------------------ Runde 4: Jahreszeiten
+
+  /**
+   * Farbvarianten einer Jahreszeit für ein Thema (aus config.jahreszeiten; Wüste: Winter-Ausnahme).
+   * null = nichts ändern (Sommer, oder Thema ohne Bäume wie Wüste/Fantasie bei den Bäumen).
+   * @returns {{laub:number[]|null, bluete:number[]|null, bluetenAnteil:number, tanneMisch, buschMisch, bodenMisch, randSchnee}|null}
+   */
+  function jahreszeitFarben(themaName, jahreszeit) {
+    const J = R.config.jahreszeiten;
+    if (!J || !jahreszeit || !J[jahreszeit]) return null;
+    let d = J[jahreszeit];
+    if (d[themaName]) d = Object.assign({}, d, d[themaName]);
+    const baeume = themaName === 'wiese' || themaName === 'wald';    // Wüste/Fantasie: eigene Pflanzen bleiben
+    const f = {
+      laub: baeume ? d.laub : null, bluete: baeume ? d.bluete : null, bluetenAnteil: d.bluetenAnteil || 0,
+      tanneMisch: baeume ? d.tanneMisch : null, buschMisch: baeume ? d.buschMisch : null,
+      bodenMisch: d.bodenMisch || null, randSchnee: !!d.randSchnee,
+    };
+    return (f.laub || f.tanneMisch || f.buschMisch || f.bodenMisch || f.randSchnee) ? f : null;
+  }
+
+  /**
+   * Deko nachträglich jahreszeitlich färben (Bäume, Tannen, Büsche/Farne). Eigener Zufall →
+   * die Platzierung (Haupt-Zufall) bleibt exakt gleich. Erkennung über Mesh-Namen/Materialfarbe.
+   */
+  function jahreszeitFaerben(gruppe, f, seed) {
+    const rnd = zufall(seed ^ 0x9e3779b9);
+    const c = new THREE.Color(), weiss = new THREE.Color(0xffffff);
+    const istGruen = (a, i) => a[i + 1] > a[i] * 1.05 && a[i + 1] > a[i + 2];
+    const kronenNeutral = (geo) => {      // grüne Vertex-Farben (Kronen) → hellgrau, Stamm bleibt
+      const col = geo.attributes.color; if (!col || geo.userData.jzNeutral) return;
+      const a = col.array;
+      for (let i = 0; i < a.length; i += 3) if (istGruen(a, i)) { const h = 0.82 + 0.18 * a[i + 1] / Math.max(a[i + 1], 0.3); a[i] = a[i + 1] = a[i + 2] = Math.min(1, h); }
+      col.needsUpdate = true; geo.userData.jzNeutral = true;
+    };
+    const gruenMischen = (geo, ziel, anteil) => {
+      const col = geo.attributes.color; if (!col || geo.userData.jzGemischt) return;
+      const a = col.array, z = new THREE.Color(ziel);
+      for (let i = 0; i < a.length; i += 3) if (istGruen(a, i)) { a[i] += (z.r - a[i]) * anteil; a[i + 1] += (z.g - a[i + 1]) * anteil; a[i + 2] += (z.b - a[i + 2]) * anteil; }
+      col.needsUpdate = true; geo.userData.jzGemischt = true;
+    };
+    gruppe.children.forEach((m) => {
+      if (!m.isInstancedMesh) return;
+      const mat = m.material, hex = mat.color ? mat.color.getHex() : 0xffffff;
+      let art = null;
+      if (m.name === 'Laubbaeume' || m.name === 'Baumtunnel' || (m.name === 'Baeume' && hex === 0x3f7f2a)) art = 'laub';
+      else if (m.name === 'Tannen' || (m.name === 'Baeume' && hex === 0x2d5e33)) art = 'tanne';
+      else if (m.name === 'Buesche' || m.name === 'Farne') art = 'busch';
+      if (art === 'laub' && f.laub) {
+        if (mat.vertexColors) kronenNeutral(m.geometry); else mat.color.setHex(0xffffff);
+        for (let i = 0; i < m.count; i++) {
+          const liste = f.bluete && rnd() < f.bluetenAnteil ? f.bluete : f.laub;
+          c.setHex(liste[Math.floor(rnd() * liste.length)]).multiplyScalar(0.92 + rnd() * 0.08);
+          m.setColorAt(i, c);
+        }
+        if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      } else if (art === 'tanne' && f.tanneMisch) {
+        if (mat.vertexColors) gruenMischen(m.geometry, f.tanneMisch[0], f.tanneMisch[1]);
+        else mat.color.lerp(c.setHex(f.tanneMisch[0]), f.tanneMisch[1]);
+        // Instanz-Tönung (grünlich) zur Hälfte Richtung Weiß, sonst bleibt der Schnee grün
+        for (let i = 0; i < m.count; i++) { m.getColorAt(i, c); c.lerp(weiss, 0.5); m.setColorAt(i, c); }
+        if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      } else if (art === 'busch' && f.buschMisch) {
+        mat.color.lerp(c.setHex(f.buschMisch[0]), f.buschMisch[1]);
+        if (f.randSchnee) {   // Winter (Schnee): Instanzfarben aufhellen
+          for (let i = 0; i < m.count; i++) { m.getColorAt(i, c); c.lerp(weiss, 0.6); m.setColorAt(i, c); }
+          if (m.instanceColor) m.instanceColor.needsUpdate = true;
+        }
+      }
+    });
+  }
+
+  /**
+   * Baut alle Deko-Objekte eines Themas als THREE.Group.
+   * Runde 4: jahreszeit (optional, Standard/sommer = unverändert) färbt Bäume/Büsche um.
+   */
+  function dekoBauen(themaName, strecke, jahreszeit) {
     const thema = themes[themaName] || themes.wiese;
     const rnd = zufall(textSeed(strecke.id || 'strecke') ^ thema.seed);
     const gruppe = new THREE.Group();
@@ -958,6 +1036,9 @@
       }
     });
     gruppe.userData.anzahl = anzahl;
+    const jzFarben = jahreszeitFarben(themaName, jahreszeit);
+    if (jzFarben) jahreszeitFaerben(gruppe, jzFarben, textSeed(strecke.id || 'strecke') ^ thema.seed);
+    gruppe.userData.jahreszeit = jahreszeit || null;
     return gruppe;
   }
 
@@ -1024,6 +1105,7 @@
   }
 
   themes.dekoBauen = dekoBauen;
+  themes.jahreszeitFarben = jahreszeitFarben;
   themes.instanzenAufteilen = instanzenAufteilen;
   themes.statischVorbereiten = statischVorbereiten;
   themes.zufall = zufall;

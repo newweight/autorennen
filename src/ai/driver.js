@@ -24,6 +24,8 @@
 //   nach 3 Fehlversuchen brauchtReset), Falsch-herum-Erkennung.
 // - Deterministisch: eigener Zufallsgenerator (mulberry32) aus dem Seed.
 // Keine Abhängigkeit von Three.js (Node-Tests).
+// Runde 4: Fahrbahnbreite je Stelle (strecke.breiteBei, Spuren 1/3) – der seitliche Versatz wird
+// am Auto und am Zielpunkt auf ±max(0,5; breiteBei/2 − SPUR_GRENZE_RAND) begrenzt (enge Stellen: Mitte).
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -198,11 +200,13 @@
      * vor Autos). Liefert den Tempofaktor (1 oder kleiner).
      */
     _streckenHindernisse(n, tempo, grenze) {
-      const sp = this.spline, b = this.strecke.breite / 2;
+      const sp = this.spline, st = this.strecke;
       let faktor = 1;
       for (const h of this.streckenHindernisse) {
-        const hart = h.typ === 'baustelle' || h.typ === 'ast';
+        // Runde 4: Wracks (liegengeblieben/brennend) sind feste Hindernisse → ausweichen wie bei der Baustelle
+        const hart = h.typ === 'baustelle' || h.typ === 'ast' || h.typ === 'wrack' || h.typ === 'brand';
         const d0 = sp.differenzS(h.s0, n.s), d1 = sp.differenzS(h.s1, n.s);
+        const b = (st.breiteBei ? st.breiteBei(h.s) : st.breite) / 2;
         const vorlauf = hart ? Math.max(HART_MIN, HART_ZEIT * tempo) : Math.max(WEICH_MIN, WEICH_ZEIT * tempo);
         const nach = hart ? HART_NACH : 6;
         if (d0 > vorlauf || d1 < -nach) continue;
@@ -306,7 +310,7 @@
       }
 
       // ---------- Ausweichen ----------
-      const grenze = strecke.breite / 2 - SPUR_GRENZE_RAND;
+      const grenze = this._grenzeBei(n.s);
       const fenster = Math.max(AUSWEICH_MIN, AUSWEICH_ZEIT * Math.max(0, tempo));
       const fensterLangsam = Math.max(LANGSAM_FENSTER_MIN, LANGSAM_FENSTER_ZEIT * Math.max(0, tempo), fenster);
       const andere = u.andere || [];
@@ -493,7 +497,15 @@
         if (h.seite > 0 && q > Math.max(qGrenze, grenzeHart)) q = Math.max(qGrenze, grenzeHart);
         if (h.seite < 0 && q < Math.min(qGrenze, grenzeHart)) q = Math.min(qGrenze, grenzeHart);
       }
-      return { q: clamp(q, -grenze, grenze), w: wBest };
+      // Runde 4: am Zielpunkt gilt dessen Fahrbahnbreite (enge Spur voraus → rechtzeitig zur Mitte)
+      const g = Math.min(grenze, this._grenzeBei(sAuto + d));
+      return { q: clamp(q, -g, g), w: wBest };
+    }
+
+    /** Erlaubter seitlicher Versatz (Auto-Mitte) an Bogenlänge s: ±max(0,5; Breite/2 − SPUR_GRENZE_RAND). */
+    _grenzeBei(s) {
+      const st = this.strecke, b = st.breiteBei ? st.breiteBei(s) : st.breite;
+      return Math.max(0.5, b / 2 - SPUR_GRENZE_RAND);
     }
 
     /** Gummiband-Faktor aus dem Abstand zum besten Spieler. */

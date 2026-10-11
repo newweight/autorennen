@@ -12,6 +12,11 @@
 // Wasserstrahl: Düse in einer Bodenplatte. Je Zyklus (intervall s, Startversatz aus dem Seed):
 //   vorwarnung s Blubbern (kleine Spritzer), dann dauer s Fontäne. Treffer während der Fontäne:
 //   Tempo −40 % + Schlingern (vQuer-Impuls), höchstens einmal je Fontäne und Auto.
+// Runde 4 – Strohballen (Schicht „strohballen“, strecke.strohballen [{ s, von, intervall, tempo }], config.strohballen):
+//   ab Runde 1 rollt an jeder Stelle alle `intervall` s ein Rundballen (liegender Zylinder, Achse längs der Straße)
+//   von der Seite `von` quer über die Fahrbahn. Treffer: Tempo −50 %, der Ballen kippt um, rutscht an den
+//   nächsten Fahrbahnrand und bleibt dort liegenZeit (3 s) liegen, dann ist er weg. Stoß-typ 'stroh'.
+//   Dynamik lohnt sich auch, wenn eine Strecke NUR Strohballen hat (main.js: Bau-Bedingung beachten).
 // Die KI kennt beides nicht (gewollt). Autos im Looping (vehicle.imLooping) werden nicht getroffen.
 // Rechenteil ohne Three.js (Node-Tests: tests/test_dynamik.js), bauen()/animieren() brauchen THREE.
 // ============================================================
@@ -31,6 +36,7 @@
     };
   }
   function cfg() { return (R.config.fantasie) || {}; }
+  function cfgStroh() { return (R.config.strohballen) || {}; }
   function wert(x, std) { return x === undefined ? std : x; }
 
   class Dynamik {
@@ -59,6 +65,17 @@
           versatz: this.rnd() * (e.intervall || 20),     // zeitlich zufällig versetzt (Seed)
           zustand: 'aus', phase: 0, getroffen: new Set(),
         };
+      });
+      // Runde 4: Strohballen (nur wenn die Welt die Schicht einschaltet; strecke.strohballen ist schon gefiltert)
+      const CS = cfgStroh(), schichtAn = !strecke.aktiveSchichten || strecke.aktiveSchichten.strohballen !== false;
+      const strohListe = schichtAn ? (strecke.strohballen || d.strohballen || []) : [];
+      const radius = wert(CS.radius, 0.75), uebS = wert(CS.ueberstand, 8);
+      this.strohStellen = strohListe.map((e, nr) => {
+        const s = sp.wrapS(e.s), bh = (strecke.breiteBei ? strecke.breiteBei(s) : strecke.breite) / 2;
+        const von = e.von < 0 ? -1 : 1;
+        return { nr, s, von, intervall: e.intervall || 10, tempo: e.tempo || wert(CS.tempo, 5), radius, breite: wert(CS.breite, 1.25),
+          qStart: von * (bh + uebS), randQ: bh + (strecke.randBreite || 1) * 0.5 + radius,
+          timer: 1 + this.rnd() * Math.min(4, e.intervall || 10), ballen: [] };
       });
     }
 
@@ -128,12 +145,61 @@
           }
         }
       }
+      this._strohSchritt(dt);
       for (const d of this.duesen) {
         const z = this.duesenZustand(d, this.zeit);
         if (d.zustand === 'aktiv' && z.zustand !== 'aktiv') d.getroffen.clear();
         d.zustand = z.zustand; d.phase = z.phase;
       }
       return erg;
+    }
+
+    /** Strohballen: neue rollen los (ab Runde 1, sobald das Rennen läuft), rollende/gekippte bewegen. */
+    _strohSchritt(dt) {
+      const CS = cfgStroh(), kipp = wert(CS.kippZeit, 0.45), liegen = wert(CS.liegenZeit, 3);
+      for (const st of this.strohStellen) {
+        st.timer -= dt;
+        if (st.timer <= 0) {
+          st.timer = st.intervall;
+          const b = { s: st.s + (this.rnd() - 0.5) * 4, q: st.qStart, vq: -st.von * st.tempo, radius: st.radius, breite: st.breite,
+            winkel: 0, kipp: 0, zustand: 'rollt', zeit: 0, qZiel: 0, x: 0, y: 0, z: 0, nx: 1, nz: 0, tx: 0, tz: 1 };
+          this._strohWelt(b);
+          st.ballen.push(b);
+        }
+        for (let i = st.ballen.length - 1; i >= 0; i--) {
+          const b = st.ballen[i];
+          b.zeit += dt;
+          if (b.zustand === 'rollt') {
+            b.q += b.vq * dt;
+            b.winkel += b.vq / b.radius * dt;
+            if (b.q * st.von < -Math.abs(st.qStart)) { st.ballen.splice(i, 1); continue; }   // drüben angekommen
+          } else {
+            // getroffen: kippt in kippZeit um und rutscht an den Rand, liegt dann liegenZeit s, dann weg
+            const u = Math.min(1, b.zeit / kipp);
+            b.kipp = u;
+            b.q = b.qVon + (b.qZiel - b.qVon) * (1 - (1 - u) * (1 - u));
+            if (b.zeit > kipp + liegen) { st.ballen.splice(i, 1); continue; }
+          }
+          this._strohWelt(b);
+        }
+      }
+    }
+
+    /** Weltposition eines Strohballens (s, q) → x, y, z (+ Tangente/Normale für die Grafik). */
+    _strohWelt(b) {
+      const st = this.strecke, p = st.spline.punktBei(b.s);
+      b.x = p.x + p.nx * b.q; b.z = p.z + p.nz * b.q;
+      // rollend: Mitte = Radius über dem Boden; gekippt (liegt auf der runden Stirnseite): halbe Breite
+      const hoehe = b.radius + (b.breite / 2 - b.radius) * b.kipp;
+      b.y = st.hoeheAn(b.x, b.z) + hoehe;
+      b.nx = p.nx; b.nz = p.nz; b.tx = p.tx; b.tz = p.tz;
+    }
+
+    /** Alle Strohballen (rollend oder gekippt) – für Tests/Anzeige. */
+    alleStrohballen() {
+      const l = [];
+      for (const st of this.strohStellen) for (const b of st.ballen) l.push(b);
+      return l;
     }
 
     /** Alle Bälle, die gerade rollen oder fliegen (für Tests/Anzeige). */
@@ -153,7 +219,7 @@
       const kapsel = R.Kollisionen && R.Kollisionen.kapsel;
       for (let i = 0; i < fahrzeugListe.length; i++) {
         const f = fahrzeugListe[i], v = (f && f.vehicle) ? f.vehicle : f;
-        if (!v || v.imLooping) continue;
+        if (!v || v.imLooping || v.imFlug) continue;    // Runde 4: im Flug über einer Schanze nicht treffbar
         const ka = kapsel ? kapsel(v) : { rad: 0.9, kreise: [{ x: v.x, z: v.z }] };
         // Bälle
         for (const st of this.stellen) {
@@ -176,6 +242,27 @@
             ball.zustand = 'weg'; ball.zeit = 0;
             ball.vx = gx / l * weg + r.x * vorher * 0.6; ball.vz = gz / l * weg + r.z * vorher * 0.6; ball.vy = 7 + vorher * 0.12;
             stoesse.push({ nr: i, typ: 'ball', staerke: Math.max(3, vorher * 0.6) });
+          }
+        }
+        // Runde 4: Strohballen (Kreis mit Radius ≈ größere Ausdehnung des liegenden Zylinders)
+        for (const st of this.strohStellen) {
+          for (const b of st.ballen) {
+            if (b.zustand !== 'rollt') continue;
+            const gx = b.x - v.x, gz = b.z - v.z, gr = b.radius + v.daten.laenge;
+            if (gx * gx + gz * gz > gr * gr) continue;
+            let treffer = false;
+            for (const c of ka.kreise) {
+              const dx = b.x - c.x, dz = b.z - c.z, rr = ka.rad + Math.max(b.radius, b.breite / 2) * 0.9;
+              if (dx * dx + dz * dz < rr * rr) { treffer = true; break; }
+            }
+            if (!treffer) continue;
+            const vorher = v.tempo;
+            v.vLaengs *= wert(cfgStroh().tempoFaktor, 0.5);
+            v.vQuer *= 0.5;
+            // Ballen kippt um und rutscht an den Fahrbahnrand auf seiner Seite (vom Auto weg)
+            const seite = b.q >= 0 ? 1 : -1;
+            b.zustand = 'gekippt'; b.zeit = 0; b.qVon = b.q; b.qZiel = seite * st.randQ;
+            stoesse.push({ nr: i, typ: 'stroh', staerke: Math.max(3, vorher * 0.5) });
           }
         }
         // Wasserfontänen
@@ -302,10 +389,55 @@
         this._tropfen = [];
         for (let i = 0; i < n; i++) this._tropfen.push({ w: rnd() * Math.PI * 2, r: 0.4 + rnd() * 1.0, h: 0.6 + rnd() * 1.2, t0: rnd() });
       }
+      // Runde 4: Strohballen – ein InstancedMesh für alle Stellen (höchstens 4 je Stelle gleichzeitig)
+      if (this.strohStellen.length) {
+        const m = new THREE.InstancedMesh(this._strohGeo(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x2a1e06 }), this.strohStellen.length * 4);
+        m.count = 0; m.frustumCulled = false; m.name = 'Strohballen';
+        g.add(m);
+        this._strohMesh = m;
+      }
       this._m4 = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._v = new THREE.Vector3(); this._sk = new THREE.Vector3();
       this._achse = new THREE.Vector3();
       this.animieren(0);
       return g;
+    }
+
+    /**
+     * Rundballen-Geometrie (Einheitsmaße: Radius 1, Länge 1 längs y): Mantel strohgelb mit leichten
+     * Streifen, Stirnseiten mit dunklen Ringen (Wickel-Spirale), Ränder etwas dunkler. Vertex-Farben.
+     */
+    _strohGeo() {
+      const pos = [], col = [], c = new THREE.Color();
+      const N = 20, RINGE = 6;
+      const ton = (x) => { c.setRGB(0.86 * x, 0.68 * x, 0.30 * x); return [c.r, c.g, c.b]; };
+      const tri = (a, b, d, fa, fb, fd) => { pos.push(...a, ...b, ...d); col.push(...fa, ...fb, ...fd); };
+      for (let k = 0; k < N; k++) {
+        const w0 = k / N * Math.PI * 2, w1 = (k + 1) / N * Math.PI * 2;
+        const c0 = Math.cos(w0), s0 = Math.sin(w0), c1 = Math.cos(w1), s1 = Math.sin(w1);
+        // Mantel in 3 Bändern (Ränder dunkler, Mitte hell, Streifen je Segment)
+        const band = [-0.5, -0.42, 0.42, 0.5], hell = [0.8, 1.0, 0.8];
+        for (let b = 0; b < 3; b++) {
+          const f = ton(hell[b] * (k % 2 ? 0.93 : 1.0));
+          const y0 = band[b], y1 = band[b + 1];
+          tri([c0, y0, s0], [c0, y1, s0], [c1, y1, s1], f, f, f);
+          tri([c0, y0, s0], [c1, y1, s1], [c1, y0, s1], f, f, f);
+        }
+        // Stirnseiten: Ringe (abwechselnd hell/dunkel), Umlaufsinn nach außen
+        for (const yy of [0.5, -0.5]) {
+          for (let r = 0; r < RINGE; r++) {
+            const ra = r / RINGE, rb = (r + 1) / RINGE;
+            const f = ton(r % 2 ? 0.55 : 0.9);
+            const A = [c0 * ra, yy, s0 * ra], B = [c1 * ra, yy, s1 * ra], Cc = [c1 * rb, yy, s1 * rb], D = [c0 * rb, yy, s0 * rb];
+            if (yy > 0) { tri(A, Cc, B, f, f, f); tri(A, D, Cc, f, f, f); }
+            else { tri(A, B, Cc, f, f, f); tri(A, Cc, D, f, f, f); }
+          }
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
+      geo.computeVertexNormals();
+      return geo;
     }
 
     /** Optik je Frame: Bälle (Position + Rollen), Fontänen (Skalierung), Spritzer. */
@@ -328,6 +460,35 @@
         mesh.count = n;
         mesh.instanceMatrix.needsUpdate = true;
       });
+      // Strohballen: Zylinderachse (Einheits-y) längs der Straße; rollen = Drehung um diese Achse,
+      // gekippt = Achse kippt nach oben (Ballen liegt auf der Stirnseite)
+      if (this._strohMesh) {
+        const m = this._strohMesh, qa = this._qa || (this._qa = new THREE.Quaternion()), qr = this._qr || (this._qr = new THREE.Quaternion());
+        const yAchse = this._yAchse || (this._yAchse = new THREE.Vector3(0, 1, 0)), ziel = this._ziel || (this._ziel = new THREE.Vector3());
+        let n = 0;
+        for (const st of this.strohStellen) {
+          let je = 0;
+          for (const b of st.ballen) {
+            if (je++ >= 4) break;
+            // Grundlage: y-Achse → Tangente (liegt), dann um die Tangente rollen
+            ziel.set(b.tx, 0, b.tz).normalize();
+            qa.setFromUnitVectors(yAchse, ziel);
+            qr.setFromAxisAngle(ziel, b.winkel);
+            q.multiplyQuaternions(qr, qa);
+            if (b.kipp > 0) {
+              // Kippen um die Querachse (Normale) bis zu 90°: Achse zeigt dann nach oben
+              achse.set(b.nx, 0, b.nz).normalize();
+              qr.setFromAxisAngle(achse, -b.kipp * Math.PI / 2);
+              q.premultiply(qr);
+            }
+            v.set(b.x, b.y, b.z); sk.set(b.radius, b.breite, b.radius);
+            m4.compose(v, q, sk);
+            m.setMatrixAt(n++, m4);
+          }
+        }
+        m.count = n;
+        m.instanceMatrix.needsUpdate = true;
+      }
       const tr = this._tropfen;
       this._fontaenen.forEach((F, k) => {
         const d = F.d, z = this.duesenZustand(d, t);

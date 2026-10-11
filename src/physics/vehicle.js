@@ -6,6 +6,9 @@
 // (vQuer). Lenken dreht das Auto abhängig vom Tempo; der Grip baut die
 // Seitwärtsgeschwindigkeit wieder ab (Driften bei wenig Grip).
 // Keine Abhängigkeit von Three.js, damit Node-Tests möglich sind.
+//
+// Runde 4: optionales 4. Argument `umwelt` von schritt() (Wetter/Wind aus src/world/wetter.js):
+// { gripFaktor, bremsFaktor, windX, windZ } – fehlt es, rechnet alles exakt wie vorher.
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -31,6 +34,9 @@
         wendigkeit: 1.9, grip: 0.9, masse: 1400, laenge: 4.4, breite: 1.8,
       }, daten);
       this.gripBonus = 1;        // Faktor auf die Haftung (KI "unschlagbar" setzt 1.05)
+      this.umweltGrip = 1;       // Runde 4: Wetter-Faktor auf die Haftung (aus umwelt.gripFaktor, gilt auch für die KI-Planung)
+      this.windSeite = 0;        // Runde 4: Seitenwind relativ zum Auto −1..1 (> 0 = drückt nach rechts), für das HUD
+      this.windLaengs = 0;       // Runde 4: > 0 Rückenwind, < 0 Gegenwind (−1..1)
       this.x = 0; this.z = 0; this.y = 0;
       this.heading = 0;          // 0 = Richtung -z (nach "vorne" in Three.js)
       this.vLaengs = 0;          // m/s, negativ = rückwärts
@@ -117,11 +123,28 @@
      * @param {number} dt Zeit in Sekunden (fest, z. B. 1/60)
      * @param {{gas:number,bremse:number,lenkung:number}} s Steuerbefehle (lenkung: links negativ)
      * @param {object} [hilfe] Fahrhilfe { lenkhilfe, bremshilfe, tangente:{tx,tz}, seitenabstand, zieltempo }
+     * @param {object} [umwelt] Runde 4 – Wetter/Wind { gripFaktor, bremsFaktor, windX, windZ } (windX/Z in Stufen 0..5,
+     *   Richtung, in die der Wind weht). Fehlt es: Haftung/Bremsen unverändert, kein Wind.
      */
-    schritt(dt, s, hilfe) {
+    schritt(dt, s, hilfe, umwelt) {
       const d = this.daten;
       const ug = R.config.physik.untergrund[this.untergrund] || R.config.physik.untergrund.strasse;
-      const grip = Math.min(1, d.grip * ug.grip * this.gripBonus);
+      // Runde 4: Wetter wirkt auf die Haftung (auch drehrateMax/querBeschleunigungMax über gripGesamt)
+      this.umweltGrip = umwelt && umwelt.gripFaktor !== undefined ? umwelt.gripFaktor : 1;
+      const bremsFaktor = umwelt && umwelt.bremsFaktor !== undefined ? umwelt.bremsFaktor : 1;
+      // Wind relativ zum Auto (Stufen): seit > 0 = weht nach rechts, laengs > 0 = Rückenwind
+      let windSeit = 0, windLaengs = 0;
+      if (umwelt && (umwelt.windX || umwelt.windZ)) {
+        const r0 = this.richtung(), q0 = this.rechts();
+        windSeit = umwelt.windX * q0.x + umwelt.windZ * q0.z;
+        windLaengs = umwelt.windX * r0.x + umwelt.windZ * r0.z;
+      }
+      const W = R.config.wind || { seitK: 0, gierK: 0, vMaxJeStufe: 0, staerkeMax: 5 };
+      this.windSeite = windSeit / (W.staerkeMax || 5);
+      this.windLaengs = windLaengs / (W.staerkeMax || 5);
+      // Gegen-/Rückenwind verschiebt das Höchsttempo (±3 % je Stufe); ohne Wind exakt d.vMax
+      const vMaxWind = windLaengs ? d.vMax * (1 + W.vMaxJeStufe * windLaengs) : d.vMax;
+      const grip = Math.min(1, d.grip * ug.grip * this.gripBonus * this.umweltGrip);
       s = s || {};
       // --- Lenkung: kleine Totzone NUR auf die Eingabe (Gamepad-Rauschen), sanft skaliert;
       //     die Fahrhilfe kommt danach, damit ihre feinen Korrekturen nicht verschluckt werden ---
@@ -143,12 +166,12 @@
       const P = R.config.physik;
       let a = 0;
       const gas = s.gas || 0, bremse = s.bremse || 0;
-      const vRel = this.vLaengs / d.vMax;
+      const vRel = this.vLaengs / vMaxWind;
       if (gas > 0 && this.vLaengs >= -0.5) {
         a += d.beschleunigung * gas * (1 - P.kraftAbfall * Math.max(0, vRel)) * (0.6 + 0.4 * ug.grip);
       }
       if (bremse > 0) {
-        if (this.vLaengs > 0.5) a -= d.bremsen * bremse;                 // bremsen
+        if (this.vLaengs > 0.5) a -= d.bremsen * bremse * bremsFaktor;   // bremsen (Runde 4: × Wetter)
         else if (gas === 0) a -= Math.min(6, d.beschleunigung) * 0.8 * bremse;   // rückwärts (nach Stillstand)
       }
       const luft = Math.max(0, (1 - P.kraftAbfall - P.endKraft) * d.beschleunigung - 0.6);
@@ -164,9 +187,10 @@
       if (this.vLaengs > 0 && vNeu < 0 && bremse > 0 && gas === 0) vNeu = 0;
       // Abseits ist das Höchsttempo deutlich niedriger (Gras ≤ 90 km/h, Sand ≤ 79 km/h).
       // Darüber wird kräftig, aber nicht schlagartig abgebremst.
-      const vMaxHier = this.vMaxAuf(this.untergrund);
+      let vMaxHier = this.vMaxAuf(this.untergrund);
+      if (windLaengs) vMaxHier *= vMaxWind / d.vMax;          // Runde 4: Wind verschiebt auch den Untergrund-Deckel
       if (vNeu > vMaxHier) vNeu = Math.max(vMaxHier, Math.min(vNeu, vAlt - P.abseitsBremsen * dt));
-      vNeu = Math.max(-d.rueckwaertsMax, Math.min(d.vMax, vNeu));
+      vNeu = Math.max(-d.rueckwaertsMax, Math.min(vMaxWind, vNeu));
       this.vLaengs = vNeu;
 
       // --- Drehung (Arcade): Drehrate in rad/s. Langsam begrenzt die Wendigkeit, schnell die
@@ -183,6 +207,12 @@
         // die selbst begrenzt ist (kein Wegdrehen bei hohem Tempo).
         // vQuer > 0 = nach rechts. Rechtskurve (drehrate > 0) → nach links (vQuer sinkt).
         this.vQuer -= this._querBeschl * (1 - grip) * 0.4 * dt;
+      }
+      // Runde 4: Seitenwind – schiebt das Auto seitlich (vQuer) und dreht es leicht mit (Lenkversatz),
+      // beides ∝ Stufe × Tempo. Wer nicht gegenlenkt, wird zur Seite getragen.
+      if (windSeit && this.vLaengs > 1) {
+        this.vQuer += W.seitK * windSeit * this.vLaengs * dt;
+        this.heading -= W.gierK * windSeit * this.vLaengs * dt;     // heading kleiner = nach rechts
       }
       // Grip baut Drift ab
       const dampf = Math.exp(-(2.5 + 9 * grip) * dt);
@@ -208,7 +238,7 @@
     gripGesamt(untergrund) {
       const U = R.config.physik.untergrund;
       const ug = U[untergrund || this.untergrund] || U.strasse;
-      return Math.min(1, this.daten.grip * ug.grip * this.gripBonus);
+      return Math.min(1, this.daten.grip * ug.grip * this.gripBonus * this.umweltGrip);
     }
 
     /**

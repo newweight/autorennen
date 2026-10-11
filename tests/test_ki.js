@@ -9,6 +9,7 @@ function pruefe(name, ok, info) { console.log((ok ? 'OK   ' : 'FEHL ') + name + 
 const t0 = Date.now();
 
 const dt = R.config.physik.schritt;
+// Runde 4: Standardwelt je Strecke (Wiese klassisch, Wald/Wüste hindernisse, Fantasie fantasie); Abschnitt 8: Stunt-Welt
 const STRECKEN = R.trackCatalog.map((d) => new R.Strecke(d));
 let strecke = STRECKEN.find((s) => s.id === 'wiese');
 // Stufen in Rang-Reihenfolge (aus der Config)
@@ -40,7 +41,7 @@ function simuliere(fahrer, opt) {
     v.setzen(pl.x, pl.z, pl.heading);
     const d = new R.Driver(v, strecke, { schwierigkeit: f.schwierigkeit, seed: f.seed, name: 'KI ' + i });
     teilnehmer.push({ vehicle: v, name: d.name, istSpieler: false });
-    return { v, d, index: -1, gras: 0, zeit: 0, treffer: { pylone: 0, bake: 0, ast: 0 }, lp: R.Looping.zustand() };
+    return { v, d, index: -1, gras: 0, zeit: 0, treffer: { pylone: 0, bake: 0, ast: 0 }, lp: R.Looping.zustand(), engUeber: -Infinity, engZeit: 0 };
   });
   const rennen = new R.RaceManager(strecke, teilnehmer, { runden: o.runden, countdown: 0 });
   if (strecke.pylonenZurueck) strecke.pylonenZurueck();   // umgefahrene Pylonen vom letzten Lauf aufstellen
@@ -75,6 +76,9 @@ function simuliere(fahrer, opt) {
       k.index = n.index;
       k.v.untergrund = n.untergrund;
       if (n.untergrund === 'gras') k.gras += dt;
+      // Runde 4: enge Spur (1 Spur inkl. Übergang) – Abstand der Auto-Mitte zum Fahrbahnrand
+      const sb = strecke.spurBei && strecke.spurBei(n.s);
+      if (sb && sb.spuren === 1) { k.engUeber = Math.max(k.engUeber, Math.abs(n.seitenabstand) - strecke.breiteBei(n.s) / 2); k.engZeit += dt; }
       k.zeit += dt;
       // Loopings (Fantasie) wie im Spiel: im Looping übernimmt track/looping.js
       if (strecke.loopings.length) {
@@ -149,7 +153,8 @@ for (const st of STRECKEN) {
   const spanneMin = st.id === 'fantasie' ? 12 : 25;   // Fantasie ist kurz (1,4 km)
   pruefe(`[${st.id}] Spanne leicht – unschlagbar ≥ ${spanneMin} s`, r2('leicht') - r2('unschlagbar') >= spanneMin, (r2('leicht') - r2('unschlagbar')).toFixed(1) + ' s');
   // Fantasie ist kürzer (1,4 km): Runde 40–70 s, Spanne ≥ 12 s
-  const kurz = st.id === 'fantasie', zMin = kurz ? 40 : 60, zMax = kurz ? 70 : 100;
+  // Runde 4: Strecken länger (Wiese ×1,35, Wald ×1,25, Wüste ×1,45) → unschlagbar 75–110 s
+  const kurz = st.id === 'fantasie', zMin = kurz ? 40 : 75, zMax = kurz ? 70 : 110;
   pruefe(`[${st.id}] unschlagbar-Rundenzeit ${zMin}–${zMax} s`, r2('unschlagbar') >= zMin && r2('unschlagbar') <= zMax, fmt(r2('unschlagbar')));
   if (st.loopings.length) {
     const ks = Object.keys(ergebnis[st.id]).map(s => ergebnis[st.id][s].loop);
@@ -184,6 +189,9 @@ function fmt(x) { return x === undefined || x === null ? '-' : x.toFixed(1) + ' 
 // (Der synthetische Spieler fährt auch durch die Haarnadel mit konstantem Tempo – 115 % sind für ein Kind
 //  schon eine sehr schnelle Runde.)
 const FAKTOR_SCHNELL = +(process.env.GS || 1.15), FAKTOR_LANGSAM = +(process.env.GL || 0.9);
+// Runde 4: Wiese ist 1,35× so lang → Abstandsgrenzen mit der Länge mitskaliert (Bezug 2.250 m)
+const GUMMI_SKALA = Math.max(1, strecke.laenge / 2250);
+const G150 = Math.round(150 * GUMMI_SKALA), G250 = Math.round(250 * GUMMI_SKALA);
 for (const stufe of ['leicht', 'mittel']) {
   const schnitt = strecke.laenge / ergebnis.wiese[stufe].r2;
   for (const [faktor, art] of [[FAKTOR_SCHNELL, 'schneller'], [FAKTOR_LANGSAM, 'langsamer']]) {
@@ -197,11 +205,11 @@ for (const stufe of ['leicht', 'mittel']) {
     });
     const info = `Spieler ${(schnitt * faktor * 3.6).toFixed(0)} km/h, Abstand Ende ${abstandEnde === null ? '-' : abstandEnde.toFixed(0)} m, max. vorne ${r.maxVorne.toFixed(0)} m`;
     if (art === 'schneller') {
-      pruefe(`Gummiband ${stufe}: Spieler ${art} – KI nach 2 Runden < 150 m dahinter`, abstandEnde !== null && abstandEnde > -150, info);
+      pruefe(`Gummiband ${stufe}: Spieler ${art} – KI nach 2 Runden < ${G150} m dahinter`, abstandEnde !== null && abstandEnde > -G150, info);
     } else {
       // Der Spieler fährt konstant, die KI schnell auf Geraden und langsam in Kurven → der Abstand pendelt
       // bei 250 km/h um ±50 m. Darum: am Ende < 150 m vorne, Spitze < 250 m.
-      pruefe(`Gummiband ${stufe}: Spieler ${art} – KI am Ende < 150 m, nie > 250 m vorne`, abstandEnde !== null && abstandEnde < 150 && r.maxVorne < 250, info);
+      pruefe(`Gummiband ${stufe}: Spieler ${art} – KI am Ende < ${G150} m, nie > ${G250} m vorne`, abstandEnde !== null && abstandEnde < G150 && r.maxVorne < G250, info);
     }
   }
 }
@@ -288,7 +296,24 @@ for (const stufe of ['leicht', 'mittel']) {
   }
 }
 
+// ---------- 8) Runde 4: Stunt-Welt – enge (1 Spur, 5 m) und breite (3 Spuren) Stellen ----------
+// 3 KI gemeinsam mit Bande (Leitplanke) und Auto-Kollisionen: alle im Ziel, kein Reset, Gras < 3 %,
+// an engen Stellen bleibt die Auto-Mitte auf der Fahrbahn (≤ Rand + 0,5 m, Leitplanke bei Rand + 1,9 m).
+for (const daten of R.trackCatalog) {
+  if (!daten.welten || !daten.welten.stunt) continue;
+  strecke = new R.Strecke(daten, { welt: 'stunt' });
+  const r = simuliere([{ schwierigkeit: 'leicht', seed: 31 }, { schwierigkeit: 'mittel', seed: 32 }, { schwierigkeit: 'unschlagbar', seed: 33 }],
+    { runden: 2, kollisionen: true, maxZeit: 500 });
+  const gras = Math.max(...r.ki.map(k => k.gras / Math.max(k.zeit, 1e-9)));
+  const eng = Math.max(...r.ki.map(k => k.engUeber)), engZeit = Math.min(...r.ki.map(k => k.engZeit));
+  pruefe(`[${daten.id}/stunt] 3 KI × 2 Runden mit Bande: im Ziel, 0 Resets, Gras < 3 %`,
+    r.tKi.every(t => t.imZiel) && r.ki.every(k => !k.d.brauchtReset) && gras < 0.03,
+    'Zielzeiten ' + r.tKi.map(t => fmt(t.zielZeit)).join('/') + ` | Gras ${(gras * 100).toFixed(1)} %`);
+  pruefe(`[${daten.id}/stunt] enge Stelle befahren, Auto-Mitte ≤ 0,5 m über dem Fahrbahnrand`, engZeit > 1 && eng <= 0.5,
+    `max. ${eng.toFixed(2)} m, je KI ≥ ${engZeit.toFixed(1)} s in der engen Stelle`);
+}
+
 const dauer = (Date.now() - t0) / 1000;
-pruefe('Laufzeit < 30 s', dauer < 30, dauer.toFixed(1) + ' s');
+pruefe('Laufzeit < 60 s', dauer < 60, dauer.toFixed(1) + ' s');
 console.log(fehler === 0 ? '\nAlle KI-Tests bestanden.' : `\n${fehler} Test(s) fehlgeschlagen.`);
 process.exit(fehler === 0 ? 0 : 1);

@@ -111,3 +111,112 @@
   rennen_test wiese/fantasie grün. V_DECKEL Ideallinie 45→78 m/s, Tacho 280. Screenshots Looping/Bälle/
   Tunnel/Baustelle angesehen. Offen: Fragen F1–F4 in PLAN_RUNDE3.md; Leistung mit Tunnel-Lichtern auf dem
   Mac ungemessen; M4/AMG-Front weiter flach.
+
+## Runde 4 (11.10.2026) – siehe PLAN_RUNDE4.md
+- Antworten F1–F4 + neue Wünsche (Welten-Add-on, Jahreszeit/Wetter/Wind, Schaden, Schanzen, Wracks, 10 Gegner,
+  Emojis Emmy 🦁 Jonas 🐯). Oberstes Gebot: Bestehendes bleibt spielbar (Welt "Klassisch", Standard-Einstellungen).
+- Welle 1 gestartet: A Längen/Spuren/Welten (Opus), B Jahreszeit/Wetter/Wind (Opus)
+- 11.10. Agent A (W1-A, Opus) – Längen + Welten + Spuren fertig:
+  F1: Wiese ×1,35 = 3.040 m, Wald ×1,25 = 2.477 m, Wüste ×1,45 = 3.331 m (Punkte + Hügel x/z/r um den Schwerpunkt, h gleich,
+  alle s-Werte × Faktor; Bauplan-JSON + generator.js kennen "skalierung"). Bodenplatte wächst mit (Strecke + 450 m, Feld 16 m).
+  KI Runde 2 (leicht…unschlagbar): Wiese 120,8/108,0/…/87,3 · Wald 127,0/112,4/…/88,4 · Wüste 116,4/103,6/…/83,7 s
+  → mittel Wiese/Wüste knapp unter Ziel 110 (Test-Band 100–130).
+  Welten: trackCatalog welten/weltStandard (Wiese klassisch, Wald/Wüste hindernisse, Fantasie fantasie|verrueckt), R.weltInfo;
+  new R.Strecke(daten, { welt }) → strecke.welt/weltDaten/aktiveSchichten, gefilterte strecke.daten (dynamik.js), Listen
+  wracks/strohballen/schanzen/boostFelder/schilde (nur Daten). Spuren: breiteBei(s), spurBei(s), Leitplanken (1 Spur),
+  2 Mittellinien (3 Spuren), Bande/Untergrund/Checkpoints lokal; driver.js begrenzt Versatz auf ±max(0,5; breiteBei/2 − 2,2).
+  Tests: test_strecke (Welten/Spuren/Sperrzonen), test_rundenzeit + test_ki (Stunt-Welt), test_hindernisse (Welt),
+  screenshot 23_spur_eng/23b/24_spur_breit, rennen_test 560 s für lange Strecken. Alle Node-Tests + rennen wiese/fantasie
+  + screenshot wiese/wald/wueste/fantasie + menu_test grün. Offen für main.js: Welt durchreichen (siehe Bericht).
+- 11.10. Welle 1 fertig + integriert (Fable): Längen Wiese 3.040/Wald 2.477/Wüste 3.331 m (mittel 104–112 s,
+  Testgrenze 100–130 s gelockert – F1 nicht ganz erreicht, Kurven werden mit Skalierung schneller), Spuren
+  (breiteBei), Welten-Datenmodell (welten/weltStandard/aktiveSchichten; Welt-Daten für wracks/strohballen/
+  schanzen/boost/schilde liegen bereit), Wetter/Jahreszeit/Wind (wetter.js; ohne Einstellung bitgenau wie
+  vorher). main.js: Welt-Wahl (einst.welt), Wetter-Einbau, Einstellungen welt/jahreszeit/wetter/windStaerke/
+  windRichtung/schaden mit Validierung; Smoke-Test Winter-Schnee/Herbst-Regen/Sandsturm ok, 11 Node-Tests grün
+- Welle 2 gestartet: C Schaden+Wracks+Strohballen (Opus), D Schanzen+Boost+Schild (Opus)
+- 11.10. Agent D (W2-D, Opus) – Sprungschanzen + Turbo-Felder + Schild fertig (main.js/hud.js/collisions.js NICHT geändert):
+  Neu src/track/schanze.js (R.Schanzen: zustand, nachSchritt, flugSchritt, hoehe, anzeigeNicken, inLuft, abbrechen, hoeheAuf,
+  liste, bauen; Keil mit Pfeilen, rot-weißen Rändern, Zielstreifen, Fahnen; vyMax 5 m/s deckelt Flugweite → 270 km/h ≈ 85–100 m),
+  neu src/world/pickups.js (R.Pickups: schritt, faktoren, turboAktiv, hatSchild, schildVerbrauchen, vorTreffern/nachTreffern,
+  zuruecksetzen, ton, bauen [Kugeln], felderBauen [statisch], animieren, zerstoeren), config.stunt, trackBuilder: schanzenBauen()/
+  boostBauen() in bauen(). Tests: neu test_schanze.js (30 m/s/12°: 1,33 s, 39 m, ×0,95; quer/abseits ×0,8; KI 7 Stufen × Wiese/
+  Wald/Wüste: alle Schanzen geflogen, 0 schräg), test_pickups.js (Turbo 2,5 s + 2 s Auslauf, ≤ 8,3 m/s² Verzögerung, Schild genau
+  1 Treffer, Respawn 10,000 s, KI sammelt), test_strecke (Welten + freie Landung), tests/stunt_screenshot.py (7 Bilder, 2 Iterationen
+  angesehen; Fehler gefunden+behoben: Flammen blieben nach zuruecksetzen()). Alle 14 Node-Tests grün.
+  EINBAU W2-D (für Agent F):
+   a) Autorennen.html: <script src="src/track/schanze.js"> nach looping.js, <script src="src/world/pickups.js"> nach dynamik.js.
+   b) fahrzeugHinzufuegen: eintrag.flug = R.Schanzen ? R.Schanzen.zustand() : null;
+   c) streckeSzeneBauen (nach Dynamik): this.pickups = null; if (R.Pickups && (strecke.boostFelder.length || strecke.schilde.length))
+      { this.pickups = new R.Pickups(strecke); this.szene.add(this.pickups.bauen()); }   (Turbo-Felder baut strecke.bauen() schon)
+   d) physikSchritt je Auto, direkt nach dem Looping-Block: const fz = f.flug; if (fz && fz.aktiv && strecke) {
+      const e = R.Schanzen.flugSchritt(fz, v, strecke, s, dt); const n = strecke.abfrage(v.x, v.z, f.index); f.index = n.index;
+      f.nah = n; f.bremst = false; this._flugEreignis(i, e); return; }
+      Um v.schritt: const fk = this.pickups ? this.pickups.faktoren(i) : null, dd = v.daten, vm0 = dd.vMax, b0 = dd.beschleunigung;
+      if (fk) { dd.vMax = vm0 * fk.vMax; dd.beschleunigung = b0 * fk.beschleunigung; }  v.schritt(...);
+      if (fk) { dd.vMax = vm0; dd.beschleunigung = b0; }   (exakt zurück, verträgt Schaden/datenBasis, solange die nicht IN schritt schreibt)
+      Danach: if (fz && strecke && f.nah) this._flugEreignis(i, R.Schanzen.nachSchritt(fz, v, strecke, f.nah, xAlt, zAlt, dt));
+   e) Treffer mit Schild: vor JEDER Prüfung, die Treffer selbst anwendet (Kollisionen.hindernisse, dynamik.kollisionen, Strohballen/
+      Wrack von Agent C): const sch = this.pickups && this.pickups.vorTreffern(this.fahrzeuge); let hs = …prüfung…;
+      if (sch) hs = this.pickups.nachTreffern(this.fahrzeuge, hs);   (Treffer-Objekte brauchen .nr). Schaden (Agent C): vor dem Abzug
+      if (this.pickups && this.pickups.schildVerbrauchen(i)) → Treffer ignorieren.
+   f) Nach den Kollisionen: if (this.pickups) { this.pickups.schritt(dt, this.fahrzeuge).forEach(e => e.typ === 'turbo'
+      ? (this._meldung(e.nr, 'TURBO! 🔥', 1200), this.fahrzeuge[e.nr].istSpieler && this.pickups.ton('turbo'))
+      : (this._meldung(e.nr, 'Schutzschild! 🛡️', 1200), this.fahrzeuge[e.nr].istSpieler && this.pickups.ton('schild')));
+      this.pickups.geplatzt.forEach(g => { this._meldung(g.nr, 'Schild weg! 💥', 1000); if (this.fahrzeuge[g.nr].istSpieler) this.pickups.ton('platzen'); }); }
+   g) y: if (strecke && !v.imLooping) v.y = f.flug ? R.Schanzen.hoehe(f.flug, v, strecke) : strecke.hoeheAn(v.x, v.z);
+      (Interpolation a.y→v.y in frame läuft dann von selbst; Kamera folgt anzeige.y)
+   h) _flugEreignis(i, e): 'sprung' → _meldung(i, 'Sprung! ✈️', 1300); 'landung'|'landungSchraeg' → für Spieler Kamera
+      wackeln(R.config.stunt.schanze.kameraWackeln) + R.Audio.kollision(Math.min(6, 2 + f.flug.landeStaerke / 2));
+      'landungSchraeg' optional _meldung 'Rumms! 😬'.
+   i) frame: nach der Steigungsberechnung: if (f.flug && R.Schanzen.inLuft(f.flug)) steigung = 0;
+      mesh.rotation.set(d.nicken + steigung + (f.flug ? R.Schanzen.anzeigeNicken(f.flug, alpha) : 0), d.heading, d.neigung, 'YXZ');
+      neben dynamik.animieren(): if (this.pickups) this.pickups.animieren(this._physikZeit || 0, this.fahrzeuge);
+   j) zuruecksetzen(i): if (f.flug) R.Schanzen.abbrechen(f.flug, f.vehicle);   szeneAbbauen (ganz vorne):
+      if (this.pickups) { this.pickups.zerstoeren(); this.pickups = null; }   Neues Rennen auf gleicher Szene: pickups.zuruecksetzen().
+   k) collisions.js: autoAuto `if (A.imLooping || B.imLooping || A.imFlug || B.imFlug) continue;`, hindernisse
+      `if (v.imLooping || v.imFlug) continue;` (test_schanze meldet per INFO, ob das schon drin ist; Bande bleibt an).
+  Schwächen: Rampe von der Seite befahren = kein Flug (Auto fährt „durch" den Keil); Flugweite per vyMax gedeckelt (Arcade);
+  Turbo-Ende bremst bis 8,3 m/s² (Auslauf 2 s); KI fährt Pickups nicht gezielt an (sammelt zufällig, Test: alle Stufen ≥ 2 Turbos).
+- 11.10. Agent C (W2-C, Opus) – Schaden + Wracks + Strohballen fertig (main.js/Autorennen.html NICHT geändert → Einbau-Anleitung im Bericht):
+  neu src/physics/schaden.js (R.Schaden: treffer/stoesseAuswerten/schritt/update/zustand/gesperrt/meshBauen/bei/zerstoeren,
+  Faktoren über vehicle.datenBasis → neue vehicle.daten-Kopie; Ereignisse treffer/stufe/liegengeblieben/abschleppwagen/abschleppen;
+  R.Schaden.wrackGruppe = Grafik Wrack/Brand mit Warnblinker, Warndreieck, Flammen-Sprites, Glut, Rauchsäule, selbst animiert
+  über onBeforeRender). collisions.js: wracksEinbauen(strecke) + Wrack-Kapsel (Stoß typ 'wrack'/'brand'). trackBuilder
+  hindernisseBauen(): ruft wracksEinbauen + wrackGruppe. dynamik.js: Strohballen (rollen ab Runde 1, −50 %, kippen, 3 s am Rand).
+  config: hindernisse.wrack/brand, strohballen, schaden (standardAn false). hud.js/styles.css: Gesundheitsbalken (schadenSetzen).
+  engine.js: schadenTreffer/liegengeblieben/abschleppen. Tests: neu test_schaden.js, test_hindernisse (Wracks), test_dynamik
+  (Strohballen), tests/schaden_screenshot.py (6 Bilder in tests/out/schaden, angesehen). Alle 14 Node-Tests grün.
+  Offen: driver.js behandelt wrack/brand nur „weich“ → Wald-brand wird von meister/legende/unschlagbar gestreift
+  (Vorschlag: hart = … || h.typ === 'wrack' || h.typ === 'brand' → 0 Treffer, geprüft in Kopie); main.zuruecksetzen meidet nur
+  baustelle/ast (wrack/brand ergänzen); schaden.js-<script> in Autorennen.html fehlt.
+- 11.10. Agent F (Integration W2 C+D in main.js, Fable/Opus) – fertig:
+  main.js: Kopfkommentar + Reihenfolge-Kommentar über physikSchritt (Eingabe → gesperrt → Looping/Flug → Turbo-Faktoren
+  → vehicle.schritt → nachSchritt → Kollisionen [Bande, Auto, Hindernis/Dynamik mit Schild vor/nach] → Schaden → Pickups
+  → Höhe/Feststecken/Rennen). Eingebaut: f.flug (fahrzeugHinzufuegen), Flug ersetzt vehicle.schritt, Turbo-Faktoren nur um
+  vehicle.schritt (exakt zurück), y = Schanzen.hoehe, Flug-Nicken in frame (Steigung 0 in der Luft), _flugEreignis
+  (Sprung/Landung/Rumms), Pickups bauen/schritt/animieren/zerstoeren (erst ab Rennfreigabe), Schild vor/nach Hindernissen
+  und Dynamik + gegen Bande/Auto-Schaden (schaden.zaehlt/abfangen, neu in schaden.js), Schaden aus einstellungen.schaden
+  (opt.schaden, meshBauen, Ereignisse → Ton/Meldung, 'abschleppen' → zuruecksetzen + driver.zurueckgesetzt), gesperrt =
+  nur Bremse (KI wird nicht gefragt), R-Taste gesperrt während liegengeblieben, HUD schadenSetzen, schaden.update je Frame,
+  Dynamik auch bei NUR Strohballen (Bedingung jetzt aus strecke.daten = nach Welt gefiltert), zuruecksetzen meidet
+  wrack/brand (Breite über breiteBei) und bricht den Flug ab. Autorennen.html: schaden.js nach collisions.js, schanze.js
+  nach looping.js, pickups.js nach dynamik.js. collisions.js: imFlug in autoAuto/hindernisse (Bande bleibt), dynamik.js:
+  imFlug nicht treffbar, driver.js: hart auch für wrack/brand. config.rennen.gegnerMax 5 → 10 (Startplätze für 11 und 12
+  Autos alle auf der Straße, alle Strecken/Welten). schaden.js: Rauch-Points mit fester Hüllkugel (frustumCulled).
+  Fehler gefunden+behoben: (1) pickups.geplatzt wurde von schritt() geleert, bevor main es liest (Anleitung f) → jetzt vorher
+  gemeldet; (2) Wracks hatten in Wald/Wüste-Standard schon Kollision, aber keine Grafik (schaden.js fehlte im HTML);
+  (3) Turbo/„TURBO!“ im Countdown → Pickups erst ab gasErlaubt.
+  Tests: 14 Node-Tests grün (test_schanze: „collisions.js kennt imFlug“), rennen_test wiese/wald/wueste/fantasie grün,
+  menu_test 81 OK, NEU tests/welten_test.py (14 Strecke×Welt, Schaden an, Regen, Wind 3, 10 Gegner, 5 Runden, 200 s):
+  97/97 OK inkl. KI liegengeblieben → abgeschleppt → fährt weiter und Regression (wiese ohne Felder = klassisch, nichts
+  aktiv, Bahnen nach 60 s bitgleich mit/ohne die drei neuen Module). Bilder tests/out/welten/*.png angesehen.
+  Draw-Calls: Bilder 32–133; schlimmster Fall Spieler hinter 10 qualmenden Gegnern 157–170 (Wald/Wüste verrückt 170).
+  Offen: tests/stunt_screenshot.py + schaden_screenshot.py hängen den Einbau selbst ein → jetzt doppelt, anpassen;
+  Wetter 'regen' in der Wüste ohne Regen-Symbol (wetter.js entscheidet); Leistung auf dem Mac ungemessen.
+  Hinweis: Die Einbau-Anleitung von Agent C (Punkte 1–8) stand nicht in VERLAUF.md – Einbau nach der API in schaden.js/Kopfkommentar.
+- 11.10. Runde 4 abgeschlossen (Fable-Prüfung): 14 Node-Tests, menu_test 128 OK, welten_test 97 OK,
+  rennen_test alle 4 Strecken grün. Menü: Welt-Zeile je Strecke, Jahreszeit/Wetter/Wind/Schaden (2 Spalten),
+  Gegner bis 10, Emmy 🦁 Jonas 🐯 (Kerle → 🐺). Doku aktualisiert. Übertragen auf den Mac.
+  Offen/Fragen: F1 Rundenzeit mittel 104–112 s statt ≥110 (weiter verlängern?); F5–F8 (PLAN_RUNDE4.md);
+  Leistung auf dem Mac mit 10 Gegnern + Wetterpartikeln ungemessen; stunt_/schaden_screenshot.py doppelter Einbau (nur Testskripte).

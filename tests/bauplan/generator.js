@@ -51,9 +51,17 @@ const erg = laufen(laengen);
 let pts = erg.pts;
 // letzter Punkt == erster -> weg
 if (Math.hypot(pts[pts.length - 1][0], pts[pts.length - 1][1]) < 0.5) pts.pop();
-const huegel = cfg.huegel || [];
+// Runde 4: "skalierung": { faktor, mitte: [x, z] } → Punkte und Hügel (x, z, r) um die Mitte skalieren
+// (Wald ×1,25, Wüste ×1,45; Mitte = Schwerpunkt der Kontrollpunkte vor dem Skalieren). Höhen h bleiben.
+let huegel = cfg.huegel || [];
+if (cfg.skalierung) {
+  const f = cfg.skalierung.faktor, [mx, mz] = cfg.skalierung.mitte;
+  pts = pts.map(([x, z]) => [mx + f * (x - mx), mz + f * (z - mz)]);
+  huegel = huegel.map(g => ({ x: mx + f * (g.x - mx), z: mz + f * (g.z - mz), r: g.r * f, h: g.h }));
+}
 const hoehe = (x, z) => huegel.reduce((s, g) => s + g.h * Math.exp(-((x - g.x) ** 2 + (z - g.z) ** 2) / (2 * g.r * g.r)), 0);
 const r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
 const punkte = pts.map(([x, z]) => [r1(x), r2(hoehe(r1(x), r1(z))), r1(z)]);
 const endH = erg.h * 180 / Math.PI;
-console.log(JSON.stringify({ laengen: laengen.map(r1), endWinkel: r1(endH), schluss: [r1(erg.x), r1(erg.z)], punkte }));
+console.log(JSON.stringify({ laengen: laengen.map(r1), endWinkel: r1(endH), schluss: [r1(erg.x), r1(erg.z)],
+  huegel: cfg.skalierung ? huegel.map(g => ({ x: r1(g.x), z: r1(g.z), r: r1(g.r), h: g.h })) : undefined, punkte }));

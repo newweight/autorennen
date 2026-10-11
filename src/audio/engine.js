@@ -8,6 +8,8 @@
 //   motorAnlegen(id, {spieler}) / motorUpdate(id, {tempo, vMax, gas, untergrund, abstand, dt})
 //   motorEntfernen(id) / motorAlleEntfernen() / motorStumm(bool)
 //   countdown(n) kollision(staerke) bande() runde() ziel(platz) menueKlick() bremsen(an)
+//   schadenTreffer(stufe) liegengeblieben() abschleppen()   (Runde 4, Schaden-System)
+//   wetter('regen'|'hagel'|'schnee'|'wind', an, staerke 0..1) / wetterAlleAus()   (Runde 4, Dauer-Geräusche)
 //   statistik()                   Zähler (aktive Nodes usw.) für Tests
 //
 // Aufbau: Motor-Stimmen (Sägezahn + Rechteck → Tiefpass) liegen in einem festen
@@ -55,6 +57,7 @@
       this._erzeugt = 0; this._aktiv = 0;
       this._suspendTimer = null;
       this._horcher = null;
+      this._wetterTon = {};           // Runde 4: art → { quellen, gain }
     }
 
     // ---------- Zustand ----------
@@ -465,6 +468,32 @@
       }
     }
 
+    /** Runde 4: Blech-Knirschen bei einem Schaden-Treffer; je höher die Stufe, desto tiefer und rauer. */
+    schadenTreffer(stufe) {
+      if (!this._bereit()) return;
+      const st = klemme(+stufe || 0, 0, 5);
+      this._stoss(0.16, 0.35, 'bandpass', 3200 - st * 350, 900, 4, 0);
+      this._ton(420 - st * 45, 160 - st * 15, 0.14, 'square', 0.07 + st * 0.012, 0.01);
+    }
+
+    /** Runde 4: Auto liegengeblieben – Motor stottert ab (drei Puffer) + trauriges „Wah-wah“. */
+    liegengeblieben() {
+      if (!this._bereit()) return;
+      for (let k = 0; k < 3; k++) this._stoss(0.09, 0.32 - k * 0.07, 'lowpass', 600, 180, 1, k * 0.16);
+      this._ton(330, 250, 0.4, 'sawtooth', 0.09, 0.55);
+      this._ton(250, 120, 0.8, 'sawtooth', 0.09, 0.95);
+    }
+
+    /** Runde 4: Abschleppwagen kommt – zweimal Hupe (zwei Töne) + kurzes Motorbrummen. */
+    abschleppen() {
+      if (!this._bereit()) return;
+      [0, 0.32].forEach((t) => {
+        this._ton(392, 392, 0.22, 'square', 0.08, t);
+        this._ton(494, 494, 0.22, 'square', 0.06, t);
+      });
+      this._ton(70, 95, 0.9, 'sawtooth', 0.12, 0.7);
+    }
+
     menueKlick() {
       if (!this._bereit()) return;
       this._ton(660, 990, 0.07, 'triangle', 0.3, 0);
@@ -479,6 +508,68 @@
       this._quietsch.gain.setTargetAtTime(ziel, this._ctx.currentTime, 0.05);
     }
   }
+
+  // ---------- Runde 4: Wetter-Geräusche (Dauer-Schleifen, nur Zusatz – Motor unverändert) ----------
+  /** Prassel-Puffer für Hagel: 2 s mit zufälligen kurzen Klicks (abklingendes Rauschen). */
+  Ton.prototype._prasselPuffer = function () {
+    if (this._prassel) return this._prassel;
+    const c = this._ctx, len = Math.floor(c.sampleRate * 2), p = c.createBuffer(1, len, c.sampleRate), d = p.getChannelData(0);
+    const klicks = 70, dauer = Math.floor(c.sampleRate * 0.012);
+    for (let k = 0; k < klicks; k++) {
+      const start = Math.floor(Math.random() * (len - dauer)), laut = 0.4 + Math.random() * 0.6;
+      for (let i = 0; i < dauer; i++) d[start + i] += (Math.random() * 2 - 1) * laut * Math.exp(-i / (dauer * 0.18));
+    }
+    this._prassel = p;
+    return p;
+  };
+
+  /**
+   * Wetter-Geräusch an/aus. regen: helles, breites Rauschen; schnee: sehr leises, dumpfes Rauschen;
+   * hagel: Prasseln (Klick-Schleife, Bandpass); wind: tiefes Rauschen, langsam moduliert (LFO auf Filter + Lautstärke).
+   * staerke 0..1 skaliert die Lautstärke. Mehrfach-Aufrufe ändern nur die Lautstärke.
+   */
+  Ton.prototype.wetter = function (art, an, staerke) {
+    if (!this._ctx || !this._effekte) return;
+    const c = this._ctx, t = c.currentTime, s = klemme(staerke === undefined ? 1 : +staerke, 0, 1);
+    const PEGEL = { regen: 0.16, schnee: 0.05, hagel: 0.22, wind: 0.2 };
+    let w = this._wetterTon[art];
+    if (!an) {
+      if (!w) return;
+      try { w.gain.gain.setTargetAtTime(0, t, 0.25); } catch (e) { /* egal */ }
+      w.quellen.forEach(q => { try { q.stop(t + 1.2); } catch (e) { /* egal */ } });
+      delete this._wetterTon[art];
+      return;
+    }
+    if (!PEGEL[art]) return;
+    if (!w) {
+      const quelle = this._n(c.createBufferSource());
+      quelle.buffer = art === 'hagel' ? this._prasselPuffer() : this._rausch;
+      quelle.loop = true;
+      const f = this._n(c.createBiquadFilter()), g = this._gain(0);
+      const quellen = [quelle], nodes = [quelle, f, g];
+      if (art === 'regen') { f.type = 'bandpass'; f.frequency.value = 2800; f.Q.value = 0.4; }
+      else if (art === 'schnee') { f.type = 'lowpass'; f.frequency.value = 700; f.Q.value = 0.5; }
+      else if (art === 'hagel') { f.type = 'bandpass'; f.frequency.value = 3200; f.Q.value = 1.2; }
+      else { f.type = 'lowpass'; f.frequency.value = 380; f.Q.value = 2.5; }
+      quelle.connect(f); f.connect(g);
+      if (art === 'wind') {        // Böen: LFO 0,13 Hz auf Filterfrequenz und Lautstärke
+        const lfo = this._n(c.createOscillator()), tief = this._gain(160), laut = this._gain(0.35), mod = this._gain(1);
+        lfo.frequency.value = 0.13; lfo.connect(tief); tief.connect(f.frequency);
+        g.connect(mod); mod.connect(this._effekte);
+        lfo.connect(laut); laut.connect(mod.gain);
+        lfo.start(t); quellen.push(lfo); nodes.push(lfo, tief, laut, mod);
+      } else g.connect(this._effekte);
+      quelle.start(t, Math.random() * 1.5);
+      quelle.onended = () => { this._aktiv -= nodes.length; nodes.forEach(n => { try { n.disconnect(); } catch (e) { /* egal */ } }); };
+      w = this._wetterTon[art] = { quellen, gain: g };
+    }
+    try { w.gain.gain.setTargetAtTime(PEGEL[art] * s, t, 0.6); } catch (e) { /* egal */ }
+  };
+
+  /** Alle Wetter-Geräusche ausblenden (Szene abbauen, Menü). */
+  Ton.prototype.wetterAlleAus = function () {
+    Object.keys(this._wetterTon || {}).forEach(art => this.wetter(art, false));
+  };
 
   R.AudioKlasse = Ton;
   R.Audio = new Ton();

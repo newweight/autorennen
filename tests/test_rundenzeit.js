@@ -5,6 +5,9 @@
 //    - Runde 2 (fliegend) streng monoton fallend von leicht → unschlagbar
 //    - Abstand leicht – unschlagbar ≥ 25 s je Runde (Kinder müssen spürbar gewinnen können)
 //    - unschlagbar höchstens 3 % langsamer als die "perfekte Fahrt" (b)
+//    Runde 4: Strecken länger (Wiese ×1,35, Wald ×1,25, Wüste ×1,45) → KI „mittel" 100–130 s/Runde (Ziel 110–130).
+//    Welten: Standardwelt (Wiese klassisch, Wald/Wüste hindernisse, Fantasie fantasie) mit allen Prüfungen,
+//    dazu die Stunt-Welt (enge/breite Spuren): im Ziel, abseits < 3 %, kein Reset, an engen Stellen auf der Fahrbahn.
 // b) "Perfekte Fahrt": Mittellinien-Fahrer (Pure-Pursuit-Lenkung) mit Ideallinien-Tempo 100 %
 //    (Driver.tempoProfil, gleiches Auto, ohne Bonus) – Referenz, bleibt auf Straße + Randstreifen.
 const { ladeModule } = require('./lade');
@@ -14,6 +17,8 @@ const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/track/spli
 const LP = R.Looping;
 // Erwartungen je Strecke (Spanne leicht – unschlagbar je Runde); Fantasie ist kurz (1,4 km)
 const SPANNE = { fantasie: 12 };
+// Runde 4: Rundenzeit KI „mittel" (Runde 2) je Strecke
+const MITTEL = { wiese: [100, 130], wald: [100, 130], wueste: [100, 130], fantasie: [50, 70] };
 
 const dt = R.config.physik.schritt;
 const nurId = process.argv[2];
@@ -31,19 +36,25 @@ function kiRunde(strecke, stufe) {
   const rennen = new R.RaceManager(strecke, [{ vehicle: v, name: 'KI', istSpieler: false }], { runden: 2, countdown: 0 });
   const d = new R.Driver(v, strecke, { schwierigkeit: stufe, seed: 7, name: 'KI' });
   const t = rennen.teilnehmer[0], lp = LP.zustand();
-  let index = -1, abseits = 0, zeit = 0, maxAbstand = 0, vMax = 0;
+  let index = -1, abseits = 0, zeit = 0, maxAbstand = 0, vMax = 0, engUeber = -Infinity;
   for (let k = 0; k < 60 * 500 && !t.imZiel; k++) {
     const s = d.steuerung(dt, { andere: [], spielerFortschrittMax: null, eigenerFortschritt: t.fortschritt, laeuft: true });
     const r = LP.fahrzeugSchritt(lp, v, strecke, s, dt, index);
     index = r.index;
     if (r.untergrund === 'gras' || r.untergrund === 'sand') abseits += dt;
-    if (!lp.aktiv) maxAbstand = Math.max(maxAbstand, Math.abs(strecke.spline.naechster(v.x, v.z, index).seitenabstand));
+    if (!lp.aktiv) {
+      const nn = strecke.spline.naechster(v.x, v.z, index);
+      maxAbstand = Math.max(maxAbstand, Math.abs(nn.seitenabstand));
+      // enge Spur (1 Spur, inkl. Übergang): wie weit ragt die Auto-Mitte über den Fahrbahnrand?
+      const sb = strecke.spurBei && strecke.spurBei(nn.s);
+      if (sb && sb.spuren === 1) engUeber = Math.max(engUeber, Math.abs(nn.seitenabstand) - strecke.breiteBei(nn.s) / 2);
+    }
     if (r.ereignis === 'gefallen') rennen.verfolgungSetzen(0, v.x, v.z);
     rennen.schritt(dt);
     zeit += dt;
     vMax = Math.max(vMax, v.vLaengs);
   }
-  return { r1: t.rundenzeiten[0], r2: t.rundenzeiten[1], imZiel: t.imZiel, abseits, anteil: abseits / zeit, maxAbstand, reset: d.brauchtReset, vMax,
+  return { r1: t.rundenzeiten[0], r2: t.rundenzeiten[1], imZiel: t.imZiel, abseits, anteil: abseits / zeit, maxAbstand, reset: d.brauchtReset, vMax, engUeber,
     loop: { geschafft: lp.geschafft, gefallen: lp.gefallen, zuLangsam: lp.zuLangsam } };
 }
 
@@ -84,9 +95,24 @@ function perfekteRunde(strecke) {
 const tabelle = [];
 for (const daten of R.trackCatalog) {
   if (nurId && daten.id !== nurId) continue;
-  const strecke = new R.Strecke(daten);
-  console.log('\n=== ' + daten.name + ' (' + strecke.laenge.toFixed(0) + ' m, Breite ' + strecke.breite + ' m) ===');
-  const zeile = { id: daten.id, laenge: strecke.laenge };
+  // Runde 4: zusätzlich die Stunt-Welt (enge und breite Spuren)
+  const welten = [daten.weltStandard].concat(daten.welten && daten.welten.stunt ? ['stunt'] : []);
+  for (const welt of welten) {
+  const strecke = new R.Strecke(daten, { welt });
+  console.log('\n=== ' + daten.name + ' / Welt ' + strecke.welt + ' (' + strecke.laenge.toFixed(0) + ' m, Breite ' + strecke.breite + ' m) ===');
+  const zeile = { id: daten.id + (welt === daten.weltStandard ? '' : '/' + welt), laenge: strecke.laenge };
+  if (welt !== daten.weltStandard) {
+    // Stunt-Welt: nur Sicherheit (enge Stellen), Zeiten für die Tabelle
+    for (const stufe of STUFEN) {
+      const e = kiRunde(strecke, stufe);
+      zeile[stufe] = e.r2;
+      console.log(`KI ${stufe.padEnd(11)} Runde 1 ${fmt(e.r1)}, Runde 2 ${fmt(e.r2)} | abseits ${(e.anteil * 100).toFixed(1)} % | enge Stelle: Mitte max. ${e.engUeber.toFixed(2)} m über dem Rand`);
+      pruefe(`[${zeile.id}] ${stufe}: 2 Runden im Ziel, abseits < 3 %, kein Reset, an engen Stellen auf der Fahrbahn (≤ 0,3 m über den Rand)`,
+        e.imZiel && e.anteil < 0.03 && !e.reset && e.engUeber <= 0.3, (e.anteil * 100).toFixed(1) + ' %, ' + e.engUeber.toFixed(2) + ' m');
+    }
+    tabelle.push(zeile);
+    continue;
+  }
   for (const stufe of STUFEN) {
     const e = kiRunde(strecke, stufe);
     zeile[stufe] = e.r2;
@@ -113,11 +139,14 @@ for (const daten of R.trackCatalog) {
   const unschl = z[z.length - 1];
   pruefe(`[${daten.id}] unschlagbar innerhalb 3 % der perfekten Fahrt`, unschl <= zeile.perfekt * 1.03,
     fmt(unschl) + ' vs ' + fmt(zeile.perfekt) + ' (' + ((unschl / zeile.perfekt - 1) * 100).toFixed(1) + ' %)');
+  const mz = MITTEL[daten.id];
+  if (mz) pruefe(`[${daten.id}] KI mittel ${mz[0]}–${mz[1]} s/Runde`, zeile.mittel >= mz[0] && zeile.mittel <= mz[1], fmt(zeile.mittel));
   tabelle.push(zeile);
+  }
 }
 console.log('\nRunde 2 (fliegend), Standard-Auto 240 km/h');
-console.log('Strecke  Länge  ' + STUFEN.map((s) => s.slice(0, 7).padStart(8)).join('') + '  perfekt');
-tabelle.forEach((z) => console.log(z.id.padEnd(8), (z.laenge.toFixed(0) + ' m').padEnd(6),
+console.log('Strecke        Länge  ' + STUFEN.map((s) => s.slice(0, 7).padStart(8)).join('') + '  perfekt');
+tabelle.forEach((z) => console.log(z.id.padEnd(14), (z.laenge.toFixed(0) + ' m').padEnd(6),
   STUFEN.concat(['perfekt']).map((s) => fmt(z[s]).padStart(8)).join('')));
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');
 process.exit(fehler ? 1 : 0);

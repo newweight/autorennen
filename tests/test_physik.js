@@ -179,5 +179,75 @@ for (const [name, staerke] of [['viel', 0.7], ['wenig', 0.3]]) {
   pruefe(`Lenkhilfe ${name} bei 250 km/h: kein Aufschaukeln, zieht zur Mitte`, wechsel <= 1 && ueber < 0.3 && Math.abs(v.x) < 0.3,
     'Nulldurchgänge ' + wechsel + ', Überschwingen ' + ueber.toFixed(2) + ' m, Ende ' + v.x.toFixed(2) + ' m');
 }
+// ---------------- Runde 4: Umwelt (Wetter/Wind) – optionales 4. Argument von schritt() ----------------
+// 14) Ohne umwelt identisch wie vor Runde 4: Fingerabdruck einer festen Fahrt (Gas/Bremse/Lenkung/Gras/Fahrhilfe),
+//     aufgenommen mit vehicle.js VOR dem Einbau (11.10.2026). Ändert sich config.physik, muss er neu erzeugt werden.
+function fingerabdruck(umwelt) {
+  const v = new R.Vehicle({ grip: 0.8 });
+  for (let i = 0; i < 1500; i++) {
+    const s = { gas: i % 400 < 300 ? 1 : 0, bremse: i % 400 >= 320 ? 1 : 0, lenkung: Math.sin(i / 37) };
+    v.untergrund = (i % 500 < 450) ? 'strasse' : 'gras';
+    const h = i % 3 === 0 ? { lenkhilfe: 0.3, bremshilfe: 0.2, tangente: { tx: 0, tz: -1 }, seitenabstand: v.x, zieltempo: 40 } : undefined;
+    if (umwelt === 'ohne') v.schritt(dt, s, h); else v.schritt(dt, s, h, umwelt);
+  }
+  return [v.x, v.z, v.heading, v.vLaengs, v.vQuer].map(x => x.toPrecision(17)).join(',');
+}
+{
+  const VORHER = '62.449828835206183,-3.0875188764072736,-1.6375436679295485,1.9191817441917385,0.0000000000000000';
+  const ohne = fingerabdruck('ohne');
+  pruefe('Ohne umwelt: bitgenau wie vor Runde 4', ohne === VORHER, ohne === VORHER ? '' : ohne);
+  pruefe('umwelt undefined / neutral {1,1,Wind 0}: identisch', fingerabdruck(undefined) === ohne &&
+    fingerabdruck({ gripFaktor: 1, bremsFaktor: 1, windX: 0, windZ: 0 }) === ohne);
+}
+// 15) Wenig Grip (Schnee 0,6): Auto rutscht in der Kurve stärker (mehr Drift, kleinere Drehrate)
+{
+  const schnee = { gripFaktor: 0.6, bremsFaktor: 0.6, windX: 0, windZ: 0 };
+  const a = new R.Vehicle({}), b = new R.Vehicle({});
+  a.vLaengs = b.vLaengs = 25;
+  let driftA = 0, driftB = 0;
+  for (let i = 0; i < 90; i++) {
+    a.schritt(dt, { gas: 1, bremse: 0, lenkung: -1 }); b.schritt(dt, { gas: 1, bremse: 0, lenkung: -1 }, undefined, schnee);
+    driftA = Math.max(driftA, Math.abs(a.vQuer)); driftB = Math.max(driftB, Math.abs(b.vQuer));
+  }
+  pruefe('Grip 0,6: mehr Drift (≥ 1,5×) und weniger Drehung', driftB > driftA * 1.5 && Math.abs(b.heading) < Math.abs(a.heading),
+    'Drift ' + driftA.toFixed(2) + ' → ' + driftB.toFixed(2) + ' m/s, Drehung ' + a.heading.toFixed(2) + ' → ' + b.heading.toFixed(2) + ' rad');
+  pruefe('Grip 0,6: KI-Planung sieht weniger Querhaftung (querBeschleunigungMax)',
+    b.querBeschleunigungMax(25) < a.querBeschleunigungMax(25) * 0.62, b.querBeschleunigungMax(25).toFixed(1) + ' vs ' + a.querBeschleunigungMax(25).toFixed(1));
+}
+// 16) Bremsweg 150 → 0 km/h: × 1/bremsFaktor (Rollwiderstand/Luft machen ihn etwas kürzer als exakt)
+for (const [name, bf] of [['Regen', 0.8], ['Schnee', 0.6]]) {
+  const weg = (umwelt) => {
+    const v = new R.Vehicle({}); v.vLaengs = 150 / 3.6;
+    let s = 0;
+    while (v.vLaengs > 0) { const z0 = v.z; v.schritt(dt, { gas: 0, bremse: 1, lenkung: 0 }, undefined, umwelt); s += Math.abs(v.z - z0); }
+    return s;
+  };
+  const trocken = weg(undefined), nass = weg({ gripFaktor: 1, bremsFaktor: bf, windX: 0, windZ: 0 });
+  const verh = nass / trocken;
+  pruefe(`Bremsweg ${name}: × ${(1 / bf).toFixed(2)} (±8 %)`, verh > (1 / bf) * 0.92 && verh < (1 / bf) * 1.04,
+    trocken.toFixed(1) + ' m → ' + nass.toFixed(1) + ' m (× ' + verh.toFixed(2) + ')');
+}
+// 17) Seitenwind Stufe 5 bei 55 m/s, ohne Gegenlenken: 2–6 m Versatz in 3 s; Stufe 1 kaum (< 1,2 m);
+//     Gegenlenken (einfacher Regler) hält das Auto in der Spur
+{
+  const versatz = (stufe, gegenlenken) => {
+    const v = new R.Vehicle({ vMax: 75, beschleunigung: 7.4 });
+    v.setzen(0, 0, 0); v.vLaengs = 55;                  // fährt nach −z, rechts = +x
+    const u = { gripFaktor: 1, bremsFaktor: 1, windX: stufe, windZ: 0 };   // Wind weht nach +x = von links
+    let lenk = 0;
+    for (let i = 0; i < 180; i++) {
+      if (gegenlenken) lenk = Math.max(-1, Math.min(1, -(v.x * 0.6 + (-v.heading) * 6)));
+      v.schritt(dt, { gas: 0.75, bremse: 0, lenkung: lenk }, undefined, u);
+    }
+    return v.x;
+  };
+  const x5 = versatz(5, false), x1 = versatz(1, false), xg = versatz(5, true);
+  pruefe('Seitenwind 5 bei 55 m/s: 2–6 m nach rechts in 3 s', x5 > 2 && x5 < 6, x5.toFixed(2) + ' m');
+  pruefe('Seitenwind 1: kaum (< 1,2 m)', x1 > 0 && x1 < 1.2, x1.toFixed(2) + ' m');
+  pruefe('Seitenwind 5 mit Gegenlenken: < 1 m', Math.abs(xg) < 1, xg.toFixed(2) + ' m');
+  const v = new R.Vehicle({}); v.vLaengs = 30;
+  v.schritt(dt, gerade, undefined, { gripFaktor: 1, bremsFaktor: 1, windX: 5, windZ: 0 });
+  pruefe('vehicle.windSeite: Wind von links = +1', Math.abs(v.windSeite - 1) < 1e-9, v.windSeite.toFixed(3));
+}
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');
 process.exit(fehler ? 1 : 0);

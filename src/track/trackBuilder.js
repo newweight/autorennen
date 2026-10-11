@@ -5,6 +5,16 @@
 //
 // Heading-Konvention wie vehicle.js: heading 0 = Richtung -z,
 // richtung() = { x: -sin h, z: -cos h }, Linkslenken erhöht heading.
+//
+// Runde 4: Welten + Spuren.
+//   new R.Strecke(daten, { welt })   welt = Name aus daten.welten (sonst daten.weltStandard)
+//   strecke.welt (Name), strecke.weltDaten / strecke.aktiveSchichten ({ hindernisse, wracks, … : bool })
+//   strecke.daten = Katalogeintrag, aber nur mit den Listen aktiver Schichten (dynamik.js liest baelle/
+//   wasserstrahlen von hier); strecke.katalog = unveränderter Katalogeintrag.
+//   strecke.hindernisse / loopings / wracks / strohballen / schanzen / boostFelder / schilde: leer, wenn aus.
+//   strecke.breiteBei(s): Fahrbahnbreite an s (Spuren: 1 Spur 5 m, 3 Spuren 15 m, Übergang 40 m);
+//   Straße, Randsteine, Mittellinien, Bande (grenzeBei), Untergrund und Checkpoints nutzen sie.
+//   Enge Stellen (1 Spur): Leitplanke direkt hinter dem Randstreifen (_leitplankenBauen).
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -20,6 +30,15 @@
   // Senke unter einer Brücke (lokal um die Brückenmitte: l längs, q quer)
   const SENKE_Q0 = 34, SENKE_Q1 = 58;    // volle Tiefe bis q0, flach bei q1
   const GROB_RAND = 6, GROB_ABSENKUNG = 1.5;  // grobes Bodengitter tiefer/weiter als die feine Senke
+  // Runde 4: Spuren (Katalog spuren [{ s0, s1, spuren: 1 | 3 }])
+  const SPUR_BREITE = { 1: 5, 3: 15 };   // m Fahrbahnbreite je Spurzahl
+  const SPUR_UEBERGANG = 40;             // m weicher Übergang vor s0 und nach s1
+  const BODEN_HALB = 800, BODEN_SICHT = 450;   // Bodenplatte mind. ±800 m, sonst Strecke + 450 m Rand
+  // Alle Schichten einer Welt (Katalog welten[name] = { schicht: bool })
+  const SCHICHTEN = ['hindernisse', 'wracks', 'strohballen', 'spuren', 'schanzen', 'baelle', 'wasserstrahlen', 'boost', 'schild', 'loopings'];
+  // Katalogfeld je Schicht (Liste der Einträge)
+  const SCHICHT_FELD = { hindernisse: 'hindernisse', wracks: 'wracks', strohballen: 'strohballen', spuren: 'spuren',
+    schanzen: 'schanzen', baelle: 'baelle', wasserstrahlen: 'wasserstrahlen', boost: 'boostFelder', schild: 'schilde', loopings: 'loopings' };
 
   /** Weicher Übergang 0 → 1 zwischen a und b. */
   function glatt(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
@@ -27,10 +46,43 @@
   /** Heading (wie vehicle.js) aus einer Richtung in XZ. */
   function headingAus(tx, tz) { return Math.atan2(-tx, -tz); }
 
+  /**
+   * Welt-Auswahl: Name der Welt, die für diese Daten gilt (unbekannt/leer → weltStandard → erste Welt).
+   * Ohne welten im Katalog (alte/Test-Daten): null = alles aktiv wie bisher.
+   */
+  function weltName(daten, wunsch) {
+    const w = daten.welten;
+    if (!w) return null;
+    if (wunsch && w[wunsch]) return wunsch;
+    if (daten.weltStandard && w[daten.weltStandard]) return daten.weltStandard;
+    return Object.keys(w)[0] || null;
+  }
+
+  /** Aktive Schichten { hindernisse: bool, … } einer Welt (alle Schichten belegt, fehlend = false). */
+  function weltSchichten(daten, name) {
+    const erg = {};
+    const w = name && daten.welten ? daten.welten[name] : null;
+    SCHICHTEN.forEach((k) => { erg[k] = w ? !!w[k] : true; });   // ohne Welten: alles wie bisher
+    if (!w) erg.spuren = !!(daten.spuren && daten.spuren.length);
+    return erg;
+  }
+
   class Strecke {
-    /** @param {object} daten Eintrag aus Rennspiel.trackCatalog */
-    constructor(daten) {
-      this.daten = daten;
+    /**
+     * @param {object} daten Eintrag aus Rennspiel.trackCatalog
+     * @param {{welt?:string}} [optionen] welt = Name aus daten.welten (Standard: daten.weltStandard)
+     */
+    constructor(daten, optionen) {
+      const opt = optionen || {};
+      this.katalog = daten;
+      this.welt = weltName(daten, opt.welt);
+      this.weltDaten = weltSchichten(daten, this.welt);
+      this.aktiveSchichten = Object.assign({}, this.weltDaten);
+      const an = (k) => !!this.aktiveSchichten[k];
+      // Datensicht nur mit aktiven Schichten (dynamik.js, themes.js und main.js lesen strecke.daten)
+      const sicht = Object.assign({}, daten);
+      SCHICHTEN.forEach((k) => { const f = SCHICHT_FELD[k]; if (f in daten || !an(k)) sicht[f] = an(k) ? (daten[f] || []) : []; });
+      this.daten = sicht;
       this.id = daten.id;
       this.name = daten.name;
       this.thema = daten.thema;
@@ -40,6 +92,10 @@
       this.abseitsUntergrund = daten.abseitsUntergrund || 'gras';   // 'gras' | 'sand'
       this.spline = new R.Spline(daten.punkte, { abstand: 2 });
       this.laenge = this.spline.laenge;
+      // Spuren (nur wenn die Welt sie einschaltet): [{ s0, s1, spuren, breite }]
+      this.spuren = (sicht.spuren || []).map(e => ({ s0: this.spline.wrapS(e.s0), s1: this.spline.wrapS(e.s1), spuren: e.spuren,
+        breite: SPUR_BREITE[e.spuren] || this.breite }));
+      this._spurEng = this.spuren.filter(e => e.breite < this.breite);
       // Höhe der Mittellinie exakt aus dem Gelände (die y-Werte im Katalog sind gerundet)
       if (this.huegel.length) this.spline.punkte.forEach((p) => { p.y = this.gelaendeHoehe(p.x, p.z); });
       // Unsichtbare weiche Bande (physics/collisions.js) + sichtbarer Holzzaun genau dort
@@ -65,10 +121,17 @@
       this.bruecke = this.bruecken[0] || null;          // Kurzform (erste Brücke) für Deko/ältere Aufrufer
       this.tunnel = (daten.tunnel || []).map(t => this._bereich(t, t.art === 'sandstein' ? 'sandstein' : 'fels'));
       this._engstellen = this.bruecken.concat(this.tunnel);
-      this.hindernisse = this._hindernisseBerechnen(daten.hindernisse || []);
+      this.hindernisse = this._hindernisseBerechnen(sicht.hindernisse || []);
       this._flecken = this.hindernisse.filter(h => h.untergrund);
       // Loopings (Fantasie): Datenstruktur hier, Fahrlogik + Grafik in track/looping.js
-      this.loopings = this._loopingsBerechnen(daten.loopings || []);
+      this.loopings = this._loopingsBerechnen(sicht.loopings || []);
+      // Runde 4: Listen für noch nicht gebaute Schichten (Agent C/D): Kopien mit s in [0, laenge)
+      const kopie = (liste) => (liste || []).map(e => Object.assign({}, e, { s: this.spline.wrapS(e.s) }));
+      this.wracks = kopie(sicht.wracks);            // [{ s, seitenabstand, brennt, autoId }]
+      this.strohballen = kopie(sicht.strohballen);  // [{ s, von, intervall, tempo }]
+      this.schanzen = kopie(sicht.schanzen);        // [{ s, winkel: 8 | 12, laenge }]
+      this.boostFelder = kopie(sicht.boostFelder);  // [{ s, seitenabstand, laenge }]
+      this.schilde = kopie(sicht.schilde);          // [{ s, seitenabstand }]
       this.checkpoints = this._checkpointsBerechnen(daten.checkpointAbstand || 120);
       this.idealLinie = this._idealLinieBerechnen();
     }
@@ -169,12 +232,47 @@
       let g = this.seitenabstandMax;
       const sp = this.spline;
       for (const b of this._engstellen) {
-        const d0 = sp.differenzS(s, b.s0), d1 = sp.differenzS(s, b.s1);
-        const aussen = d0 >= 0 && d1 <= 0 ? 0 : Math.min(Math.abs(d0), Math.abs(d1));
+        const aussen = this._aussen(b, s);
         if (aussen >= TRICHTER) continue;
         g = Math.min(g, this.grenzeEng + (this.seitenabstandMax - this.grenzeEng) * glatt(0, 1, aussen / TRICHTER));
       }
+      // Enge Spur-Abschnitte: Leitplanke folgt dem Fahrbahnrand (inkl. Übergang), davor/danach Trichter
+      for (const e of this._spurEng) {
+        const aussen = this._aussen(e, s);
+        if (aussen >= SPUR_UEBERGANG + TRICHTER) continue;
+        const gRand = this.breiteBei(s) / 2 + this.randBreite + ENG_ZUGABE;
+        const t = aussen <= SPUR_UEBERGANG ? 0 : glatt(0, 1, (aussen - SPUR_UEBERGANG) / TRICHTER);
+        g = Math.min(g, gRand + (this.seitenabstandMax - gRand) * t);
+      }
+      void sp;
       return g;
+    }
+
+    /** Abstand (m) von s zum Bereich { s0, s1 } entlang der Strecke, 0 = innerhalb (Rundenübergang beachtet). */
+    _aussen(b, s) {
+      const sp = this.spline, d0 = sp.differenzS(s, b.s0), d1 = sp.differenzS(s, b.s1);
+      return d0 >= 0 && d1 <= 0 ? 0 : Math.min(Math.abs(d0), Math.abs(d1));
+    }
+
+    /**
+     * Fahrbahnbreite (m) an Bogenlänge s. Ohne aktive Spuren konstant this.breite; in einem Spur-Abschnitt
+     * die Spurbreite (1 Spur 5 m, 3 Spuren 15 m), davor und danach SPUR_UEBERGANG m weicher Übergang.
+     */
+    breiteBei(s) {
+      const sp = this.spuren;
+      if (!sp.length) return this.breite;
+      for (let i = 0; i < sp.length; i++) {
+        const e = sp[i], aussen = this._aussen(e, s);
+        if (aussen >= SPUR_UEBERGANG) continue;
+        return e.breite + (this.breite - e.breite) * glatt(0, SPUR_UEBERGANG, aussen);
+      }
+      return this.breite;
+    }
+
+    /** Spur-Abschnitt, in dessen Bereich (inkl. Übergang + zugabe) s liegt, oder null. */
+    spurBei(s, zugabe) {
+      for (const e of this.spuren) if (this._aussen(e, s) < SPUR_UEBERGANG + (zugabe || 0)) return e;
+      return null;
     }
 
     /** Liegt Bogenlänge s auf einer Brücke? */
@@ -185,7 +283,8 @@
     /** Untergrund aus Seitenabstand (+ Bogenlänge s für Brücke und Hindernis-Flecken). */
     _untergrundAus(seitenabstand, s) {
       const a = Math.abs(seitenabstand);
-      if (a <= this.breite / 2) {
+      const b2 = (s !== undefined && this.spuren.length) ? this.breiteBei(s) / 2 : this.breite / 2;
+      if (a <= b2) {
         // Öl- und Sandflecken (Ellipse um die Mitte des Flecks)
         if (s !== undefined) {
           for (let i = 0; i < this._flecken.length; i++) {
@@ -197,7 +296,7 @@
         }
         return 'strasse';
       }
-      if (a <= this.breite / 2 + this.randBreite) return 'rand';
+      if (a <= b2 + this.randBreite) return 'rand';
       // Holzsteg: bis zum Geländer fährt man auf Brettern (wie Randstreifen)
       if (s !== undefined && this._aufBruecke(s) && a <= this.seitenabstandMax) return 'rand';
       return this.abseitsUntergrund;
@@ -345,7 +444,8 @@
       for (let k = 0; k < anzahl; k++) {
         const s = k * this.laenge / anzahl;
         const p = this.spline.punktBei(s);
-        liste.push({ nr: k, s, x: p.x, z: p.z, tx: p.tx, tz: p.tz, nx: p.nx, nz: p.nz });
+        // breite = lokale Fahrbahnbreite (Tore/Anzeigen an engen und breiten Stellen)
+        liste.push({ nr: k, s, x: p.x, z: p.z, tx: p.tx, tz: p.tz, nx: p.nx, nz: p.nz, breite: this.breiteBei(s) });
       }
       return liste;   // Checkpoint 0 = Start/Ziel
     }
@@ -387,13 +487,32 @@
       gruppe.add(this._startZielBauen());
       gruppe.add(this._startbogenBauen());
       gruppe.add(this._zaunBauen(thema.zaun || {}));
+      if (this._spurEng.length) gruppe.add(this._leitplankenBauen());
       this.bruecken.forEach((b) => {
         gruppe.add(this._senkeBauen(b, thema));
         gruppe.add(this._brueckeBauen(b, thema));
       });
       if (this.tunnel.length) this._tunnelBauen(thema).forEach(m => gruppe.add(m));
       if (this.loopings.length && R.Looping && R.Looping.bauen) gruppe.add(R.Looping.bauen(this, thema));
+      // Runde 4 (W2-D): Sprungschanzen und Turbo-Felder (nur wenn die Welt sie einschaltet)
+      if (this.aktiveSchichten.schanzen && this.schanzen.length) gruppe.add(this.schanzenBauen(thema));
+      if (this.aktiveSchichten.boost && this.boostFelder.length) gruppe.add(this.boostBauen());
       return gruppe;
+    }
+
+    /**
+     * Runde 4: Sprungschanzen (Keile auf der Fahrbahn, track/schanze.js). Die Rampe hebt den Spline NICHT –
+     * hoeheAn bleibt der Boden; die Rampenhöhe liefert R.Schanzen.hoeheAuf(strecke, s).
+     */
+    schanzenBauen(thema) {
+      if (!R.Schanzen || !R.Schanzen.bauen) return new THREE.Group();
+      return R.Schanzen.bauen(this, thema);
+    }
+
+    /** Runde 4: Turbo-Felder (leuchtende Pfeile, world/pickups.js; animiert über Pickups.animieren). */
+    boostBauen() {
+      if (!R.Pickups || !R.Pickups.felderBauen) return new THREE.Group();
+      return R.Pickups.felderBauen(this);
     }
 
     /** Lambert-Material, leicht zur Kamera gezogen gegen Flimmern (z-fighting). */
@@ -444,6 +563,14 @@
       };
     }
 
+    /** Wie _band, aber mit eigener Querlage am Ende q (qa1/qb1) – für veränderliche Fahrbahnbreite. */
+    _band2(p, q, qa0, qb0, qa1, qb1, anheben, farbe) {
+      return {
+        a: this._seitPunkt(p, qa0, anheben), b: this._seitPunkt(p, qb0, anheben),
+        c: this._seitPunkt(q, qb1, anheben), d: this._seitPunkt(q, qa1, anheben), farbe,
+      };
+    }
+
     /** Boden: Grundfarbe, optional mit großen Flecken in Farbe 2 (Nadelboden, Sandwellen). */
     _bodenBauen(farbe, farbe2) {
       // Mittelpunkt der Strecke
@@ -454,7 +581,11 @@
       // Rasterweite aus config (100 → 16 m Felder, 20.000 Dreiecke statt 51.200 bei 160).
       // Geprüft: bei 100 bleibt die Straße auf allen Strecken ≥ 2,5 cm über dem Boden, 80 sticht im Wald durch.
       const raster = (R.config.grafik && R.config.grafik.bodenRaster) || 160;
-      const geo = new THREE.PlaneGeometry(1600, 1600, raster, raster);
+      // Runde 4: lange Strecken (Wüste ±685 m) – Platte mind. 1600 m, sonst Strecke + BODEN_SICHT je Seite,
+      // Feldgröße bleibt gleich (1600 / raster). this.bodenPlatte = { mx, mz, hx, hz } für Deko.
+      const g = this._bodenMasse();
+      const nx = Math.max(raster, Math.round(raster * g.hx / BODEN_HALB)), nz = Math.max(raster, Math.round(raster * g.hz / BODEN_HALB));
+      const geo = new THREE.PlaneGeometry(2 * g.hx, 2 * g.hz, nx, nz);
       geo.rotateX(-Math.PI / 2);
       const pos = geo.attributes.position;
       const farben = new Float32Array(pos.count * 3);
@@ -473,6 +604,18 @@
       return boden;
     }
 
+    /** Mitte und halbe Kantenlängen der Bodenplatte (Mitte = Schwerpunkt der Mittellinie). */
+    _bodenMasse() {
+      if (this.bodenPlatte) return this.bodenPlatte;
+      let mx = 0, mz = 0, ax = 0, az = 0;
+      const pk = this.spline.punkte;
+      pk.forEach(p => { mx += p.x; mz += p.z; });
+      mx /= pk.length; mz /= pk.length;
+      pk.forEach(p => { ax = Math.max(ax, Math.abs(p.x - mx)); az = Math.max(az, Math.abs(p.z - mz)); });
+      this.bodenPlatte = { mx, mz, hx: Math.max(BODEN_HALB, Math.ceil(ax + BODEN_SICHT)), hz: Math.max(BODEN_HALB, Math.ceil(az + BODEN_SICHT)) };
+      return this.bodenPlatte;
+    }
+
     /** Bodenfarbe an (x, z): leichte Farbflecken, damit die Wiese nicht wie Plastik aussieht. */
     _bodenFarbe(x, z, basis, zweite, mitZweiter, c) {
       const f = 0.9 + 0.1 * Math.sin(x * 0.047 + Math.sin(z * 0.031) * 2) * Math.cos(z * 0.052 - x * 0.013)
@@ -484,11 +627,11 @@
     }
 
     _strasseBauen(asphalt) {
-      const pk = this.spline.punkte, N = pk.length, b = this.breite / 2;
+      const pk = this.spline.punkte, N = pk.length;
       const pos = new Float32Array(N * 2 * 3), col = new Float32Array(N * 2 * 3);
       const c = new THREE.Color();
       for (let i = 0; i < N; i++) {
-        const p = pk[i];
+        const p = pk[i], b = this.breiteBei(p.s) / 2;      // Runde 4: Breite je Stelle (Spuren)
         const l = this._seitPunkt(p, -b, 0.06), r = this._seitPunkt(p, b, 0.06);
         pos.set(l, i * 6); pos.set(r, i * 6 + 3);
         // Asphalt mit leichter Streifung (Flickstellen)
@@ -516,10 +659,16 @@
       const sp = this.spline, vierecke = [];
       const strich = 3, luecke = 4, w = 0.14;
       for (let s = 8; s + strich < this.laenge - 6; s += strich + luecke) {
+        // Runde 4: 3 Spuren → zwei Linien bei ±Breite/6, 1 Spur → keine Mittellinie
+        const spur = this.spurBei(s + strich / 2);
+        if (spur && spur.spuren === 1) continue;
         // Strich in 1-m-Stücken, damit er Kurven folgt
         for (let t = 0; t < strich; t += 1) {
           const p = sp.punktBei(s + t), q = sp.punktBei(s + t + 1);
-          vierecke.push(this._band(p, q, -w, w, 0.08, 0xf0f0f0));
+          if (spur && spur.spuren === 3) {
+            const a = this.breiteBei(s + t) / 6, e = this.breiteBei(s + t + 1) / 6;
+            [-1, 1].forEach(vz => vierecke.push(this._band2(p, q, vz * a - w, vz * a + w, vz * e - w, vz * e + w, 0.08, 0xf0f0f0)));
+          } else vierecke.push(this._band(p, q, -w, w, 0.08, 0xf0f0f0));
         }
       }
       const m = new THREE.Mesh(this._viereckeZuGeometrie(vierecke), this._material(undefined, 2));
@@ -528,7 +677,7 @@
     }
 
     _randBauen() {
-      const pk = this.spline.punkte, N = pk.length, b = this.breite / 2, rb = this.randBreite;
+      const pk = this.spline.punkte, N = pk.length, rb = this.randBreite;
       const vierecke = [];
       // Fantasie: Regenbogen-Randsteine (Thema regenbogen = Farbliste), in Kurven kräftig, auf Geraden heller
       const thema = (R.themes && R.themes[this.thema]) || {}, rb6 = thema.regenbogen;
@@ -541,8 +690,9 @@
         const kurve = k > KERB_KRUEMMUNG;
         let farbe = kurve ? (i % 2 === 0 ? 0xd42a2a : 0xf4f4f4) : 0x8f9294;
         if (rb6) farbe = (kurve ? rb6 : hell)[i % rb6.length];
-        vierecke.push(this._band(p, q, -b - rb, -b, 0.07, farbe));
-        vierecke.push(this._band(p, q, b, b + rb, 0.07, farbe));
+        const b = this.breiteBei(p.s) / 2, bq = this.breiteBei(q.s) / 2;   // Runde 4: Breite je Stelle
+        vierecke.push(this._band2(p, q, -b - rb, -b, -bq - rb, -bq, 0.07, farbe));
+        vierecke.push(this._band2(p, q, b, b + rb, bq, bq + rb, 0.07, farbe));
       }
       const m = new THREE.Mesh(this._viereckeZuGeometrie(vierecke), this._material(undefined, 1));
       m.name = 'Randsteine';
@@ -626,8 +776,11 @@
       const pfosten = [], pos = [];
       [-1, 1].forEach((seite) => {
         const zp = this.zaunPunkte(seite), N = zp.length;
-        // Auf Brücken steht das Geländer, im Tunnel die Wand
-        zp.forEach((a) => { if (this._engstellen.some(b => this._inBereich(b, a.s, 1.5))) a.ok = false; });
+        // Auf Brücken steht das Geländer, im Tunnel die Wand, an engen Spur-Stellen die Leitplanke
+        zp.forEach((a) => {
+          if (this._engstellen.some(b => this._inBereich(b, a.s, 1.5))) a.ok = false;
+          if (this._spurEng.some(e => this._aussen(e, a.s) < SPUR_UEBERGANG + 1.5)) a.ok = false;
+        });
         for (let i = 0; i < N; i++) {
           const a = zp[i], b = zp[(i + 1) % N];
           if (i % PFOSTEN_ALLE === 0 && a.ok) pfosten.push(a);
@@ -674,6 +827,36 @@
       g.add(pf);
       this.zaunInfo = { pfosten: pfosten.length, lattenStuecke: pos.length / 36 };
       return g;
+    }
+
+    /**
+     * Runde 4: Leitplanken an engen Spur-Abschnitten (1 Spur), beidseitig genau an der Bande (grenzeBei),
+     * über Abschnitt + Übergang: verzinktes Band (0,45–0,8 m) + Pfosten alle 4 m. Ein Mesh (Vertex-Farben).
+     */
+    _leitplankenBauen() {
+      const v = [], sp = this.spline;
+      for (const e of this._spurEng) {
+        const a = e.s0 - SPUR_UEBERGANG, laenge = sp.differenzS(e.s1, e.s0) + 2 * SPUR_UEBERGANG;
+        const n = Math.max(4, Math.round(laenge / 2));
+        [-1, 1].forEach((sg) => {
+          for (let k = 0; k < n; k++) {
+            const s0 = a + laenge * k / n, s1 = a + laenge * (k + 1) / n;
+            const q0 = sg * (this.grenzeBei(s0) - 0.15), q1 = sg * (this.grenzeBei(s1) - 0.15);
+            const p0 = this._punktSQ(s0, q0, 0), p1 = this._punktSQ(s1, q1, 0);
+            const wand = (u0, u1, farbe) => ({ a: [p0[0], p0[1] + u0, p0[2]], b: [p1[0], p1[1] + u0, p1[2]],
+              c: [p1[0], p1[1] + u1, p1[2]], d: [p0[0], p0[1] + u1, p0[2]], farbe });
+            v.push(wand(0.45, 0.62, 0xc9ced3), wand(0.62, 0.8, 0xaeb4ba));
+            if (k % 2 === 0) {
+              const pp = sp.punktBei(s0);
+              this._kiste(v, p0[0], p0[2], pp.tx, pp.tz, 0.06, 0.06, p0[1] - 0.2, p0[1] + 0.85, 0x6f757b);
+            }
+          }
+        });
+      }
+      const mesh = new THREE.Mesh(this._viereckeZuGeometrie(v),
+        new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+      mesh.name = 'Leitplanken';
+      return mesh;
     }
 
     // ---------------------------------------------------------- Brücken, Senken, Tunnel
@@ -1016,6 +1199,8 @@
      * Die Pylonen ändern sich (umgefahren → blinken → weg): hindernisseAnimieren(zeit).
      */
     hindernisseBauen() {
+      // Runde 4: Wracks (Schicht „wracks“) als feste Hindernisse anhängen (einmalig, vor dem Bau der KI-Fahrer)
+      if (R.Kollisionen && R.Kollisionen.wracksEinbauen) R.Kollisionen.wracksEinbauen(this);
       const g = new THREE.Group();
       g.name = 'Strecke Hindernisse';
       const sp = this.spline, sand = [], oel = [], teile = [];
@@ -1153,6 +1338,9 @@
         this.pylonenGeaendert = true;
         this.hindernisseAnimieren(0);
       }
+      // Runde 4: liegengebliebene/brennende Autos (Grafik + Warnblinker/Feuer in physics/schaden.js)
+      const wracke = this.hindernisse.filter(h => h.typ === 'wrack' || h.typ === 'brand');
+      if (wracke.length && R.Schaden && R.Schaden.wrackGruppe) g.add(R.Schaden.wrackGruppe(this, wracke));
       return g;
     }
 
@@ -1191,6 +1379,11 @@
   }
 
   Strecke.headingAus = headingAus;
+  Strecke.weltName = weltName;            // (daten, wunsch) → gültiger Weltname
+  Strecke.weltSchichten = weltSchichten;  // (daten, name) → { schicht: bool }
+  Strecke.SCHICHTEN = SCHICHTEN;
+  Strecke.SPUR_BREITE = SPUR_BREITE;
+  Strecke.SPUR_UEBERGANG = SPUR_UEBERGANG;
   R.Strecke = Strecke;
   R.headingAus = headingAus;
 })();

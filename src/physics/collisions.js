@@ -10,7 +10,13 @@
 // 3) hindernisse(): Pylonen, Baken und Äste auf der Fahrbahn (strecke.hindernisse) → Stöße-Liste.
 //               Öl- und Sandflecken wirken nicht hier, sondern über den Untergrund (strecke.untergrundAn).
 // Autos im Looping (vehicle.imLooping, track/looping.js) sind von allen drei Prüfungen ausgenommen.
+// Runde 4: Autos im Flug (vehicle.imFlug, track/schanze.js) sind von autoAuto() und hindernisse() ausgenommen,
+//          die Bande wirkt auch im Flug (sonst flöge ein Auto über den Streckenrand hinaus).
 // Auf Brücken und in Tunneln liegt die Bande direkt hinter dem Randstreifen (strecke.grenzeBei(s)).
+// Runde 4: grenzeBei(s) kennt auch enge Spur-Abschnitte (1 Spur = 5 m): dort Leitplanke direkt am Rand.
+// Runde 4: wracksEinbauen(strecke) hängt liegengebliebene ('wrack') und brennende ('brand') Autos aus
+//          strecke.wracks als Hindernisse an strecke.hindernisse an (feste Kapsel wie die Bake, KI-Daten wie
+//          die Baustelle). hindernisse() meldet Stöße dagegen mit typ 'wrack' / 'brand'.
 //
 // Vorzeichen wie überall: seitenabstand > 0 = rechts der Mitte, Normale (nx, nz) nach rechts.
 // ============================================================
@@ -106,7 +112,8 @@
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
         const A = autos[i], B = autos[j], ka = kapseln[i], kb = kapseln[j];
-        if (A.imLooping || B.imLooping) continue;      // Auto im Looping (track/looping.js): keine Auto-Auto-Stöße
+        // Auto im Looping (track/looping.js) oder im Flug über eine Schanze (track/schanze.js): keine Auto-Auto-Stöße
+        if (A.imLooping || B.imLooping || A.imFlug || B.imFlug) continue;
         const grenze = ka.rad + kb.rad;
         // Grobtest: Mittelpunkte weiter auseinander als halbe Längen + Radien
         const dxg = B.x - A.x, dzg = B.z - A.z;
@@ -188,7 +195,7 @@
     for (let i = 0; i < fahrzeugListe.length; i++) {
       const f = fahrzeugListe[i], v = (f && f.vehicle) ? f.vehicle : f;
       if (v._astSperre > 0) v._astSperre -= dt;
-      if (v.imLooping) continue;                       // im Looping über der Straße
+      if (v.imLooping || v.imFlug) continue;           // im Looping / im Flug über der Straße
       for (let k = 0; k < liste.length; k++) {
         const h = liste[k];
         if (!h.segmente && !h.pylonen) continue;
@@ -217,7 +224,7 @@
         // Bake (fest) und Ast
         if (h.segmente) {
           for (const sg of h.segmente) {
-            const dicke = sg.art === 'ast' ? (sg.dicke || 0.28) : 0.15;
+            const dicke = sg.dicke || (sg.art === 'ast' ? 0.28 : 0.15);   // Wrack: halbe Autobreite (Kapsel)
             for (const c of ka.kreise) {
               const n = segmentPunkt(sg.ax, sg.az, sg.bx, sg.bz, c.x, c.z);
               const grenze = ka.rad + dicke;
@@ -243,7 +250,7 @@
               if (vn < 0) {
                 const px = vw.x - nx * vn, pz = vw.z - nz * vn;
                 v.weltGeschwindigkeitSetzen(px * BANDE_PARALLEL, pz * BANDE_PARALLEL);
-                if (-vn > 0.5) stoesse.push({ nr: i, typ: 'bake', staerke: -vn, hindernis: k });
+                if (-vn > 0.5) stoesse.push({ nr: i, typ: sg.art === 'bake' ? 'bake' : sg.art, staerke: -vn, hindernis: k });
               }
               break;
             }
@@ -254,5 +261,52 @@
     return stoesse;
   }
 
-  R.Kollisionen = { bande, autoAuto, kapsel, hindernisse };
+  /**
+   * Runde 4: Wracks (strecke.wracks, nur Welten mit Schicht „wracks“) als feste Hindernisse an
+   * strecke.hindernisse anhängen. Einmal je Strecke (Merker strecke._wracksEingebaut), ohne Three.js.
+   * Ein Wrack steht bei { s, seitenabstand } leicht schräg (Bug zum Fahrbahnrand, config.hindernisse[typ].schraeg)
+   * und ist eine Kapsel: Segment längs der Autoachse, dicke = halbe Autobreite (Maße aus carCatalog[autoId]).
+   * Felder wie die Baustelle (für KI/Reset): typ 'wrack'|'brand', s, s0, s1, laenge, seitenabstand, halbbreite,
+   * seite, gefahr (1.0); dazu x, z, radius, segmente, heading, autoId, laengeAuto, breiteAuto, dreieckS.
+   * @returns {number} Anzahl neu angehängter Wracks
+   */
+  function wracksEinbauen(strecke) {
+    if (!strecke || strecke._wracksEingebaut) return 0;
+    strecke._wracksEingebaut = true;
+    const liste = strecke.wracks || [];
+    if (!liste.length || (strecke.aktiveSchichten && strecke.aktiveSchichten.wracks === false)) return 0;
+    if (!strecke.hindernisse) strecke.hindernisse = [];
+    const C = (R.config && R.config.hindernisse) || {}, sp = strecke.spline;
+    const katalog = R.carCatalog || [];
+    let n = 0;
+    liste.forEach((e) => {
+      const typ = e.brennt ? 'brand' : 'wrack', c = C[typ] || C.wrack || {};
+      const auto = katalog.find(a => a.id === e.autoId) || null;
+      const fw = (auto && auto.fahrwerte) || {};
+      const L = fw.laenge || 4.6, B = fw.breite || 1.85;
+      const q = e.seitenabstand || 0, seite = q >= 0 ? 1 : -1;
+      const s = sp.wrapS(e.s), p = sp.punktBei(s);
+      const x = p.x + p.nx * q, z = p.z + p.nz * q;
+      const schraeg = c.schraeg !== undefined ? c.schraeg : 0.28;
+      // Bug zeigt schräg zum eigenen Fahrbahnrand (rechts: heading kleiner = nach rechts gedreht)
+      const heading = Math.atan2(-p.tx, -p.tz) - seite * schraeg;
+      const rx = -Math.sin(heading), rz = -Math.cos(heading);
+      const halb = Math.max(0, L / 2 - B / 2);
+      const laengs = (L / 2) * Math.cos(schraeg) + (B / 2) * Math.sin(schraeg);   // Ausdehnung längs der Strecke
+      const quer = (L / 2) * Math.sin(schraeg) + (B / 2) * Math.cos(schraeg);     // Ausdehnung quer
+      const h = {
+        nr: strecke.hindernisse.length, typ, gefahr: c.gefahr !== undefined ? c.gefahr : 1.0,
+        s, s0: sp.wrapS(s - laengs - 1), s1: sp.wrapS(s + laengs + 1), laenge: 2 * laengs + 2,
+        seitenabstand: q, halbbreite: quer + 0.3, seite,
+        x, z, radius: L / 2 + 1, heading, autoId: auto ? auto.id : e.autoId, laengeAuto: L, breiteAuto: B,
+        dreieckS: sp.wrapS(s - (c.dreieckAbstand || 9)),
+        segmente: [{ ax: x + rx * halb, az: z + rz * halb, bx: x - rx * halb, bz: z - rz * halb, art: typ, dicke: B / 2 }],
+      };
+      strecke.hindernisse.push(h);
+      n++;
+    });
+    return n;
+  }
+
+  R.Kollisionen = { bande, autoAuto, kapsel, hindernisse, wracksEinbauen };
 })();

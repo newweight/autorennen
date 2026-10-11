@@ -3,11 +3,13 @@
 // Bake hält auf), untergrundAn liefert die Fleck-Untergründe.
 const { ladeModule } = require('./lade');
 const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/track/spline.js',
-  'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/physics/collisions.js']);
+  'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/physics/collisions.js', 'src/cars/carCatalog.js']);
 let fehler = 0;
 function pruefe(name, ok, info) { console.log((ok ? 'OK   ' : 'FEHL ') + name + (info ? '  (' + info + ')' : '')); if (!ok) fehler++; }
 
 const DT = 1 / 60;
+// Runde 4: Hindernisse gibt es nur in Welten mit hindernisse = true (Wiese-Standard ist 'klassisch')
+const weltMitHindernissen = (d) => Object.keys(d.welten || {}).find(w => d.welten[w].hindernisse);
 const AUTO = (R.carCatalog && R.carCatalog[0] && R.carCatalog[0].fahrwerte) || {};
 const C = R.config.hindernisse;
 const U = R.config.physik.untergrund;
@@ -49,7 +51,7 @@ function fahre(ug, v0, sek, steuer) {
 
 // ---------- untergrundAn auf allen Strecken ----------
 for (const daten of R.trackCatalog) {
-  const st = new R.Strecke(daten), sp = st.spline;
+  const st = new R.Strecke(daten, { welt: weltMitHindernissen(daten) }), sp = st.spline;
   for (const h of st.hindernisse.filter(x => x.untergrund)) {
     const p = sp.punktBei(h.s);
     const an = (ds, q) => { const pp = sp.punktBei(h.s + ds); return st.untergrundAn(pp.x + pp.nx * q, pp.z + pp.nz * q); };
@@ -64,7 +66,7 @@ for (const daten of R.trackCatalog) {
 
 // ---------- Ast: Tempo −40 %, Hüpfer, danach kurz Ruhe ----------
 {
-  const st = new R.Strecke(R.trackCatalog.find(t => t.id === 'wiese'));
+  const st = new R.Strecke(R.trackCatalog.find(t => t.id === 'wiese'), { welt: 'hindernisse' });
   const h = st.hindernisse.find(x => x.typ === 'ast'), sp = st.spline;
   const a = new R.Vehicle(AUTO);
   const p = sp.punktBei(h.s - 6);
@@ -92,7 +94,7 @@ for (const daten of R.trackCatalog) {
 
 // ---------- Baustelle: Pylone stößt und verschwindet, Bake hält auf ----------
 {
-  const st = new R.Strecke(R.trackCatalog.find(t => t.id === 'wiese'));
+  const st = new R.Strecke(R.trackCatalog.find(t => t.id === 'wiese'), { welt: 'hindernisse' });
   const h = st.hindernisse.find(x => x.typ === 'baustelle'), sp = st.spline;
   // a) Auto fährt auf der gesperrten Seite in die Pylonen-Schräge
   const a = new R.Vehicle(AUTO);
@@ -156,10 +158,74 @@ for (const daten of R.trackCatalog) {
 
 // ---------- Datenstruktur für die KI ----------
 for (const daten of R.trackCatalog) {
-  const st = new R.Strecke(daten);
+  const st = new R.Strecke(daten, { welt: weltMitHindernissen(daten) });
   const ok = st.hindernisse.every(h => typeof h.typ === 'string' && Number.isFinite(h.s) && Number.isFinite(h.seitenabstand) &&
     h.halbbreite > 0 && h.gefahr >= 0 && h.gefahr <= 1 && Number.isFinite(h.s0) && h.laenge > 0);
   pruefe(`[${daten.id}] strecke.hindernisse: {typ, s, s0, laenge, seitenabstand, halbbreite, gefahr}`, ok);
+}
+
+// ---------- Runde 4: Wracks ('wrack' liegengeblieben, 'brand' brennend) ----------
+{
+  pruefe('config.hindernisse hat wrack/brand (gefahr 1.0)', C.wrack && C.brand && C.wrack.gefahr === 1 && C.brand.gefahr === 1);
+  // Klassisch: keine Wracks
+  for (const daten of R.trackCatalog) {
+    if (!daten.welten || !daten.welten.klassisch) continue;
+    const st = new R.Strecke(daten, { welt: 'klassisch' });
+    const n = R.Kollisionen.wracksEinbauen(st);
+    pruefe(`[${daten.id}] Welt klassisch: keine Wracks`, n === 0 && !st.hindernisse.some(h => h.typ === 'wrack' || h.typ === 'brand'));
+  }
+  // Welt Hindernisse: alle Wracks aus dem Katalog, einmalig
+  for (const daten of R.trackCatalog) {
+    if (!daten.wracks || !daten.wracks.length || !daten.welten || !daten.welten.hindernisse) continue;
+    const st = new R.Strecke(daten, { welt: 'hindernisse' });
+    const vorher = st.hindernisse.length;
+    const n = R.Kollisionen.wracksEinbauen(st), n2 = R.Kollisionen.wracksEinbauen(st);
+    const wr = st.hindernisse.filter(h => h.typ === 'wrack' || h.typ === 'brand');
+    pruefe(`[${daten.id}] Welt hindernisse: ${daten.wracks.length} Wracks angehängt, zweiter Aufruf nichts`,
+      n === daten.wracks.length && n2 === 0 && st.hindernisse.length === vorher + n && wr.length === n);
+    pruefe(`[${daten.id}] brennt → typ 'brand', sonst 'wrack'`, wr.every((h, k) => h.typ === (daten.wracks[k].brennt ? 'brand' : 'wrack')));
+    pruefe(`[${daten.id}] KI-Struktur wie Baustelle (s0/s1/laenge/seitenabstand/halbbreite/seite/gefahr 1)`, wr.every(h =>
+      Number.isFinite(h.s0) && Number.isFinite(h.s1) && h.laenge > 0 && h.halbbreite > 0.9 && h.gefahr === 1 && Math.abs(h.seite) === 1 &&
+      h.seite === Math.sign(h.seitenabstand)));
+    // Untergrund unverändert (Wrack ist kein Fleck)
+    const sp = st.spline;
+    const ug = wr.every(h => { const p = sp.punktBei(h.s); return st.untergrundAn(p.x + p.nx * h.seitenabstand, p.z + p.nz * h.seitenabstand) === 'strasse' || Math.abs(h.seitenabstand) > st.breite / 2; });
+    pruefe(`[${daten.id}] untergrundAn am Wrack unverändert ('strasse')`, ug && wr.every(h => !h.untergrund));
+  }
+  // Kollision: Auto fährt mittig ins Wrack → Stoß wie Bake, kommt nicht durch; andere Hälfte frei
+  for (const typ of ['wrack', 'brand']) {
+    const daten = R.trackCatalog.find(t => (t.wracks || []).some(w => (typ === 'brand') === !!w.brennt));
+    const st = new R.Strecke(daten, { welt: 'hindernisse' });
+    R.Kollisionen.wracksEinbauen(st);
+    const h = st.hindernisse.find(x => x.typ === typ), sp = st.spline;
+    const a = new R.Vehicle(AUTO), p = sp.punktBei(h.s - 15);
+    a.setzen(p.x + p.nx * h.seitenabstand, p.z + p.nz * h.seitenabstand, R.headingAus(p.tx, p.tz)); a.vLaengs = 15;
+    let stoss = null, zeit = 0, aIdx;
+    for (let k = 0; k < 150; k++) {
+      const n = sp.naechster(a.x, a.z, aIdx); aIdx = n.index;
+      const tp = sp.punktBei(n.s); a.heading = R.headingAus(tp.tx, tp.tz);   // stur geradeaus auf der Spur
+      a.schritt(DT, { gas: 1, bremse: 0, lenkung: 0 });
+      const s = R.Kollisionen.hindernisse([a], st, { dt: DT, zeit: zeit += DT });
+      stoss = stoss || s.find(x => x.typ === typ) || null;
+    }
+    const nb = sp.naechster(a.x, a.z);
+    pruefe(`${typ}: Stoß typ '${typ}' wie eine Bake`, !!stoss && stoss.staerke > 5, stoss && stoss.staerke.toFixed(1) + ' m/s');
+    pruefe(`${typ}: Auto kommt nicht durch das Wrack`, sp.differenzS(nb.s, h.s) < 0.5, 'ds ' + sp.differenzS(nb.s, h.s).toFixed(1) + ' m');
+    // andere Fahrbahnhälfte: frei
+    const c = new R.Vehicle(AUTO), q = -h.seite * st.breite / 4, pc = sp.punktBei(h.s - 15);
+    c.setzen(pc.x + pc.nx * q, pc.z + pc.nz * q, R.headingAus(pc.tx, pc.tz)); c.vLaengs = 25;
+    let n = 0, cIdx;
+    for (let k = 0; k < 90; k++) {
+      const nn = sp.naechster(c.x, c.z, cIdx); cIdx = nn.index;
+      const tp = sp.punktBei(nn.s); c.heading = R.headingAus(tp.tx, tp.tz);
+      c.x += c.richtung().x * c.vLaengs * DT; c.z += c.richtung().z * c.vLaengs * DT;
+      n += R.Kollisionen.hindernisse([c], st, { dt: DT, zeit: zeit += DT }).length;
+    }
+    pruefe(`${typ}: freie Fahrbahnhälfte ohne Stoß`, n === 0 && c.vLaengs === 25, n + ' Stöße');
+  }
+  // Ohne Aufruf (alte Wege): Strecke unverändert
+  const st0 = new R.Strecke(R.trackCatalog.find(t => t.id === 'wald'), { welt: 'hindernisse' });
+  pruefe('ohne wracksEinbauen: strecke.hindernisse ohne Wracks (bisheriges Verhalten)', !st0.hindernisse.some(h => h.typ === 'wrack' || h.typ === 'brand'));
 }
 
 console.log(fehler ? `\n${fehler} FEHLER` : '\nALLE TESTS OK');
