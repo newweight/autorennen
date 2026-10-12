@@ -10,6 +10,10 @@ Startet server/server.js als Unterprozess (freier Port) und spielt mit 2 Browser
     Screenshots Host-/Gast-Sicht, dann bremsen beide bis zum Stillstand → Positionen beider Sichten < 3 m;
     Server-Zustände in beiden Sichten gleich (Computer-Auto zum selben Tick)
  f) weiterfahren bis die Runde zählt (Ziel) → Ergebnis-Tafel bei beiden; keine JS-Fehler
+W5 Stufe 2 (Rempeln online):
+ g) Lobby: Gast sieht „Geister“ (nur Ansicht), Host schaltet per Klick auf „💥 Rempeln“ (Server übernimmt, Gast sieht den Wert,
+    zuletzt gewählter Wert landet in den lokalen Einstellungen); Start mit Rempeln: alle Autos deckend, Vorhersage kennt die
+    Stellvertreter; der Gast fährt in das stehende Host-Auto → Stoß in der Vorhersage, keine harte Korrektur, keine JS-Fehler
 Bilder: tests/out/online/"""
 import sys, os, socket, subprocess, time, json
 from playwright.sync_api import sync_playwright
@@ -123,6 +127,10 @@ try:
         gast.screenshot(path=os.path.join(out, 'online_4_lobby_gast.png'))
         gl = gast.evaluate("(() => { const o = Rennspiel.spiel.menue.onlineUi; return { n: o.lobby.spieler.length, host: o.istHost, bereit: o.ichLobby().bereit, start: !!document.querySelector('[data-a=\"start\"]'), einst: !!document.querySelector('.on-zusammen') }; })()")
         pruefe('Gast-Lobby: 2 Spieler, Gast bereit (Leertaste), kein Start-Knopf, Einstellungen nur zum Ansehen', gl['n'] == 2 and not gl['host'] and gl['bereit'] and not gl['start'] and gl['einst'], gl)
+        gz = gast.evaluate("document.querySelector('.on-zusammen').textContent")
+        pruefe('Rempeln-Schalter: Standard Geister (Host-Zeile 👻 aktiv, Gast sieht „Geister“, kein Schalter beim Gast)',
+               host.evaluate("(() => { const a = document.querySelector('[data-a=\"wert:kollisionen:aus\"]'); return !!a && a.classList.contains('aktiv'); })()")
+               and 'Geister' in gz and gast.evaluate("!document.querySelector('[data-a^=\"wert:kollisionen\"]')"), gz[-40:])
         # ---------- c) Host stellt ein und startet ----------
         for a in ['wert:strecke:fantasie', 'wert:runden:1', 'wert:gegner:1', 'wert:schwierigkeit:leicht']:
             host.click('[data-a="%s"]' % a); host.wait_for_timeout(350)
@@ -211,8 +219,61 @@ try:
             pruefe('Host: „Zur Lobby“ → beide wieder in der Lobby (Szene abgebaut)', True)
         except Exception as ex:
             pruefe('Host: „Zur Lobby“ → beide wieder in der Lobby (Szene abgebaut)', False, [pg.evaluate("[Rennspiel.spiel.zustand, Rennspiel.spiel.online && Rennspiel.spiel.online.phase]") for pg in (host, gast)])
+        # ---------- g) W5 Stufe 2: Rempeln online ----------
+        gast.keyboard.press('Space')
+        host.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.spieler[1].bereit === true", timeout=10000, polling=200)
+        host.click('[data-a="wert:kollisionen:an"]')
+        for pg in (host, gast):
+            pg.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.einstellungen.kollisionen === true", timeout=10000, polling=200)
+        host.wait_for_timeout(300)
+        hint = host.evaluate("document.querySelector('#online .on-mitte').textContent")
+        hostzeile = host.evaluate("(() => { const a = document.querySelector('[data-a=\"wert:kollisionen:an\"]'); return !!a && a.classList.contains('aktiv'); })()")
+        gz = gast.evaluate("document.querySelector('.on-zusammen').textContent")
+        gl2 = host.evaluate("""(() => { const m = document.querySelector('#online .m-inhalt'); const fuss = document.querySelector('#online .m-fuss').getBoundingClientRect().top;
+          return { scroll: m.scrollHeight <= m.clientHeight + 1, ueber: Array.from(document.querySelectorAll('#online .on-spalte')).some(e => e.scrollHeight > e.clientHeight + 2),
+            innen: Array.from(document.querySelectorAll('#online .on-spalte')).every(e => e.getBoundingClientRect().bottom <= fuss + 2) }; })()""")
+        pruefe('Host schaltet auf 💥 Rempeln: Server übernimmt, Zeile aktiv, Hinweis „gut bei Ping unter 100 ms“, Gast sieht „Rempeln an“',
+               hostzeile and 'Rempeln (gut bei Ping unter 100 ms)' in hint and 'Rempeln an' in gz, [hint[-60:], gz[-30:]])
+        pruefe('Lobby (Host) mit der neuen Zeile 1280×800: nichts abgeschnitten, kein Scrollen', gl2['scroll'] and gl2['innen'] and not gl2['ueber'], gl2)
+        gespeichert = host.evaluate("(() => { try { return JSON.parse(localStorage.getItem(Rennspiel.config.ui.speicherSchluessel)).kollisionen; } catch (e) { return null; } })()")
+        pruefe('Zuletzt gewählter Wert (Rempeln) steht in den lokalen Einstellungen', gespeichert is True, gespeichert)
+        host.screenshot(path=os.path.join(out, 'online_14_lobby_rempeln.png'))
+        gast.screenshot(path=os.path.join(out, 'online_15_lobby_rempeln_gast.png'))
+        host.keyboard.press('Enter')
+        for pg in (host, gast):
+            pg.wait_for_function("Rennspiel.spiel.zustand === 'online' && Rennspiel.spiel.online && Rennspiel.spiel.online.empfangen", timeout=30000, polling=200)
+        gast.wait_for_timeout(700)
+        deck = gast.evaluate("""(() => { const s = Rennspiel.spiel, o = s.online, erg = [];
+          s.fahrzeuge.forEach((f, i) => { let tr = 0, alle = 0; f.mesh.traverse(c => { if (c.material && !Array.isArray(c.material)) { alle++; if (c.material.transparent && c.material.opacity <= 0.61) tr++; } });
+            erg.push({ i, anteil: alle ? tr / alle : 0 }); });
+          const v = o.vorhersage; return { autos: erg, koll: o.kollisionen, vp: v.kollisionen, sv: v.stellvertreter.length, n: s.fahrzeuge.length }; })()""")
+        pruefe('Rempeln: alle Autos deckend (nicht halbtransparent), Vorhersage kennt die Stellvertreter der anderen',
+               all(g['anteil'] < 0.2 for g in deck['autos']) and deck['koll'] and deck['vp'] and deck['sv'] == deck['n'] - 1, deck)
+        gast.screenshot(path=os.path.join(out, 'online_16_gast_countdown_rempeln.png'))
+        # Host steht still; der Gast (hinter ihm auf dem Startfeld) steuert auf das Host-Auto zu
+        host.evaluate(AUTOPILOT, 'stopp')
+        gast.evaluate("""() => { const s = Rennspiel.spiel, o = s.online, R = Rennspiel;
+          if (!s._origSteuerung) s._origSteuerung = s.input.steuerung.bind(s.input);
+          s.input.steuerung = (nr) => { if (nr !== 0) return { gas: 0, bremse: 0, lenkung: 0 };
+            const ich = o.vorhersage.vp, ziel = s.fahrzeuge[0].vehicle;       // Nr. 0 = Host
+            let d = R.headingAus(ziel.x - ich.x, ziel.z - ich.z) - ich.heading;
+            while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+            return { gas: ich.vLaengs < 14 ? 1 : 0.3, bremse: 0, lenkung: Math.max(-1, Math.min(1, -3 * Math.sin(d))) }; };
+          return true; }""")
+        stoss = 0
+        for _ in range(40):
+            gast.wait_for_timeout(500)
+            stoss = gast.evaluate("Rennspiel.spiel.online.vorhersage.stat.stoesse")
+            if stoss >= 3: break
+        zg = gast.evaluate(ZUSTAND); zh = host.evaluate(ZUSTAND)
+        abstand = ((zg['pos'][0][0] - zh['pos'][0][0]) ** 2 + (zg['pos'][0][1] - zh['pos'][0][1]) ** 2) ** 0.5
+        pruefe('Rempeln: Gast fährt ins stehende Host-Auto → Stoß in der Vorhersage (≥ 3), Sicht-Abweichung des Host-Autos < 3 m',
+               stoss >= 3 and abstand < 3, 'Stöße %s, %s; Host-Auto in beiden Sichten %.2f m auseinander' % (stoss, zg['stat'], abstand))
+        gast.screenshot(path=os.path.join(out, 'online_17_rempeln_gast.png'))
+        host.screenshot(path=os.path.join(out, 'online_18_rempeln_host.png'))
+        # Rennen verlassen (Host: Esc, dann Enter)
+        host.keyboard.press('Escape'); host.wait_for_timeout(300); host.keyboard.press('Enter')
         # Host verlässt → Gast bekommt Hinweis
-        host.keyboard.press('Escape')
         gast.wait_for_function("Rennspiel.spiel.menue.onlineUi.ansicht === 'start' && Rennspiel.spiel.menue.onlineUi.hinweis.length > 0", timeout=10000, polling=200)
         pruefe('Host verlässt den Raum → Gast zurück mit Hinweis', 'Host' in gast.evaluate('Rennspiel.spiel.menue.onlineUi.hinweis'), gast.evaluate('Rennspiel.spiel.menue.onlineUi.hinweis'))
         gast.screenshot(path=os.path.join(out, 'online_13_gast_raum_zu.png'))

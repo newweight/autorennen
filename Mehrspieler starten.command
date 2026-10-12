@@ -43,11 +43,30 @@ SERVER=$!
 aufraeumen() { kill "$SERVER" 2>/dev/null; wait "$SERVER" 2>/dev/null; echo "👋 Server beendet."; exit 0; }
 trap aufraeumen INT TERM HUP
 
-# warten, bis der Server antwortet, dann das Spiel öffnen
-for _ in $(seq 1 50); do
-  curl -s -o /dev/null "http://localhost:$PORT/" && break
+# --- warten, bis der Server antwortet (bis zu 60 s; beim ersten Start nach iCloud-Download dauert das länger) ---
+BEREIT=0; HINWEIS=0; LETZTE_MELDUNG=0
+START=$SECONDS
+while [ $((SECONDS - START)) -lt 60 ]; do
+  if ! kill -0 "$SERVER" 2>/dev/null; then
+    echo ""
+    echo "❌ Server ist abgestürzt – Meldung oben lesen"
+    read -r -p "Enter zum Schließen … " _; exit 1
+  fi
+  if curl -s -o /dev/null --max-time 2 "http://localhost:$PORT/"; then BEREIT=1; break; fi
+  VERGANGEN=$((SECONDS - START))
+  if [ "$HINWEIS" -eq 0 ] && [ "$VERGANGEN" -ge 3 ]; then
+    echo "⏳ Server lädt noch (beim ersten Start nach iCloud-Download kann das bis zu einer Minute dauern) …"
+    HINWEIS=1; LETZTE_MELDUNG=$VERGANGEN
+  elif [ "$HINWEIS" -eq 1 ] && [ $((VERGANGEN - LETZTE_MELDUNG)) -ge 10 ]; then
+    echo "   … $VERGANGEN s"
+    LETZTE_MELDUNG=$VERGANGEN
+  fi
   sleep 0.2
 done
+if [ "$BEREIT" -eq 0 ]; then
+  echo "⚠️  Server antwortet nach 60 s noch nicht – ich öffne den Browser trotzdem."
+  echo "   Der Server läuft weiter; falls die Seite nicht lädt, in einigen Sekunden neu laden (Cmd+R)."
+fi
 if [ -d "/Applications/Google Chrome.app" ]; then open -a "Google Chrome" "http://localhost:$PORT/"; else open "http://localhost:$PORT/"; fi
 
 echo ""

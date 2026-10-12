@@ -29,6 +29,8 @@
       rempeln: (c.kollision && c.kollision.rempeln && c.kollision.rempeln.standard) === 'echt' ? 'echt' : 'sanft',
       // Runde 6 (W2-D): Tageszeit 'tag' (Standard, Licht wie bisher) | 'daemmerung' | 'nacht'
       tageszeit: c.tageszeit && c.tageszeit[c.tageszeitStandard] ? c.tageszeitStandard : 'tag',
+      // W5 Stufe 2: Online-Raum mit Rempeln (Auto↔Auto) statt Geister – nur die zuletzt gewählte Host-Einstellung, Standard Geister
+      kollisionen: false,
       // Runde 6 (W3-F): Spielart 'rennen' (Einzelrennen, wie bisher) | 'pokal' (D1) | 'elimination' (D7); Pokal-Größe 3/4/5
       spielart: 'rennen', pokalGroesse: (c.pokal && c.pokal.groesseStandard) || 3,
       // Runde 6 (W3-G): Garage-Upgrades im Rennen anwenden (aus = Faktoren 1, Lackfarben bleiben)
@@ -65,6 +67,7 @@
       polizei: typeof r.polizei === 'boolean' ? r.polizei : std.polizei,
       rempeln: r.rempeln === 'echt' || r.rempeln === 'sanft' ? r.rempeln : std.rempeln,
       tageszeit: c.tageszeit && c.tageszeit[r.tageszeit] ? r.tageszeit : std.tageszeit,
+      kollisionen: r.kollisionen === true,                // W5 Stufe 2 (nur online genutzt)
       spielart: r.spielart === 'pokal' || r.spielart === 'elimination' ? r.spielart : 'rennen',     // W3-F
       pokalGroesse: ((c.pokal && c.pokal.groessen) || [3, 4, 5]).includes(+r.pokalGroesse) ? +r.pokalGroesse : std.pokalGroesse,
       upgradesZaehlen: r.upgradesZaehlen !== false,      // W3-G

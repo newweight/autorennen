@@ -707,3 +707,29 @@
   (Agent), test_strecke/test_kollisionen grün, Bilder Lobby/QR + iPhone-Rennen angesehen. → Version v11 (Online + Touch).
   Offen W5-4: echter Handy-Test über Funnel (wss auf 8443), Stufe 2 Kollisionen online, iOS-Besonderheiten (Neigung, Vollbild).
 - 12.10. Übergabe geschrieben: UEBERGABE_2026-10-12.md (offenes Problem: Server auf dem mini startet nicht, localhost:8443 abgelehnt).
+- 12.10. Agent Rempeln online (W5 Stufe 2, Sonnet) – fertig. Arbeitsordner v12 (Kopie von v11, v11_original unberührt).
+  Ausgangsstand (vorher, v11-Kopie): alle 22 Node-Tests exit 0 (test_netz 44/44), online_test 23/23, menu_test 175 OK, touch_test 76/76.
+  Geändert: src/net/vorhersage.js (Stellvertreter, nur bei opt.kollisionen), src/net/online.js (Lobby-Zeile, Weitergabe), src/main.js (Einstellung
+  `kollisionen`, Standard false, nur gemerkt), tests/test_netz.js (Teil K + E), tests/online_test.py (Teil g), server/PROTOKOLL.md, server/README.md,
+  ANLEITUNG.md (Geister vs. Rempeln), ERWEITERN.md. server.js/simulation.js UNVERÄNDERT (einstellungenPruefen nimmt schon nur ein echtes `true`).
+  Menü: Host-Zeile „💥 Rempeln (gut bei Ping unter 100 ms)“ mit 👻 Geister / 💥 Rempeln unter „Deine Wahl“ (mittlere Spalte – rechts war für Fantasie +
+  Variante kein Platz mehr), ↑↓/←→/Klick wie die anderen Zeilen; Gäste sehen den Wert in der Zusammenfassung rechts („Rempeln an“/„Geister“).
+  raumErstellen schickt den zuletzt gewählten Wert mit (localStorage über spiel.einstellungen.kollisionen, Standard Geister).
+  Vorhersage: NetzVorhersage(opt.kollisionen, opt.andere [{nr, auto}]) hält je Gegner ein R.Vehicle als Stellvertreter (Fahrwerte per autoId aus
+  start.teilnehmer). abgleich(ich, anzeige, zustand.a) setzt sie auf die Server-Pose des Ack-Ticks; `_autoAuto` (nach der Bande, Bande nochmal
+  für den bewegten Wagen wie main.js) rückt sie je Folge-Nr um dt entlang ihrer Welt-Geschwindigkeit vor und ruft Kollisionen.autoAuto([eigener
+  Wagen, Gegner < 15 m], {countdown, rempeln:'sanft', dt}). Erster Entwurf (Stellvertreter in jedem Schritt NEU aus dem alten Zustand) war schlechter:
+  nach einem Stoß bekam der Gegner keine Beschleunigung und der eigene Wagen stieß ~5 Schritte lang gegen ein „unbewegtes“ Auto (Fehler 0,6 m statt 0) →
+  jetzt zustandsbehaftet bis zum nächsten Abgleich. Flug/Looping der Gegner (Flags) behandelt autoAuto selbst. Die Anzeige der anderen kommt weiter aus dem
+  NetzPuffer (Test prüft: Zustandsreihen bleiben bitgleich). Ohne kollisionen: kein Stellvertreter, kein Aufruf – Pose bitgleich zu v11.
+  Kleine Nebenkorrektur: online.js ignoriert einen nachzüglerischen Fehler „keinRaum“ nach „Raum zu“ (überschrieb den Host-Weg-Hinweis, nur sichtbar, wenn der Host mitten im Rennen geht).
+  Tests nachher: test_netz 52/52 (+8: bool-Prüfung Server, Rempeln-Schalter über Lobby, K: je Szenario ‚hinten‘ und ‚seitlich‘ Fehler gegen den Server bei 100 ms
+  Verzug – hinten: mit Stellvertretern Ø 0,000 / max 0,00 m, ohne max 1,06 m (21 Server-Stöße, 20 in der Vorhersage); seitlich: Ø 0,018 / max 0,04 m gegen ohne Ø 0,094 /
+  max 0,16 m; bitgleich zu v11 bei kollisionen aus; kein Rückfluss), online_test 29/29 (+6: Standard Geister, Host schaltet, Gast sieht Wert, Layout, localStorage, Start mit
+  Rempeln → alle Autos deckend + 2 Stellvertreter, Gast fährt ins stehende Host-Auto → 8 Stöße in der Vorhersage, Host-Auto in beiden Sichten 0,28 m auseinander),
+  menu_test 175 OK, touch_test 76/76, die übrigen 22 Node-Tests exit 0 – keine neuen Fehler. Bilder tests/out/online (14–18) bzw. Scratchpad angesehen.
+  Schwächen: Gegner fahren in der Vorhersage geradeaus (Lenken/Gas der letzten ~100 ms + Ping unbekannt) – bei Kurven-Rempeln bleibt ein Rest-Fehler bis zum nächsten
+  Zustand; die anderen werden ~100 ms + Ping/2 hinter dem (vorhergesagten) eigenen Wagen gezeichnet, der Stoß sieht deshalb leicht versetzt aus (Wagen stößt „vor“ dem sichtbaren
+  Gegner); Basis > 1,5 s alt → keine Stöße mehr in der Vorhersage; Szenarien im Test sind künstlich (2 Spieler, gerade Strecke), kein Test mit 6 Menschen/Netz-Zittern/Echt-Rempeln
+  ('echt' ist online nicht anwählbar); Browser-Test lief auf 2 Kernen mit Software-GL (4–6 fps, daher viele harte Korrekturen in den Zahlen – auch schon im Ausgangsstand), echtes Gefühl
+  bei 50–100 ms Ping ungetestet; Lobby-Zeile liegt in der Mitte statt bei den anderen Host-Zeilen (Platz).

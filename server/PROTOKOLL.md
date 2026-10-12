@@ -39,7 +39,9 @@ Host trennt/verlässt → Raum zu (alle Gäste: raumZu). Gast trennt im Rennen �
 
 `einstellungen`: `streckeId`, `welt`, `variante`, `runden`, `gegner` (Computer, 0 … 12 − Menschen), `schwierigkeit`,
 `tempoKlasse`, `jahreszeit` (auch `zufall`), `wetter` (auch `zufall`), `windStaerke`, `tageszeit`,
-`kollisionen` (**Stufe 2**, bool, im Menü nicht angeboten; Standard `false` = Geister). `schaden` ist online immer `false`.
+`kollisionen` (**Stufe 2**, Menü-Schalter „👻 Geister / 💥 Rempeln“ in der Lobby, nur Host; nur ein echtes `true` schaltet Rempeln
+an, alles andere – auch `"true"`, `1`, `null` – bleibt/wird `false` = Geister). `raumErstellen` darf den zuletzt gewählten Wert gleich mitschicken.
+`schaden` ist online immer `false`.
 
 Eingaben sind ganze Zahlen (`Netz.eingabeKodieren`), damit Server und Vorhersage im Browser **genau** mit
 denselben Werten rechnen (`wert / 100`). Der Server verarbeitet je Tick (1/60 s) eine Eingabe je Spieler aus einer
@@ -89,7 +91,14 @@ Schaden ist online aus, darum steht er nicht im Zustand.
   nie über einen Reset hinweg (`resetZaehler`).
 - **Stufe 1 (Geister)**: Auto↔Auto-Kollisionen sind im Server aus (`Kollisionen.autoAuto` liefert nichts, solange
   `sim.kollisionen` false ist); fremde Autos werden halbtransparent (0,6) gezeichnet.
-- **Stufe 2**: Raum-Einstellung `kollisionen: true` (nur per Nachricht, z. B. Konsole:
-  `Rennspiel.spiel.menue.onlineUi.verb.senden({t:'einstellungen', einstellungen:{kollisionen:true}})`).
-  Dann schiebt der Server die Autos auseinander; die Vorhersage kennt die anderen Autos nicht → Stöße kommen
-  beim eigenen Wagen erst mit dem nächsten Zustand an (Korrektur). Sinnvoll erst bei Ping < 100 ms.
+- **Stufe 2 (Rempeln)**: Raum-Einstellung `kollisionen: true` – im Menü: Lobby-Zeile „👻 Autos untereinander“ (Host: 👻 Geister /
+  💥 Rempeln, Gäste sehen den Wert), Hinweis „Rempeln (gut bei Ping unter 100 ms)“. Der Server schiebt die Autos auseinander
+  (Rempeln `sanft`), die anderen Autos werden deckend gezeichnet. Die Vorhersage (`NetzVorhersage`, nur bei `kollisionen`) prüft
+  den eigenen Wagen nach der Bande auch gegen **Stellvertreter** der anderen Autos (eigene `R.Vehicle` je Gegner, Fahrwerte aus dem
+  Katalog per `autoId` aus `start.teilnehmer`): beim Abgleich auf die Pose aus `zustand.a` desselben Ticks gesetzt (Folge-Nr = `ack`),
+  dann je Folge-Nr um 1/60 s entlang ihrer Welt-Geschwindigkeit vorgerückt (nach einem Stoß mit dem veränderten Tempo), das Replay im
+  Abgleich macht es für jede nachgerechnete Eingabe genauso. Die Stellvertreter gehören nur der Vorhersage – die Anzeige der anderen
+  Autos kommt weiter aus dem `NetzPuffer`. Ohne `kollisionen` rechnet die Vorhersage exakt wie vorher. Grenzen: Die anderen fahren
+  in der Vorhersage geradeaus (Lenken/Gasgeben in den letzten ~100 ms kennt sie nicht), mehr als 90 Schritte (1,5 s) Abstand zum
+  letzten Zustand → keine Stöße mehr in der Vorhersage; die gezeichneten anderen Autos sind ~100 ms + Ping/2 „hinter" dem eigenen
+  (vorhergesagten) Wagen, der Stoß sieht deshalb leicht versetzt aus. Sinnvoll bei Ping < 100 ms.

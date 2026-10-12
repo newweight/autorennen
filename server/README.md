@@ -16,6 +16,11 @@ Gäste brauchen nur einen Browser (auch Handy/Tablet) – kein Tailscale, keine 
 Im Spiel: Menü → **🌐 Online** → *Raum erstellen* → Code, Link und QR-Code an die Gäste geben.
 Link/QR zeigen automatisch die öffentliche Adresse, auch wenn du selbst über `localhost` spielst.
 
+**Geister oder Rempeln:** In der Lobby stellt der Host in der Zeile „👻 Autos untereinander“ ein, ob die Autos durcheinander durchfahren
+(👻 Geister, Standard) oder sich anstoßen (💥 Rempeln, Raum-Einstellung `kollisionen`). Rempeln rechnet der Server (Auto↔Auto, Rempeln „sanft“);
+die Browser sagen den eigenen Wagen samt Stößen voraus (siehe `PROTOKOLL.md`), das fühlt sich nur bei Ping unter ca. 100 ms gut an
+(Anzeige 🌐 im HUD). Der Server übernimmt nur ein echtes `true`.
+
 Node.js: Ist `node` (ab Version 18) installiert, wird es genommen, sonst die mitgelieferte Datei
 `server/bin/node-macos-arm64` (offizielles Node.js **v24.21.0 LTS** für Apple Silicon, signiert von
 „Developer ID Application: Node.js Foundation (HX7739G8FX)“, SHA-256
@@ -63,7 +68,7 @@ localhost-Link – Gäste können aber auch einfach die trycloudflare-Adresse ö
 
 - „Port 8443 ist schon belegt“ → läuft der Server schon in einem anderen Fenster? `lsof -nP -iTCP:8443 -sTCP:LISTEN`
 - Gäste sehen „Keine Verbindung zum Server“ → Funnel läuft? (`funnel status`), Adresse mit `:8443`?
-- Ruckeln beim Gast → Ping-Anzeige 🌐 im HUD oben links; über Mobilfunk sind 40–120 ms normal.
+- Ruckeln beim Gast → Ping-Anzeige 🌐 im HUD oben links; über Mobilfunk sind 40–120 ms normal. Bei hohem Ping lieber 👻 Geister statt 💥 Rempeln.
 
 Technik: `server/PROTOKOLL.md` (Nachrichten), `ERWEITERN.md` (Abschnitt Mehrspieler), Tests:
 `node tests/test_netz.js`, `python3 tests/online_test.py`.

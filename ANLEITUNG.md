@@ -118,7 +118,12 @@ ist die Karte „🌐 Online“ grau („Online geht nur über ‚Mehrspieler st
    Tageszeit** ein und startet mit **Enter**, sobald alle bereit sind. Höchstens **6 Spieler**, dazu Computer-Gegner (zusammen bis 12 Autos).
 5. Im Rennen fährt jeder mit seiner eigenen Ansicht (Pfeile **oder** WASD, Leertaste/E = Item, R = zurück auf die Strecke,
    C = Kamera). Oben links zeigt **🌐 … ms** die Verbindung (unter 100 ms ist gut).
-- **Geister:** Online fahren die Autos **durcheinander durch** (keine Zusammenstöße), die anderen Autos sind halb durchsichtig.
+- **👻 Geister oder 💥 Rempeln:** Der Host stellt in der Lobby in der Zeile **„👻 Autos untereinander“** ein (die anderen sehen es nur):
+  - **👻 Geister** (Standard): Die Autos fahren **durcheinander durch**, es gibt keine Zusammenstöße, die anderen Autos sind halb durchsichtig.
+    Gut für Anfänger, kleine Kinder und wenn das Internet langsam ist.
+  - **💥 Rempeln**: Die Autos sind fest und **schieben sich weg**, wenn sie sich berühren (leichte Autos weichen schweren aus); alle
+    Autos sind voll sichtbar. Das fühlt sich nur gut an, wenn **🌐 … ms oben links unter 100** ist – sonst „springt" ein Stoß ein wenig.
+    Der Host merkt sich die letzte Wahl für den nächsten Raum.
   Bande, Bäume, Hindernisse, Turbo, Schild und Ölfalle gelten wie immer. **Schaden ist online aus**, Polizei und Münzen auch.
 - **Esc** im Rennen fragt „Rennen verlassen?“ – online gibt es **keine Pause**, das Rennen läuft weiter. Wer geht, dessen Auto
   fährt als Computer zu Ende. Geht der **Host**, ist der Raum zu und alle kommen mit einem Hinweis zurück ins Online-Menü.

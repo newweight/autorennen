@@ -208,7 +208,7 @@
         const e = this.spiel.einstellungen;
         v.senden(Object.assign({ t: 'raumErstellen', einstellungen: { streckeId: e.streckeId, welt: e.welt, variante: e.variante, runden: e.runden,
           gegner: e.gegner, schwierigkeit: e.schwierigkeit, tempoKlasse: e.tempoKlasse, jahreszeit: e.jahreszeit, wetter: e.wetter,
-          tageszeit: e.tageszeit } }, this.meineWahl()));
+          tageszeit: e.tageszeit, kollisionen: e.kollisionen === true } }, this.meineWahl()));   // Stufe 2: zuletzt gewählt (Standard Geister)
       } catch (err) { this.ansicht = 'start'; this.hinweis = 'Keine Verbindung zum Server 😕'; this.zeichnen(); }
     }
 
@@ -245,6 +245,7 @@
     }
 
     fehlerEmpfangen(m) {
+      if (m.grund === 'keinRaum' && !this.lobby && !this.phase) return;   // Nachzügler einer Eingabe nach „Raum zu“: Hinweis des Hosts nicht überschreiben
       if (this.phase === 'rennen') { const hd = this.spiel.huds[0]; if (hd) hd.meldung(m.text || 'Fehler', 1800); return; }
       this.hinweis = m.text || 'Fehler';
       if (this.ansicht === 'verbinden') this.ansicht = this.lobby ? 'lobby' : (m.grund === 'unbekannt' || m.grund === 'voll' || m.grund === 'laeuft' ? 'code' : 'start');
@@ -356,7 +357,7 @@
       if (this.istHost) {
         z.push('strecke', 'welt');
         if (this.variantenListe().length) z.push('variante');
-        z.push('runden', 'gegner', 'schwierigkeit', 'tempoKlasse', 'jahreszeit', 'wetter', 'tageszeit');
+        z.push('runden', 'gegner', 'schwierigkeit', 'tempoKlasse', 'jahreszeit', 'wetter', 'tageszeit', 'kollisionen');
       }
       return z;
     }
@@ -414,6 +415,7 @@
         l.push({ k: 'zufall', text: '🎲' });
         return { wert: e.wetter, liste: l };
       }
+      if (zeile === 'kollisionen') return { wert: e.kollisionen ? 'an' : 'aus', liste: [{ k: 'aus', text: '👻 Geister' }, { k: 'an', text: '💥 Rempeln' }] };
       if (zeile === 'tageszeit') return { wert: e.tageszeit, liste: [{ k: 'tag', text: '☀️ Tag' }, { k: 'daemmerung', text: '🌇 Dämmerung' }, { k: 'nacht', text: '🌙 Nacht' }] };
       return { wert: null, liste: [] };
     }
@@ -436,6 +438,13 @@
       else if (zeile === 'welt') e.welt = k === this.streckeDaten().weltStandard ? '' : k;
       else if (zeile === 'runden' || zeile === 'gegner') e[zeile] = +k;
       else if (zeile === 'jahreszeit') { e.jahreszeit = k; e.wetter = 'klar'; }
+      else if (zeile === 'kollisionen') {
+        e.kollisionen = k === 'an';
+        // zuletzt gewählten Wert merken (nächster „Raum erstellen“ startet damit)
+        const lok = this.basis || this.spiel.einstellungen;
+        lok.kollisionen = e.kollisionen;
+        if (!this.basis) this.spiel.einstellungenSpeichern();
+      }
       else e[zeile] = k;
       this.verb.senden({ t: 'einstellungen', einstellungen: e });
     }
@@ -453,7 +462,7 @@
           `<div class="karten-sub">Du bist der Host und bekommst einen Code für die anderen</div></div>` +
           `<div class="karte gross${this.wahl === 1 ? ' gewaehlt' : ''}" data-a="beitretenAnsicht"><div class="emoji">🔑</div><div class="karten-name">Raum beitreten</div>` +
           `<div class="karten-sub">Gib den Code ein, den du bekommen hast</div></div></div>${hw}` +
-          `<div class="on-info">👻 Online fahren alle Autos durcheinander durch (Geister) · 💥 Schaden ist online aus · kein Chat</div>`;
+          `<div class="on-info">👻 Online fahren die Autos meist durcheinander durch (Geister), der Host kann 💥 Rempeln einschalten · Schaden ist online aus · kein Chat</div>`;
         fuss = `<div class="knopf klein" data-a="zurueck">◀ Zurück</div>`;
         hinweis = '<kbd>←</kbd><kbd>→</kbd> auswählen · <kbd>Enter</kbd> weiter · <kbd>Esc</kbd> zurück';
       } else if (this.ansicht === 'code') {
@@ -508,7 +517,7 @@
           (this.variantenListe().length ? zeile('variante', '📏 Variante') : '') + zeile('runden', '🔁 Runden') +
           zeile('gegner', '🤖 Computer-Gegner') + zeile('schwierigkeit', '🎚️ Computer-Stärke') + zeile('tempoKlasse', '🏎️ Tempo') +
           zeile('jahreszeit', '🍂 Jahreszeit') + zeile('wetter', '🌦️ Wetter') + zeile('tageszeit', '🌗 Tageszeit') +
-          `<div class="on-fest">💥 Schaden: aus (online) · ${e.kollisionen ? '💥 Rempeln an (Stufe 2)' : '👻 Geister: Autos fahren durcheinander durch'}</div>`;
+          `<div class="on-fest">💥 Schaden: aus (online) · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister: Autos fahren durcheinander durch'}</div>`;
       } else {
         const wi = (R.weltInfo || {})[e.welt || daten.weltStandard] || {};
         const S = c.schwierigkeiten[e.schwierigkeit] || {};
@@ -524,7 +533,10 @@
         (qr ? `<div class="on-qr" title="QR-Code mit dem Handy scannen">${qr}</div>` : '') +
         `<div class="on-link">${esc(link)}</div><div class="on-klein">Code eingeben, Link öffnen oder QR scannen</div></div>` +
         `<div class="on-spalte on-mitte"><h3>👥 Spieler (${L.spieler.length}/${L.max || N.MAX_SPIELER})</h3><div class="on-spieler">${spieler}</div>` +
-        `<div class="on-wahl-block"><h3>Deine Wahl</h3>${meine}</div>${hw}</div>` +
+        `<div class="on-wahl-block"><h3>Deine Wahl</h3>${meine}</div>` +
+        // W5 Stufe 2: Geister/Rempeln (nur der Host stellt es ein; Gäste sehen den Wert rechts in der Zusammenfassung)
+        (this.istHost ? `<div class="on-wahl-block"><h3>🚗💥 Autos untereinander (Host)</h3>${zeile('kollisionen', '💥 Rempeln (gut bei Ping unter 100 ms)')}</div>` : '') +
+        `${hw}</div>` +
         `<div class="on-spalte on-einst">${rechts}</div></div>`;
     }
 
@@ -597,8 +609,10 @@
       // Netz-Zustand
       this.du = du;
       this.teilnehmer = m.teilnehmer;
+      this.kollisionen = e.kollisionen === true;        // Stufe 2 (Rempeln): Vorhersage kennt die anderen Autos
+      const andere = this.kollisionen ? m.teilnehmer.map((t, i) => (i === du ? null : { nr: i, auto: katalog.find(a => a.id === t.autoId) || katalog[0] })).filter(Boolean) : [];
       this.vorhersage = new R.NetzVorhersage({ strecke, auto: mein.auto, tempoKlasse: e.tempoKlasse, fahrhilfe: m.teilnehmer[du].hilfe,
-        umwelt: () => (spiel.wetter ? spiel.wetter.umwelt() : undefined) });
+        umwelt: () => (spiel.wetter ? spiel.wetter.umwelt() : undefined), kollisionen: this.kollisionen, andere, rempeln: 'sanft' });
       const vp = this.vorhersage.vp, p0 = plaetze[du];
       vp.setzen(p0.x, p0.z, p0.heading); vp.y = strecke.hoeheAn(p0.x, p0.z);
       this.puffer = new R.NetzPuffer();
@@ -714,7 +728,7 @@
       if (z.ich) {
         const ich = z.ich, f = spiel.fahrzeuge[this.du], t = r.teilnehmer[this.du];
         const v = f.vehicle, anzeige = { x: v.x, z: v.z, y: v.y, heading: v.heading };
-        this.vorhersage.abgleich(ich, anzeige);
+        this.vorhersage.abgleich(ich, anzeige, this.kollisionen === true ? z.a : undefined);
         f.resetHinweis = !!ich.rh; f.falschHerum = !!ich.fh;
         t.rundenStart = ich.rs; t.rundenzeiten = ich.rzn || []; t.bestzeit = ich.bz;
         if (ich.zz !== null && ich.zz !== undefined) t.zielZeit = ich.zz;

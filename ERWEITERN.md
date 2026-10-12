@@ -195,8 +195,12 @@ Nachrichten: **`server/PROTOKOLL.md`**.
 - **Geister / Stufe 2**: `laden()` hüllt `Kollisionen.autoAuto` und `loopingAbstand` ein – solange die laufende Simulation `kollisionen: false`
   hat, liefern sie nichts. **Stufe 2 einschalten**: Raum-Einstellung `kollisionen: true` (Host schickt `{t:'einstellungen', einstellungen:
   {kollisionen:true}}`; `einstellungenPruefen` lässt nur `true` durch). Der Browser zeichnet dann die anderen Autos deckend und die Lobby zeigt
-  „💥 Rempeln an“. Für ein Menü-Angebot: Zeile in `online.js zeilen()/werte()` ergänzen (bisher bewusst nicht angeboten). Offen für Stufe 2:
-  Die Vorhersage kennt die anderen Autos nicht (Stoß kommt erst mit der Korrektur), sinnvoll ab Ping < 100 ms.
+  „💥 Rempeln an“. **Menü (W5 Stufe 2)**: Lobby-Zeile `kollisionen` in `online.js zeilen()/werte()/wertSetzen()` (Host: 👻 Geister / 💥 Rempeln,
+  Wert wird in `spiel.einstellungen.kollisionen` gemerkt – `main.js` `standardEinstellungen/einstellungenPruefen`, Standard false – und bei
+  `raumErstellen` mitgeschickt). **Vorhersage**: `NetzVorhersage` (Optionen `kollisionen`, `andere: [{ nr, auto }]`, `rempeln`) hält je Gegner ein
+  Stellvertreter-`R.Vehicle`, `abgleich(ich, anzeige, zustand.a)` setzt sie auf die Server-Pose, `_autoAuto` rückt sie je Folge-Nr vor und ruft
+  `Kollisionen.autoAuto`; ohne `kollisionen` ist alles wie vorher. Grenzen: Gegner fahren in der Vorhersage geradeaus; Anzeige der anderen
+  ~100 ms + Ping/2 hinter dem eigenen Wagen; sinnvoll ab Ping < 100 ms.
 - **Browser** (`src/net/online.js`): `menu.js` hat eine 5. Modus-Karte `online` (`onlineGewaehlt`, `htmlOnlineKarte`, `onlineOeffnen`; von
   `file://` ausgegraut via `R.Online.verfuegbar()`). `R.Online.Bildschirm` zeigt Start/Code-Eingabe (fängt Buchstaben vor den Spieltasten ab)/
   Lobby (Code, Link + QR aus `einladungsBasis`: bei localhost/Heimnetz-IP die `oeffentlich`-Adresse des Servers)/Ergebnis. `?raum=ABCD` öffnet
@@ -215,7 +219,7 @@ Nachrichten: **`server/PROTOKOLL.md`**.
   = Server auf allen Strecken).
 - **Neue Nachricht**: in `server.js nachricht()` (Raum-Nachrichten zusätzlich in `RAUM_NACHRICHTEN`), Browser `verbindung()` → `v.bei('typ', …)`,
   in `PROTOKOLL.md` eintragen; Werte immer auf erlaubte Listen prüfen (keine Freitexte!).
-- **Tests**: `node tests/test_netz.js` (Vorhersage = Server auf 6 Strecken, Geister/Stufe 2, HTTP-Sperren, kaputte Nachrichten, Raum/Lobby/
+- **Tests**: `node tests/test_netz.js` (Vorhersage = Server auf 6 Strecken, Geister/Stufe 2, Teil K: Rempeln mit Stellvertretern gegen ohne, HTTP-Sperren, kaputte Nachrichten, Raum/Lobby/
   Start/Eingaben/ack/Checkpoints/Runde/Ergebnis mit 2 Clients im Zeitraffer, Gast/Host trennt, max. 6, Ping, öffentliche Adresse) und
   `python3 tests/online_test.py` (Server als Unterprozess, 2 Browser: Lobby + QR (OpenCV liest ihn), Link `?raum=`, Code-Eingabe, Geister,
   20 s fahren, Positionen beider Sichten < 3 m, Runde, Ergebnis, Host geht). Bilder: `tests/out/online/`.

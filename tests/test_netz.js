@@ -15,7 +15,7 @@ const http = require('http');
 const path = require('path');
 const WebSocket = require(path.join(__dirname, '..', 'server', 'node_modules', 'ws'));
 const { starten } = require('../server/server');
-const { Simulation, kontextLaden, laden } = require('../server/simulation');
+const { Simulation, kontextLaden, laden, einstellungenPruefen } = require('../server/simulation');
 
 let fehler = 0, ok = 0;
 function pruefe(name, gut, info) { console.log((gut ? 'OK   ' : 'FEHL ') + name + (info !== undefined ? '  (' + info + ')' : '')); if (gut) ok++; else fehler++; }
@@ -107,6 +107,87 @@ function autopilot(st, v, idx) {
   const g = abstand(false), k = abstand(true);
   pruefe('B Geister: zwei Spielerautos übereinander werden nicht auseinandergeschoben (Stufe 1)', g < 0.35, g.toFixed(2) + ' m');
   pruefe('B Stufe 2 vorbereitet: Raum-Schalter kollisionen: true trennt sie (Auto↔Auto an)', k > 1.5, k.toFixed(2) + ' m');
+}
+
+
+// ------------------------------------------------------------------ K) Rempeln online (W5 Stufe 2): Vorhersage mit Stellvertretern
+//   Server mit kollisionen: true, zwei Menschen (ich = Spieler 2). Die Server-Zustände kommen mit 100 ms Verzug beim
+//   Client an (wie bei ~100 ms Ping): Vorhersage mit Stellvertretern der anderen Autos gegen Vorhersage ohne sie.
+{
+  // Server übernimmt kollisionen nur als echtes bool (Host-Nachricht 'einstellungen' läuft durch einstellungenPruefen)
+  {
+    const w = (x) => einstellungenPruefen({ kollisionen: x }, 2).kollisionen;
+    pruefe('K Server: kollisionen nur true → an; Standard/„true“/1/null → Geister (bool-Prüfung)', w(true) === true && w(false) === false && w() === false && w('true') === false && w(1) === false && w(null) === false,
+      [w(true), w(false), w(), w('true'), w(1), w(null)].join(' '));
+  }
+  const VERZUG = 6;                 // Zustände (und ack) kommen 6 Schritte = 100 ms zu spät an
+  const ich_ = 1;
+  function lauf(szenario, kollisionen) {
+    const sim = new Simulation({ einstellungen: { streckeId: 'wiese', gegner: 0, kollisionen: true, runden: 3 },
+      spieler: [{ fahrer: 'Jonas', auto: 'passat', hilfe: 'aus' }, { fahrer: 'Emmy', auto: 'porsche-911', hilfe: 'aus' }], seed: 77 });
+    const info = sim.startInfo(), e = info.einstellungen, { st, w } = clientStrecke(e);
+    const katalog = C.carCatalog.waehlbare(), auto = katalog.find(a => a.id === 'porsche-911');
+    const andereAuto = katalog.find(a => a.id === 'passat');
+    const neu = (opt) => new C.NetzVorhersage(Object.assign({ strecke: st, auto, tempoKlasse: e.tempoKlasse, fahrhilfe: 'aus', umwelt: () => w.umwelt() }, opt || {}));
+    const vMit = neu({ kollisionen, andere: [{ nr: 0, auto: andereAuto }] });
+    const vOhne = neu();                              // wie v11 (ohne Stellvertreter)
+    const vAus = neu({ kollisionen: false, andere: [{ nr: 0, auto: andereAuto }] });   // kollisionen aus, aber Daten übergeben → muss = v11 sein
+    const alle = [vMit, vOhne, vAus];
+    const p = st.startpositionen(2);
+    for (let k = 0; k < 60 * 4; k++) sim.schritt();   // Countdown vorbei (Server-Takt n läuft ab 1; Eingaben folgen)
+    const f = sim.sim.fahrzeuge;
+    // Ausgangslage auf der Startgeraden: Szenario 'hinten' = ich komme schneller von hinten, 'seitlich' = ich lenke in ein gleich schnelles Auto
+    const a = f[0].vehicle, b = f[1].vehicle, h = p[0].heading;
+    a.setzen(p[0].x, p[0].z, h); b.setzen(p[0].x, p[0].z, h);
+    const r = a.richtung(), q = a.rechts();
+    if (szenario === 'hinten') { b.x = a.x - r.x * 30; b.z = a.z - r.z * 30; a.vLaengs = 12; b.vLaengs = 28; }
+    else { b.x = a.x + q.x * 2.6; b.z = a.z + q.z * 2.6; a.vLaengs = 25; b.vLaengs = 25; }
+    for (const V of alle) {
+      const pv = V.vp; C.Netz.fahrzeugSchreiben(pv, sim.ich(ich_).v);
+    }
+    const n0 = 60 * 4;                               // Server-Tick/Folge-Nr zählen ab hier gleich
+    const snaps = new Map();
+    const stat = alle.map(() => ({ summe: 0, max: 0, n: 0 }));
+    let stoesse = 0, letzterStoss = -1e9;
+    const d2 = (V, ich) => Math.hypot(V.vp.x - ich.v[0], V.vp.z - ich.v[1]);
+    // Ausgangszustand "bekannt": erster Abgleich mit Snapshot des aktuellen Ticks
+    const snap = (n) => { const ich = sim.ich(ich_); ich.ack = n; const a = sim.zustand().a; snaps.set(n, { ich, a, json: JSON.stringify(a) }); };
+    let rueckfluss = 0;
+    // Folge-Nr n ↔ Server-Tick n0 + n; die Vorhersage zählt n ab 1
+    snap(0);
+    for (const V of alle) V.abgleich(snaps.get(0).ich, null, snaps.get(0).a);
+    for (let n = 1; n <= 60 * 6; n++) {
+      const s = szenario === 'hinten' ? { gas: 1, bremse: 0, lenkung: 0 } : { gas: 1, bremse: 0, lenkung: n < 30 ? -0.25 : 0 };
+      const sa = szenario === 'hinten' ? { gas: 0.4, bremse: 0, lenkung: 0 } : { gas: 1, bremse: 0, lenkung: 0 };
+      const dek = C.Netz.eingabeDekodieren(C.Netz.eingabeKodieren(s));
+      sim.eingabeSetzen(1, dek); sim.eingabeSetzen(0, C.Netz.eingabeDekodieren(C.Netz.eingabeKodieren(sa))); sim.schritt();
+      if (sim.sim.stoesse.length) { stoesse++; letzterStoss = n; }
+      for (const V of alle) V.schritt(n, dek, { countdown: false, imZiel: false });
+      if (n % 3 === 0) snap(n);
+      const alt = snaps.get(n - VERZUG);            // erst jetzt „angekommen“
+      const ich = sim.ich(ich_);
+      if (n - letzterStoss < 90 && n > 5 || stoesse > 0) {
+        alle.forEach((V, i) => { const d = d2(V, ich); stat[i].summe += d; stat[i].max = Math.max(stat[i].max, d); stat[i].n++; });
+      }
+      if (alt) {
+        for (const V of alle) V.abgleich(alt.ich, null, alt.a);
+        if (JSON.stringify(alt.a) !== alt.json) rueckfluss++;       // Stellvertreter dürfen die Zustandsreihen (= Anzeige der anderen) nie verändern
+      }
+      snaps.delete(n - VERZUG - 3);
+    }
+    // Vorhersage ohne kollisionen muss exakt v11 sein (gleiche Pose wie die Vorhersage ohne Daten)
+    const gleich = vOhne.vp.x === vAus.vp.x && vOhne.vp.z === vAus.vp.z && vOhne.vp.heading === vAus.vp.heading && vOhne.vp.vLaengs === vAus.vp.vLaengs;
+    return { stoesse, mit: stat[0], ohne: stat[1], aus: stat[2], gleich, rueckfluss, V: vMit };
+  }
+  for (const sz of ['hinten', 'seitlich']) {
+    const o = lauf(sz, true);
+    const m = o.mit, oh = o.ohne;
+    pruefe(`K Rempeln (${sz}): Server stößt (≥ 3 Stöße), Vorhersage mit Stellvertretern deutlich näher am Server als ohne`,
+      o.stoesse >= 3 && oh.max > 0.1 && m.summe < 0.5 * oh.summe && m.max < 0.5 * oh.max,
+      `${o.stoesse} Stöße; Fehler mit Ø ${(m.summe / Math.max(1, m.n)).toFixed(3)} m / max ${m.max.toFixed(2)} m, ohne Ø ${(oh.summe / Math.max(1, oh.n)).toFixed(3)} m / max ${oh.max.toFixed(2)} m, Stöße in der Vorhersage ${o.V.stat.stoesse}`);
+    pruefe(`K Rempeln (${sz}): mit kollisionen: false ist die Vorhersage bitgleich zu v11 (trotz übergebener Daten)`, o.gleich);
+    pruefe(`K Rempeln (${sz}): Stoß der Stellvertreter fließt nicht in die Server-Zustände (= Anzeige der anderen Autos) zurück`, o.rueckfluss === 0 && o.V.stat.stoesse > 0, `${o.rueckfluss} Änderungen`);
+  }
 }
 
 (async () => {
@@ -215,6 +296,14 @@ function autopilot(st, v, idx) {
   pruefe('E Gast darf nicht einstellen/starten', fe && fe.grund === 'nurHost' && fs && fs.grund === 'nurHost');
   host.senden({ t: 'einstellungen', einstellungen: { gegner: 2, runden: 1, schaden: true, tageszeit: 'quatsch', kollisionen: false } }); const le = await host.auf('lobby');
   pruefe('E Host-Einstellungen geprüft (Schaden bleibt online aus, ungültige Tageszeit → tag)', le && le.einstellungen.schaden === false && le.einstellungen.tageszeit === 'tag' && le.einstellungen.runden === 1);
+  // W5 Stufe 2: Rempeln-Schalter aus dem Menü – Host schaltet um, Gast darf nicht, Nicht-bool wird ignoriert (→ Geister)
+  host.senden({ t: 'einstellungen', einstellungen: { kollisionen: true } }); const lk1 = await host.auf('lobby');
+  host.senden({ t: 'einstellungen', einstellungen: { kollisionen: 'ja' } }); const lk2 = await host.auf('lobby');
+  host.senden({ t: 'einstellungen', einstellungen: { kollisionen: true } }); await host.auf('lobby');
+  gast.senden({ t: 'einstellungen', einstellungen: { kollisionen: false } }); const lkg = await gast.auf('fehler');
+  host.senden({ t: 'einstellungen', einstellungen: { kollisionen: false } }); const lk3 = await host.auf('lobby');
+  pruefe('E Rempeln-Schalter: Host an/aus, „ja“ → Geister, Gast bekommt nurHost', lk1 && lk1.einstellungen.kollisionen === true && lk2 && lk2.einstellungen.kollisionen === false &&
+    lkg && lkg.grund === 'nurHost' && lk3 && lk3.einstellungen.kollisionen === false);
   host.senden({ t: 'start' }); const fb = await host.auf('fehler');
   pruefe('E Start ohne „bereit“ des Gastes → Fehler', fb && fb.grund === 'nichtBereit');
   gast.senden({ t: 'bereit', an: true }); await host.auf('lobby', (m) => m.spieler[1].bereit);

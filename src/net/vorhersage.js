@@ -10,6 +10,13 @@
 //   - Sonderzustände (Looping, Rampe/Flug, Anlauf-Bremse, Kleber) rechnet nur der Server: dann folgt der eigene
 //     Wagen dem Server-Zustand (50 ms Verzug), Übergänge werden ebenfalls weich ausgeblendet.
 //   Nicht vorhergesagt (der Server korrigiert): Hindernisse/Pylonen, Bälle/Dinos, Ölflecken, Schanzen-/Looping-Einfahrt.
+//   W5 Stufe 2 (Rempeln, nur wenn opt.kollisionen): nach der Bande wird der eigene Wagen auch gegen die ANDEREN Autos
+//   geprüft (R.Kollisionen.autoAuto). Die anderen sind Stellvertreter (eigene R.Vehicle je Gegner): Pose/Tempo aus dem
+//   Server-Zustand des letzten Abgleichs (zustand.a), linear Schritt für Schritt hochgerechnet (Tempo × Richtung, nach
+//   einem Stoß mit dem veränderten Tempo). Bei jedem Abgleich werden sie neu auf die Server-Pose gesetzt und das Replay
+//   rückt sie für jede nachgerechnete Folge-Nr genauso vor wie später die laufende Vorhersage. Sie gehören nur der
+//   Vorhersage: ein Stoß verändert sie, fließt aber nie in die Anzeige der anderen Autos zurück (die kommt weiter aus
+//   dem NetzPuffer). Ohne opt.kollisionen: Verhalten wie v11.
 //
 // R.NetzPuffer (andere Autos): Zustände nach Server-Tick, pose(i, tick) interpoliert linear (Richtung über
 //   winkelDiff), kein Interpolieren über einen Reset (Zähler) hinweg.
@@ -19,7 +26,8 @@
 
   class NetzVorhersage {
     /**
-     * @param {object} opt { strecke, auto (Katalog), tempoKlasse, fahrhilfe, umwelt () => Umwelt|undefined }
+     * @param {object} opt { strecke, auto (Katalog), tempoKlasse, fahrhilfe, umwelt () => Umwelt|undefined,
+     *   kollisionen? (Stufe 2: Rempeln an), andere? [{ nr (Index in zustand.a), auto (Katalog) }], rempeln? ('sanft' | 'echt') }
      */
     constructor(opt) {
       this.strecke = opt.strecke;
@@ -37,17 +45,26 @@
       this.stat = { abgleiche: 0, weich: 0, hart: 0, maxFehler: 0, summeFehler: 0, replays: 0 };
       this._liste = [{ vehicle: this.vp }];
       this._ersterAbgleich = true;
+      // Stufe 2: Stellvertreter der anderen Autos (nur bei kollisionen; sonst bleibt alles wie in v11)
+      this.kollisionen = !!opt.kollisionen && Array.isArray(opt.andere) && opt.andere.length > 0;
+      this.rempeln = opt.rempeln === 'echt' ? 'echt' : 'sanft';
+      this.stellvertreter = this.kollisionen
+        ? opt.andere.map(o => ({ nr: o.nr, v: new R.Vehicle(o.auto.fahrwerte, { tempoKlasse: opt.tempoKlasse }) }))
+        : [];
+      this._ref = null;            // { a: zustand.a, ack } des letzten Abgleichs (Basis der Hochrechnung)
+      this._kandidaten = [];
+      this.stat.stoesse = 0;       // Stöße in der laufenden Vorhersage (nicht im Replay)
     }
 
     /** Ein vorhergesagter Schritt. s = { gas, bremse, lenkung } (bereits wie gesendet quantisiert). */
     schritt(n, s, ctx) {
       this.offen.push({ n, s: { gas: s.gas, bremse: s.bremse, lenkung: s.lenkung }, cd: !!ctx.countdown, ziel: !!ctx.imZiel });
       if (this.offen.length > 240) this.offen.shift();
-      if (!this.sonder) this._rechnen(this.offen[this.offen.length - 1]);
+      if (!this.sonder) this._rechnen(this.offen[this.offen.length - 1], true);
     }
 
-    /** Ein Schritt wie main.js physikSchritt (nur dieses Auto, auf dem Boden). */
-    _rechnen(e) {
+    /** Ein Schritt wie main.js physikSchritt (nur dieses Auto, auf dem Boden). live = neuer Schritt (nicht Replay). */
+    _rechnen(e, live) {
       const v = this.vp, st = this.strecke, dt = R.config.physik.schritt;
       let s = e.s;
       if (e.ziel) s = { gas: 0, bremse: 0.6, lenkung: 0 };
@@ -73,15 +90,62 @@
       if (turbo) { dd.vMax = vm0; dd.beschleunigung = b0; }
       this.bremst = v.letzteSteuerung.bremse > 0 && v.vLaengs > 0.5;
       R.Kollisionen.bande(v, st);
+      if (this.kollisionen && this._ref) this._autoAuto(e, live);
       if (R.Kollisionen.pflanzen) R.Kollisionen.pflanzen(this._liste, st, { dt, countdown: e.cd });
       v.y = st.hoeheAn(v.x, v.z, this.idx);
     }
 
     /**
+     * Stufe 2: eigener Wagen gegen die Stellvertreter der anderen Autos (wie main.js physikSchritt, Schritt 8, aber nur
+     * Paare mit dem eigenen Wagen). Die Stellvertreter starten beim Abgleich auf der Server-Pose (Tick des Zustands,
+     * Folge-Nr = ack) und rücken dann mit jedem Schritt (Folge-Nr n) um dt entlang ihrer Welt-Geschwindigkeit vor:
+     * geradeaus mit dem damaligen Tempo, nach einem Stoß mit dem veränderten Tempo (sonst würde der eigene Wagen nach dem
+     * Aufprall noch Schritte lang gegen ein „unbewegtes" Auto stoßen). Beim nächsten Abgleich werden sie neu gesetzt.
+     */
+    _autoAuto(e, live) {
+      const v = this.vp, K = R.Kollisionen, dt = R.config.physik.schritt, ref = this._ref;
+      if (e.n - ref.ack > 90) return;                   // Basis älter als 1,5 s: nicht mehr hochrechnen
+      const liste = this._kandidaten;
+      liste.length = 0;
+      liste.push(v);
+      // fehlende Schritte (Sonderzustand dazwischen) ohne Stoß nachholen, dann den aktuellen Schritt
+      for (const p of this.stellvertreter) {
+        const w = p.v;
+        if (!ref.a[p.nr]) continue;
+        for (; p.n < e.n; p.n++) {
+          const alt = w._kollAlt || (w._kollAlt = {});
+          alt.x = w.x; alt.z = w.z; alt.h = w.heading;
+          const vw = w.weltGeschwindigkeit();
+          w.x += vw.x * dt; w.z += vw.z * dt;
+        }
+        if (Math.hypot(w.x - v.x, w.z - v.z) <= 15) liste.push(w);      // weiter weg: kein Kandidat
+      }
+      const x0 = v.x, z0 = v.z;
+      const stoesse = K.autoAuto(liste, { countdown: e.cd, rempeln: this.rempeln, dt });
+      if (stoesse.length) {
+        if (live) this.stat.stoesse++;
+        if (v.x !== x0 || v.z !== z0) K.bande(v, this.strecke);       // wer bewegt wurde, prüft die Bande nochmal (wie main.js)
+      }
+    }
+
+    /** Stellvertreter auf die Server-Pose setzen (zustand.a beim Abgleich, ack = Folge-Nr dieses Ticks). */
+    _stellvertreterSetzen(a, ack) {
+      for (const p of this.stellvertreter) {
+        const z = a[p.nr], w = p.v;
+        if (!z) continue;
+        w.x = z[0]; w.z = z[1]; w.y = z[2]; w.heading = z[3]; w.vLaengs = z[4]; w.vQuer = 0; w.lenkung = z[5];
+        w.imFlug = !!(z[6] & 32); w.imLooping = !!z[14]; w._anBande = false;
+        w._kollAlt = { x: w.x, z: w.z, h: w.heading };
+        p.n = ack;
+      }
+    }
+
+    /**
      * Server-Zustand für den eigenen Wagen (ich = { v, idx, bi, bs, fk, gs, so, ack }).
      * @param {object} anzeige aktuelle Anzeige-Pose { x, z, y, heading } (für weiche Übergänge)
+     * @param {Array} [andere] zustand.a desselben Server-Ticks (Stellvertreter der anderen Autos, nur bei kollisionen)
      */
-    abgleich(ich, anzeige) {
+    abgleich(ich, anzeige, andere) {
       const st = this.stat, warSonder = this.sonder;
       st.abgleiche++;
       this.offen = this.offen.filter(e => e.n > ich.ack);
@@ -94,6 +158,11 @@
       this.idx = ich.idx;
       v._bandeIndex = ich.bi >= 0 ? ich.bi : undefined;
       v._buschSperre = ich.bs || 0;
+      if (this.kollisionen && andere) {
+        this._ref = { a: andere, ack: ich.ack };
+        this._stellvertreterSetzen(andere, ich.ack);
+        v._kollAlt = { x: v.x, z: v.z, h: v.heading };   // Sweep ab der Server-Pose (nicht ab einer Pose aus der Zukunft)
+      }
       if (this.sonder) return;                 // Server rechnet allein – Anzeige folgt dem Puffer
       for (const e of this.offen) { this._rechnen(e); st.replays++; }
       if (!anzeige) return;
