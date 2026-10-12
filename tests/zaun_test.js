@@ -99,7 +99,10 @@ const breitestes = autos.reduce((a, b) => (b.breite * 10 + b.laenge > a.breite *
     gezeigt++;
     // 0,3 m hinter dem Zaunpunkt muss die Bande greifen (eigenes Streckenstück, |q| > grenze)
     const p = sp.punktBei(zp.s), g = st.grenzeBei(zp.s) + 0.3;
-    const n = sp.naechster(p.x + p.nx * g * seite, p.z + p.nz * g * seite);
+    const qx = p.x + p.nx * g * seite, qz = p.z + p.nz * g * seite;
+    // v14: Kreuzungs-Zwickel (zp.kz): dort liegt die querende Fahrbahn global näher – die Bande gilt aber für den EIGENEN
+    // Abschnitt (Index-Kontinuität, wie collisions.bande), also mit _naechsterKont ab dem Index des Zaunpunkts messen
+    const n = zp.kz ? st._naechsterKont(qx, qz, sp.indexBei(zp.s)) : sp.naechster(qx, qz);
     if (!(Math.abs(n.seitenabstand) > st.grenzeBei(n.s))) { ohneBande++; info = 's=' + zp.s.toFixed(0); }
   }));
   pruefe(`${id}: Zaun steht nur dort, wo die Bande hält (${gezeigt} Zaunpunkte)`, ohneBande === 0, ohneBande + ' ohne Bande ' + info);

@@ -769,3 +769,26 @@
   Zwischenstände (Prüfung gelegentlich rot, vorher): 3 Läufe mit verschiedenen Zwischenvarianten ergaben je 0–2 rote Abschlepp-Prüfungen (Wald/Stunt, Wiese/Verrückt, Wiese/Stunt, Fantasie/Verrückt, Wüste/Hindernisse, Wald/Klassisch, Fantasie/Fantasie).
   Möglicher echter Spiel-Befund (nicht angefasst): Fantasie – wird die KI an Checkpoint 118 m zurückgesetzt, schafft sie den Looping bei 170 m aus dem Stand nicht immer (zu langsam, bleibt hängen, Driver setzt nochmal zurück);
   vor Wracks kriecht sie nach dem Reset kurz (Ausweichen).
+- 12.10. Agent Kreuzungs-Zaun (v14, Sonnet) – fertig. Arbeitsordner v14 (Sicherung v13_fertig unberührt).
+  Ursache: Wer auf der Fantasie-Kreuzung abbiegt, bleibt dem Abschnitt zugeordnet, auf dem er herkam (Index-Kontinuität, W4-J) → die Bande des
+  ALTEN Abschnitts (grenzeBei = 23 m seitlich) gilt weiter und schneidet quer über die Querstraße. Der Zaun fehlt aber überall, wo die querende Fahrbahn
+  näher liegt (zaunPunkte: `n.abstand ≥ g − 0,05 && gleicher Abschnitt`) – also auf ±23 m um die Kreuzung. Gemessen (tests/kreuzung_bande_diag.js, Auto
+  von A/B in alle 4 Richtungen abgebogen): Stoß an der Bande bei 20,9–21,2 m von der Mitte (Karosserie-Ecke an 23 m), in allen 4 Ästen gleich, vorher kein Zaun.
+  Änderung (nur Grafik, Physik/collisions.js unverändert): trackBuilder.js `_kreuzungZaunOk(s, n)` + in `zaunPunkte` Punktmarke `kz`: In den Zwickeln zwischen den
+  Fahrbahnen (nächste Mittellinie gehört zur QUERENDEN Strecke, Abstand > Fahrbahn + Rand + 0,6 m, s innerhalb Bande + 8 m um die Kreuzung) steht der Zaun jetzt
+  genau an der Bande; `_zaunBauen` setzt an beiden Enden eines Zwickelstücks einen Pfosten. Gleiche zwei Meshes wie bisher (Latten-Band + Pfosten-InstancedMesh):
+  Draw-Calls unverändert (Strecke+Deko+Hindernisse 33 vorher/nachher), Pfosten 332 → 354, Lattenstücke 1324 → 1379 (+6 %). Kopfkommentar aktualisiert.
+  Die Fahrbahnen (geradeaus, beide Richtungen), Haltelinien, Kreuzungsplatte, Masten bleiben unberührt (Test: 0 Zaunpunkte auf einer Fahrbahn ± 60 m).
+  Tests neu: test_strecke +2 (Zwickelstücke A/B beide Seiten, an der Bande, nie auf einer Fahrbahn; kein Zaunpunkt auf der Fahrbahn), tests/zaun_test.js:
+  „Zaun steht nur dort, wo die Bande hält“ misst für Zwickelpunkte jetzt mit Index-Kontinuität (`_naechsterKont`, wie collisions.bande) statt global (sonst 55 falsche
+  Treffer); neu tests/kreuzung_bande_diag.js (Node: Bandenstoß beim Abbiegen) und tests/kreuzung_zaun_screenshot.py (Bilder k1–k8; Spieler mit Fahrhilfe „aus“,
+  weil die Lenkhilfe ein abgebogenes Auto sonst zurück auf den alten Abschnitt zieht).
+  Tests vorher → nachher: test_strecke 1039 → 1041 OK; test_kollisionen 53 → 53; test_ki 260 → 260 (je ~70–75 s allein); test_rundenzeit 242 → 242 (Ausgabe bitgleich);
+  test_welten_ki 154 → 154 OK, 0 FEHL, Ausgabe (Resets, Begegnungen, Stoß-Schritte) bis auf die Laufzeit identisch, 0 Resets wie vorher; zaun_test nachher alle OK (55 Zwickelpunkte geprüft);
+  screenshot_test fantasie 23 → 23 OK; welten_test fantasie 19 → 19 OK. leistung_test kennt Fantasie nicht (nur Wiese/Wald/Wüste, Zaun dort unverändert) – nicht gelaufen.
+  Bilder: tests/out/kreuzzaun/vorher/ und nachher/ (k4_schraeg: Zwickel-Zaun in allen 4 Ecken, k3_vogel von oben, k5 Fahrer geradeaus – Fahrbahn frei,
+  k1/k2 Fahrer an der Bande, k7/k8 echt gefahren: Auto stoppt bei 21,5 m); Zwischenstände iter1/iter2.
+  Schwächen: In den 4 STRASSENMÜNDUNGEN (Querstraße ~23 m von der anderen Fahrbahn) bleibt die Bande unsichtbar – der Zaun endet 0,6 m vor dem Randstein, die Lücke ist genau die
+  Straße. Ein Zaun quer über die Mündung würde die Fahrbahn des anderen Abschnitts (KI, Spieler geradeaus) optisch versperren, obwohl für sie keine Bande gilt. Wer abbiegt, sieht jetzt
+  also Zaun links und rechts der Querstraße, stößt aber in der Lücke weiter an. Echte Lösung wäre Physik (Bande an der Kreuzung für beide Abschnitte, Abschnittswechsel erlauben) – bewusst nicht angefasst.
+  An den Zwickel-Ecken kreuzen sich die Zäune beider Abschnitte wie ein X (entspricht der Physik: jede Bande gilt nur für ihren Abschnitt).

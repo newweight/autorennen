@@ -295,6 +295,30 @@ for (const k of strecke.kreuzungen || []) {
   ['hindernisse', 'baelle', 'wasserstrahlen', 'strohballen', 'boostFelder', 'schilde', 'loopings', 'wracks', 'schanzen', 'dinos'].forEach(fk =>
     (daten[fk] || []).forEach(e => { if (strecke.kreuzungNah(e.s, 20)) nahe.push(fk + '@' + e.s); }));
   pruefe('Kreuzung: keine Katalog-Listen (Kleber, Hindernisse, Bälle, Wasser, Turbo, Schilde …) an der Kreuzung (± 35 m)', nahe.length === 0, nahe.join(', '));
+  // v14 Kreuzungs-Zaun: in den Zwickeln zwischen den Fahrbahnen steht der Zaun an der Bande (dort greift sie beim Abbiegen),
+  // beide Fahrbahnen samt Randstein bleiben frei; je Abschnitt Zwickelstücke auf beiden Seiten und beiden Seiten der Querstraße
+  {
+    const kzJe = { a: [0, 0], b: [0, 0] }, zu = [];       // Anzahl je Abschnitt/Seite, Verstöße
+    [-1, 1].forEach((seite, si) => strecke.zaunPunkte(seite).forEach((zp) => {
+      if (!zp.kz) return;
+      const pass = Math.abs(sp.differenzS(zp.s, k.sA)) < 60 ? 'a' : 'b';
+      kzJe[pass][si]++;
+      const aa = sp.abschnitte(zp.x, zp.z, 40), pq = aa.filter(e => Math.abs(sp.differenzS(e.s, pass === 'a' ? k.sB : k.sA)) < 60)[0];
+      const own = aa.filter(e => Math.abs(sp.differenzS(e.s, zp.s)) < 6)[0];
+      if (!pq || pq.abstand <= k.halbW + 0.5) zu.push('auf Querstraße ' + zp.s.toFixed(0));
+      if (!own || Math.abs(own.abstand - strecke.grenzeBei(zp.s)) > 0.3) zu.push('nicht an der Bande ' + zp.s.toFixed(0));
+    }));
+    const alle = kzJe.a[0] > 3 && kzJe.a[1] > 3 && kzJe.b[0] > 3 && kzJe.b[1] > 3;
+    pruefe('Kreuzungs-Zaun: Zwickelstücke an A und B, beide Seiten, an der Bande und nie auf einer Fahrbahn',
+      alle && zu.length === 0, 'A ' + kzJe.a + ' B ' + kzJe.b + (zu.length ? ' ' + zu.slice(0, 3).join(', ') : ''));
+    // Auto bleibt vom Zaun unberührt: kein Zaunpunkt innerhalb der Fahrbahn (beider Abschnitte) im ganzen Kreuzungsbereich
+    let auf = 0;
+    [-1, 1].forEach((seite) => strecke.zaunPunkte(seite).forEach((zp) => {
+      if (!zp.ok || Math.hypot(zp.x - k.x, zp.z - k.z) > 60) return;
+      if (sp.abschnitte(zp.x, zp.z, 40).some(e => e.abstand < strecke.breite / 2 + 0.3 && Math.abs(sp.differenzS(e.s, zp.s)) > 6)) auf++;
+    }));
+    pruefe('Kreuzungs-Zaun: kein Zaunpunkt auf der Fahrbahn (± 60 m um die Mitte)', auf === 0, auf + ' Punkte');
+  }
   pruefe('Kreuzung: Deko-Sperre um die Mitte', strecke.dekoSperre(k.x + 20, k.z + 20) && strecke.dekoSperre(k.x, k.z) && !strecke.dekoSperre(k.x + 200, k.z + 200));
   // Warnlicht-Logik: Auto 30 m vor der Kreuzung auf A → Masten an B warnen (und umgekehrt), weit weg → keine Warnung
   strecke.kreuzungWarnung([{ s: sp.wrapS(k.sA - 30) }]); const w1 = [k.warnA, k.warnB];

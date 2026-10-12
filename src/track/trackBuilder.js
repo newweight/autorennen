@@ -33,6 +33,11 @@
 //   Z-Fighting), Haltelinien, 4 Warnlicht-Masten (Andreaskreuz, rote Lampen) → kreuzungAnimieren(zeit, fahrzeuge).
 //   Zaun: entfällt automatisch dort, wo die querende Strecke näher ist (zaunPunkte); die Bande gilt je Auto für SEINEN
 //   Abschnitt (Index-Kontinuität), sperrt also die querende Fahrbahn nicht.
+//   v14 Kreuzungs-Zaun: wer auf der Kreuzung abbiegt, stößt nach ~21 m (Bande 23 m, Karosserie-Ecke) an die Bande des
+//   eigenen Abschnitts. Damit man sieht, wo es nicht weitergeht, steht der Zaun jetzt auch in den Zwickeln zwischen den
+//   Fahrbahnen (_kreuzungZaunOk, Punktmarke kz): genau an der Bande, mit Pfosten an beiden Enden, ≥ 0,6 m Luft zum Randstein
+//   der querenden Fahrbahn. In den 4 Straßenmündungen bleibt die Bande unsichtbar – dort fährt der andere Abschnitt
+//   ungehindert durch (ein Zaun quer über die Mündung würde dessen Fahrbahn versperren).
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -1447,6 +1452,24 @@
       return g;
     }
     /**
+     * v14: Darf der Zaunpunkt an Bogenlänge s trotz „querende Fahrbahn näher“ stehen? n = nächste Stelle der Mittellinie
+     * (Strecke gesamt) zum Zaunpunkt. Ja, wenn s nahe an einer Kreuzung liegt (± seitenabstandMax + 8 m), n zum QUERENDEN
+     * Abschnitt gehört und der Punkt mehr als Fahrbahn + Rand + 0,9 m von dessen Mittellinie entfernt ist (Fahrbahn und
+     * Randstein bleiben frei, 0,6 m Luft für die Pfosten). So entstehen Zaunstücke nur in den Zwickeln.
+     */
+    _kreuzungZaunOk(s, n) {
+      const sp = this.spline, reichweite = this.seitenabstandMax + 8;
+      for (const k of this.kreuzungen) {
+        let sQuer = null;
+        if (Math.abs(sp.differenzS(s, k.sA)) < reichweite) sQuer = k.sB;
+        else if (Math.abs(sp.differenzS(s, k.sB)) < reichweite) sQuer = k.sA;
+        if (sQuer === null) continue;
+        if (Math.abs(sp.differenzS(n.s, sQuer)) < 60 && n.abstand > k.halbW + 0.6) return true;
+      }
+      return false;
+    }
+
+    /**
      * Zaunpunkte einer Seite (seite = +1 rechts, -1 links) bei seitenabstandMax.
      * Ein Punkt ist "gültig", wenn er wirklich zu seinem eigenen Streckenstück gehört:
      * Liegt ein anderes Streckenstück näher (Innenseite enger Kurven, nahe Geraden),
@@ -1461,8 +1484,12 @@
         const n = sp.naechster(x, z);
         // Runde 5: nur, wenn der Punkt wirklich zu SEINEM Streckenstück gehört (dort hält die Bande genau hier);
         // vorher reichte „Abstand ≥ g − 1 m" → bis zu 1 m Zaun, hinter dem ein anderes Stück näher lag (keine Bande)
-        const ok = n.abstand >= g - 0.05 && Math.abs(sp.differenzS(n.s, p.s)) < 6;
-        return { x, z, y: this.hoeheAn(x, z), ok, s: p.s };
+        let ok = n.abstand >= g - 0.05 && Math.abs(sp.differenzS(n.s, p.s)) < 6;
+        // v14: an einer niveaugleichen Kreuzung steht der Zaun auch in den Zwickeln zwischen den Fahrbahnen (dort greift
+        // die Bande des eigenen Abschnitts), nur nicht auf/an der querenden Fahrbahn – die bleibt frei
+        let kz = false;
+        if (!ok && this.kreuzungen.length && this._kreuzungZaunOk(p.s, n)) ok = kz = true;
+        return { x, z, y: this.hoeheAn(x, z), ok, s: p.s, kz };
       });
     }
 
@@ -1489,7 +1516,7 @@
         });
         for (let i = 0; i < N; i++) {
           const a = zp[i], b = zp[(i + 1) % N];
-          if (i % PFOSTEN_ALLE === 0 && a.ok) pfosten.push(a);
+          if (a.ok && (i % PFOSTEN_ALLE === 0 || (a.kz && (!zp[(i + N - 1) % N].ok || !b.ok)))) pfosten.push(a);   // v14: Zwickelstücke an beiden Enden mit Pfosten
           if (!a.ok || !b.ok) continue;
           if (Math.hypot(b.x - a.x, b.z - a.z) > 8) continue;   // Sprung (Schleife) – auslassen
           for (const l of LATTEN) {
