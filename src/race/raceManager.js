@@ -11,6 +11,10 @@
 // - Sprünge (Teleport, Reset) passieren keinen Checkpoint.
 // - Das Rennen ist 'fertig', wenn alle Spieler im Ziel sind
 //   (Computerautos dürfen weiterfahren). Ohne Spieler: wenn alle im Ziel sind.
+// - Runde 6 (W3-F, D7) Option elimination („Letzter fliegt raus"): Sobald alle noch fahrenden Autos bis auf eines
+//   Runde k geschafft haben, scheidet dieses eine aus (t.ausgeschieden, Ereignis 'raus'); k = Zahl der Ausgeschiedenen + 1.
+//   Das letzte verbleibende Auto gewinnt (imZiel, Ereignis 'ziel'), dann 'fertig'. Sind alle Spieler raus, ist nach
+//   elimination.zuschauerSekunden Schluss. Platzierung: Sieger, noch Fahrende, dann Ausgeschiedene (später raus = besser).
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -22,7 +26,7 @@
     /**
      * @param {Strecke} strecke
      * @param {{vehicle:object, name:string, istSpieler:boolean}[]} teilnehmer
-     * @param {{runden?:number, countdown?:number}} [optionen]
+     * @param {{runden?:number, countdown?:number, elimination?:boolean|{zuschauerSekunden?:number|null}}} [optionen]
      */
     constructor(strecke, teilnehmer, optionen) {
       const opt = Object.assign({
@@ -37,8 +41,12 @@
       this.zustand = this.countdown > 0 ? 'countdown' : 'laeuft';
       this.zeit = 0;                       // Rennzeit seit Start (s)
       this.bestzeit = null;                // schnellste Runde aller Teilnehmer
-      this._callbacks = { runde: [], ziel: [], start: [], fertig: [] };
+      this._callbacks = { runde: [], ziel: [], start: [], fertig: [], raus: [] };
       this.zieleinlaeufe = 0;
+      // Runde 6 (W3-F): „Letzter fliegt raus" (null = normales Rennen, Verhalten unverändert)
+      this.elimination = opt.elimination ? Object.assign({ zuschauerSekunden: null }, opt.elimination === true ? {} : opt.elimination) : null;
+      this.ausgeschiedene = [];            // in Ausscheid-Reihenfolge
+      this._zuschauZeit = 0;
 
       this.teilnehmer = teilnehmer.map((t, i) => {
         const v = t.vehicle;
@@ -61,6 +69,7 @@
           bestzeit: null,
           imZiel: false,
           zielZeit: null,
+          ausgeschieden: false,    // Runde 6 (W3-F): „Letzter fliegt raus"
           platz: i + 1,
           startPose: { x: v.x, z: v.z, heading: v.heading },
           _x: v.x, _z: v.z, _s: n.s,
@@ -94,11 +103,14 @@
         return;
       }
       this.zeit += dt;
-      this.teilnehmer.forEach(t => this._verfolgen(t, true));
+      this.teilnehmer.forEach(t => { if (!t.ausgeschieden) this._verfolgen(t, true); });
       this._fortschrittBerechnen();
+      if (this.elimination && this.zustand === 'laeuft') this._eliminationPruefen(dt);
       this._platzierung();
 
-      if (this.zustand === 'laeuft') {
+      if (this.elimination) {
+        if (this.zustand === 'laeuft' && this._elimFertig) { this.zustand = 'fertig'; this._melden('fertig'); }
+      } else if (this.zustand === 'laeuft') {
         const spieler = this.teilnehmer.filter(t => t.istSpieler);
         const gruppe = spieler.length ? spieler : this.teilnehmer;
         if (gruppe.every(t => t.imZiel)) {
@@ -165,7 +177,7 @@
           if (t.bestzeit === null || rundenzeit < t.bestzeit) t.bestzeit = rundenzeit;
           if (this.bestzeit === null || rundenzeit < this.bestzeit) this.bestzeit = rundenzeit;
           this._melden('runde', t, rundenzeit);
-          if (t.runde >= this.runden) {
+          if (t.runde >= this.runden && !this.elimination) {   // Elimination: Sieger = letztes Auto (_eliminationPruefen)
             t.imZiel = true;
             t.zielZeit = this.zeit;
             this.zieleinlaeufe++;
@@ -184,6 +196,7 @@
     _fortschrittBerechnen() {
       const L = this.spline.laenge, cps = this.strecke.checkpoints;
       this.teilnehmer.forEach((t) => {
+        if (t.ausgeschieden) return;           // Runde 6: eingefroren
         if (t.imZiel) { t.fortschritt = this.runden * L; return; }
         if (!t.gestartet) {
           // vor der Startlinie: negativer Abstand zur Linie
@@ -203,12 +216,52 @@
 
     _platzierung() {
       const sortiert = this.teilnehmer.slice().sort((a, b) => {
+        // Runde 6 (W3-F): Ausgeschiedene hinten, wer später rausflog, steht weiter vorn (normales Rennen: nie gesetzt)
+        if (a.ausgeschieden !== b.ausgeschieden) return a.ausgeschieden ? 1 : -1;
+        if (a.ausgeschieden) return b.ausscheidNr - a.ausscheidNr;
         if (a.imZiel && b.imZiel) return a.zielZeit - b.zielZeit || a.zielPlatz - b.zielPlatz;
         if (a.imZiel !== b.imZiel) return a.imZiel ? -1 : 1;
         return b.fortschritt - a.fortschritt;
       });
       sortiert.forEach((t, i) => { t.platz = i + 1; });
       this.rangliste = sortiert;
+    }
+
+    /**
+     * Runde 6 (W3-F): „Letzter fliegt raus". Haben alle Fahrenden bis auf höchstens eines Runde k geschafft
+     * (k = Ausgeschiedene + 1) – oder ist der Führende schon in Runde k + 1 fertig –, scheidet das Hinterste aus;
+     * auch mehrere hintereinander, falls Überrundete zurückliegen.
+     */
+    _eliminationPruefen(dt) {
+      let aktive = this.teilnehmer.filter(t => !t.ausgeschieden);
+      while (aktive.length > 1) {
+        const k = this.ausgeschiedene.length + 1;
+        const nochNicht = aktive.filter(t => t.runde < k);
+        // warten, bis höchstens eines fehlt – außer der Führende ist schon eine Runde weiter (kein Hängenbleiben)
+        if (nochNicht.length > 1 && !aktive.some(t => t.runde >= k + 1)) break;
+        const kandidaten = nochNicht.length ? nochNicht : aktive;
+        const raus = kandidaten.slice().sort((a, b) => a.fortschritt - b.fortschritt)[0];
+        raus.ausgeschieden = true;
+        raus.ausscheidRunde = k;
+        raus.ausscheidZeit = this.zeit;
+        raus.ausscheidNr = this.ausgeschiedene.length + 1;
+        this.ausgeschiedene.push(raus);
+        aktive = aktive.filter(t => t !== raus);
+        this._melden('raus', raus);
+      }
+      if (aktive.length === 1 && !aktive[0].imZiel) {
+        const s = aktive[0];
+        s.imZiel = true; s.zielZeit = this.zeit; this.zieleinlaeufe++; s.zielPlatz = 1;
+        this._melden('ziel', s);
+        this._elimFertig = true;
+      }
+      // alle Spieler raus: noch kurz zuschauen, dann Ergebnis (Reihenfolge der Fahrenden = aktuelle Plätze)
+      const spieler = this.teilnehmer.filter(t => t.istSpieler);
+      const zs = this.elimination.zuschauerSekunden;
+      if (!this._elimFertig && spieler.length && spieler.every(t => t.ausgeschieden) && typeof zs === 'number') {
+        this._zuschauZeit += dt;
+        if (this._zuschauZeit >= zs) this._elimFertig = true;
+      }
     }
 
     /** Aktuelle Rundenzeit eines Teilnehmers (s). */

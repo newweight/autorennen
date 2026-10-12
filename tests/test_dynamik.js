@@ -453,12 +453,26 @@ const ug0 = (menge) => [...menge].filter(x => x.umgekehrt);
       minAbst = Math.min(minAbst, Math.hypot(F.x - v.x, F.y - v.y, F.z - v.z));
     }
   }
-  pruefe('C6: Flugsaurier startet auf der Geraden, von vorn, in ~25 m Höhe', startD !== null && startD > 150 && vorn, 'd0 ' + (startD || 0).toFixed(0) + ' m');
+  pruefe('C6/W3-H: Flugsaurier startet 60 m voraus, von vorn, in ~25 m Höhe', startD !== null && startD > 55 && startD < 65 && vorn, 'd0 ' + (startD || 0).toFixed(0) + ' m');
   pruefe('C6: Mindesthöhe über dem Auto ≥ 2,5 m (waagerecht < 3 m)', F.minUeberAuto >= CV.flugsaurier.tief - 1e-6 && F.minUeberAuto < CV.flugsaurier.tief + 0.3,
     F.minUeberAuto.toFixed(3) + ' m');
   pruefe('C6: nie Kontakt (Abstand ≥ 2,4 m)', minAbst >= 2.4, minAbst.toFixed(2) + ' m');
   pruefe('C6: Schrei + Duck genau einmal, fliegt hinten weiter (zieht hoch)', ereig.filter(x => x.typ === 'schrei').length === 1 &&
     ereig.filter(x => x.typ === 'duck').length === 1 && endD < -40, 'd Ende ' + (endD || 0).toFixed(0));
+  // W3-H: größer, näher, Schrei beim Auftauchen, Duck ≥ 0,4 m, Mindesthöhe 2,5 m bleibt
+  pruefe('W3-H: Flugsaurier Modellgröße ×1,8 (Spannweite 2 × 4,2 × 1,8 ≈ 15 m), Anflug ab 60 m', CV.flugsaurier.groesse === 1.8 && CV.flugsaurier.start === 60 && CV.flugsaurier.tief === 2.5,
+    'Spannweite ' + (2 * 4.2 * CV.flugsaurier.groesse).toFixed(1) + ' m');
+  {
+    const d3 = new R.Dynamik(st, { seed: 3 }), v3 = new R.Vehicle({}), au3 = [{ vehicle: v3, istSpieler: true, fortschritt: 0 }];
+    let s3 = 700, schreiD = null, duck = null;
+    for (let t = 0; t < 16; t += dt) {
+      s3 += 30 * dt; const p = sp.punktBei(s3); v3.setzen(p.x, p.z, R.headingAus(p.tx, p.tz)); v3.y = st.hoeheAn(v3.x, v3.z); au3[0].fortschritt = s3;
+      const e = d3.schritt(dt, { fortschritt: s3, runden: 3, autos: au3 });
+      e.ereignisse.forEach((x) => { if (x.typ === 'schrei' && schreiD === null) schreiD = d3.flugsaurier.d; if (x.typ === 'duck') duck = x; });
+    }
+    pruefe('W3-H: Schrei gleich beim Auftauchen (60 m voraus)', schreiD !== null && schreiD > 55, 'd ' + (schreiD || 0).toFixed(0));
+    pruefe('W3-H: Kamera-Duck ≥ 0,4 m', duck && duck.staerke >= 0.4, duck ? duck.staerke + ' m' : 'kein Duck');
+  }
   // nächster Anflug frühestens nach intervall
   pruefe('C6: Intervall 40 s', F.timer > 20 && d.flugsaurier.intervall === 40, F.timer.toFixed(1));
   // W2-C2: Start-zu-Start = 40 s, solange das Auto auf der Geraden fährt (Auto pendelt auf s 680–900)

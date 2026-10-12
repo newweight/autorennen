@@ -191,6 +191,8 @@
         const platz = t.zielPlatz;
         this.banner('🏁 Platz ' + platz + '!', 0, platz === 1 ? 'gold' : '', t.name);
       });
+      // Runde 6 (W3-F): „Letzter fliegt raus" – eigenes Auto ausgeschieden (die Meldung „X ist raus!" für die anderen kommt aus main.js)
+      r.bei('raus', (t) => { if (t === this.t) this.banner('🚪 Du bist raus!', 3500, '', t.name); });
     }
 
     /** Kurze Meldung groß in der Bildmitte (ms = 0: bleibt stehen). Mit `name`: Fahrername in kleiner Zeile darüber. */
@@ -246,6 +248,29 @@
      * Runde 5b: Polizei-System (R.Polizei) + Fahrzeug-Index. Anzeige „🚨 Polizei! Anhalten… 10 s" mit Countdown
      * (angehalten) bzw. kleines „🚨 Polizei!" (wird verfolgt); null = nichts.
      */
+    /** Runde 6 (W3-H): Item-Symbol (🛢️ + Taste) neben der Minimap, solange das Auto ein Item hält. fahrzeugIndex = Fahrzeugnummer. */
+    itemSetzen(pickups, fahrzeugIndex) {
+      this.pickups = pickups && pickups.faesser && pickups.faesser.length ? pickups : null;
+      this.itemIndex = fahrzeugIndex;
+      if (!this.pickups) { if (this.eItem) setzeAnzeige(this.eItem, false); return; }
+      if (!this.eItem) {
+        const e = document.createElement('div');
+        e.className = 'hud-item';
+        Object.assign(e.style, { position: 'absolute', left: this.split && this.nr === 1 ? '1.6em' : '1em', bottom: 'calc(1em + 168px)', whiteSpace: 'nowrap',
+          fontSize: '1.5em', fontWeight: '900', color: '#fff', padding: '.15em .55em', borderRadius: '.8em', border: '.07em solid #fff',
+          background: 'rgba(20,20,30,.78)', pointerEvents: 'none', display: 'none', textShadow: '0 .05em .1em rgba(0,0,0,.5)' });
+        this.el.appendChild(e);
+        this.eItem = e;
+      }
+    }
+
+    _itemAnzeigen() {
+      const it = this.pickups.itemVon(this.itemIndex), e = this.eItem;
+      const text = it ? '🛢️ ' + (this.nr === 1 ? 'E' : 'Leertaste') : '';
+      setzeText(e, text);
+      setzeAnzeige(e, !!text);
+    }
+
     polizeiSetzen(polizei, index) {
       this.polizei = polizei || null;
       this.polizeiIndex = index;
@@ -271,6 +296,36 @@
       const klein = !!a && a.art === 'verfolgt';
       if (e._klein !== klein) { e._klein = klein; e.style.fontSize = klein ? '1.3em' : '2.1em'; e.style.top = klein ? '12%' : '31%'; }
       setzeAnzeige(e, !!text);
+    }
+
+    /**
+     * Runde 6 (W3-G): Münzzähler „🪙 n" unter Name/Runde (n = in diesem Rennen gesammelt); plus > 0 → kurzes „+1"-Hüpfen.
+     * null = verstecken (Rennen ohne Münzen).
+     */
+    muenzenSetzen(n, plus) {
+      if (n === null || n === undefined) { if (this.eMuenzen) setzeAnzeige(this.eMuenzen, false); return; }
+      if (!this.eMuenzen) {
+        const e = document.createElement('div');
+        e.className = 'hud-muenzen';
+        e.innerHTML = '<span class="mz-zahl"></span><b class="mz-plus"></b>';
+        Object.assign(e.style, { fontWeight: '900', fontSize: '1.05em', position: 'relative', whiteSpace: 'nowrap' });
+        const p = e.querySelector('.mz-plus');
+        Object.assign(p.style, { position: 'absolute', left: '100%', marginLeft: '.35em', top: '0', color: '#ffd23a', opacity: '0',
+          transition: 'opacity .15s, transform .45s', textShadow: '0 .05em .1em rgba(0,0,0,.6)', pointerEvents: 'none' });
+        const links = this.el.querySelector('.hud-links');
+        (links || this.el).insertBefore(e, this.eGesund || null);
+        this.eMuenzen = e; this.eMzZahl = e.querySelector('.mz-zahl'); this.eMzPlus = p;
+      }
+      setzeAnzeige(this.eMuenzen, true);
+      setzeText(this.eMzZahl, '🪙 ' + n);
+      this.muenzenZahl = n;
+      if (plus > 0) {
+        const p = this.eMzPlus;
+        setzeText(p, '+' + plus);
+        p.style.transition = 'none'; p.style.opacity = '1'; p.style.transform = 'translateY(0) scale(1.3)';
+        void p.offsetWidth;
+        p.style.transition = 'opacity .5s .35s, transform .8s'; p.style.opacity = '0'; p.style.transform = 'translateY(-.9em) scale(1)';
+      }
     }
 
     /** Gesundheitsbalken: Breite = Prozent, Farbe grün (> 60 %) → gelb (> 30 %) → rot; liegengeblieben blinkt. */
@@ -345,7 +400,10 @@
 
       // Hinweise
       let hinweis = '';
-      if (!t.imZiel) {
+      if (t.ausgeschieden) {          // W3-F: Zuschauer-Kamera auf den Führenden
+        const fuehrend = r.rangliste && r.rangliste.find((x) => !x.ausgeschieden);
+        hinweis = '👀 Du schaust zu' + (fuehrend ? ': ' + fuehrend.name : '');
+      } else if (!t.imZiel) {
         if (f.resetHinweis) hinweis = 'Festgefahren? ' + (this.nr === 0 ? 'R' : 'T') + ' drücken';
         else if (f.falschHerum) hinweis = '↩ Falsch herum!';
       }
@@ -355,6 +413,7 @@
       if (this.wetter) this._windAnzeigen(v);
       if (this.schaden) this._gesundheitAnzeigen();
       if (this.polizei && this.ePolizei) this._polizeiAnzeigen();
+      if (this.pickups && this.eItem) this._itemAnzeigen();
       if (this.minimap) this.minimap.zeichnen(r.teilnehmer, t, this.polizei ? this.polizei.minimapPunkte() : null);
     }
 

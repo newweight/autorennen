@@ -98,8 +98,9 @@
     k.lookAt(0, drehbar ? 0.42 : 0.62, 0);
   }
 
-  function gruppeNehmen(auto) {
-    const g = R.carBuilder.bauen(auto);
+  function gruppeNehmen(auto, farbe) {
+    // W3-G: farbe (hex) = Garage-Lack (null/undefined = Original)
+    const g = R.carBuilder.bauen(auto, farbe !== undefined && farbe !== null ? { farbe } : undefined);
     g.rotation.order = 'YXZ';
     return g;
   }
@@ -111,15 +112,16 @@
   }
 
   // ---------- Kachelbilder ----------
-  /** dataURL des Kachelbilds (256×160, transparent) oder null, wenn WebGL nicht verfügbar. */
-  function kachel(auto) {
-    if (S.kacheln[auto.id]) return S.kacheln[auto.id];
+  /** dataURL des Kachelbilds (256×160, transparent) oder null, wenn WebGL nicht verfügbar. W3-G: farbe = Garage-Lack. */
+  function kachel(auto, farbe) {
+    const schl = farbe !== undefined && farbe !== null && farbe !== auto.farbe ? auto.id + ':' + farbe : auto.id;
+    if (S.kacheln[schl]) return S.kacheln[schl];
     if (!init()) return null;
     const t0 = performance.now();
     const alt = S.groesse;
     groesseSetzen(KACHEL.w, KACHEL.h);
     S.platte.visible = false;
-    const g = gruppeNehmen(auto);
+    const g = gruppeNehmen(auto, schl === auto.id ? undefined : farbe);
     g.rotation.y = Math.PI - rad(AZIMUT_KACHEL);
     S.szene.add(g);
     kameraSetzen(auto, AZIMUT_KACHEL, false);
@@ -128,7 +130,7 @@
     try { url = S.renderer.domElement.toDataURL('image/png'); } catch (e) { /* egal */ }
     gruppeEntfernen(g);
     if (alt.w) groesseSetzen(alt.w, alt.h);
-    if (url) S.kacheln[auto.id] = url;
+    if (url) S.kacheln[schl] = url;
     debug.kachelMs += performance.now() - t0; debug.kachelAnzahl++;
     return url;
   }
@@ -149,8 +151,10 @@
    * Bühne `index` an ein (neues) Canvas im Menü binden und das Auto `auto` zeigen.
    * Ist es dasselbe Auto wie zuvor, bleibt Drehwinkel & Modell erhalten; sonst blendet das neue Auto ein.
    * w,h = Renderauflösung in CSS-Pixeln (Seitenverhältnis fest).
+   * W3-G: farbe (hex | null) = Lack für die Garage-Vorschau; nur die Farbe neu → sofortiger Wechsel, Winkel bleibt.
    */
-  function binden(index, canvas, auto, w, h) {
+  function binden(index, canvas, auto, w, h, farbe) {
+    const lack = farbe !== undefined && farbe !== null ? farbe : null;
     if (!init()) return false;
     groesseSetzen(w, h);
     const b = buehneGet(index);
@@ -163,10 +167,17 @@
     if (!b.auto || b.auto.id !== auto.id) {
       gruppeEntfernen(b.gruppe);
       b.auto = auto;
-      b.gruppe = gruppeNehmen(auto);
+      b.lack = lack;
+      b.gruppe = gruppeNehmen(auto, lack);
       b.gruppe.visible = false;
       S.szene.add(b.gruppe);
       b.einblenden = 0;
+    } else if ((b.lack === undefined ? null : b.lack) !== lack) {
+      gruppeEntfernen(b.gruppe);          // nur Lack neu (Garage): ohne Einblenden, gleicher Drehwinkel
+      b.lack = lack;
+      b.gruppe = gruppeNehmen(auto, lack);
+      b.gruppe.visible = false;
+      S.szene.add(b.gruppe);
     }
     starten();
     if (b.gruppe && b.einblenden >= 1) zeichneBuehne(b, 0);   // sofort ein Bild (kein Flackern nach Menü-Neuaufbau)
@@ -197,6 +208,8 @@
   }
   function winkel(index) { const b = S.buehnen[index]; return b ? b.winkel : null; }
   function autoId(index) { const b = S.buehnen[index]; return b && b.auto ? b.auto.id : null; }
+  /** W3-G: Lack der Bühne (hex) – Katalogfarbe, wenn kein Garage-Lack. */
+  function lack(index) { const b = S.buehnen[index]; return b && b.gruppe ? b.gruppe.userData.lackFarbe : null; }
 
   /** Nur die ersten n Bühnen bleiben aktiv (z. B. Wechsel Zwei → Solo). */
   function behalten(n) {
@@ -257,6 +270,6 @@
     b.gruppe.visible = false;
   }
 
-  R.AutoVorschau = { kachel, alleKacheln, binden, behalten, drehen, winkel, autoId, stoppen, debug,
+  R.AutoVorschau = { kachel, alleKacheln, binden, behalten, drehen, winkel, autoId, lack, stoppen, debug,
     get verfuegbar() { return init(); }, get laeuft() { return S.laeuft; } };
 })();

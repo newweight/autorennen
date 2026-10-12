@@ -77,7 +77,8 @@ def regression(browser, fehler_global):
         page.on('pageerror', lambda e: fehler.append(str(e)))
         page.on('console', lambda m: fehler.append('console.error: ' + m.text) if m.type == 'error' else None)
         page.goto(url); page.wait_for_timeout(1200)
-        if ohne: page.evaluate("() => { delete Rennspiel.Schanzen; delete Rennspiel.Pickups; delete Rennspiel.Schaden; }")
+        # W3-G: auch Münzen/Garage weg – Münzen dürfen die Bahnen nicht verändern (nur Einsammeln, kein Stoß)
+        if ohne: page.evaluate("() => { delete Rennspiel.Schanzen; delete Rennspiel.Pickups; delete Rennspiel.Schaden; delete Rennspiel.Muenzen; delete Rennspiel.Garage; }")
         info = page.evaluate('''() => { const s = Rennspiel.spiel; s.laeuft = false;   // keine echten Frames: nur der Schnellvorlauf zählt
           s.rennenStarten({ streckeId: 'wiese' });
           const r = { welt: s.strecke.welt, wetter: s.einstellungen.wetter, wind: s.einstellungen.windStaerke, schadenEinst: s.einstellungen.schaden,
@@ -85,6 +86,7 @@ def regression(browser, fehler_global):
             schanzen: s.strecke.schanzen.length, gegner: s.fahrzeuge.length - 1 };
           s.schnellvorlauf(60);
           r.bahn = s.fahrzeuge.map(f => [f.vehicle.x, f.vehicle.z, f.vehicle.heading, f.vehicle.vLaengs, f.vehicle.y]);
+          r.muenzen = s.muenzen ? [s.muenzen.anzahl, s.muenzen.anzahl - s.muenzen.uebrig] : null;
           return r; }''')
         info['fehler'] = fehler; fehler_global.extend(fehler)
         erg['ohne' if ohne else 'mit'] = info
@@ -96,7 +98,8 @@ def regression(browser, fehler_global):
               {k: m[k] for k in ('welt', 'wetter', 'wind', 'schadenEinst', 'schadenAn')}),
              ('Regression: keine Hindernisse, keine Pickups, keine Dynamik, keine Schanzen', m['hindernisse'] == 0 and m['pickups'] is None and m['dynamik'] is None and m['schanzen'] == 0,
               {k: m[k] for k in ('hindernisse', 'pickups', 'dynamik', 'schanzen')}),
-             ('Regression: Bahnen nach 60 s bitgleich mit/ohne schanze.js+pickups.js+schaden.js', gleich, 'max. Abweichung %.3g' % abw)]
+             ('Regression: Bahnen nach 60 s bitgleich mit/ohne schanze.js+pickups.js+schaden.js+muenzen.js+garage.js', gleich, 'max. Abweichung %.3g' % abw),
+             ('Regression: Münzen liegen (Klassisch) und werden dabei eingesammelt [anzahl, eingesammelt]', bool(m.get('muenzen')) and m['muenzen'][1] > 0 and o.get('muenzen') is None, [m.get('muenzen'), o.get('muenzen')])]
     return pruef
 
 def main():

@@ -16,7 +16,7 @@
       const spielTasten = new Set();
       const t = R.config.tasten;
       t.spieler.forEach(s => ['gas', 'bremse', 'links', 'rechts'].forEach(k => spielTasten.add(s[k])));
-      [t.resetSpieler1, t.resetSpieler2, t.kamera, t.pause, t.vollbild, ...t.bestaetigen]
+      [t.resetSpieler1, t.resetSpieler2, t.item1, t.item2, t.kamera, t.pause, t.vollbild, ...t.bestaetigen]
         .forEach(k => spielTasten.add(k));
       this.spielTasten = spielTasten;
 

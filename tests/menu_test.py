@@ -92,6 +92,28 @@ with sync_playwright() as p:
     br = page.evaluate("(() => { const r = document.querySelector('.m-titel').getBoundingClientRect(); return [r.left, r.right, innerWidth]; })()")
     pruefe('Titel passt in die Breite', br[0] >= 0 and br[1] <= br[2], br)
     snap('menu_1_modus.png')
+    # Runde 6 (W3-G): Garage-Karte im Modus-Schritt, Klick öffnet die Garage, Esc schließt sie wieder
+    pruefe('W3-G: Garage-Karte im Modus-Schritt sichtbar', page.is_visible('[data-a="garage"]') and 'Garage' in page.inner_text('[data-a="garage"]'))
+    page.click('[data-a="garage"]'); page.wait_for_timeout(300)
+    offen = page.is_visible('#garage') and not page.is_visible('#menue')
+    taste('Escape'); page.wait_for_timeout(200)
+    pruefe('W3-G: Klick öffnet Garage, Esc zurück ins Menü (Modus-Schritt)', offen and page.is_visible('#menue') and not page.is_visible('#garage')
+           and page.evaluate('Rennspiel.spiel.menue.schritt') == 0)
+    r = page.evaluate("""(() => { const m = document.querySelector('.m-inhalt'), k = document.querySelector('[data-a="garage"]').getBoundingClientRect();
+      return { scroll: m.scrollHeight <= m.clientHeight + 1, innen: k.bottom <= document.querySelector('.m-fuss').getBoundingClientRect().top }; })()""")
+    pruefe('W3-G: Modus-Schritt mit Garage-Karte passt ohne Scrollen', r['scroll'] and r['innen'], r)
+    # Runde 6 (W3-F): 4 Modus-Karten (Allein, Zu zweit, Pokal, Letzter fliegt raus) im Bild, ohne Überlappung – 1280×800 und 1440×900
+    MODUS4 = """(() => { const k = Array.from(document.querySelectorAll('.karte.modus-karte')), r = k.map(e => e.getBoundingClientRect()),
+      fuss = document.querySelector('.m-fuss').getBoundingClientRect().top;
+      return { ids: k.map(e => e.dataset.a), innen: r.every(a => a.left >= 0 && a.right <= innerWidth && a.top >= 0 && a.bottom <= fuss + 2),
+        frei: r.every((a, i) => r.every((b, j) => i === j || a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1)),
+        textUeber: k.some(e => e.scrollHeight > e.clientHeight + 2) }; })()"""
+    for vw, vh in ((1280, 800), (1440, 900)):
+        page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(300)
+        m4 = page.evaluate(MODUS4)
+        pruefe(f'W3-F: 4 Modus-Karten {vw}×{vh} im Bild, ohne Überlappung', m4['ids'] == ['modus:solo', 'modus:zwei', 'modus:pokal', 'modus:elimination']
+               and m4['innen'] and m4['frei'] and not m4['textUeber'], m4)
+    page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
     # b) Tastatur: Modus zu zweit
     taste('ArrowRight'); snap('menu_1b_modus_zwei.png')
     pruefe('Modus zu zweit', page.evaluate('Rennspiel.spiel.einstellungen.modus') == 'zwei')
@@ -499,6 +521,10 @@ with sync_playwright() as p:
     page.evaluate("Rennspiel.Sterne.gutschreiben('Kerle', 12)"); page.evaluate("Rennspiel.spiel.menue.zeichnen && Rennspiel.spiel.menue.zeichnen()"); page.wait_for_timeout(200)
     karte = page.evaluate("(() => { const k = document.querySelector('[data-a=\"fahrer:0:Kerle\"]'); return k ? k.textContent.trim() : null; })()")
     pruefe('Runde 6: Fahrerkarte zeigt „⭐ 12“ (Sterne-Gesamtzahl je Fahrer)', karte is not None and '⭐ 12' in karte, karte)
+    # Runde 6 (W3-G): Münz-Kontostand an der Fahrerkarte
+    page.evaluate("Rennspiel.Garage.gutschreiben('Kerle', 7 - Rennspiel.Garage.konto('Kerle'))"); page.evaluate("Rennspiel.spiel.menue.zeichnen()"); page.wait_for_timeout(150)
+    karte = page.evaluate("(() => { const k = document.querySelector('[data-a=\"fahrer:0:Kerle\"]'); return k ? k.textContent.trim() : null; })()")
+    pruefe('W3-G: Fahrerkarte zeigt „🪙 n“ (Münz-Kontostand)', karte is not None and ('🪙 %d' % page.evaluate("Rennspiel.Garage.konto('Kerle')")) in karte, karte)
     pruefe('Maus: Fahrer Kerle gewählt, Solo-Raster 12 Karten', page.evaluate('Rennspiel.spiel.einstellungen.fahrer[0]') == 'Kerle'
            and page.evaluate("document.querySelectorAll('.karte.fahrer').length") == 12)
     page.click('[data-a="weiter"]'); page.wait_for_timeout(150)

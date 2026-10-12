@@ -96,6 +96,9 @@ Rennspiel.config = {
     debug: 'KeyH',             // Debug-Text ein/aus
     ton: 'KeyM',               // Ton an/aus
     bestaetigen: ['Enter', 'Space'],
+    // Runde 6 (W3-H, Ölfalle): Item einsetzen (im Rennen; Space ist im Menü „bestätigen", im Rennen frei)
+    item1: 'Space',            // Spieler 1
+    item2: 'KeyE',             // Spieler 2
   },
 
   // --- Grafik ---
@@ -218,7 +221,8 @@ Rennspiel.config = {
     meteor: { vorlauf: 85, warnZeit: 2, abstand: 15, brockenMin: 3, brockenMax: 5, brockenTempo: 7, kraterDauer: 25,
       wackelRadius: 60, wackeln: 4 },
     // Flugsaurier (Katalog flugsaurier { s0, s1, intervall }): fliegt von vorn an, taucht bis tief m über das Auto
-    flugsaurier: { intervall: 40, hoehe: 25, tief: 2.5, tempo: 24, start: 170, breite: 34, duck: 0.45 },
+    flugsaurier: { intervall: 40, hoehe: 25, tief: 2.5, tempo: 24, start: 60, breite: 34, duck: 0.6,
+      groesse: 1.8 },   // W3-H: Modell ×1,8, Anflug ab 60 m voraus (vorher 170), Schrei beim Auftauchen (doppelt laut in der Nähe), Kamera-Duck 0,6 m (vorher 0,45)
   },
   // Runde 6 (W2-C): Wildtiere im Wald (Katalog tiere [{ art: 'reh'|'baer', s, von, intervall, tempo }], Schicht „dinos")
   tiere: {
@@ -452,6 +456,21 @@ Rennspiel.config = {
       wiederDa: 10,            // s bis die Kugel wieder erscheint
       hoehe: 1.3,              // m schwebt über der Straße
     },
+    // Runde 6 (W3-H): Ölfalle. Ölfässer (Pickup) stehen 35 m hinter jeder Schild-Kugel auf der Gegenseite (nur wo es Schilde gibt:
+    // Welt Verrückt/Alles). Aufsammeln → 1 Item; Taste legt 8 m hinter dem Auto einen Ölfleck (Untergrund 'oel': grip 0,25, schlingern).
+    oelfalle: {
+      radius: 2.6,             // m Aufsammel-Abstand
+      wiederDa: 10,            // s bis das Fass wieder da ist
+      versatz: 35,             // m hinter der Schild-Kugel (entlang der Strecke)
+      abstand: 8,              // m hinter dem Auto wird der Fleck gelegt
+      dauer: 20,               // s sichtbar/wirksam
+      halbLaenge: 3.2, halbBreite: 2.6,   // m Ellipse des Flecks (längs/quer zur Fahrtrichtung beim Legen)
+      immun: 1,                // s: das legende Auto selbst ist immun
+      max: 6,                  // höchstens so viele Flecken gleichzeitig (der älteste verschwindet)
+      kiChance: 0.3,           // KI: Wahrscheinlichkeit je Gelegenheit (Spieler tritt in den Bereich hinter ihr)
+      kiAbstand: 15,           // m: Spieler höchstens so weit hinter der KI
+      kiNachlauf: 2,           // s: so lange nach dem Aufsammeln wartet die KI mindestens
+    },
   },
 
   // --- Runde 5 (M6): Anlauf-Hilfe vor Loopings und Schanzen (Logik: src/track/anlauf.js) ---
@@ -505,6 +524,42 @@ Rennspiel.config = {
     sireneHoerweite: 120,        // m: Lautstärke linear bis 0
   },
 
+  // --- Runde 6 (W3-G): Münzen auf der Strecke + Garage (Logik: src/world/muenzen.js, src/ui/garage.js) ---
+  // Münzen: anzahlMin–anzahlMax je Strecke, auf Geraden Reihen à `reihe` Stück (Abstand reiheAbstand m), in Kurven
+  // (|Krümmung| > kurveAb 1/m) einzeln. Einsammeln = Abstand Auto-Mitte ↔ Münze ≤ radius m; KEIN Stoß, keine Physik.
+  // Preisgeld nach dem Rennen je Spieler: Platz 1–3 = preisgeld[0..2], sonst preisgeldSonst.
+  // Garage je Fahrer (localStorage speicherSchluessel): Lackfarben (4 je Auto, farbPreis je Farbe, einmal kaufen,
+  // danach frei wechselbar; Original immer), Upgrades Motor/Reifen/Bremsen je 3 Stufen (upgradePreise),
+  // je Stufe vMax/grip/bremsen + upgradeJeStufe; Reparatur (nur wenn Schaden an): nächstes Rennen mit 100 %.
+  // Schaden-Rest: Endprozent je Fahrer+Auto, nächstes Rennen startet damit (mindestens restMin).
+  garage: {
+    speicherSchluessel: 'rennspiel.garage.v1',
+    muenzen: { anzahlMin: 20, anzahlMax: 40, zielAnzahl: 30, maxReihen: 4, reihe: 5, reiheAbstand: 6, kurveAb: 0.008, radius: 1.9, hoehe: 0.95,
+      startFrei: 70, zielFrei: 25, schanzeFrei: 110 },
+    preisgeld: [30, 20, 15], preisgeldSonst: 5,
+    farbPreis: 20,
+    reparaturPreis: 10,
+    restMin: 30,
+    upgradePreise: [30, 60, 100],          // Stufe 1, 2, 3
+    upgradeJeStufe: { motor: 0.04, reifen: 0.04, bremsen: 0.06 },   // vMax / grip / bremsen je Stufe
+    // 4 Lackfarben je Auto (Polizei nicht in der Garage); Namen für die Anzeige in farbNamen
+    farben: {
+      'troc-cabrio': [0xe3202b, 0xffc400, 0x14a64a, 0xff5fb8],
+      multivan: [0xff7a1a, 0x1fb5b0, 0xd8262f, 0x1f5fd6],
+      passat: [0xf2f2f2, 0x1f5fd6, 0xc8202a, 0xc4cad3],
+      'porsche-911': [0xffc400, 0x1f7bff, 0x3ddc5a, 0x2b2e35],
+      'bmw-m4': [0x1f7bff, 0xe3202b, 0xff7a1a, 0xf2f2f2],
+      'amg-gt': [0xe3202b, 0xffc400, 0x3ddc5a, 0x8a3ffc],
+      'audi-rs6': [0x1f7bff, 0xe3202b, 0x2e9e4a, 0x2b2e35],
+      'mini-cooper': [0xe3202b, 0x1f7bff, 0xffc400, 0xff5fb8],
+      formel: [0xe3202b, 0x14a64a, 0xff7a1a, 0xff5fb8],
+      _standard: [0xe3202b, 0x1f7bff, 0xffc400, 0x14a64a],
+    },
+    farbNamen: { e3202b: 'Rot', ffc400: 'Gelb', '14a64a': 'Grün', ff5fb8: 'Pink', ff7a1a: 'Orange', '1fb5b0': 'Türkis',
+      d8262f: 'Rot', '1f5fd6': 'Blau', f2f2f2: 'Weiß', c8202a: 'Rot', c4cad3: 'Silber', '1f7bff': 'Blau', '3ddc5a': 'Grün',
+      '2b2e35': 'Schwarz', '8a3ffc': 'Lila', '2e9e4a': 'Grün' },
+  },
+
   // --- Kamera ---
   kamera: {
     modi: ['verfolger', 'cockpit', 'weit'],
@@ -516,6 +571,22 @@ Rennspiel.config = {
     weit:      { abstand: 16.0, abstandSchnell: 18.0, hoehe: 7.0, hoeheSchnell: 7.8, vorausblick: 6.0, vorausblickSchnell: 10.0,
                  weichheit: 3.5, blickWeichheit: 6.0, lenkVorgriff: 0.10 },
     cockpit:   { hoehe: 1.15, vor: 0.4, blickWeite: 30, blickWeiteSchnell: 45, lenkVorgriff: 0.08 },
+  },
+
+  // --- Runde 6 (W3-F): Pokal-Serie (D1) und „Letzter fliegt raus" (D7), src/race/pokal.js ---
+  pokal: {
+    groessen: [3, 4, 5], groesseStandard: 3,          // Rennen je Pokal
+    // feste Strecken-Reihenfolge je Pokal-Größe (Welt/Tageszeit/Wetter kommen aus den Einstellungen)
+    reihenfolge: { 3: ['wiese', 'wald', 'fantasie'], 4: ['wiese', 'wald', 'wueste', 'fantasie'], 5: ['wiese', 'wald', 'wueste', 'fantasie', 'dino'] },
+    punkte: [10, 8, 6, 5, 4, 3, 2], punkteRest: 1,   // 1.=10 … 7.=2, ab 8. Platz 1 Punkt
+    maxStaerke: 'legende',                            // KI-Stärke steigt je Rennen um eine Stufe, höchstens bis hier
+    speicherSchluessel: 'rennspiel.pokale.v1',        // Pokal-Gewinne je Fahrer
+    konfetti: 90,                                     // Konfetti-Schnipsel bei der Siegerehrung
+    elimination: {
+      minGegner: 3,             // mindestens 3 Computer-Gegner (Rundenzahl = Teilnehmer − 1)
+      zuschauerSekunden: 6,     // alle Spieler raus: noch so lange zuschauen, dann Ergebnis (null = bis zum Ende)
+      puffDauer: 0.9,           // s „Puff"-Wolke beim Ausscheiden
+    },
   },
 
   // --- Oberfläche (Menü, HUD) ---

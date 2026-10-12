@@ -120,6 +120,7 @@
     /** Fokus-Reihenfolge: linke Spalte (Rennen), rechte Spalte (Welt-Extras), dann Start. */
     zeilen() {
       const z = ['runden', 'gegner', 'schwierigkeit', 'hilfe0'];
+      if (this.e.spielart === 'pokal') z.unshift('pokal');     // Runde 6 (W3-F): Pokal-Größe 3/4/5 Rennen
       if (this.zwei) z.push('hilfe1');
       z.push('tageszeit');      // Runde 6 (W2-D): unten in der linken Spalte (rechts ist kein Platz mehr)
       z.push('jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'rempeln', 'start');   // Runde 5: Tempo-Klasse, 5b: Polizei, 6: Rempeln
@@ -228,6 +229,7 @@
     // ---------- Eingabe ----------
     /** Taste im Menü. Gibt true zurück, wenn sie verwendet wurde. */
     taste(code) {
+      if (this.garageUi && this.garageUi.sichtbar) return this.garageUi.taste(code);   // Runde 6 (W3-G): Garage offen
       const T = R.config.tasten;
       const P1 = T.spieler[0], P2 = T.spieler[1];
       const richtung = (c) => {
@@ -240,6 +242,7 @@
       if (code === T.pause) { this.zurueck(); return true; }
       if (T.bestaetigen.includes(code)) { this.weiter(); return true; }
       const id = SCHRITTE[this.schritt].id;
+      if (id === 'modus' && code === 'KeyG' && R.Garage) { this.garageOeffnen(); return true; }   // W3-G: Taste G = Garage
       if (id === 'auto' && DREH_TASTEN[code] && R.AutoVorschau) {
         const [sp, r] = DREH_TASTEN[code];
         R.AutoVorschau.drehen(this.zwei ? sp : 0, r);
@@ -255,7 +258,15 @@
       const [dx, dy] = rich;
 
       if (id === 'modus') {
-        this.e.modus = this.e.modus === 'solo' ? 'zwei' : 'solo';
+        // Runde 6 (W3-F): ←→ wandert über die Karten Allein · Zu zweit · Pokal · Letzter fliegt raus,
+        // ↑↓ schaltet bei Pokal/„Letzter fliegt raus" allein ↔ zu zweit
+        const e = this.e, sa = e.spielart || 'rennen';
+        if (dx) {
+          const karten = ['solo', 'zwei', 'pokal', 'elimination'];
+          const i = sa === 'rennen' ? (e.modus === 'zwei' ? 1 : 0) : karten.indexOf(sa);
+          this.modusKarte(karten[(i + dx + 4) % 4]);
+        } else if (sa !== 'rennen') e.modus = e.modus === 'solo' ? 'zwei' : 'solo';
+        else e.modus = e.modus === 'solo' ? 'zwei' : 'solo';
         this.einstellungenFix();
         this.aenderung();
       } else if (id === 'strecke') {
@@ -310,8 +321,13 @@
     zeilenWert(zeile, dx) {
       const rc = R.config.rennen, e = this.e;
       const klemme = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-      if (zeile === 'runden') e.runden = klemme(e.runden + dx, rc.rundenMin, rc.rundenMax);
-      else if (zeile === 'gegner') e.gegner = klemme(e.gegner + dx, 0, rc.gegnerMax);
+      const elim = e.spielart === 'elimination', minG = elim ? ((R.config.pokal && R.config.pokal.elimination && R.config.pokal.elimination.minGegner) || 3) : 0;
+      if (zeile === 'runden') { if (!elim) e.runden = klemme(e.runden + dx, rc.rundenMin, rc.rundenMax); }   // W3-F: Elimination = automatisch
+      else if (zeile === 'gegner') e.gegner = klemme(Math.max(minG, e.gegner) + dx, minG, rc.gegnerMax);
+      else if (zeile === 'pokal') {           // W3-F: 3 / 4 / 5 Rennen
+        const gs = (R.config.pokal && R.config.pokal.groessen) || [3, 4, 5], i = gs.indexOf(e.pokalGroesse);
+        e.pokalGroesse = gs[klemme((i < 0 ? 0 : i) + dx, 0, gs.length - 1)];
+      }
       else if (zeile === 'schwierigkeit' || zeile.startsWith('hilfe')) {
         const hilfe = zeile.startsWith('hilfe'), sp = hilfe ? +zeile.slice(5) : 0;
         const keys = Object.keys(hilfe ? R.config.fahrhilfen : R.config.schwierigkeiten);
@@ -363,15 +379,32 @@
     zurueck() {
       if (this.schritt > 0) { this.schritt--; this.zeichnen(); }
     }
-    starten() { this.spiel.einstellungenSpeichern(); this.spiel.rennenStarten(); }
+    starten() {
+      this.spiel.einstellungenSpeichern();
+      if (this.e.spielart === 'pokal' && this.spiel.pokalStarten) this.spiel.pokalStarten();   // Runde 6 (W3-F)
+      else this.spiel.rennenStarten();
+    }
+    /** Runde 6 (W3-F): Modus-Karte wählen: 'solo'/'zwei' = Einzelrennen, 'pokal'/'elimination' = Spielart (Spielerzahl bleibt). */
+    modusKarte(k) {
+      const e = this.e;
+      if (k === 'solo' || k === 'zwei') { e.modus = k; e.spielart = 'rennen'; }
+      else if (k === 'pokal' || k === 'elimination') {
+        e.spielart = k;
+        const minG = (R.config.pokal && R.config.pokal.elimination && R.config.pokal.elimination.minGegner) || 3;
+        if (k === 'elimination' && e.gegner < minG) e.gegner = minG;
+      }
+    }
 
     aktion(a) {
       const [art, p1, p2] = a.split(':');
       const e = this.e;
+      if (art === 'garage') return this.garageOeffnen();      // Runde 6 (W3-G)
       if (art === 'schritt') { this.schritt = +p1; this.fokus = 0; }
       else if (art === 'weiter') return this.weiter();
       else if (art === 'zurueck') return this.zurueck();
-      else if (art === 'modus') { e.modus = p1; this.einstellungenFix(); this.schritt = 1; }
+      else if (art === 'modus') { this.modusKarte(p1); this.einstellungenFix(); this.schritt = 1; }
+      else if (art === 'spieler') { e.modus = p1 === 'zwei' ? 'zwei' : 'solo'; if (p2) this.modusKarte(p2); this.einstellungenFix(); }   // W3-F: Pille auf Pokal-/Raus-Karte
+      else if (art === 'pokalgroesse') { e.pokalGroesse = +p1; this.modusKarte('pokal'); }
       else if (art === 'strecke') this.streckeWaehlen(p1);     // bleibt im Schritt: darunter die Welt wählen, dann „Weiter“
       else if (art === 'welt') this.weltSetzen(p1);
       else if (art === 'variante') this.varianteSetzen(p1);
@@ -403,7 +436,7 @@
         `<div class="m-schritt${i === this.schritt ? ' aktiv' : ''}${i < this.schritt ? ' fertig' : ''}" data-a="schritt:${i}">` +
         `<b>${i + 1}</b> ${s.name}</div>`).join('<span class="m-pfeil">›</span>');
       let inhalt = '', hinweis = '', titel = '';
-      if (id === 'modus') { titel = 'Wie wollt ihr fahren?'; inhalt = this.htmlModus(); hinweis = '<kbd>←</kbd><kbd>→</kbd> auswählen · <kbd>Enter</kbd> weiter'; }
+      if (id === 'modus') { titel = 'Wie wollt ihr fahren?'; inhalt = this.htmlModus() + this.htmlGarageKarte(); hinweis = '<kbd>←</kbd><kbd>→</kbd> auswählen · <kbd>Enter</kbd> weiter' + (R.Garage ? ' · <kbd>G</kbd> Garage' : ''); }
       if (id === 'strecke') { titel = 'Welche Strecke?'; inhalt = this.htmlStrecke(); hinweis = '<kbd>←</kbd><kbd>→</kbd> Strecke · <kbd>↑</kbd><kbd>↓</kbd> Welt · <kbd>Enter</kbd> weiter · <kbd>Esc</kbd> zurück'; }
       if (id === 'fahrer') {
         titel = this.zwei ? 'Wer fährt? Wählt eure Fahrer!' : 'Wer fährt?';
@@ -446,13 +479,42 @@
       });
     }
 
+    // ---------- Runde 6 (W3-G): Garage ----------
+    /** Karte „🔧 Garage" unter den Modus-Karten (öffnet R.Garage.Bildschirm). */
+    htmlGarageKarte() {
+      if (!R.Garage) return '';
+      return `<div class="reihe garage-reihe"><div class="karte garage-karte" data-a="garage">` +
+        `<div class="emoji">🔧</div><div><div class="karten-name">Garage</div><div class="karten-sub">Münzen ausgeben: Farben, Motor, Reifen, Bremsen <kbd>G</kbd></div></div></div></div>`;
+    }
+    /** Garage-Bildschirm öffnen; beim Schließen kommt das Menü (Modus-Schritt) zurück. */
+    garageOeffnen() {
+      if (!R.Garage || !R.Garage.Bildschirm) return;
+      if (!this.garageUi) this.garageUi = new R.Garage.Bildschirm(this.spiel, this.wurzel.parentNode, () => {
+        this.sichtbar = true; this.wurzel.style.display = ''; this.zeichnen();
+      });
+      if (R.Audio) R.Audio.menueKlick();
+      this.sichtbar = false; this.wurzel.style.display = 'none';
+      if (R.AutoVorschau) R.AutoVorschau.stoppen();
+      this.garageUi.oeffnen();
+    }
+
     htmlModus() {
-      const k = (id, emoji, text, sub) =>
-        `<div class="karte gross${this.e.modus === id ? ' gewaehlt' : ''}" data-a="modus:${id}">` +
-        `<div class="emoji">${emoji}</div><div class="karten-name">${text}</div><div class="karten-sub">${sub}</div></div>`;
-      return `<div class="reihe">` +
+      // Runde 6 (W3-F): 4 Karten – Einzelrennen allein / zu zweit, Pokal, „Letzter fliegt raus" (Pillen: allein/zu zweit, Pokal-Größe)
+      const e = this.e, sa = e.spielart || 'rennen';
+      const gew = (id) => (id === 'solo' || id === 'zwei' ? sa === 'rennen' && e.modus === id : sa === id);
+      const k = (id, emoji, text, sub, extra) =>
+        `<div class="karte gross modus-karte m-${id}${gew(id) ? ' gewaehlt' : ''}" data-a="modus:${id}">` +
+        `<div class="emoji">${emoji}</div><div class="karten-name">${text}</div><div class="karten-sub">${sub}</div>${extra || ''}</div>`;
+      const sp = (id) => `<div class="modus-pillen"><span class="pille${sa === id && e.modus === 'solo' ? ' aktiv' : ''}" data-a="spieler:solo:${id}">👤 allein</span>` +
+        `<span class="pille${sa === id && e.modus === 'zwei' ? ' aktiv' : ''}" data-a="spieler:zwei:${id}">👫 zu zweit</span></div>`;
+      const gs = (R.config.pokal && R.config.pokal.groessen) || [3, 4, 5];
+      const groesse = `<div class="modus-pillen">` + gs.map((g) =>
+        `<span class="pille${sa === 'pokal' && e.pokalGroesse === g ? ' aktiv' : ''}" data-a="pokalgroesse:${g}">${g} Rennen</span>`).join('') + `</div>`;
+      return `<div class="reihe modus-reihe">` +
         k('solo', '🏁', 'Allein gegen Computer', 'Du fährst gegen die Computer-Autos') +
         k('zwei', '👫', 'Zu zweit', 'Geteilter Bildschirm: links Pfeile, rechts WASD') +
+        k('pokal', '🏆', 'Pokal', 'Mehrere Rennen, Punkte sammeln – wer gewinnt den Pokal?', groesse + sp('pokal')) +
+        k('elimination', '🚪', 'Letzter fliegt raus', 'Nach jeder Runde scheidet der Letzte aus', sp('elimination')) +
         `</div>`;
     }
 
@@ -509,10 +571,13 @@
         const karten = R.config.fahrer.map((f) => {
           const gewaehlt = f.name === this.e.fahrer[sp], vergeben = f.name === andere;
           const sterneGes = R.Sterne ? R.Sterne.summe(f.name) : 0;   // Runde 6: „⭐ 12" an der Karte
+          const pokaleGes = R.Pokal ? R.Pokal.gewinne(f.name) : 0;   // Runde 6 (W3-F): „🏆 2"
           return `<div class="karte fahrer${gewaehlt ? ' gewaehlt' : ''}${vergeben ? ' vergeben' : ''}" data-a="fahrer:${sp}:${f.name}">` +
             (vergeben ? `<span class="vergeben-marke p${2 - sp}">${2 - sp}</span>` : '') +
             `<div class="avatar">${f.emoji}</div><div class="karten-name">${f.name}</div>` +
-            (sterneGes > 0 ? `<div class="karten-sterne">⭐ ${sterneGes}</div>` : '') + `</div>`;
+            (sterneGes > 0 || pokaleGes > 0 ? `<div class="karten-sterne">${sterneGes > 0 ? '⭐ ' + sterneGes : ''}${sterneGes > 0 && pokaleGes > 0 ? ' · ' : ''}` +
+              `${pokaleGes > 0 ? '<span class="karten-pokale">🏆 ' + pokaleGes + '</span>' : ''}</div>` : '') +   // W3-F: Pokal-Gewinne
+            (R.Garage && R.Garage.konto(f.name) > 0 ? `<div class="karten-muenzen">🪙 ${R.Garage.konto(f.name)}</div>` : '') + `</div>`;   // W3-G
         }).join('');
         const kopf = this.zwei
           ? `<h2 class="p${sp + 1}"><span class="marke">${sp + 1}</span> Spieler ${sp + 1}: ${R.fahrerEmoji(this.e.fahrer[sp])} ${this.e.fahrer[sp]}</h2>`
@@ -555,6 +620,16 @@
       return `<div class="m-autos auto3d${this.zwei ? ' zwei' : ''}">${panels}</div>`;
     }
 
+    /** Runde 6 (W3-F): Zeile „🏆 Pokal" im Einstellungs-Schritt: 3/4/5 Rennen + Strecken-Reihenfolge. */
+    htmlPokalZeile(fk, fz) {
+      const e = this.e, gs = (R.config.pokal && R.config.pokal.groessen) || [3, 4, 5];
+      const namen = R.Pokal ? R.Pokal.strecken(e.pokalGroesse).map((id) => (R.trackCatalog.find((t) => t.id === id) || { name: id }).name) : [];
+      // steht statt der Spaltenüberschrift „Rennen" (keine zusätzliche Höhe – passt auch zu zweit in 1280×800)
+      return `<h3 class="pokal-zeile${fk('pokal')}" ${fz('pokal')} title="Computer werden jedes Rennen eine Stufe stärker">🏆 Pokal ` +
+        gs.map((g) => `<span class="pille${e.pokalGroesse === g ? ' aktiv' : ''}" data-a="pokalgroesse:${g}">${g} Rennen</span>`).join('') +
+        `<span class="pokal-strecken">${namen.join(' → ')}</span></h3>`;
+    }
+
     htmlStart() {
       const e = this.e, z = this.zeilen();
       const fk = (zeile) => (z[this.fokus] === zeile ? ' fokus' : '');
@@ -577,9 +652,11 @@
       const cfg = R.config;
       const name1 = this.zwei ? 'Fahrhilfe ' + e.fahrer[0] : 'Fahrhilfe';
       let links =
-        stepper('runden', '🔁', 'Runden', e.runden, e.runden === 1 ? '(kurz)' : '') +
-        stepper('gegner', '🤖', 'Computer-Gegner', e.gegner, e.gegner === 0 ? '(keine)' : '') +
-        pillen('schwierigkeit', '🎚️', 'Computer-Stärke', cfg.schwierigkeiten, e.schwierigkeit) +
+        (e.spielart === 'elimination'
+          ? stepper('runden', '🔁', 'Runden', (this.zwei ? 2 : 1) + Math.max(3, e.gegner) - 1, '(1 weniger als Autos)')
+          : stepper('runden', '🔁', e.spielart === 'pokal' ? 'Runden je Rennen' : 'Runden', e.runden, e.runden === 1 ? '(kurz)' : '')) +
+        stepper('gegner', '🤖', 'Computer-Gegner', e.spielart === 'elimination' ? Math.max(3, e.gegner) : e.gegner, e.gegner === 0 ? '(keine)' : '') +
+        pillen('schwierigkeit', '🎚️', e.spielart === 'pokal' ? 'Start-Stärke' : 'Computer-Stärke', cfg.schwierigkeiten, e.schwierigkeit) +
         pillen('hilfe0', '🛟', name1, cfg.fahrhilfen, e.fahrhilfe[0]);
       if (this.zwei) links += pillen('hilfe1', '🛟', 'Fahrhilfe ' + e.fahrer[1], cfg.fahrhilfen, e.fahrhilfe[1]);
       // Runde 6 (W2-D): Tageszeit (alle Strecken) – Dämmerung: Licht an, Nacht: Mond, Sterne, Scheinwerfer, Laternen
@@ -620,7 +697,8 @@
         `<div class="t-zeile p2${this.zwei ? '' : ' aus'}"><b>${e.fahrer[1]}</b><span><kbd>W</kbd> Gas <kbd>S</kbd> Bremse <kbd>A</kbd><kbd>D</kbd> Lenken <kbd>T</kbd> zurück</span></div>` +
         `<div class="t-zeile"><b>Alle</b><span><kbd>C</kbd> Kamera <kbd>F</kbd> Vollbild <kbd>Esc</kbd> Pause</span></div></div>`;
       return `<div class="m-start"><div class="m-spalten">` +
-        `<div class="m-einstellungen"><h3>🏎️ Rennen</h3>${links}</div>` +
+        `<div class="m-einstellungen">${e.spielart === 'pokal' ? this.htmlPokalZeile(fk, fz)      // W3-F: Pokal-Größe als Überschrift
+          : `<h3>${e.spielart === 'elimination' ? '🚪 Letzter fliegt raus' : '🏎️ Rennen'}</h3>`}${links}</div>` +
         `<div class="m-einstellungen"><h3>🌍 Welt &amp; Wetter</h3>${rechts}</div></div>${aktionen}${tafel}</div>`;
     }
   }
@@ -645,7 +723,8 @@
       this.sichtbar = true; this.seit = performance.now();
       const zeilen = erg.zeilen.map((z) => {
         const farbe = z.auto ? HEX(z.auto.farbe) : '#888';
-        const zeit = z.zeit !== null ? R.zeitText(z.zeit) : '<span class="noch">unterwegs</span>';
+        const zeit = z.raus ? `<span class="raus">🚪 raus in Runde ${z.raus}</span>`      // W3-F: „Letzter fliegt raus"
+          : z.zeit !== null ? R.zeitText(z.zeit) : '<span class="noch">unterwegs</span>';
         return `<tr class="${z.istSpieler ? 'spieler p' + (z.spielerNr + 1) : 'computer'}">` +
           `<td class="platz">${z.platz}.</td><td class="name">${z.istSpieler ? '' : '🤖 '}${z.name}` +
           (z.sterne ? ` <span class="sterne" title="Sterne gesamt: ${z.sterneGesamt}">${R.Sterne ? R.Sterne.text(z.sterne) : '⭐'.repeat(z.sterne)}</span>` : '') + `</td>` +
@@ -653,7 +732,7 @@
           `<td class="zeit">${zeit}</td><td class="zeit">${z.beste !== null ? R.zeitText(z.beste) : '–'}</td></tr>`;
       }).join('');
       this.wurzel.innerHTML =
-        `<div class="ergebnis-karte"><h1>🏆 Ergebnis</h1>` +
+        `<div class="ergebnis-karte"><h1>${erg.elimination ? '🚪 Letzter fliegt raus' : '🏆 Ergebnis'}</h1>` +
         `<table><thead><tr><th>Platz</th><th>Name</th><th>Auto</th><th>Gesamtzeit</th><th>Beste Runde</th></tr></thead>` +
         `<tbody>${zeilen}</tbody></table>` +
         `<div class="knoepfe"><div class="knopf gruen" data-a="nochmal">🔄 Nochmal <kbd>Enter</kbd></div>` +

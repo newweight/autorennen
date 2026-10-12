@@ -844,9 +844,9 @@
         const a = zi >= 0 ? autos[zi] : null;
         if (!a) { F.timer = 1; return; }
         const n = sp.naechster(a.vehicle.x, a.vehicle.z);
-        const start = wert(C.start, 170), vor = sp.differenzS(n.s, F.s0), rest = sp.differenzS(F.s1, n.s);
+        const start = wert(C.start, 60), vor = sp.differenzS(n.s, F.s0), rest = sp.differenzS(F.s1, n.s);
         if (vor < 0 || rest < start + 20 || a.vehicle.imFlug) { F.timer = 1; return; }
-        F.aktiv = true; F.ziel = zi; F.s = sp.wrapS(n.s + start); F.q = n.seitenabstand; F.geschrien = false;
+        F.aktiv = true; F.ziel = zi; F.s = sp.wrapS(n.s + start); F.q = n.seitenabstand; F.geschrien = false; F.geducked = false;
         F.timer = F.intervall; F.anzahl++; F.zeit = 0;
         F.starts = F.starts || []; F.starts.push(this.zeit);
       }
@@ -868,10 +868,9 @@
       F.fluegel = Math.abs(F.d) < br * 1.6 ? 0.25 + 0.05 * Math.sin(F.zeit * 9) : Math.sin(F.zeit * 7) * 0.7;
       // Test-/Sicherheitswert: Höhe über dem Auto, wenn er waagerecht nah dran ist
       if (Math.hypot(F.x - v.x, F.z - v.z) < 3) F.minUeberAuto = Math.min(F.minUeberAuto, F.y - (v.y || 0));
-      if (!F.geschrien && F.d < 22) {
-        F.geschrien = true;
-        if (erg) { erg.ereignisse.push({ typ: 'schrei', x: F.x, z: F.z }); erg.ereignisse.push({ typ: 'duck', nr: F.ziel, staerke: wert(C.duck, 0.45) }); }
-      }
+      // W3-H: Schrei gleich beim Auftauchen (60 m voraus, in der Nähe laut), Kamera-Duck wenn er über das Auto stößt
+      if (!F.geschrien) { F.geschrien = true; if (erg) erg.ereignisse.push({ typ: 'schrei', x: F.x, z: F.z }); }
+      if (!F.geducked && F.d < 22) { F.geducked = true; if (erg) erg.ereignisse.push({ typ: 'duck', nr: F.ziel, staerke: wert(C.duck, 0.6) }); }
       if (F.d < -170) { F.aktiv = false; F.y = -100; }
     }
 
@@ -1343,7 +1342,15 @@
       const sch = new THREE.CircleGeometry(1, 20); sch.rotateX(-Math.PI / 2);
       this._schattenM = imesh(sch, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, depthWrite: false,
         polygonOffset: true, polygonOffsetFactor: -10, polygonOffsetUnits: -10 }), 12, 'Schatten');
-      if (this.flugsaurier) { this._flugGrp = this._flugsaurierGruppe(); g.add(this._flugGrp); }
+      if (this.flugsaurier) {
+        this._flugGrp = this._flugsaurierGruppe(); g.add(this._flugGrp);
+        // W3-H: Schatten auf der Straße (weiche dunkle Ellipse unter dem Flugsaurier, wird beim Annähern größer und dunkler)
+        const sg = new THREE.CircleGeometry(1, 24); sg.rotateX(-Math.PI / 2);
+        this._flugSchatten = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4, depthWrite: false,
+          polygonOffset: true, polygonOffsetFactor: -10, polygonOffsetUnits: -10 }));
+        this._flugSchatten.name = 'FlugsaurierSchatten'; this._flugSchatten.visible = false; this._flugSchatten.renderOrder = 2;
+        g.add(this._flugSchatten);
+      }
     }
 
     /** Optik je Frame für die Runde-6-Teile. */
@@ -1455,7 +1462,18 @@
       const F = this.flugsaurier, grp = this._flugGrp;
       if (grp) {
         grp.visible = !!(F && F.aktiv);
+        const sh = this._flugSchatten;
+        if (sh) sh.visible = grp.visible;
         if (grp.visible) {
+          // W3-H: Modell ×groesse (Einblenden in den ersten 0,4 s statt Aufpoppen), Schatten auf dem Boden unter ihm
+          const CFg = cfgDinoV().flugsaurier || {}, gr = wert(CFg.groesse, 1.8) * Math.min(1, 0.35 + F.zeit / 0.6);
+          grp.scale.setScalar(gr);
+          if (sh) {
+            const hy = this.strecke.hoeheAn(F.x, F.z), hoeheUeber = Math.max(0, F.y - hy), u = Math.max(0, 1 - hoeheUeber / 28);
+            sh.position.set(F.x, hy + 0.14, F.z); sh.rotation.y = F.yaw;
+            sh.scale.set(gr * 2.4 * (0.5 + 0.5 * u), 1, gr * 3.6 * (0.5 + 0.5 * u));   // längs (x) × quer (z): Spannweite
+            sh.material.opacity = 0.18 + 0.32 * u;
+          }
           grp.position.set(F.x, F.y, F.z);
           grp.rotation.set(0, F.yaw, F.nicken, 'YXZ');           // Modell blickt +x → Flugrichtung, Nase hoch beim Steigen
           this._fluegel.forEach((m) => { m.rotation.x = -m.userData.sg * F.fluegel; });

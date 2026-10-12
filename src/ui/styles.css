@@ -333,3 +333,135 @@ canvas.buehne { display: block; width: 100%; height: auto; aspect-ratio: 1.6; }
 .karte.strecke.t-dino { border-color: #9ad15a; background: rgba(46, 82, 26, .78); }
 .karte.strecke.t-dino .strecken-hinweis { background: rgba(255,150,60,.35); }
 .karte.strecke.t-dino.gewaehlt { background: rgba(70, 120, 36, .92); }
+
+/* ============================================================
+   Runde 6 (W3-G): Garage (src/ui/garage.js) + Garage-Karte im Modus-Schritt + Münzen an der Fahrerkarte
+   ============================================================ */
+.reihe.garage-reihe { margin-top: 1.1em; }
+.karte.garage-karte { display: flex; align-items: center; gap: .6em; padding: .45em 1.2em; text-align: left;
+  border-color: #ffc928; background: linear-gradient(90deg, rgba(120, 70, 10, .78), rgba(14, 24, 58, .78)); }
+.karte.garage-karte .emoji { font-size: 2.2em; line-height: 1; }
+.karte.garage-karte .karten-name { font-size: 1.15em; color: var(--gelb); }
+.karte.garage-karte .karten-sub { font-size: .7em; opacity: .9; }
+.karte.fahrer .karten-muenzen { font-size: .8em; line-height: 1.1; color: #ffc928; white-space: nowrap; }
+
+.garage .m-kopf { flex-wrap: nowrap; }
+.g-konto { font-size: 1.05em; background: rgba(14,24,58,.75); border: .15em solid #ffc928; border-radius: 1em; padding: .2em .8em; white-space: nowrap; }
+.g-konto b { color: #ffc928; font-size: 1.25em; margin-left: .3em; }
+.garage .karte.fahrer.gewaehlt, .garage .karte.auto.gewaehlt { border-color: #ffc928; box-shadow: 0 0 0 .15em #ffc928, 0 0 1em rgba(255,201,40,.7); }
+.garage .m-fahrer .karte.fahrer { padding: .7em .3em .8em; }
+.garage .m-fahrer .karte.fahrer .avatar { font-size: 3em; }
+.g-auto { display: grid; grid-template-columns: 19em minmax(0, 1fr); gap: 1.1em; align-items: start; width: 100%; }
+.g-auto .auto-bild img { width: 100%; height: auto; display: block; aspect-ratio: 2.1; object-fit: contain; }
+.g-auto .karte.auto .karten-name { font-size: .78em; min-height: 2.3em; }
+.g-auto .buehne-rahmen, .g-werkstatt .buehne-rahmen { width: 100%; border-color: #ffc928; }
+.g-raster { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.g-mini { font-size: .7em; min-height: 1.2em; color: #ffc928; }
+.g-farbklecks { height: 3em; border-radius: .6em; margin: .3em; }
+.g-werkstatt { display: grid; grid-template-columns: 21em minmax(0, 1fr); gap: 1.2em; align-items: start; width: 100%; }
+.g-links { display: flex; flex-direction: column; gap: .35em; }
+.g-autoname { font-size: 1.15em; text-align: center; }
+.g-rechts { display: flex; flex-direction: column; gap: .35em; min-width: 0; }
+.g-zeile { display: grid; grid-template-columns: 7.6em minmax(0, 1fr); align-items: center; gap: .6em; background: var(--tafel);
+  border: .15em solid rgba(255,255,255,.25); border-radius: .9em; padding: .25em .6em; }
+.g-zeile.fokus { border-color: #ffc928; box-shadow: 0 0 0 .13em #ffc928; background: rgba(60, 50, 20, .85); }
+.g-label { font-size: 1.05em; white-space: nowrap; }
+.g-wert { display: flex; align-items: center; gap: .6em; flex-wrap: wrap; min-width: 0; }
+.g-text { font-size: .75em; opacity: .92; }
+.g-text.klein { font-size: .65em; }
+.g-farben { display: flex; gap: .45em; flex-wrap: nowrap; }
+.g-farbe { display: flex; flex-direction: column; align-items: center; cursor: pointer; padding: .15em .2em; border-radius: .7em; border: .13em solid transparent; min-width: 3.6em; }
+.g-farbe i { width: 2.1em; height: 2.1em; border-radius: 50%; border: .15em solid rgba(255,255,255,.75); box-shadow: inset 0 -.25em .4em rgba(0,0,0,.35); }
+.g-farbe span { font-size: .62em; margin-top: .1em; white-space: nowrap; }
+.g-farbe small { font-size: .58em; color: #ffc928; white-space: nowrap; }
+.g-farbe.aktiv { border-color: var(--gruen); background: rgba(47,207,90,.25); }
+.g-farbe.aktiv small { color: #b8ffcb; }
+.g-farbe.sicht { border-color: #ffc928; }
+.g-farbe.teuer i { opacity: .75; }
+.g-farbe:hover { transform: scale(1.06); }
+.g-knopf { background: var(--p1); border: .13em solid #fff; border-radius: .9em; padding: .15em .7em; cursor: pointer; white-space: nowrap; font-size: .9em; }
+.g-knopf small { color: #ffe27a; margin-left: .2em; }
+.g-knopf.teuer { background: #6a6f86; }
+.g-knopf.aus { background: rgba(255,255,255,.15); border-color: rgba(255,255,255,.4); opacity: .75; }
+.g-balken { display: flex; gap: .25em; }
+.g-balken i { display: block; width: 1.9em; height: .8em; border-radius: .3em; background: rgba(255,255,255,.18); border: .1em solid rgba(255,255,255,.4); }
+.g-balken i.voll { background: linear-gradient(#7dff9a, var(--gruen)); border-color: #fff; }
+.g-nachricht { font-size: .85em; padding: .3em .8em; border-radius: .8em; background: rgba(14,24,58,.8); text-align: center; min-height: 1.3em; }
+.g-nachricht.gut { background: rgba(47,207,90,.85); }
+.g-nachricht.schlecht { background: rgba(220,70,50,.88); }
+.g-nachricht.leer { background: transparent; }
+
+/* ============================================================
+   Runde 6 (W3-F): Modus-Karten Pokal / „Letzter fliegt raus", Pokal-Zwischenstand, Siegerehrung, Rückfrage
+   ============================================================ */
+.reihe.modus-reihe { gap: 1em; flex-wrap: nowrap; align-items: stretch; }
+.reihe.modus-reihe .karte.gross { width: 10.6em; padding: .8em .6em; display: flex; flex-direction: column; align-items: center; }
+.reihe.modus-reihe .karte.gross .emoji { font-size: 3.1em; }
+.reihe.modus-reihe .karten-sub { font-size: .8em; }
+.karte.m-pokal { border-color: #ffd23a; background: rgba(90, 70, 10, .6); }
+.karte.m-pokal.gewaehlt { background: rgba(140, 105, 10, .85); }
+.karte.m-elimination { border-color: #ff8a8a; background: rgba(110, 30, 40, .6); }
+.karte.m-elimination.gewaehlt { background: rgba(160, 40, 55, .85); }
+.modus-pillen { display: flex; flex-wrap: wrap; gap: .25em; justify-content: center; margin-top: .45em; font-size: .72em; }
+.modus-pillen .pille { padding: .1em .5em; }
+h3.pokal-zeile { display: flex; align-items: center; gap: .3em; white-space: nowrap; cursor: pointer; border-radius: .6em; padding: 0 .3em; margin-left: 0; opacity: 1; }
+h3.pokal-zeile .pille { font-size: .82em; padding: 0 .5em; }
+h3.pokal-zeile.fokus { outline: .12em solid var(--gelb); background: rgba(40, 60, 130, .7); }
+.pokal-zeile .pokal-strecken { font-size: .7em; opacity: .85; margin-left: .3em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.karte.fahrer .karten-pokale { color: #ffe27a; }
+.ergebnis .raus { color: #ff9a9a; font-size: .85em; white-space: nowrap; }
+
+/* Zwischenstand / Siegerehrung (Overlay .ergebnis.pokal) */
+.ergebnis.pokal { background: rgba(10, 20, 50, .35); overflow: hidden; }
+.pokal-karte { position: relative; z-index: 2; max-width: 94vw; }
+.pokal-untertitel { text-align: center; font-size: .8em; opacity: .9; margin: -.2em 0 .5em; }
+.pokal-etappen { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: .2em .3em; font-size: .72em; margin-bottom: .5em; }
+.pokal-etappe { padding: .1em .55em; border-radius: 1em; background: rgba(255,255,255,.14); }
+.pokal-etappe.fertig { background: var(--gruen); }
+.pokal-etappe.jetzt { background: var(--gelb); color: #1a2550; }
+.ergebnis td.p-rennen { text-align: center; opacity: .85; font-size: .9em; }
+.ergebnis td.p-plus { text-align: right; color: #9ff0b0; font-variant-numeric: tabular-nums; }
+.ergebnis td.p-punkte { text-align: right; font-size: 1.25em; color: var(--gelb); font-variant-numeric: tabular-nums; }
+.pokal-naechstes { text-align: center; font-size: .85em; margin-top: .5em; }
+.pokal-karte .knoepfe { display: flex; gap: 1em; justify-content: center; margin-top: .8em; }
+
+/* Podest: 2 – 1 – 3 */
+.podest { display: flex; align-items: flex-end; justify-content: center; gap: .8em; margin: .4em 0 .2em; }
+.podest-platz { width: 11em; display: flex; flex-direction: column; align-items: center; text-align: center; animation: podestRein .7s ease-out both; }
+.podest-platz.p1 { width: 12.5em; animation-delay: .5s; }
+.podest-platz.p2 { animation-delay: .25s; }
+.podest-platz.p3 { animation-delay: 0s; }
+.podest-platz.leer { visibility: hidden; }
+.podest-medaille { font-size: 3em; line-height: 1; }
+.podest-platz.p1 .podest-medaille { font-size: 4em; animation: wackel 1.2s ease-in-out infinite; }
+.podest-fahrer { font-size: 1.1em; font-weight: 900; margin: .15em 0; white-space: nowrap; }
+.podest-platz.p1 .podest-fahrer { font-size: 1.35em; color: var(--gelb); }
+.podest-platz.spieler .podest-fahrer { text-shadow: 0 0 .5em rgba(47,139,255,.9); }
+.podest-auto { display: flex; flex-direction: column; align-items: center; font-size: .75em; opacity: .95; }
+.podest-auto img { width: 9em; height: auto; max-height: 5.5em; object-fit: contain; filter: drop-shadow(0 .2em .3em rgba(0,0,0,.5)); }
+.podest-platz.p1 .podest-auto img { width: 10.5em; max-height: 6.5em; }
+.podest-farbe { width: 4em; height: 1.6em; border-radius: .8em; border: .12em solid #fff; margin: .4em 0; }
+.podest-punkte { font-size: .85em; margin: .2em 0; }
+.podest-sockel { width: 100%; border-radius: .5em .5em 0 0; font-size: 2em; font-weight: 900; color: #1a2550; display: flex; align-items: center; justify-content: center;
+  border: .08em solid #fff; border-bottom: none; }
+.podest-platz.p1 .podest-sockel { height: 3.2em; background: linear-gradient(#ffe56a, #e2a800); }
+.podest-platz.p2 .podest-sockel { height: 2.3em; background: linear-gradient(#f1f3f7, #a9b1bf); }
+.podest-platz.p3 .podest-sockel { height: 1.6em; background: linear-gradient(#f2b27a, #b8662a); }
+.podest-reste { display: flex; flex-wrap: wrap; justify-content: center; gap: .3em .9em; font-size: .72em; opacity: .9; margin-top: .5em; }
+.pokal-gewinn { text-align: center; font-size: 1.1em; color: var(--gelb); margin-top: .5em; animation: blink 1.4s ease-in-out infinite; }
+@keyframes podestRein { from { transform: translateY(2em) scale(.8); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* Konfetti (reines DOM/CSS) */
+.konfetti { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
+.konfetti i { position: absolute; top: -4vh; width: .55em; height: .95em; border-radius: .12em; opacity: .95; animation-name: konfettiFall; animation-timing-function: linear;
+  animation-iteration-count: infinite; }
+.konfetti i:nth-child(3n) { width: .7em; height: .45em; }
+.konfetti i:nth-child(4n) { border-radius: 50%; width: .6em; height: .6em; }
+@keyframes konfettiFall { 0% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(55vh) translateX(2vw) rotate(260deg); }
+  100% { transform: translateY(110vh) translateX(-1vw) rotate(540deg); } }
+
+/* Rückfrage „Pokal abbrechen?" (über allem) */
+.pokal-frage { align-items: center; justify-content: center; font-size: clamp(20px, 2.6vh, 28px); font-weight: 800; background: rgba(10, 20, 50, .6); z-index: 20; }
+.pokal-frage-karte .knoepfe { display: flex; gap: 1em; justify-content: center; margin-top: .6em; }
+.pokal-frage-text { text-align: center; opacity: .85; font-size: .85em; }
+.g-tuning { text-align: center; font-size: .85em; }

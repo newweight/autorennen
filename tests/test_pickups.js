@@ -185,5 +185,140 @@ pruefe('Wiese Verrückt: 2 Turbo-Felder, 2 Schild-Kugeln', (() => { const pk = n
   });
 }
 
+// ---------- Runde 6 (W3-H): Ölfalle ----------
+{
+  const CO = R.config.stunt.oelfalle, st = strecke, spl = st.spline;
+  const bei = (s, q) => { const p = spl.punktBei(s), v = new R.Vehicle({}); v.setzen(p.x + p.nx * (q || 0), p.z + p.nz * (q || 0), R.headingAus(p.tx, p.tz)); return v; };
+  const frisch = () => new R.Pickups(st);
+  const pk0 = frisch();
+  pruefe('Ölfalle: ein Ölfass je Schild-Kugel (Verrückt)', pk0.faesser.length === pk0.kugeln.length && pk0.faesser.length === 2 && pk0.aktiv);
+  pruefe('Ölfalle: Tasten Space / KeyE', R.config.tasten.item1 === 'Space' && R.config.tasten.item2 === 'KeyE');
+
+  // Aufsammeln, Fass weg, nach 10 s wieder da
+  {
+    const pk = frisch(), F = pk.faesser[0], v = bei(F.s, F.q);
+    const ev = pk.schritt(dt, [v]);
+    pruefe('Ölfalle: Aufsammeln → Ereignis oel + Item', ev.some(e => e.typ === 'oel' && e.nr === 0) && pk.itemVon(0) === 'oel' && !F.da, JSON.stringify(ev));
+    v.setzen(v.x + 100, v.z, 0);
+    for (let t = 0; t < CO.wiederDa - 0.2; t += dt) pk.schritt(dt, [v]);
+    const nochWeg = !F.da;
+    for (let t = 0; t < 0.5; t += dt) pk.schritt(dt, [v]);
+    pruefe('Ölfalle: Fass respawnt nach 10 s', nochWeg && F.da);
+    // ein Item reicht: zweites Fass wird nicht eingesammelt
+    const F2 = pk.faesser[1], v2 = bei(F2.s, F2.q);
+    pk.schritt(dt, [v2]);
+    pruefe('Ölfalle: mit Item kein zweites Aufsammeln', F2.da && pk.itemVon(0) === 'oel');
+  }
+
+  // Legen: 8 m hinter dem Auto, Item weg; ohne Item nichts
+  {
+    const pk = frisch(), v = bei(300, 0), F = pk.faesser[0];
+    pk.schritt(dt, [v]);
+    pruefe('Ölfalle: ohne Item legt oelLegen nichts', pk.oelLegen(0) === null && pk.oel.length === 0);
+    pk.autos[0].item = 1;
+    const o = pk.oelLegen(0), r = v.richtung();
+    const hinten = (v.x - o.x) * r.x + (v.z - o.z) * r.z, quer = Math.abs((v.x - o.x) * r.z - (v.z - o.z) * r.x);
+    pruefe('Ölfalle: Fleck 8 m hinter dem Auto, Item verbraucht', Math.abs(hinten - CO.abstand) < 1e-6 && quer < 1e-6 && pk.itemVon(0) === null && pk.oel.length === 1,
+      'hinten ' + hinten.toFixed(2));
+
+    // Wirkung für ein anderes Auto: im Fleck → true (Untergrund 'oel' = grip 0,25), daneben false
+    const b = new R.Vehicle({}); b.setzen(o.x, o.z, o.heading);
+    pruefe('Ölfalle: anderes Auto im Fleck → Wirkung', pk.oelWirkt(1, b) === true && pk.rutscher.length === 1);
+    pruefe('Ölfalle: Untergrund oel = grip 0,25 (rutschig)', R.config.physik.untergrund.oel.grip === 0.25 && b.gripGesamt('oel') < 0.3 * b.gripGesamt('strasse'),
+      b.gripGesamt('oel').toFixed(2) + ' vs ' + b.gripGesamt('strasse').toFixed(2));
+    b.setzen(o.x + 8, o.z, o.heading);
+    pruefe('Ölfalle: neben dem Fleck keine Wirkung', pk.oelWirkt(1, b) === false);
+    // Ellipse: längs ±3,2 m, quer ±2,6 m
+    const rr = { x: -Math.sin(o.heading), z: -Math.cos(o.heading) };
+    b.setzen(o.x + rr.x * 3.0, o.z + rr.z * 3.0, o.heading);
+    const l1 = pk.oelWirkt(1, b);
+    b.setzen(o.x + rr.x * 3.5, o.z + rr.z * 3.5, o.heading);
+    pruefe('Ölfalle: Fleck-Ausdehnung längs 3,2 m', l1 === true && pk.oelWirkt(1, b) === false);
+
+    // Immunität des legenden Autos 1 s
+    v.setzen(o.x, o.z, o.heading);
+    pruefe('Ölfalle: eigenes Auto 1 s immun', pk.oelWirkt(0, v) === false);
+    for (let t = 0; t < CO.immun + 0.1; t += dt) pk.schritt(dt, [v]);
+    pruefe('Ölfalle: danach wirkt der Fleck auch auf das eigene Auto', pk.oelWirkt(0, v) === true);
+
+    // sichtbar 20 s
+    let t0 = 0;
+    for (; t0 < CO.dauer - 1.2 - CO.immun; t0 += dt) pk.schritt(dt, [bei(100)]);
+    const nochDa = pk.oel.length === 1;
+    for (let t = 0; t < 1.5; t += dt) pk.schritt(dt, [bei(100)]);
+    pruefe('Ölfalle: Fleck bleibt 20 s, dann weg', nochDa && pk.oel.length === 0);
+  }
+
+  // Schild schützt vor Öl (verbraucht, genau dieser Fleck wirkt dann nicht mehr)
+  {
+    const pk = frisch(), v = bei(300, 0), b = bei(300, 0);
+    pk.schritt(dt, [v, b]);
+    pk.autos[0].item = 1; const o = pk.oelLegen(0);
+    b.setzen(o.x, o.z, o.heading);
+    pk.autos[1].schild = true;
+    const w1 = pk.oelWirkt(1, b);
+    pruefe('Ölfalle: Schild fängt den Fleck ab (verbraucht)', w1 === false && !pk.hatSchild(1) && pk.geplatzt.length === 1);
+    pruefe('Ölfalle: derselbe Fleck wirkt für das Auto nicht mehr', pk.oelWirkt(1, b) === false);
+    pk.autos[0].item = 1; const o2 = pk.oelLegen(0);
+    b.setzen(o2.x, o2.z, o2.heading);
+    pruefe('Ölfalle: ein weiterer Fleck wirkt ohne Schild', pk.oelWirkt(1, b) === true);
+  }
+
+  // Limit 6, der älteste weicht
+  {
+    const pk = frisch(), v = bei(300, 0);
+    pk.schritt(dt, [v]);
+    const xs = [];
+    for (let k = 0; k < 8; k++) { v.setzen(v.x + 5, v.z, v.heading); pk.autos[0].item = 1; xs.push(pk.oelLegen(0)); }
+    pruefe('Ölfalle: höchstens 6 Flecken gleichzeitig, die ältesten weichen', pk.oel.length === CO.max && !pk.oel.includes(xs[0]) && !pk.oel.includes(xs[1]) && pk.oel.includes(xs[7]));
+  }
+
+  // KI-Logik deterministisch + Wahrscheinlichkeit
+  {
+    const lauf = (abstand, runden, seedPk) => {
+      const pk = frisch(); if (seedPk) pk._rnd = seedPk;
+      const sp0 = 400, spieler = bei(sp0, 0), ki = bei(sp0 + 10, 0);
+      const liste = [{ vehicle: spieler, istSpieler: true }, { vehicle: ki, istSpieler: false }];
+      pk.schritt(dt, liste);
+      let gelegt = 0, chancen = 0;
+      for (let r = 0; r < runden; r++) {
+        pk.autos[1].item = 1; pk.autos[1].itemZeit = 5;
+        // Spieler weit hinten → keine Gelegenheit; dann dicht dahinter → eine Gelegenheit
+        let p = spl.punktBei(sp0 - 40); spieler.setzen(p.x, p.z, R.headingAus(p.tx, p.tz)); pk.schritt(dt, liste);
+        p = spl.punktBei(sp0 + 10 - abstand); spieler.setzen(p.x, p.z, R.headingAus(p.tx, p.tz));
+        const ev = pk.schritt(dt, liste); chancen++;
+        const vorher = pk.oel.length;
+        gelegt += ev.filter(e => e.typ === 'oelGelegt').length;
+        // weitere Schritte in derselben Gelegenheit würfeln nicht erneut
+        for (let k = 0; k < 20; k++) gelegt += pk.schritt(dt, liste).filter(e => e.typ === 'oelGelegt').length;
+        void vorher;
+      }
+      return { gelegt, chancen, oel: pk.oel.length, item: pk.itemVon(1) };
+    };
+    const a = lauf(10, 300), b = lauf(10, 300), fern = lauf(25, 100);
+    pruefe('Ölfalle KI: deterministisch (zwei Läufe identisch)', a.gelegt === b.gelegt && a.oel === b.oel, a.gelegt + ' von ' + a.chancen);
+    pruefe('Ölfalle KI: ~30 % je Gelegenheit (Spieler ≤ 15 m hinter ihr)', a.gelegt / a.chancen > 0.22 && a.gelegt / a.chancen < 0.38, (100 * a.gelegt / a.chancen).toFixed(1) + ' %');
+    pruefe('Ölfalle KI: Spieler > 15 m hinter ihr → nie', fern.gelegt === 0 && fern.oel === 0);
+    pruefe('Ölfalle KI: höchstens 6 Flecken auch bei vielen Gelegenheiten', a.oel <= 6);
+    // KI legt nur mit Item und erst nach kiNachlauf, nie vor dem Spieler (Spieler vor der KI → keine Gelegenheit)
+    const pk = frisch(), sp0 = 400, spieler = bei(sp0 + 10), ki = bei(sp0);
+    const liste = [{ vehicle: spieler, istSpieler: true }, { vehicle: ki, istSpieler: false }];
+    pk.schritt(dt, liste); pk.autos[1].item = 1; pk.autos[1].itemZeit = 5;
+    let n = 0; for (let k = 0; k < 600; k++) n += pk.schritt(dt, liste).filter(e => e.typ === 'oelGelegt').length;
+    pruefe('Ölfalle KI: Spieler VOR der KI → keine Gelegenheit', n === 0);
+  }
+
+  // KI-Auto mit Öl-Untergrund schlingert (Vehicle-Physik): Fleck ohne Lenkausgleich → Querbewegung
+  {
+    const v = new R.Vehicle({}); v.setzen(0, 0, 0); v.vLaengs = 30;
+    let maxQ = 0;
+    for (let k = 0; k < 90; k++) { v.untergrund = 'oel'; v.schritt(dt, { gas: 0.5, bremse: 0, lenkung: k < 20 ? 0.6 : -0.6 }); maxQ = Math.max(maxQ, Math.abs(v.vQuer)); }
+    const w = new R.Vehicle({}); w.setzen(0, 0, 0); w.vLaengs = 30;
+    let maxQs = 0;
+    for (let k = 0; k < 90; k++) { w.untergrund = 'strasse'; w.schritt(dt, { gas: 0.5, bremse: 0, lenkung: k < 20 ? 0.6 : -0.6 }); maxQs = Math.max(maxQs, Math.abs(w.vQuer)); }
+    pruefe('Ölfalle: auf Öl schlingert das Auto (vQuer > 0,5 m/s, mehr als auf Straße)', maxQ > 0.5 && maxQ > maxQs, 'Öl ' + maxQ.toFixed(2) + ' / Straße ' + maxQs.toFixed(2));
+  }
+}
+
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');
 process.exit(fehler ? 1 : 0);

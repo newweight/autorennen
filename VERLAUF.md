@@ -495,3 +495,69 @@
 - 11.10. W2 abgeschlossen (Fable-Prüfung): Tageszeit, XL, Dino-Ausbau komplett (Lava, Vulkanausbruch mit Kratern, 2 Tunnel,
   Meteoriten, Flugsaurier, Dinos ×2 mit Verhalten), Rehe/Bären im Wald, Doku v8. 19 Node-Tests grün. → Version v8.
   Schwäche: Flugsaurier aus Fahrersicht sehr klein (Polierrunde). Nächster Schritt: W3 (Pokal, Garage/Münzen, Ölfalle, Elimination).
+- W3 gestartet: F Pokal + Elimination (Opus, src/race/pokal.js), G Münzen + Garage (Opus, src/world/muenzen.js, src/ui/garage.js),
+  H Ölfalle-Item + Flugsaurier näher/größer (Sonnet). Sicherung: Autorennen-Sicherung/w3_vorher
+- 12.10. Agent W3-H (Sonnet) – Ölfalle (D5) + Flugsaurier näher/größer – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w3h_vorher.
+  Ölfalle (world/pickups.js, config.stunt.oelfalle): Ölfässer (schwarz, gelbe Ringe, rotierend, Respawn 10 s) stehen 35 m hinter jeder Schild-Kugel
+  auf der Gegenseite (also nur Welt Verrückt/Alles; KEIN Katalog-/trackBuilder-Umbau nötig). Aufsammeln → 1 Item (HUD 🛢️ + Taste neben der Minimap);
+  Space (Spieler 1) / E (Spieler 2) legt 8 m hinter dem Auto einen Ölfleck (Ellipse 3,2 × 2,6 m, 20 s, max. 6, ältester weicht). Wirkung ohne
+  Strecken-Liste: main.js setzt nach untergrundAn v.untergrund = 'oel' (pickups.oelWirkt) → grip 0,25 wie Hindernis oel. Eigenes Auto 1 s immun,
+  Schild fängt ab (verbraucht, Fleck dann für das Auto wirkungslos). KI weicht nicht aus, sammelt Fässer, legt mit 30 % je Gelegenheit (Spieler
+  ≤ 15 m hinter ihr, steigende Flanke, eigener Seed-Zufall → deterministisch). Töne oelAuf/oelLegen/oelRutsch, Meldungen „Öl-Fass!/Öl gelegt!/Öl!".
+  Space ist im Menü „bestätigen", im Rennen frei (taste() gibt es nur im Zustand rennen). input.js: item1/item2 in der preventDefault-Liste.
+  Flugsaurier (dynamik.js, config.dino.flugsaurier): Modell ×1,8 (Spannweite 2 × 4,2 × 1,8 ≈ 15 m; der Altwert war schon ≈ 8,4 m), Anflug 60 m voraus
+  (vorher 170), Einblenden in 0,6 s statt Aufpoppen, Schatten (dunkle Ellipse, wächst/dunkelt beim Annähern), Schrei gleich beim Auftauchen und in
+  < 80 m doppelt übereinander (Engine kappt laut bei 1), Kamera-Duck 0,6 m (Vorgabe „0,4" wäre weniger als der Altwert 0,45 – bewusst 0,6), Mindesthöhe 2,5 m bleibt.
+  Tests: test_pickups +22 (Fass, Legen 8 m, Ellipse, Immunität, Schild, Limit 6, 20 s, KI 30,7 % deterministisch, schlingern), test_dynamik +3 (60 m, ×1,8,
+  Schrei beim Auftauchen, Duck); tests/oel_test.py (Playwright: Fass → Space → Fleck, KI schlingert vQuer 1,3 m/s, Flugsaurier 335 px (nah) / 956 px (Überflug)
+  Spannweite bei 1280 px; Bilder tests/out/oel/*.png angesehen). Alle Node-Tests grün.
+  Gefundener Altfehler (nicht behoben, cameras.js nicht in meinem Bereich): Cockpit-Kamera rollt bei Heading ≈ ±90° (rotation.z auf Euler XYZ im Gimbal-Lock) →
+  Fix: kamera.rotation.order = 'YXZ'. oel_test setzt das nur im Test.
+- 12.10. Agent W3-G (Opus) – D2 Münzen + Garage – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w3g_vorher.
+  Neu src/world/muenzen.js (R.Muenzen): 30 Münzen je Strecke (config.garage.muenzen: 20–40, Ziel 30), bis 4 Reihen à 5 (6 m) gleichmäßig auf
+  Geraden + Einzelmünzen (Kurven zur Innenseite); Start/Ziel, Loopings und 110 m hinter Schanzen frei; deterministisch; 1 InstancedMesh
+  (1 Draw-Call), drehen/schweben, Einsammeln = hochspringen + verschwinden; KEINE Physik (Fahrzeug bitgleich); Looping/Flug/Polizei sammeln nicht,
+  KI sammelt nebenbei (zählt nicht). Jede Welt, nur im Rennen (nicht Menü-Hintergrund), neues Rennen = alle wieder da.
+  Neu src/ui/garage.js (R.Garage): Logik (localStorage rennspiel.garage.v1 {fahrer:{muenzen, autos:{id:{farbe, farben[], motor, reifen, bremsen, rest}}}},
+  RAM-Rückfall) + Bildschirm Fahrer → Auto → Werkstatt (Bühne drehbar, Lack: Original + 4 Farben, 20 🪙 je Farbe einmalig, danach gratis; Pfeile/Maus-
+  Hover = Live-Vorschau; Reparatur 10 🪙 nur mit Schaden an und Rest < 100, sonst „Nicht nötig"; Motor/Reifen/Bremsen 3 Stufen 30/60/100 🪙,
+  +4 % vMax / +4 % grip / +6 % bremsen je Stufe, Balken; Schalter „Upgrades zählen im Rennen: An/Aus" = einstellungen.upgradesZaehlen (Standard an) –
+  bewusst IN der Garage statt im Einstellungen-Schritt (dort kein Platz bei 1440×900, Fokus-Indizes menu_test).
+  main.js: Münzen bauen/sammeln (Schritt 10b, sofort +1 aufs Konto + Ton + HUD „🪙 n +1"), Preisgeld in rennenFertig (30/20/15/sonst 5, Meldung
+  „🏆 Preisgeld", ergebnis.zeilen[].preisgeld/muenzenRennen/muenzenGesamt), fahrzeugHinzufuegen(auto, x, z, h, garage): Upgrade-Faktoren in
+  vehicle.daten vor der Schaden-Kopie + Lack; nur Spieler, KI nie. Schaden an: Endprozent je Fahrer+Auto gespeichert, nächstes Rennen startet damit
+  (min. 30 %), Reparatur = 100 %; Schaden aus = unverändert. carBuilder.bauen(auto, {farbe}) (Kopie mit anderem Lack, Farbe steht im Cache-Schlüssel →
+  Standard-Autos nutzen denselben Cache-Eintrag wie bisher; userData.lackFarbe). autoVorschau.binden(…, farbe), kachel(auto, farbe), lack(i).
+  menu.js: Karte „🔧 Garage" unter den Modus-Karten (+ Taste G), Garage fängt Tasten ab, Fahrerkarte „🪙 n". hud.js: muenzenSetzen(n, plus).
+  styles.css: Garage-Block. config.js: Block garage. Autorennen.html: muenzen.js, garage.js.
+  Tests: neu tests/test_garage.js (48 Prüfungen: Platzierung alle Strecken/XL/Welten, Einsammeln ohne Physik, Konto, Käufe, Faktoren, Reparatur,
+  Rest, Speicherformat), neu tests/garage_test.py (45 Prüfungen inkl. Pixel/Material: Autopilot sammelt 8, KI 21, Preisgeld Platz 1 = 30, Garage per
+  Tastatur+Maus, Pink-Lack im nächsten Rennen, vMax × 1,04, Schalter aus = Standard, Rest 45 % → Start 45 %, Reparatur), welten_test-Regression um
+  muenzen.js/garage.js erweitert (bitgleich, 7 von 30 Münzen von der KI gesammelt), menu_test (Garage-Karte, Esc, Münzen an der Fahrerkarte).
+  Bilder angesehen: tests/out/garage/01–07 (1. Iteration: Münzen zu braun → heller; Werkstatt-Label abgeschnitten, Autowahl lief über → behoben).
+  Schwächen: Ergebnis-Tafel zeigt das Preisgeld nicht (nur HUD-Meldung; Daten liegen in ergebnis.zeilen – menu.js war für W3-G gesperrt);
+  Ergebnis-Farbklecks zeigt Katalogfarbe; grip-Upgrade wirkt beim Formel-Renner kaum (Haftung schon nahe 1, Deckel min(1, …));
+  test_ki „Laufzeit < 60 s" schlug unter Last fehl (106 s; parallele Agenten), fachlich grün.
+- 12.10. Agent W3-F (Opus) – D1 Pokal + D7 „Letzter fliegt raus" – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w3f_vorher,
+  nachher: …/w3f_nachher. Neu src/race/pokal.js: R.Pokal (Punkte 10/8/6/5/4/3/2/1, Reihenfolge je Größe aus config.pokal.reihenfolge,
+  Stärke +1 Stufe je Rennen bis legende – unschlagbar bleibt, Gewinne je Fahrer in rennspiel.pokale.v1, nur menschliche Sieger),
+  R.Pokal.Serie (Stand, Tabelle mit Gleichstand: Siege → beste Plätze → letztes Rennen), R.PokalAnzeige (Zwischenstand, Siegerehrung mit
+  Podest 2-1-3 + Auto-Kacheln, 90 Konfetti-Schnipsel CSS, Fanfare über Audio._ton; Rückfrage „Pokal abbrechen?"), R.Puff (Wolke, Three.js).
+  Einstellungen: neu spielart ('rennen'|'pokal'|'elimination') + pokalGroesse. Pokal-Rennen laufen über rennenStarten(ein, {temporaer:true})
+  (nicht gespeichert); nach Ende/Abbruch werden die Einstellungen von vor dem Pokal wiederhergestellt; Welt/Variante/Wetter je Strecke
+  geprüft. main.js: Zustand 'pokal', rennenFertig → Zwischenstand/Siegerehrung statt Ergebnis-Tafel; zumMenue() fragt im Pokal nach.
+  Elimination: RaceManager-Option elimination (Runden = Teilnehmer − 1, mind. 3 Gegner, Polizei aus): raus, sobald alle Fahrenden bis auf
+  eines Runde k haben ODER der Führende schon Runde k+1 fertig hat (kein Hängenbleiben); Ereignis 'raus'; Sieger = letztes Auto;
+  Ausgeschiedene in der Rangliste hinten (später raus = besser); alle Spieler raus → nach 6 s Ergebnis. Ausgeschiedene Autos: f.ausgeschieden,
+  unsichtbar, bei (100000+60·nr, 100000) geparkt (Arrays bleiben, Kollisionen/Pflanzen/Hindernisse greifen dort nicht), Physik/Bande/Höhe/
+  Ton/Reset/Gummiband überspringen sie; Zuschauer-Kamera auf den Führenden, HUD „Du bist raus!" / „👀 Du schaust zu: X".
+  Menü: Modus-Schritt 4 Karten in einer Reihe (Pokal mit Pillen 3/4/5 Rennen + allein/zu zweit, Raus-Karte mit allein/zu zweit;
+  ←→ wandert über alle 4, ↑↓ allein/zu zweit), Einstellungs-Schritt: Pokal-Größe als Spaltenkopf (keine Extra-Höhe), Fahrer-Karte „🏆 n",
+  Ergebnistafel „🚪 raus in Runde n". Tests: tests/test_pokal.js (48 Prüfungen inkl. Elimination-Rennleitung kinematisch), tests/pokal_test.py
+  (42/42, Bilder tests/out/pokal/ angesehen: Puff erst kaum sichtbar → heller/größer), menu_test +2 (164+ OK), welten_test grün, alle Node-Tests grün.
+  Schwächen: Strecken-Liste im Pokal-Spaltenkopf wird bei 5 Rennen abgekürzt (…); Ausgeschiedene sehen auf der Minimap nichts Eigenes mehr.
+- 12.10. W3 abgeschlossen (Fable-Prüfung): Pokal-Serie (3/4/5 Rennen, Punkte, Stärke steigt, Siegerehrung, 🏆-Zähler),
+  „Letzter fliegt raus", Münzen (30/Strecke) + Preisgeld + Garage (Lack 4 Farben, Reparatur 10, Upgrades Motor/Reifen/
+  Bremsen 3 Stufen, Schalter „Upgrades zählen"), Ölfalle-Item (Space / E), Flugsaurier ×1,8 nah. 20 Node-Tests, menu_test,
+  welten_test grün bis auf die bekannte lageabhängige Abschlepp-Prüfung Wald (einmal rot). → Version v9.
+  Offen: Preisgeld in Ergebnistafel anzeigen; Cockpit-Kamera rollt bei ±90° (rotation.order 'YXZ' setzen) – Polierrunde.

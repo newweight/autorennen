@@ -1434,7 +1434,13 @@
    * Baut ein Auto aus einem Katalog-Eintrag (Rennspiel.carCatalog[i]).
    * @returns {THREE.Group} Ursprung = Bodenmitte, Front bei -z
    */
-  function bauen(autoDaten) {
+  function bauen(autoDaten, opt) {
+    // Runde 6 (W3-G): Garage-Lack – bauen(auto, { farbe: 0xff5fb8 }) ersetzt die Hauptfarbe (Formel-Renner: Hauptlack,
+    // farbe2 bleibt). Ohne opt/farbe = Katalogfarbe → derselbe Cache-Eintrag wie bisher (Standard-Autos unverändert);
+    // die Farbe steht im Cache-Schlüssel, jede Garage-Farbe bekommt also eine eigene Karosserie-Geometrie.
+    if (opt && opt.farbe !== undefined && opt.farbe !== null && Number.isFinite(opt.farbe) && opt.farbe !== autoDaten.farbe) {
+      autoDaten = Object.assign({}, autoDaten, { farbe: opt.farbe >>> 0 });
+    }
     const typ = TYP_STANDARD[autoDaten.karosserie] ? autoDaten.karosserie : 'limousine';
     const key = JSON.stringify([autoDaten.id, typ, autoDaten.farbe, autoDaten.farbe2, autoDaten.abmessungen, autoDaten.form,
       autoDaten.fahrwerte && autoDaten.fahrwerte.laenge, autoDaten.fahrwerte && autoDaten.fahrwerte.breite]);
@@ -1489,7 +1495,7 @@
     g.add(e.schatten ? schattenMesh(e.M.L, e.M.B, e.schatten[0], e.schatten[1]) : schattenMesh(e.M.L, e.M.B));
 
     g.userData = {
-      autoId: autoDaten.id, karosserie: typ,
+      autoId: autoDaten.id, karosserie: typ, lackFarbe: autoDaten.farbe,   // W3-G: tatsächlicher Lack (Garage-Tests)
       raeder, vorderraeder, lenkObjekte, bremslichter, scheinwerfer,
       bremslichtMaterial: bremslichtMat,
       blaulicht,

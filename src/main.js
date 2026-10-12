@@ -29,6 +29,10 @@
       rempeln: (c.kollision && c.kollision.rempeln && c.kollision.rempeln.standard) === 'echt' ? 'echt' : 'sanft',
       // Runde 6 (W2-D): Tageszeit 'tag' (Standard, Licht wie bisher) | 'daemmerung' | 'nacht'
       tageszeit: c.tageszeit && c.tageszeit[c.tageszeitStandard] ? c.tageszeitStandard : 'tag',
+      // Runde 6 (W3-F): Spielart 'rennen' (Einzelrennen, wie bisher) | 'pokal' (D1) | 'elimination' (D7); Pokal-Größe 3/4/5
+      spielart: 'rennen', pokalGroesse: (c.pokal && c.pokal.groesseStandard) || 3,
+      // Runde 6 (W3-G): Garage-Upgrades im Rennen anwenden (aus = Faktoren 1, Lackfarben bleiben)
+      upgradesZaehlen: true,
     };
   }
 
@@ -61,6 +65,9 @@
       polizei: typeof r.polizei === 'boolean' ? r.polizei : std.polizei,
       rempeln: r.rempeln === 'echt' || r.rempeln === 'sanft' ? r.rempeln : std.rempeln,
       tageszeit: c.tageszeit && c.tageszeit[r.tageszeit] ? r.tageszeit : std.tageszeit,
+      spielart: r.spielart === 'pokal' || r.spielart === 'elimination' ? r.spielart : 'rennen',     // W3-F
+      pokalGroesse: ((c.pokal && c.pokal.groessen) || [3, 4, 5]).includes(+r.pokalGroesse) ? +r.pokalGroesse : std.pokalGroesse,
+      upgradesZaehlen: r.upgradesZaehlen !== false,      // W3-G
     };
   }
 
@@ -108,7 +115,9 @@
       this.kameras = [];
       this.huds = [];
       this.laeuft = false;
-      this.zustand = 'menue';  // 'menue' | 'rennen' | 'ergebnis'  (Pause = this.pausiert im Zustand 'rennen')
+      this.zustand = 'menue';  // 'menue' | 'rennen' | 'ergebnis' | 'pokal' (W3-F: Zwischenstand/Siegerehrung)  (Pause = this.pausiert im Zustand 'rennen')
+      this.pokal = null;       // Runde 6 (W3-F): laufende Pokal-Serie (R.Pokal.Serie) oder null
+      this.puffs = [];         // Runde 6 (W3-F): „Puff"-Wolken ausgeschiedener Autos
       this.pausiert = false;
       this.ergebnis = null;    // eingefrorene Ergebnisliste
       this.einstellungen = einstellungenLaden();
@@ -124,6 +133,7 @@
       this.menue = new R.Menue(this, this.ui);
       this.ergebnisAnzeige = new R.ErgebnisAnzeige(this, this.ui);
       this.pauseAnzeige = new R.PauseAnzeige(this, this.ui);
+      this.pokalAnzeige = R.PokalAnzeige ? new R.PokalAnzeige(this, this.ui) : null;   // Runde 6 (W3-F)
 
       window.addEventListener('resize', () => this.groesse());
       this.input.beiTaste((code, e) => this.taste(code, e));
@@ -144,6 +154,7 @@
       if (code === T.ton) { if (!wiederholt && R.Audio) { R.Audio.schalten(); if (this.zustand === 'menue') this.menue.zeichnen(); } return; }
       if (this.zustand === 'menue') { this.menue.taste(code); return; }
       if (wiederholt) return;
+      if (this.pokalAnzeige && this.pokalAnzeige.offen()) { this.pokalAnzeige.taste(code); return; }   // W3-F: Rückfrage/Zwischenstand
       if (this.zustand === 'ergebnis') { this.ergebnisAnzeige.taste(code); return; }
       if (this.zustand !== 'rennen') return;
       if (this.pausiert) { this.pauseAnzeige.taste(code); return; }
@@ -151,6 +162,15 @@
       else if (code === T.kamera) this.kameras.forEach(k => k.naechsterModus());
       else if (code === T.resetSpieler1) this.spielerZuruecksetzen(0);
       else if (code === T.resetSpieler2) this.spielerZuruecksetzen(1);
+      else if (code === T.item1) this.itemEinsetzen(0);      // Runde 6 (W3-H): Item (Ölfalle) einsetzen
+      else if (code === T.item2) this.itemEinsetzen(1);
+    }
+
+    /** Runde 6 (W3-H): Item des Spielers nr einsetzen (Öl 8 m hinter das Auto legen). */
+    itemEinsetzen(nr) {
+      const i = this.fahrzeuge.findIndex(f => f.istSpieler && f.spielerNr === nr);
+      if (i < 0 || !this.pickups || !this.rennen || !this.rennen.gasErlaubt) return;
+      if (this.pickups.oelLegen(i)) { this._meldung(i, 'Öl gelegt! 🛢️', 1000); this.pickups.ton('oelLegen'); }
     }
 
     pauseSetzen(an) {
@@ -230,6 +250,7 @@
     szeneAbbauen() {
       // Runde 4: Teile an den Auto-Meshes (Schild-Hülle, Turbo-Flammen, Rauch) zuerst lösen – die Meshes sind Katalog-Caches
       if (this.pickups) { this.pickups.zerstoeren(); this.pickups = null; }
+      if (this.muenzen) { this.muenzen.zerstoeren(); this.muenzen = null; }     // Runde 6 (W3-G)
       if (this.schaden) { this.schaden.zerstoeren(); this.schaden = null; }
       if (this.polizei) { this.polizei.zerstoeren(); this.polizei = null; }   // Runde 5b: Blaulicht-Lichter, Sirene
       this.huds.forEach(h => h.zerstoeren());
@@ -251,6 +272,7 @@
         });
       });
       this.fahrzeuge = []; this.kameras = [];
+      this.puffs = [];        // W3-F (Gruppen hat die Schleife oben schon entfernt)
       this.tunnelLichter = null;
       this.dynamik = null;
       this._himmelBasis = null; if (R.themes) R.themes.vulkanGlut = 0;   // Runde 6 (W2-C)
@@ -350,9 +372,13 @@
     }
 
     /** Zurück ins Hauptmenü (aus Pause oder Ergebnis). */
-    zumMenue() {
+    zumMenue(sicher) {
+      // Runde 6 (W3-F): mitten im Pokal erst nachfragen (Pause → Hauptmenü)
+      if (this.pokal && !this.pokal.fertig && !sicher && this.pokalAnzeige) { this.pokalAbbruchFragen(); return; }
+      if (this.pokal) this.pokalBeenden(true);
       this.pausiert = false;
       this.pauseAnzeige.verstecken(); this.ergebnisAnzeige.verstecken();
+      if (this.pokalAnzeige) this.pokalAnzeige.verstecken();
       this.zustand = 'menue';
       this.szeneAbbauen();
       this.ui.classList.remove('split');
@@ -363,18 +389,28 @@
      * Neues Rennen starten. Ohne Argument: aktuelle Einstellungen (= "Nochmal").
      * Mit Argument: wird mit den bisherigen Einstellungen zusammengeführt und gespeichert.
      */
-    rennenStarten(einst) {
+    rennenStarten(einst, opt) {
       if (einst) this.einstellungen = einstellungenPruefen(Object.assign({}, this.einstellungen, einst));
-      this.einstellungenSpeichern();
+      if (opt && opt.temporaer) this.fahrhilfeStufe = this.einstellungen.fahrhilfe[0];   // W3-F: Pokal-Rennen nicht speichern
+      else this.einstellungenSpeichern();
       const e = this.einstellungen;
+      if (this.pokalAnzeige) this.pokalAnzeige.verstecken();
+      // Runde 6 (W3-F): „Letzter fliegt raus" – mind. 3 Gegner, Runden = Teilnehmer − 1, ohne Polizei
+      const CE = (R.config.pokal && R.config.pokal.elimination) || {};
+      const elim = e.spielart === 'elimination' && !this.pokal;
+      const gegnerE = elim ? Math.max(CE.minGegner || 3, e.gegner) : e.gegner;
+      const rundenE = elim ? (e.modus === 'zwei' ? 2 : 1) + gegnerE - 1 : e.runden;
+      this.puffs.forEach(p => p.entfernen()); this.puffs = [];
       this.menue.verstecken(); this.ergebnisAnzeige.verstecken(); this.pauseAnzeige.verstecken();
       this.szeneAbbauen();
       const zwei = e.modus === 'zwei';
       this.pausiert = false;
       this.streckeAufbauen(e.streckeId, {
-        spieler: zwei ? 2 : 1, autoIds: e.autoIds, fahrer: e.fahrer, gegner: e.gegner, runden: e.runden,
+        spieler: zwei ? 2 : 1, autoIds: e.autoIds, fahrer: e.fahrer, gegner: gegnerE, runden: rundenE,
         schwierigkeit: e.schwierigkeit, fahrhilfe: e.fahrhilfe, schaden: e.schaden === true, tempoKlasse: e.tempoKlasse,
-        polizei: e.polizei === true,
+        polizei: e.polizei === true && !elim,
+        elimination: elim ? { zuschauerSekunden: CE.zuschauerSekunden === undefined ? 6 : CE.zuschauerSekunden } : null,   // W3-F
+        upgradesZaehlen: e.upgradesZaehlen !== false,      // W3-G
       });
       for (let i = 0; i < (zwei ? 2 : 1); i++) this.kameraHinzufuegen(this.fahrzeuge[i]);
       const split = zwei;
@@ -382,11 +418,14 @@
         rennen: this.rennen, teilnehmer: this.rennen.teilnehmer[i], fahrzeug: this.fahrzeuge[i], nr: i, split,
       }));
       this.rennen.bei('fertig', () => this.rennenFertig());
+      if (elim) this.rennen.bei('raus', (t) => this._ausgeschieden(t));   // Runde 6 (W3-F)
       if (this.wetter) { this.wetter.partikelBauen(this.kameras.length); this.huds.forEach(h => h.wetterSetzen && h.wetterSetzen(this.wetter)); }
       // Runde 4: Gesundheitsbalken (HUD i gehört zu Fahrzeug i – Spieler stehen vorne); aus = versteckt
       this.huds.forEach((h, i) => h.schadenSetzen && h.schadenSetzen(this.schaden, i));
+      this.huds.forEach((h, i) => h.itemSetzen && h.itemSetzen(this.pickups, this.fahrzeuge.findIndex(f => f.istSpieler && f.spielerNr === i), i));   // W3-H
       // Runde 5b: Polizei-Anzeige (Stopp-Countdown) + Streifenwagen auf der Minimap
       this.huds.forEach((h, i) => h.polizeiSetzen && h.polizeiSetzen(this.polizei, i));
+      this.huds.forEach((h) => h.muenzenSetzen && h.muenzenSetzen(this.muenzen ? 0 : null));   // Runde 6 (W3-G): 🪙 0
       // Ton: Motoren je Auto, Ereignisse
       if (R.Audio) {
         const A = R.Audio; this._tonCd = -1;
@@ -415,14 +454,125 @@
             sterne = R.Sterne.bewerten(i + 1, t.imZiel, t.bestzeit, R.Sterne.zielzeit(this.strecke && this.strecke.katalog, this.tempoKlasse));
             sterneGesamt = R.Sterne.gutschreiben(t.name, sterne);
           }
+          // Runde 6 (W3-G): Preisgeld je Spieler (Platz 1/2/3 = 30/20/15, sonst 5) aufs Garage-Konto; mit Schaden an
+          // das End-Prozent je Fahrer+Auto merken (nächstes Rennen startet damit, mindestens 30 %)
+          let preisgeld = 0, muenzenRennen = 0, muenzenGesamt = 0;
+          if (t.istSpieler && R.Garage) {
+            preisgeld = R.Garage.preisgeld(t.zielPlatz || i + 1);
+            muenzenRennen = this.muenzen ? this.muenzen.anzahlVon(t.nr) : 0;
+            muenzenGesamt = R.Garage.gutschreiben(t.name, preisgeld);
+            if (this.schaden && this.schaden.an && f && f.auto) R.Garage.restSetzen(t.name, f.auto.id, this.schaden.zustand(t.nr).prozent);
+            this._meldung(t.nr, '🏆 Preisgeld +' + preisgeld + ' 🪙', 4000);
+            const hd = this.huds[f.spielerNr];
+            if (hd && hd.muenzenSetzen && this.muenzen) hd.muenzenSetzen(muenzenRennen + preisgeld, preisgeld);
+          }
           return {
+            preisgeld, muenzenRennen, muenzenGesamt,
             platz: i + 1, nr: t.nr, name: t.name, istSpieler: t.istSpieler, spielerNr: f.spielerNr, auto: f.auto,
             zeit: t.imZiel ? t.zielZeit : null, beste: t.bestzeit, runden: t.runde, sterne, sterneGesamt,
+            raus: t.ausgeschieden ? t.ausscheidRunde : 0,     // W3-F: „Letzter fliegt raus" – in Runde n ausgeschieden
           };
         }),
       };
+      if (r.elimination) this.ergebnis.elimination = true;
+      // Runde 6 (W3-F): im Pokal statt der Ergebnis-Tafel den Zwischenstand bzw. die Siegerehrung zeigen
+      if (this.pokal && this.pokalAnzeige) { this._pokalRennenFertig(); return; }
       this.zustand = 'ergebnis';
       this.ergebnisAnzeige.zeigen(this.ergebnis);
+    }
+
+    // ---------- Runde 6 (W3-F): Pokal-Serie (D1) ----------
+    /** Pokal mit den aktuellen Einstellungen starten (Größe, Startstärke, Spieler, Autos, Welt/Tageszeit/Wetter). */
+    pokalStarten() {
+      const e = this.einstellungen;
+      this.einstellungenSpeichern();
+      this.pokal = new R.Pokal.Serie({ groesse: e.pokalGroesse, startStaerke: e.schwierigkeit, basis: JSON.parse(JSON.stringify(e)) });
+      this._pokalRennen();
+    }
+    /** Nächstes Pokal-Rennen über rennenStarten() (Einstellungen nur vorübergehend, Welt/Wetter je Strecke gültig). */
+    _pokalRennen() {
+      const s = this.pokal, b = s.basis, re = s.rennenEinstellungen();
+      const daten = R.trackCatalog.find(t => t.id === re.streckeId) || R.trackCatalog[0];
+      const ein = Object.assign({}, b, re, { spielart: 'pokal' });
+      ein.welt = b.welt && daten.welten && daten.welten[b.welt] ? b.welt : '';
+      ein.variante = b.variante && daten.varianten && daten.varianten[b.variante] ? b.variante : '';
+      if (R.Wetter && R.Wetter.erlaubt && b.jahreszeit !== 'zufall') {
+        const erl = R.Wetter.erlaubt(daten.thema, b.jahreszeit) || [];
+        if (!erl.length) { ein.jahreszeit = 'sommer'; ein.wetter = 'klar'; }
+        else if (b.wetter !== 'zufall' && !erl.includes(b.wetter)) ein.wetter = 'klar';
+      }
+      this.rennenStarten(ein, { temporaer: true });
+    }
+    _pokalRennenFertig() {
+      const s = this.pokal;
+      s.ergebnisEintragen(this.ergebnis.zeilen);
+      this.zustand = 'pokal';
+      if (!s.fertig) { this.pokalAnzeige.zwischenstand(s); return; }
+      const sieger = s.sieger;
+      let pokale = 0;
+      if (sieger && sieger.istSpieler && !s.gewinnGespeichert) { pokale = R.Pokal.gutschreiben(sieger.name); s.gewinnGespeichert = true; }
+      this.pokalAnzeige.siegerehrung(s, { pokale });
+    }
+    /** Zwischenstand → nächstes Rennen. */
+    pokalWeiter() { if (this.pokal && !this.pokal.fertig) this._pokalRennen(); }
+    /** Rückfrage „Pokal abbrechen?" (Esc im Zwischenstand, Hauptmenü aus der Pause). */
+    pokalAbbruchFragen() {
+      if (!this.pokalAnzeige) return;
+      this.pokalAnzeige.frage('Pokal abbrechen?', () => this.zumMenue(true), () => {});
+    }
+    /** Pokal beenden: gespeicherte Einstellungen von vor dem Pokal wiederherstellen; ohne `ohneMenue` ins Hauptmenü. */
+    pokalBeenden(ohneMenue) {
+      const s = this.pokal;
+      this.pokal = null;
+      if (s && s.basis) { this.einstellungen = einstellungenPruefen(s.basis); this.einstellungenSpeichern(); }
+      if (!ohneMenue) this.zumMenue(true);
+    }
+    /** Siegerehrung → gleichen Pokal noch einmal. */
+    pokalNeu() {
+      const s = this.pokal;
+      if (s && s.basis) this.einstellungen = einstellungenPruefen(s.basis);
+      this.pokal = null;
+      this.pokalStarten();
+    }
+
+    // ---------- Runde 6 (W3-F): „Letzter fliegt raus" (D7) ----------
+    /**
+     * Ein Auto scheidet aus: „Puff" + Meldung, Auto unsichtbar und weit weg geparkt (keine Kollisionen mit Autos,
+     * Hindernissen, Pflanzen), Physik/Bande/Höhe/Ton überspringen es (f.ausgeschieden). Ausgeschiedene Spieler schauen
+     * dem Führenden zu (_zuschauerKameras). Die fahrzeuge-Liste bleibt unverändert (Indizes = Teilnehmer-Nummern).
+     */
+    _ausgeschieden(t) {
+      const f = this.fahrzeuge[t.nr];
+      if (!f || f.ausgeschieden) return;
+      const d = f.anzeige || f.vehicle;
+      if (R.Puff && this.szene) this.puffs.push(new R.Puff(this.szene, d.x, d.y || f.vehicle.y || 0, d.z));
+      if (R.Audio && R.Audio._bereit && R.Audio._bereit() && R.Audio._ton && this._spielerAbstand(f.vehicle.x, f.vehicle.z) < 120) {
+        R.Audio._ton(520, 90, 0.35, 'sawtooth', 0.35, 0); R.Audio._ton(260, 60, 0.4, 'triangle', 0.3, 0.02);   // „Puff"
+      }
+      f.ausgeschieden = true;
+      if (f.mesh) f.mesh.visible = false;
+      if (f.looping && (f.looping.aktiv || f.looping.fallen)) { f.looping.aktiv = false; f.looping.fallen = false; f.vehicle.imLooping = false; }
+      if (f.flug && R.Schanzen) R.Schanzen.abbrechen(f.flug, f.vehicle);
+      if (f.kleber && R.Kleber) { R.Kleber.abbrechen(f.kleber); R.Kleber.optik(f, false); }
+      f.vehicle.setzen(100000 + t.nr * 60, 100000, 0);
+      f.vehicle.y = -100;
+      this._vorherAngleichen(f);
+      f.bremst = false; f.resetHinweis = false; f.falschHerum = false;
+      if (R.Audio) R.Audio.motorEntfernen(t.nr);
+      this.fahrzeuge.forEach((g, i) => { if (g.istSpieler && i !== t.nr) this._meldung(i, '🚪 ' + t.name + ' ist raus!', 2200); });
+    }
+
+    /** Kameras ausgeschiedener Spieler folgen dem Führenden (Zuschauer). */
+    _zuschauerKameras() {
+      const r = this.rennen;
+      if (!r || !r.elimination) return;
+      for (let i = 0; i < this.kameras.length; i++) {
+        const f = this.fahrzeuge[i];
+        if (!f || !f.ausgeschieden) continue;
+        const fuehrend = r.rangliste.find(t => !t.ausgeschieden) || r.rangliste[0];
+        const lf = fuehrend && this.fahrzeuge[fuehrend.nr];
+        if (lf && this.kameras[i].ziel !== lf.vehicle) this.kameras[i].folge(lf.vehicle, lf.anzeige);
+      }
     }
 
     /** Test-Hook: Spieler wird vom Computerfahrer gesteuert (Autopilot an/aus). */
@@ -465,7 +615,9 @@
         const auto = istSpieler
           ? (katalog.find(a => a.id === spielerIds[i]) || katalog[0])
           : (frei.length ? frei[(i - opt.spieler) % frei.length] : katalog[0]);
-        const f = this.fahrzeugHinzufuegen(auto, p.x, p.z, p.heading);
+        // Runde 6 (W3-G): Garage-Werte (Lack, Upgrade-Faktoren) nur für Spieler – die KI nie
+        const gw = istSpieler && R.Garage ? R.Garage.fahrzeugWerte(spielerNamen[i], auto.id, opt.upgradesZaehlen !== false) : null;
+        const f = this.fahrzeugHinzufuegen(auto, p.x, p.z, p.heading, gw);
         f.vehicle.y = strecke.hoeheAn(p.x, p.z);
         this._vorherAngleichen(f);
         f.istSpieler = istSpieler;
@@ -481,7 +633,7 @@
         return { vehicle: f.vehicle, name: istSpieler ? spielerNamen[i] : computerNamen[i - opt.spieler], istSpieler };
       });
       this.fahrhilfeStufe = opt.fahrhilfe[0] || this.fahrhilfeStufe;
-      this.rennen = new R.RaceManager(strecke, teilnehmer, { runden: opt.runden });
+      this.rennen = new R.RaceManager(strecke, teilnehmer, { runden: opt.runden, elimination: opt.elimination || null });   // W3-F
       // Runde 6 (D3): Start-Boost (Gas im Fenster um „LOS"), nur mit Countdown
       this.startBoost = R.StartBoost && this.rennen.countdownDauer > 0 ? new R.StartBoost(teilnehmer.length) : null;
       // Umgefahrene Pylonen stehen wieder, sobald der Verursacher eine Runde beendet hat
@@ -494,6 +646,13 @@
       this.schaden = null;
       if (R.Schaden) {
         this.schaden = new R.Schaden(this.fahrzeuge, { an: opt.schaden === true });
+        // Runde 6 (W3-G): Spieler starten mit dem Schaden-Rest des letzten Rennens (Garage, min. 30 %; Reparatur = 100 %)
+        if (this.schaden.an && R.Garage) {
+          for (let i = 0; i < opt.spieler; i++) {
+            const f = this.fahrzeuge[i], pr = f && f.auto ? R.Garage.startProzent(spielerNamen[i], f.auto.id) : 100;
+            if (pr < 100) this.schaden._punkteSetzen(i, pr);
+          }
+        }
         if (this.schaden.an) {
           this.fahrzeuge.forEach((f, i) => this.schaden.meshBauen(i, f.mesh));
           this.schaden.bei((e) => this._schadenEreignis(e));
@@ -506,6 +665,12 @@
         this.polizei = new R.Polizei(this);
         this.polizei.einsetzen(strecke, opt.spieler + opt.gegner, opt.gegner);
         this.polizei.vorkompilieren(this.renderer, this.szene, this.menueKamera);
+      }
+      // Runde 6 (W3-G): Münzen auf der Fahrbahn (nur im Rennen, jede Welt; keine Physik – nur Einsammeln)
+      this.muenzen = null;
+      if (R.Muenzen && opt.muenzen !== false) {
+        this.muenzen = new R.Muenzen(strecke);
+        if (this.muenzen.anzahl) this.szene.add(this.muenzen.bauen()); else this.muenzen = null;
       }
       if (this.tunnelLichter) this._tunnelLichterVorkompilieren();
       return strecke;
@@ -532,11 +697,16 @@
     }
 
     /** Fahrzeug aus einem Katalog-Eintrag anlegen (Physik + 3D-Modell). */
-    fahrzeugHinzufuegen(auto, x, z, heading) {
+    fahrzeugHinzufuegen(auto, x, z, heading, garage) {
       // Runde 5: Tempo-Klasse (normal/schnell) VOR jeder Schaden-Kopie (datenBasis) einrechnen
       const vehicle = new R.Vehicle(auto.fahrwerte, { tempoKlasse: this.tempoKlasse || R.config.tempoKlasseStandard || 'normal' });
+      // Runde 6 (W3-G): Garage-Upgrades (nur Spieler) ebenfalls direkt in daten – vor der Schaden-Kopie, Turbo bleibt multiplikativ
+      if (garage) {
+        vehicle.daten.vMax *= garage.vMax || 1; vehicle.daten.grip *= garage.grip || 1; vehicle.daten.bremsen *= garage.bremsen || 1;
+        vehicle.garage = garage;
+      }
       vehicle.setzen(x, z, heading);
-      const mesh = R.carBuilder.bauen(auto);
+      const mesh = R.carBuilder.bauen(auto, garage && garage.farbe !== null && garage.farbe !== undefined ? { farbe: garage.farbe } : undefined);
       // Runde 6: Dämmerung/Nacht – alle Autos mit leuchtenden Scheinwerfern/Rücklichtern (nur Material, kein Licht)
       if (this.tageszeitDaten && this.tageszeitDaten.autoLicht && R.carBuilder.setzeLicht) R.carBuilder.setzeLicht(mesh, true);
       this.szene.add(mesh);
@@ -630,13 +800,16 @@
         R.carBuilder.setzeBremslicht(mesh, !!f.bremst);
       }
       if (this.zustand === 'menue') this.menueKameraFlug(dt);
-      else if (!this.pausiert) for (let i = 0; i < this.kameras.length; i++) { this.kameras[i].update(dt); this._loopingKamera(this.kameras[i], dt, alpha); }
+      else if (this.rennen && this.rennen.elimination) this._zuschauerKameras();   // W3-F (vor dem Kamera-Update)
+      if (this.zustand !== 'menue' && !this.pausiert) for (let i = 0; i < this.kameras.length; i++) { this.kameras[i].update(dt); this._loopingKamera(this.kameras[i], dt, alpha); }
       if (this.strecke) this.strecke.hindernisseAnimieren(this._physikZeit || 0);
       if (this.wetter) this.wetter.update(dt, this.zustand === 'menue' ? [this.menueKamera] : this.kameras);
       if (this.dynamik) this.dynamik.animieren();
+      if (this.puffs.length) this.puffs = this.puffs.filter(p => p.update(this.pausiert ? 0 : dt));   // W3-F
       if (this.dynamik) this._dinoFrame(dt);    // Runde 6 (W2-C): Himmel beim Vulkanausbruch, Kamera-Duck (Flugsaurier)
       // Runde 4: Turbo-Pfeile/Schild-Kugeln/Hülle/Flammen; Schaden-Rauch + Warnblinker (NACH setzeBremslicht oben)
       if (this.pickups) this.pickups.animieren(this._physikZeit || 0, this.fahrzeuge);
+      if (this.muenzen) this.muenzen.animieren(this._physikZeit || 0);      // Runde 6 (W3-G)
       if (this.schaden && this.schaden.an) this.schaden.update(this.pausiert || this.zustand === 'menue' ? 0 : dt);
       if (this.polizei) this.polizei.animieren(this._physikZeit || 0);   // Runde 5b: Blaulicht
       if (this.tunnelLichter) this._tunnelLichterAktualisieren();
@@ -719,6 +892,7 @@
       const fz = this.fahrzeuge;   // Schleifen ohne Closures: läuft jeden Frame
       for (let i = 0; i < fz.length; i++) {
         const f = fz[i], v = f.vehicle; let ab = 0;
+        if (f.ausgeschieden) continue;        // W3-F: Motor ist entfernt
         if (!f.istSpieler) {
           // Abstand zum nächsten Spieler; KI > hoerweite (60 m) ist stumm, motorUpdate kehrt dann sofort zurück
           ab = 1e9;
@@ -823,10 +997,13 @@
         } else if (e.typ === 'rehRuf') {         // W2-C2: Reh bleibt stehen und schaut
           if (A && A.rehRuf && d < 60) A.rehRuf(Math.max(0.3, 1 - d / 60));
         } else if (e.typ === 'schrei') {
-          if (A && A.flugsaurierSchrei && d < 150) A.flugsaurierSchrei(Math.max(0.4, 1 - d / 150));
+          if (A && A.flugsaurierSchrei && d < 150) {          // W3-H: in der Nähe (< 80 m) doppelt übereinander = deutlich lauter
+            A.flugsaurierSchrei(Math.max(0.5, 1 - d / 150));
+            if (d < 80) A.flugsaurierSchrei(Math.max(0.5, 1 - d / 150));
+          }
         } else if (e.typ === 'duck') {
           const f = this.fahrzeuge[e.nr];
-          if (f) this.kameras.forEach((kam) => { if (kam.ziel === f.vehicle) { kam._duckZeit = 0.7; kam._duckStaerke = e.staerke || 0.45; } });
+          if (f) this.kameras.forEach((kam) => { if (kam.ziel === f.vehicle) { kam._duckZeit = 0.7; kam._duckStaerke = e.staerke || 0.6; } });
           if (f && f.istSpieler) this._meldung(e.nr, 'Flugsaurier! 🦅', 1200);
         }
       }
@@ -855,7 +1032,7 @@
       for (const kam of this.kameras) {
         if (!(kam._duckZeit > 0)) continue;
         const u = 1 - kam._duckZeit / 0.7;
-        if (kam.kamera) kam.kamera.position.y -= (kam._duckStaerke || 0.45) * Math.sin(Math.PI * u);
+        if (kam.kamera) kam.kamera.position.y -= (kam._duckStaerke || 0.6) * Math.sin(Math.PI * u);
         kam._duckZeit -= dt;
       }
     }
@@ -922,7 +1099,7 @@
       // Fortschritt der Spieler für das Gummiband der KI
       const tn = rennen ? rennen.teilnehmer : [];
       let spielerMax = null;
-      for (let i = 0; i < tn.length; i++) if (tn[i].istSpieler && (spielerMax === null || tn[i].fortschritt > spielerMax)) spielerMax = tn[i].fortschritt;
+      for (let i = 0; i < tn.length; i++) if (tn[i].istSpieler && !tn[i].ausgeschieden && (spielerMax === null || tn[i].fortschritt > spielerMax)) spielerMax = tn[i].fortschritt;
       const umgebung = this._umgebung || (this._umgebung = {});   // wiederverwendet (KI liest nur)
       // Zustand vor diesem Schritt merken (für die Interpolation beim Zeichnen)
       for (let i = 0; i < this.fahrzeuge.length; i++) {
@@ -932,6 +1109,7 @@
       }
 
       this.fahrzeuge.forEach((f, i) => {
+        if (f.ausgeschieden) return;          // Runde 6 (W3-F): ausgeschieden („Letzter fliegt raus") – steht geparkt
         const v = f.vehicle;
         // --- 1./2. Eingabe (liegengeblieben: nur Bremse, Computerfahrer wird nicht gefragt) ---
         let s = { gas: 0, bremse: 0, lenkung: 0 };
@@ -994,6 +1172,8 @@
             const ue = R.config.physik.abseitsUebergang || 1;
             v.untergrundMisch = Math.max(0, Math.min(1, (Math.abs(n.seitenabstand) - b2 - strecke.randBreite) / ue));
           } else v.untergrundMisch = undefined;
+          // Runde 6 (W3-H): dynamisch gelegte Ölflecken wirken wie das Hindernis „Ölfleck" (Schild fängt sie ab)
+          if (pickups && v.untergrund === 'strasse' && pickups.oel.length && pickups.oelWirkt(i, v)) v.untergrund = 'oel';
           f.nah = n;
           const hilfeStufe = R.config.fahrhilfen[f.fahrhilfe] || R.config.fahrhilfen.aus;
           if (f.istSpieler && !f.autopilot && (hilfeStufe.lenkhilfe > 0 || hilfeStufe.bremshilfe > 0)) {
@@ -1041,7 +1221,7 @@
       this._physikZeit = (this._physikZeit || 0) + dt;
       const bandeSt = this._bandeSt || (this._bandeSt = []);
       bandeSt.length = this.fahrzeuge.length;
-      for (let i = 0; i < this.fahrzeuge.length; i++) bandeSt[i] = strecke ? R.Kollisionen.bande(this.fahrzeuge[i].vehicle, strecke) : 0;
+      for (let i = 0; i < this.fahrzeuge.length; i++) bandeSt[i] = strecke && !this.fahrzeuge[i].ausgeschieden ? R.Kollisionen.bande(this.fahrzeuge[i].vehicle, strecke) : 0;
       // Runde 6: Auto-Auto (Rechtecke, 2 Teilschritte, Mindestabstand); wer dabei bewegt wurde, prüft die Bande
       // nochmal (ein Auto an der Bande gilt beim Trennen als 10× so schwer → das andere weicht aus)
       const kxAlt = this._kollX || (this._kollX = []);
@@ -1095,7 +1275,7 @@
         autos.length = this.fahrzeuge.length;
         for (let i = 0; i < this.fahrzeuge.length; i++) {
           const f = this.fahrzeuge[i];
-          autos[i] = f.polizei ? null : { vehicle: f.vehicle, istSpieler: !!f.istSpieler, fortschritt: tn[i] ? tn[i].fortschritt : 0 };
+          autos[i] = f.polizei || f.ausgeschieden ? null : { vehicle: f.vehicle, istSpieler: !!f.istSpieler, fortschritt: tn[i] ? tn[i].fortschritt : 0 };
         }
         const e = this.dynamik.schritt(dt, { fortschritt: fuehrend === null ? 0 : fuehrend, runden: rennen.runden, autos });
         if (e.baelleKommen) this.fahrzeuge.forEach((f, i) => this._meldung(i, '⚠️ Bälle kommen!', 2500));
@@ -1155,16 +1335,39 @@
           this._meldung(g.nr, 'Schild weg! 💥', 1000);
           if (this.fahrzeuge[g.nr] && this.fahrzeuge[g.nr].istSpieler) pickups.ton('platzen');
         }
+        for (let k = 0; k < pickups.rutscher.length; k++) {      // W3-H: in einen Ölfleck gefahren
+          const g = pickups.rutscher[k];
+          this._meldung(g.nr, 'Öl! 🛢️', 900);
+          if (this.fahrzeuge[g.nr] && this.fahrzeuge[g.nr].istSpieler) pickups.ton('oelRutsch');
+        }
         const ev = pickups.schritt(dt, pfz);
         for (let k = 0; k < ev.length; k++) {
           const e = ev[k], spieler = this.fahrzeuge[e.nr] && this.fahrzeuge[e.nr].istSpieler;
-          if (e.typ === 'turbo') { this._meldung(e.nr, 'TURBO! 🔥', 1200); if (spieler) pickups.ton('turbo'); }
+          if (e.typ === 'oel') { this._meldung(e.nr, 'Öl-Fass! 🛢️ (' + (spieler && this.fahrzeuge[e.nr].spielerNr === 1 ? 'E' : 'Leertaste') + ')', 1400); if (spieler) pickups.ton('oelAuf'); }
+          else if (e.typ === 'oelGelegt') { /* KI legt Öl: keine Meldung, Überraschung */ }
+          else if (e.typ === 'turbo') { this._meldung(e.nr, 'TURBO! 🔥', 1200); if (spieler) pickups.ton('turbo'); }
           else { this._meldung(e.nr, 'Schutzschild! 🛡️', 1200); if (spieler) pickups.ton('schild'); }
+        }
+      }
+
+      // --- 10b. Runde 6 (W3-G): Münzen einsammeln (keine Physik). Spieler: sofort aufs Garage-Konto + Ton + HUD „+1";
+      //          KI sammelt nebenbei (Münze weg, zählt nicht). Polizei sammelt nichts.
+      if (this.muenzen && (!rennen || rennen.gasErlaubt)) {
+        const ev = this.muenzen.schritt(dt, this.fahrzeuge);
+        for (let k = 0; k < ev.length; k++) {
+          const f = this.fahrzeuge[ev[k].nr];
+          if (!f || !f.istSpieler) continue;
+          const t = rennen && rennen.teilnehmer[ev[k].nr];
+          if (R.Garage && t) R.Garage.gutschreiben(t.name, 1);
+          const hd = this.huds[f.spielerNr];
+          if (hd && hd.muenzenSetzen) hd.muenzenSetzen(this.muenzen.anzahlVon(ev[k].nr), 1);
+          this.muenzen.ton();
         }
       }
 
       // --- 11. Höhe (Rampe/Flug/Straße + Ast-Hüpfer), Feststecken, Rennleitung ---
       this.fahrzeuge.forEach((f) => {
+        if (f.ausgeschieden) return;          // W3-F
         const v = f.vehicle;
         if (strecke && !v.imLooping) v.y = f.flug ? R.Schanzen.hoehe(f.flug, v, strecke) : strecke.hoeheAn(v.x, v.z);
         // Hüpfer (Ast): kleine Sprungbewegung, nur Optik
@@ -1213,7 +1416,7 @@
     /** Runde 5 (M6): Fahrzeug i auf die Anlaufposition vor dem Looping/der Schanze setzen (Tempo 0). */
     _zurAnlauf(i) {
       const f = this.fahrzeuge[i];
-      if (!f || !this.strecke || !R.Anlauf || !R.Anlauf.aktiv(f.anlauf)) return false;
+      if (!f || f.ausgeschieden || !this.strecke || !R.Anlauf || !R.Anlauf.aktiv(f.anlauf)) return false;
       if (f.looping && (f.looping.aktiv || f.looping.fallen)) { f.looping.aktiv = false; f.looping.fallen = false; f.vehicle.imLooping = false; }
       if (f.flug) R.Schanzen.abbrechen(f.flug, f.vehicle);
       if (f.kleber) { R.Kleber.abbrechen(f.kleber); R.Kleber.optik(f, false); }
@@ -1288,7 +1491,7 @@
      */
     zuruecksetzen(i) {
       const f = this.fahrzeuge[i];
-      if (!f || !this.rennen) return;
+      if (!f || !this.rennen || f.ausgeschieden) return;     // W3-F: ausgeschiedene Autos bleiben geparkt
       const sp = this.strecke.spline;
       let pose = this.rennen.resetPose(i);
       const frei = (x, z) => this.fahrzeuge.every((g, j) => j === i || Math.hypot(g.vehicle.x - x, g.vehicle.z - z) >= 6);
@@ -1450,7 +1653,7 @@
       // Scheinwerfer: nur Spielerautos, nur im Tunnel (± 8 m); Runde 6: nachts immer
       const spieler = this._spielerListe || (this._spielerListe = []);
       spieler.length = 0;
-      for (let i = 0; i < this.fahrzeuge.length; i++) if (this.fahrzeuge[i].istSpieler) spieler.push(this.fahrzeuge[i]);
+      for (let i = 0; i < this.fahrzeuge.length; i++) if (this.fahrzeuge[i].istSpieler && !this.fahrzeuge[i].ausgeschieden) spieler.push(this.fahrzeuge[i]);
       for (let k = 0; k < 2; k++) {
         const s = L.spots[k], f = spieler.length === 1 ? spieler[0] : spieler[k];
         const an = !!f && this.zustand !== 'menue' && !!f.nah && (L.nacht || st.imTunnel(f.nah.s, 8));
