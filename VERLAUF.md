@@ -733,3 +733,39 @@
   Gegner); Basis > 1,5 s alt → keine Stöße mehr in der Vorhersage; Szenarien im Test sind künstlich (2 Spieler, gerade Strecke), kein Test mit 6 Menschen/Netz-Zittern/Echt-Rempeln
   ('echt' ist online nicht anwählbar); Browser-Test lief auf 2 Kernen mit Software-GL (4–6 fps, daher viele harte Korrekturen in den Zahlen – auch schon im Ausgangsstand), echtes Gefühl
   bei 50–100 ms Ping ungetestet; Lobby-Zeile liegt in der Mitte statt bei den anderen Host-Zeilen (Platz).
+- 12.10. Agent Kurven-Vorhersage (v13, Sonnet) – fertig. Arbeitsordner v13 (Kopie von v12, Sicherung v12_fertig unberührt).
+  Ausgangsstand (vorher): test_netz 52/52, online_test 29/29, alle Node-Tests exit 0 (nur test_ki.js „Laufzeit < 60 s“ gerissen, 85/99 s, weil parallel zu
+  online_test gelaufen – keine Logik).
+  Geändert: src/net/vorhersage.js (Gierrate je Stellvertreter: `_gierSetzen`, `abgleich(ich, anzeige, andere, k)` merkt sich den vorigen Zustand selbst, `_autoAuto` dreht
+  heading += gier × dt vor dem Vorrücken; Option `gierrate:false` = v12 nur für Tests; Konstanten GIER_MAX 3,5 rad/s, GIER_TICKS_MAX 15), src/net/online.js (reicht
+  z.k als 4. Parameter durch), tests/test_netz.js (Teil K: Kurven-Szenarien + Gierrate-Einheitsprüfung + „gerade nicht schlechter“). Protokoll/Server UNVERÄNDERT.
+  Messwerte (K, 100 ms Verzug, Fehler der Vorhersage gegen den Server in m): Kurve seitlich (stärkste Wiese-Kurve ≈ 1 rad/40 m, beide Autopilot, 52 Stöße):
+  neu Ø 0,006 / max 0,07; v12 Ø 0,009 / max 0,21; ganz ohne Stellvertreter Ø 0,060 / max 0,59. Kurve hinten (110 Stöße): neu Ø 0,003 / max 0,01; v12 Ø 0,009 / max 0,06;
+  ohne Ø 0,035 / max 1,30. Gerade Strecke (hinten/seitlich): bitgleich zu v12 (Gierrate dort ≈ 0 bzw. gleiche Zahlen).
+  Tests nachher: test_netz 59/59 (+7), online_test 29/29, alle 20 übrigen Node-Tests exit 0 und ohne FEHL (test_ki jetzt auch grün, lief allein), test_welten_ki lief beim Abschluss noch (bis dahin alle Zeilen OK, 0 FEHL; berührt das Netz nicht).
+  Schwächen: Gierrate = Mittel der letzten 50 ms (3 Ticks) – wechselt der Gegner gerade die Lenkung, ist sie bis zum nächsten Zustand falsch; der Dreh-Impuls eines Stoßes
+  (drehImpuls) wird für Stellvertreter nicht nachgebildet, die Gierrate vor dem Stoß bleibt bis zum nächsten Abgleich; bei Drehen/Schleudern > 3,5 rad/s begrenzt;
+  Szenarien künstlich (2 Autos, Autopilot, Wiese), Verbesserung in Metern klein (max 0,21 → 0,07), weil die Stellvertreter nur ~100 ms vorrechnen; kein Test mit Paketverlust
+  (Lücke > 0,25 s → v12-Verhalten, nur Einheitsprüfung).
+
+## Runde 7 (12.10.2026) – Minimap-Kreuz über Autopunkten + Abschlepp-Prüfung lageunabhängig (Agent „Minimap/Test“)
+- Minimap (src/ui/hud.js): Das Andreaskreuz (Fantasie-Kreuzung) liegt weiter im vorgerenderten Streckenbild, ZUSÄTZLICH baut `Minimap.bauen` je Kreuzung ein kleines Sprite
+  (eintrag.kreuze = [{c, x, y}], einmalig, ≈ 14×14 px); `zeichnen()` legt es nach allen Autopunkten (KI, Streifenwagen, andere Spieler, eigener Punkt samt Hof) obenauf
+  (1 drawImage je Kreuz je Frame, kein Neuzeichnen von Linien). Das Kreuz besteht nur aus dünnen Linien (rot 2,2 px mit weißem Rand) → der Autopunkt bleibt als Fläche/Farbe erkennbar.
+  Hilfsfunktion `andreaskreuz(g, cx, cy, r, dpr)` für Bild + Sprite. Andere Strecken: kreuze = [] → keine Mehrarbeit. Test: tests/minimap_kreuz_screenshot.py (neu; Eigenes Auto auf der Kreuzung,
+  Ausschnitt 4× vergrößert, Pixelprobe) → tests/out/minimap_kreuz_vorher.png / _nachher.png (vorher: blauer Punkt verdeckt das Kreuz, Probe 0 rote Pixel; nachher rotes X über dem blauen Punkt, 7/7).
+  Tests: screenshot_test fantasie 23/23 OK (Minimap sichtbar, Andreaskreuz rot/weiß), menu_test 175 OK.
+- tests/welten_test.py, Abschlepp-Prüfung (Auto 3 liegengeblieben → 5 s still → 60 % → fährt weiter) – Ursachen der Flake (alle nur im Test, Spielcode unverändert):
+  (1) Messung „Fortschritt nach 8 s > 50 m“ ist lageabhängig: Das Abschleppen setzt am LETZTEN CHECKPOINT zurück (bis ~110 m hinter die Liegestelle); liegt dort/dahinter ein Wrack, Kleber, Looping,
+  eine Kreuzung, Düse, ein Ball oder ein anderes Auto, kriecht die KI (2–7 m/s) oder steht (Wald/Stunt „weiter 7“ am Wrack bei s 1520, Wiese/Stunt 40, Fantasie/Verrückt 46/0, Wüste/Hindernisse 41 in 20 s).
+  Ein „sauberes“ Startstück zu suchen (erster Versuch: Schnellvorlauf, bis Checkpoint + 180 m frei) scheitert auf Fantasie (zwischen Kleber/Looping/Kreuzung/Düsen/Bällen gibt es kein freies Stück) und lässt
+  das Rennen ins Ziel laufen (Fortschritt friert ein) → verworfen. Neu: Messfenster 20 s (Schritte à 0,5 s, Abbruch bei Erfolg), bestanden bei Fortschritt ≥ 10 m UND Tempo > 5 m/s; alles andere bleibt strikt
+  (gesperrt, 5 s still, 60 %, versetzt, Sperre weg, kein Reset-Fehler, Zähler).
+  (2) Ist Auto 3 zufällig schon natürlich liegengeblieben (Restzeit < 2,5 s), endet seine Sperre mitten in der Messung (tempoLiegen 7,4, nochGesperrt false, danach 55 %) → vorher abwarten (Feld `gewartet`).
+  (3) Steht Auto 3 noch am Checkpoint (nach einem natürlichen Abschleppen), setzt das zweite Abschleppen es an dieselbe Stelle → „versetzt“ false → vorher ≥ 5 m von der Reset-Pose wegfahren lassen.
+  Nebenbei (Bild-Prüfung ‚Spielerauto im Flug‘, einmal rot auf Wald/Stunt, kmh 1, Ursache nicht sicher bestätigt – vermutlich KI-Auto auf der Rampe): im BILD-Skript werden die KI-Autos für das Bild ≥ 400 m weg gesetzt.
+  Neu: tests/abschlepp_diag.py (n Versuche hintereinander, Fortschritts-/Tempo-Reihe je 0,5 s).
+  Läufe nachher: welten_test.py komplett 4× (je 188 Prüfungen) → 4× 188 OK, Exit 0; die 112 Abschlepp-Fälle (28 Kombinationen × 4) alle OK (Erfolg meist nach 1,5 s, max. 4,5 s; 6 Fälle mit Abwarten).
+  Zwischenstände (Prüfung gelegentlich rot, vorher): 3 Läufe mit verschiedenen Zwischenvarianten ergaben je 0–2 rote Abschlepp-Prüfungen (Wald/Stunt, Wiese/Verrückt, Wiese/Stunt, Fantasie/Verrückt, Wüste/Hindernisse, Wald/Klassisch, Fantasie/Fantasie).
+  Möglicher echter Spiel-Befund (nicht angefasst): Fantasie – wird die KI an Checkpoint 118 m zurückgesetzt, schafft sie den Looping bei 170 m aus dem Stand nicht immer (zu langsam, bleibt hängen, Driver setzt nochmal zurück);
+  vor Wracks kriecht sie nach dem Reset kurz (Ausweichen).

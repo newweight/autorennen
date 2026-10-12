@@ -728,7 +728,7 @@
       if (z.ich) {
         const ich = z.ich, f = spiel.fahrzeuge[this.du], t = r.teilnehmer[this.du];
         const v = f.vehicle, anzeige = { x: v.x, z: v.z, y: v.y, heading: v.heading };
-        this.vorhersage.abgleich(ich, anzeige, this.kollisionen === true ? z.a : undefined);
+        this.vorhersage.abgleich(ich, anzeige, this.kollisionen === true ? z.a : undefined, z.k);
         f.resetHinweis = !!ich.rh; f.falschHerum = !!ich.fh;
         t.rundenStart = ich.rs; t.rundenzeiten = ich.rzn || []; t.bestzeit = ich.bz;
         if (ich.zz !== null && ich.zz !== undefined) t.zielZeit = ich.zz;

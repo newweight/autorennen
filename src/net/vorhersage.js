@@ -13,7 +13,12 @@
 //   W5 Stufe 2 (Rempeln, nur wenn opt.kollisionen): nach der Bande wird der eigene Wagen auch gegen die ANDEREN Autos
 //   geprüft (R.Kollisionen.autoAuto). Die anderen sind Stellvertreter (eigene R.Vehicle je Gegner): Pose/Tempo aus dem
 //   Server-Zustand des letzten Abgleichs (zustand.a), linear Schritt für Schritt hochgerechnet (Tempo × Richtung, nach
-//   einem Stoß mit dem veränderten Tempo). Bei jedem Abgleich werden sie neu auf die Server-Pose gesetzt und das Replay
+//   einem Stoß mit dem veränderten Tempo). v13: Kurven – je Gegner wird aus dem vorigen und dem aktuellen Server-Zustand eine
+//   Gierrate (rad/s = winkelDiff der Richtung / Tick-Abstand) bestimmt (abgleich merkt sich dafür selbst den letzten Zustand
+//   (a, k), online.js gibt nur zusätzlich z.k mit); jeder Schritt dreht den Stellvertreter erst um gier × dt und rückt ihn dann
+//   entlang der NEUEN Richtung vor (Kreisbogen). Gierrate nur bei gültigem Paar (gleicher resetZaehler, beide nicht im
+//   Looping/Flug, Abstand 1..15 Ticks), sonst 0 (= v12 geradeaus); begrenzt auf ±3,5 rad/s; sie bleibt auch nach einem Stoß
+//   (der Dreh-Impuls des Stoßes wird in der Vorhersage nicht nachgebildet). opt.gierrate:false = v12 (nur für den Test). Bei jedem Abgleich werden sie neu auf die Server-Pose gesetzt und das Replay
 //   rückt sie für jede nachgerechnete Folge-Nr genauso vor wie später die laufende Vorhersage. Sie gehören nur der
 //   Vorhersage: ein Stoß verändert sie, fließt aber nie in die Anzeige der anderen Autos zurück (die kommt weiter aus
 //   dem NetzPuffer). Ohne opt.kollisionen: Verhalten wie v11.
@@ -23,6 +28,9 @@
 // ============================================================
 (function () {
   const R = window.Rennspiel;
+
+  const GIER_MAX = 3.5;        // rad/s, obere Grenze der geschätzten Gierrate (Autos drehen real höchstens ~2–3 rad/s)
+  const GIER_TICKS_MAX = 15;   // Abstand der beiden Zustände höchstens 15 Ticks (0,25 s), sonst keine Gierrate
 
   class NetzVorhersage {
     /**
@@ -51,9 +59,13 @@
       this.stellvertreter = this.kollisionen
         ? opt.andere.map(o => ({ nr: o.nr, v: new R.Vehicle(o.auto.fahrwerte, { tempoKlasse: opt.tempoKlasse }) }))
         : [];
+      // v13: Stellvertreter folgen Kurven (Gierrate aus zwei aufeinanderfolgenden Server-Zuständen); opt.gierrate === false = v12 (nur Test)
+      this.gierrate = opt.gierrate !== false;
+      this._vorher = null;         // { a, k } des vorigen Abgleichs (für die Gierrate)
       this._ref = null;            // { a: zustand.a, ack } des letzten Abgleichs (Basis der Hochrechnung)
       this._kandidaten = [];
       this.stat.stoesse = 0;       // Stöße in der laufenden Vorhersage (nicht im Replay)
+      this.stat.mitGier = 0;       // Abgleiche, bei denen mindestens ein Stellvertreter eine Gierrate bekam
     }
 
     /** Ein vorhergesagter Schritt. s = { gas, bremse, lenkung } (bereits wie gesendet quantisiert). */
@@ -115,6 +127,7 @@
         for (; p.n < e.n; p.n++) {
           const alt = w._kollAlt || (w._kollAlt = {});
           alt.x = w.x; alt.z = w.z; alt.h = w.heading;
+          if (p.gier) w.heading += p.gier * dt;           // Kreisbogen: erst drehen, dann entlang der neuen Richtung
           const vw = w.weltGeschwindigkeit();
           w.x += vw.x * dt; w.z += vw.z * dt;
         }
@@ -126,6 +139,28 @@
         if (live) this.stat.stoesse++;
         if (v.x !== x0 || v.z !== z0) K.bande(v, this.strecke);       // wer bewegt wurde, prüft die Bande nochmal (wie main.js)
       }
+    }
+
+    /**
+     * v13: Gierrate (rad/s) je Gegner aus dem vorigen und dem aktuellen Server-Zustand (Richtungsdifferenz / Tick-Abstand).
+     * Nur bei gültigen Paaren (gleicher resetZaehler, beide nicht im Looping/Flug, 0 < Abstand ≤ 15 Ticks = 0,25 s), sonst 0
+     * (= v12: geradeaus). Begrenzt auf ±GIER_MAX, damit ein Ausreißer (Stoß, Spin) nicht weit wegdreht.
+     */
+    _gierSetzen(a, k) {
+      const vor = this._vorher, dt = R.config.physik.schritt;
+      const dk = vor && k !== undefined ? k - vor.k : 0;
+      let any = false;
+      for (const p of this.stellvertreter) {
+        p.gier = 0;
+        if (!this.gierrate || !(dk > 0 && dk <= GIER_TICKS_MAX)) continue;
+        const z1 = a[p.nr], z0 = vor.a[p.nr];
+        if (!z1 || !z0 || z1[13] !== z0[13] || z1[14] || z0[14] || (z1[6] & 32) || (z0[6] & 32)) continue;
+        const g = R.Vehicle.winkelDiff(z1[3], z0[3]) / (dk * dt);
+        p.gier = Math.max(-GIER_MAX, Math.min(GIER_MAX, g));
+        any = true;
+      }
+      if (any) this.stat.mitGier++;
+      this._vorher = { a, k };
     }
 
     /** Stellvertreter auf die Server-Pose setzen (zustand.a beim Abgleich, ack = Folge-Nr dieses Ticks). */
@@ -144,8 +179,9 @@
      * Server-Zustand für den eigenen Wagen (ich = { v, idx, bi, bs, fk, gs, so, ack }).
      * @param {object} anzeige aktuelle Anzeige-Pose { x, z, y, heading } (für weiche Übergänge)
      * @param {Array} [andere] zustand.a desselben Server-Ticks (Stellvertreter der anderen Autos, nur bei kollisionen)
+     * @param {number} [k] Server-Tick dieses Zustands (zustand.k): damit merkt sich die Vorhersage den vorigen Zustand (für die Gierrate)
      */
-    abgleich(ich, anzeige, andere) {
+    abgleich(ich, anzeige, andere, k) {
       const st = this.stat, warSonder = this.sonder;
       st.abgleiche++;
       this.offen = this.offen.filter(e => e.n > ich.ack);
@@ -160,6 +196,7 @@
       v._buschSperre = ich.bs || 0;
       if (this.kollisionen && andere) {
         this._ref = { a: andere, ack: ich.ack };
+        this._gierSetzen(andere, k);
         this._stellvertreterSetzen(andere, ich.ack);
         v._kollAlt = { x: v.x, z: v.z, h: v.heading };   // Sweep ab der Server-Pose (nicht ab einer Pose aus der Zukunft)
       }

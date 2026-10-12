@@ -47,10 +47,17 @@ ZUSTAND = '''() => { const s = Rennspiel.spiel, r = s.rennen, pk = s.pickups;
 
 # Bild vorbereiten: Spielerauto an s0 setzen (Tempo v0), dann synchron Physik + Kamera rechnen, bis bedingung erfüllt
 # ('flug' = 0,35 s in der Luft, sonst feste Schrittzahl), dann anhalten (pausiert ohne Fenster) und zeichnen lassen.
-BILD = '''([s0, q, v0, art, schritte]) => { const s = Rennspiel.spiel, R = Rennspiel, f = s.fahrzeuge[0], v = f.vehicle, sp = s.strecke.spline;
+BILD = '''([s0, q, v0, art, schritte]) => { const out = {}; const s = Rennspiel.spiel, R = Rennspiel, f = s.fahrzeuge[0], v = f.vehicle, sp = s.strecke.spline;
   if (s0 !== null) { const p = sp.punktBei(s0);
     v.setzen(p.x + p.nx * q, p.z + p.nz * q, R.headingAus(p.tx, p.tz)); v.vLaengs = v0; v.y = s.strecke.hoeheAn(v.x, v.z);
-    if (f.flug) R.Schanzen.abbrechen(f.flug, v); if (f.autopilot) f.autopilot.zurueckgesetzt(); f.index = -1; s._vorherAngleichen(f); }
+    if (f.flug) R.Schanzen.abbrechen(f.flug, v); if (f.autopilot) f.autopilot.zurueckgesetzt(); f.index = -1; s._vorherAngleichen(f);
+    // Flake-Fix (gelegentlich rot auf Wald/Stunt: Spielerauto 'kmh 1', kein Flug): Steht zufällig ein KI-Auto auf/vor der Rampe, rempelt es den Anlauf
+    // aus (Tempo 33 → ~0). Für das Bild die KI-Autos weit hinter/vor die Rampe auf die Strecke setzen (≥ 400 m, je 25 m versetzt); die Prüfung
+    // gilt dem Flug des Spielerautos, nicht dem Verkehr. Mindestabstand vorher steht als 'naechstes' in der Ausgabe.
+    out.naechstes = Math.round(Math.min(...s.fahrzeuge.filter((g, j) => j > 0).map(g => Math.hypot(g.vehicle.x - v.x, g.vehicle.z - v.z))));
+    s.fahrzeuge.forEach((g, j) => { if (j === 0) return; const q2 = sp.punktBei((((s0 + 400 + 25 * j) % sp.laenge) + sp.laenge) % sp.laenge);
+      g.vehicle.setzen(q2.x, q2.z, R.headingAus(q2.tx, q2.tz)); g.vehicle.vLaengs = 25; g.vehicle.y = s.strecke.hoeheAn(q2.x, q2.z); g.index = -1; if (g.flug) R.Schanzen.abbrechen(g.flug, g.vehicle);
+      if (g.driver && g.driver.zurueckgesetzt) g.driver.zurueckgesetzt(); s._vorherAngleichen(g); }); }
   const k = s.kameras[0]; k._erstesMal = true;
   const sync = () => { s.fahrzeuge.forEach((g) => { const d = g.anzeige, w = g.vehicle; d.x = w.x; d.y = w.y; d.z = w.z; d.heading = w.heading; d.nicken = w.nicken; d.neigung = w.neigung; }); k.update(1 / 60); };
   let n = 0;
@@ -62,7 +69,7 @@ BILD = '''([s0, q, v0, art, schritte]) => { const s = Rennspiel.spiel, R = Renns
     c.position.set(d.x + qv.x * 13 - r.x * 15, s.strecke.hoeheAn(d.x, d.z) + 3.2, d.z + qv.z * 13 - r.z * 15);
     c.up.set(0, 1, 0); c.lookAt(d.x - r.x * 4, d.y, d.z - r.z * 4); }
   document.querySelectorAll('.hud-banner').forEach(b => { b.className = 'hud-banner'; });
-  return { schritte: n, flug: !!(f.flug && f.flug.aktiv), hoehe: +(v.y - s.strecke.hoeheAn(v.x, v.z)).toFixed(2), kmh: v.tempoKmh,
+  return { ...out, schritte: n, flug: !!(f.flug && f.flug.aktiv), hoehe: +(v.y - s.strecke.hoeheAn(v.x, v.z)).toFixed(2), kmh: v.tempoKmh,
     prozent: s.schaden ? s.schaden.zustand(0).prozent : null }; }'''
 
 def strecken_welten(page):
@@ -136,16 +143,33 @@ def main():
             if welt == 'verrueckt': pr.append((tag + ' mindestens ein Turbo-Ereignis', turbos >= 1, 'Turbos %d' % turbos))
             if welt == 'stunt': pr.append((tag + ' mindestens ein Flug', fluege >= 1, 'Flüge %d' % fluege))
             # Liegenbleiben → Abschleppen (KI-Auto 3): 5 s Stillstand, dann Reset am Checkpoint mit 60 %, KI fährt weiter
+            # Abschleppen setzt das Auto am LETZTEN CHECKPOINT zurück (bis ~110 m hinter die Liegestelle). Je nach Lage liegt dort/dahinter ein Wrack, Kleber, Looping,
+            # eine Kreuzung, Düse, ein Ball oder ein anderes Auto: die KI kriecht (gemessen 2–7 m/s statt 20 m/s), wartet oder scheitert aus dem Stand am Looping
+            # (Fantasie: Reset am Checkpoint 118 m, Looping bei 170 m → zu langsam, bleibt hängen, Driver setzt nochmal zurück). Früher: Fortschritt nach genau
+            # 8 s > 50 m → lageabhängig rot (Wald/Stunt „weiter 7“, Wiese/Stunt 40, Fantasie/Verrückt 46, Wüste/Hindernisse 41 in 20 s). Ein „sauberer Startplatz“
+            # lässt sich nicht überall finden (Fantasie hat zwischen Kleber/Looping/Kreuzung/Düsen/Bällen kein freies 180-m-Stück). Die Prüfung gilt dem ABSCHLEPPEN
+            # (5 s still, 60 %, versetzt, Sperre weg, kein Reset-Fehler) und dass die KI danach wieder aus eigener Kraft fährt → Messfenster 20 s, bestanden, sobald
+            # der Fortschritt seit dem Reset ≥ 10 m UND das Tempo > 5 m/s war. Ist Auto 3 zufällig gerade selbst liegengeblieben oder noch am Checkpoint, wird vorher
+            # abgewartet (sonst endet die Sperre mitten in der Messung bzw. „versetzt“ ist false).
             ab = page.evaluate('''() => { const s = Rennspiel.spiel, i = 3, f = s.fahrzeuge[i], sc = s.schaden, t = s.rennen.teilnehmer[i];
+              // Zweite Flake-Ursache (gemessen: Wiese/Hindernisse „tempoLiegen 7,4, nochGesperrt false“): ist Auto 3 zufällig schon NATÜRLICH liegengeblieben
+              // (Restzeit < 2,5 s), läuft sein Abschleppen mitten in unserer Messung ab (treffer() zählt dann nicht, die Sperre endet früh) → erst abwarten.
+              // Danach muss das Auto vom Checkpoint weggefahren sein (≥ 5 m von der Reset-Pose), sonst setzt das zweite Abschleppen es an dieselbe Stelle
+              // zurück und „versetzt“ bliebe fälschlich false (gemessen Wald/Klassisch).
+              const weitWeg = () => { const rp = s.rennen.resetPose(i); return Math.hypot(f.vehicle.x - rp.x, f.vehicle.z - rp.z) >= 5; };
+              let warte = 0; while ((sc.zustand(i).liegengeblieben || !weitWeg()) && warte < 40) { s.schnellvorlauf(0.5); warte++; }
               sc.z[i].abkling = 0; sc._punkteSetzen(i, 5); sc.treffer(i, 'hindernis', 5);
-              const r = { gesperrt: sc.gesperrt(i), x0: f.vehicle.x, z0: f.vehicle.z };
+              const r = { gesperrt: sc.gesperrt(i), x0: f.vehicle.x, z0: f.vehicle.z, gewartet: warte * 0.5 };
               s.schnellvorlauf(2.5); r.tempoLiegen = f.vehicle.tempo; r.nochGesperrt = sc.gesperrt(i);
               const fo = t.fortschritt; s.schnellvorlauf(3); r.danach = sc.zustand(i).prozent; r.gesperrtDanach = sc.gesperrt(i);
               r.versetzt = Math.hypot(f.vehicle.x - r.x0, f.vehicle.z - r.z0) > 0.5; r.brauchtReset = f.driver.brauchtReset;
-              const fo2 = t.fortschritt; s.schnellvorlauf(8); r.weiter = Math.round(t.fortschritt - fo2); r.zaehl = s._zaehl; return r; }''')
+              const fo2 = t.fortschritt; r.weiter = 0; r.vMax = 0; r.nachS = null;
+              for (let k = 1; k <= 40 && !(r.weiter >= 10 && r.vMax > 5); k++) { s.schnellvorlauf(0.5);
+                r.weiter = Math.max(r.weiter, Math.round(t.fortschritt - fo2)); r.vMax = Math.max(r.vMax, Math.round(f.vehicle.tempo * 10) / 10); if (r.weiter >= 10 && r.nachS === null) r.nachS = k * 0.5; }
+              r.zaehl = s._zaehl; return r; }''')
             pr.append((tag + ' KI liegengeblieben → 5 s still → abgeschleppt (60 %) → fährt weiter',
                        ab['gesperrt'] and ab['nochGesperrt'] and ab['tempoLiegen'] < 0.01 and not ab['gesperrtDanach'] and ab['danach'] == 60
-                       and ab['versetzt'] and not ab['brauchtReset'] and ab['weiter'] > 50 and ab['zaehl']['kiAbgeschleppt'] >= 1, ab))
+                       and ab['versetzt'] and not ab['brauchtReset'] and ab['weiter'] >= 10 and ab['vMax'] > 5 and ab['zaehl']['kiAbgeschleppt'] >= 1, ab))
             # Bild
             st = page.evaluate("() => { const s = Rennspiel.spiel, L = s.strecke; const sch = Rennspiel.Schanzen ? Rennspiel.Schanzen.liste(L) : [];"
                                " const w = L.hindernisse.filter(h => h.typ === 'wrack' || h.typ === 'brand');"

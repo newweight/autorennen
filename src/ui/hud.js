@@ -25,6 +25,15 @@
   const MINIMAP_RAND = 12;        // Innenabstand (px)
   const KI_FARBE = '#a7adb5';
 
+  /** Andreaskreuz (rot mit weißem Rand) um (cx, cy), Halbdiagonale r – Runde 6 (W4-J), Runde 7: auch als Sprite über den Autopunkten. */
+  function andreaskreuz(g, cx, cy, r, dpr) {
+    g.lineCap = 'round';
+    [['#ffffff', 4.5 * dpr], ['#e0262f', 2.2 * dpr]].forEach(([farbe, lw]) => {
+      g.strokeStyle = farbe; g.lineWidth = lw; g.beginPath();
+      g.moveTo(cx - r, cy - r); g.lineTo(cx + r, cy + r); g.moveTo(cx + r, cy - r); g.lineTo(cx - r, cy + r); g.stroke();
+    });
+  }
+
   /**
    * Minimap: Streckenumriss einmal in ein Offscreen-Canvas zeichnen (je Strecke
    * und Pixeldichte zwischengespeichert, Split-Screen teilt ihn), dann pro Frame
@@ -81,14 +90,17 @@
         bruecke(); g.strokeStyle = '#7d8596'; g.lineWidth = breite; g.stroke();                    // Brückenfahrbahn heller
         g.lineCap = 'round';
       });
-      // Runde 6 (W4-J): niveaugleiche Kreuzung – kleines Andreaskreuz (rot mit weißem Rand) auf der Kreuzung
+      // Runde 6 (W4-J): niveaugleiche Kreuzung – kleines Andreaskreuz (rot mit weißem Rand) auf der Kreuzung.
+      // Runde 7: zusätzlich je Kreuz ein kleines Sprite, das zeichnen() NACH den Autopunkten obenauf legt – sonst verdeckt ein Auto auf
+      // der Kreuzung das Kreuz (Autopunkt bleibt als Fläche erkennbar, das Kreuz zieht nur dünne Linien darüber). Sprite einmalig, kein Neuzeichnen je Frame.
+      const kreuze = [];
       (strecke.kreuzungen || []).forEach((k) => {
         const [cx, cy] = nachPx(k.x, k.z), r = Math.max(4 * dpr, breite * 0.9);
-        g.lineCap = 'round';
-        [['#ffffff', 4.5 * dpr], ['#e0262f', 2.2 * dpr]].forEach(([farbe, lw]) => {
-          g.strokeStyle = farbe; g.lineWidth = lw; g.beginPath();
-          g.moveTo(cx - r, cy - r); g.lineTo(cx + r, cy + r); g.moveTo(cx + r, cy - r); g.lineTo(cx - r, cy + r); g.stroke();
-        });
+        andreaskreuz(g, cx, cy, r, dpr);
+        const pad = Math.ceil(4 * dpr), sz = Math.ceil(2 * r + 2 * pad), sc = document.createElement('canvas');
+        sc.width = sc.height = sz;
+        andreaskreuz(sc.getContext('2d'), sz / 2, sz / 2, r, dpr);
+        kreuze.push({ c: sc, x: Math.round(cx - sz / 2), y: Math.round(cy - sz / 2) });
       });
       // Startlinie: quer zur Fahrbahn, schwarz-weiß
       const s0 = strecke.spline.punktBei(0), q = breite / mass / 2 + 3;
@@ -98,7 +110,7 @@
       g.setLineDash([2 * dpr, 2 * dpr]);
       g.strokeStyle = '#111'; g.lineWidth = 4 * dpr; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
       g.setLineDash([]);
-      const eintrag = { strecke, canvas: c, nachPx };
+      const eintrag = { strecke, canvas: c, nachPx, kreuze };
       cache[schluessel] = eintrag;
       return eintrag;
     }
@@ -127,6 +139,8 @@
         g.fillStyle = 'rgba(255,255,255,0.45)'; g.fill();
         punkt(eigener, 6.5, farben[i] || '#fff');
       }
+      // Runde 7: Andreaskreuz zuletzt (über allen Autopunkten) – bleibt sichtbar, auch wenn ein Auto auf der Kreuzung steht
+      for (let j = 0; j < k.kreuze.length; j++) g.drawImage(k.kreuze[j].c, k.kreuze[j].x, k.kreuze[j].y);
     }
   }
   R.Minimap = Minimap;

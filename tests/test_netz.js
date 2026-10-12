@@ -132,15 +132,33 @@ function autopilot(st, v, idx) {
     const vMit = neu({ kollisionen, andere: [{ nr: 0, auto: andereAuto }] });
     const vOhne = neu();                              // wie v11 (ohne Stellvertreter)
     const vAus = neu({ kollisionen: false, andere: [{ nr: 0, auto: andereAuto }] });   // kollisionen aus, aber Daten übergeben → muss = v11 sein
-    const alle = [vMit, vOhne, vAus];
+    const vV12 = neu({ kollisionen, andere: [{ nr: 0, auto: andereAuto }], gierrate: false });   // v12: Stellvertreter geradeaus (nur für den Test abschaltbar)
+    const alle = [vMit, vOhne, vAus, vV12];
     const p = st.startpositionen(2);
     for (let k = 0; k < 60 * 4; k++) sim.schritt();   // Countdown vorbei (Server-Takt n läuft ab 1; Eingaben folgen)
     const f = sim.sim.fahrzeuge;
     // Ausgangslage auf der Startgeraden: Szenario 'hinten' = ich komme schneller von hinten, 'seitlich' = ich lenke in ein gleich schnelles Auto
     const a = f[0].vehicle, b = f[1].vehicle, h = p[0].heading;
     a.setzen(p[0].x, p[0].z, h); b.setzen(p[0].x, p[0].z, h);
-    const r = a.richtung(), q = a.rechts();
-    if (szenario === 'hinten') { b.x = a.x - r.x * 30; b.z = a.z - r.z * 30; a.vLaengs = 12; b.vLaengs = 28; }
+    let r = a.richtung(), q = a.rechts();
+    let kurveInfo = null, idxA = -1, idxB = -1;
+    const kurve = szenario.startsWith('kurve');
+    if (kurve) {
+      // Stelle mit der stärksten Richtungsänderung (je 40 m) suchen; beide Autos fahren dort mit dem Autopiloten, ich lenke ggf. ins andere
+      let bestS = 0, best = 0;
+      for (let s0 = 0; s0 < st.spline.laenge; s0 += 10) {
+        const d = Math.abs(C.Vehicle.winkelDiff(C.headingAus(st.spline.punktBei(s0 + 40).tx, st.spline.punktBei(s0 + 40).tz), C.headingAus(st.spline.punktBei(s0).tx, st.spline.punktBei(s0).tz)));
+        if (d > best) { best = d; bestS = s0; }
+      }
+      const pa = st.spline.punktBei(bestS + 10), tr = (pp) => C.headingAus(pp.tx, pp.tz);
+      a.setzen(pa.x, pa.z, tr(pa)); a.y = st.hoeheAn(a.x, a.z);
+      const ra = a.richtung(), qa = a.rechts();
+      if (szenario === 'kurve-seitlich') { b.setzen(pa.x + qa.x * 2.6, pa.z + qa.z * 2.6, tr(pa)); }
+      else { b.setzen(pa.x - ra.x * 16, pa.z - ra.z * 16, tr(pa)); }
+      b.y = st.hoeheAn(b.x, b.z);
+      a.vLaengs = szenario === 'kurve-seitlich' ? 22 : 12; b.vLaengs = szenario === 'kurve-seitlich' ? 22 : 30;
+      kurveInfo = { drehung: best, s: bestS };
+    } else if (szenario === 'hinten') { b.x = a.x - r.x * 30; b.z = a.z - r.z * 30; a.vLaengs = 12; b.vLaengs = 28; }
     else { b.x = a.x + q.x * 2.6; b.z = a.z + q.z * 2.6; a.vLaengs = 25; b.vLaengs = 25; }
     for (const V of alle) {
       const pv = V.vp; C.Netz.fahrzeugSchreiben(pv, sim.ich(ich_).v);
@@ -151,14 +169,23 @@ function autopilot(st, v, idx) {
     let stoesse = 0, letzterStoss = -1e9;
     const d2 = (V, ich) => Math.hypot(V.vp.x - ich.v[0], V.vp.z - ich.v[1]);
     // Ausgangszustand "bekannt": erster Abgleich mit Snapshot des aktuellen Ticks
-    const snap = (n) => { const ich = sim.ich(ich_); ich.ack = n; const a = sim.zustand().a; snaps.set(n, { ich, a, json: JSON.stringify(a) }); };
+    const snap = (n) => { const ich = sim.ich(ich_); ich.ack = n; const a = sim.zustand().a; snaps.set(n, { k: n, ich, a, json: JSON.stringify(a) }); };
     let rueckfluss = 0;
     // Folge-Nr n ↔ Server-Tick n0 + n; die Vorhersage zählt n ab 1
     snap(0);
-    for (const V of alle) V.abgleich(snaps.get(0).ich, null, snaps.get(0).a);
+    for (const V of alle) V.abgleich(snaps.get(0).ich, null, snaps.get(0).a, 0);
     for (let n = 1; n <= 60 * 6; n++) {
-      const s = szenario === 'hinten' ? { gas: 1, bremse: 0, lenkung: 0 } : { gas: 1, bremse: 0, lenkung: n < 30 ? -0.25 : 0 };
-      const sa = szenario === 'hinten' ? { gas: 0.4, bremse: 0, lenkung: 0 } : { gas: 1, bremse: 0, lenkung: 0 };
+      let s = szenario === 'hinten' ? { gas: 1, bremse: 0, lenkung: 0 } : { gas: 1, bremse: 0, lenkung: n < 30 ? -0.25 : 0 };
+      let sa = szenario === 'hinten' ? { gas: 0.4, bremse: 0, lenkung: 0 } : { gas: 1, bremse: 0, lenkung: 0 };
+      if (kurve) {
+        const ap = autopilot(st, a, idxA); idxA = ap.idx; sa = ap.s;
+        const bp = autopilot(st, b, idxB); idxB = bp.idx; s = bp.s;
+        if (szenario === 'kurve-hinten') { s = { gas: 1, bremse: 0, lenkung: s.lenkung }; sa = { gas: 0, bremse: 0, lenkung: sa.lenkung }; }
+        if (szenario === 'kurve-hinten' ? false : (n >= 10 && n < 50)) {                 // ich lenke zum anderen Auto hin (wie der Autopilot, nur mit dessen Position als Ziel)
+          const dx = a.x - b.x, dz = a.z - b.z, diff = C.Vehicle.winkelDiff(C.headingAus(dx, dz), b.heading), vl = Math.max(3, b.vLaengs);
+          s = { gas: 1, bremse: 0, lenkung: Math.max(-1, Math.min(1, -(2 * vl * Math.sin(diff) / Math.max(1, Math.hypot(dx, dz))) / b.drehrateMax(vl))) };
+        }
+      }
       const dek = C.Netz.eingabeDekodieren(C.Netz.eingabeKodieren(s));
       sim.eingabeSetzen(1, dek); sim.eingabeSetzen(0, C.Netz.eingabeDekodieren(C.Netz.eingabeKodieren(sa))); sim.schritt();
       if (sim.sim.stoesse.length) { stoesse++; letzterStoss = n; }
@@ -170,14 +197,39 @@ function autopilot(st, v, idx) {
         alle.forEach((V, i) => { const d = d2(V, ich); stat[i].summe += d; stat[i].max = Math.max(stat[i].max, d); stat[i].n++; });
       }
       if (alt) {
-        for (const V of alle) V.abgleich(alt.ich, null, alt.a);
+        for (const V of alle) V.abgleich(alt.ich, null, alt.a, alt.k);
         if (JSON.stringify(alt.a) !== alt.json) rueckfluss++;       // Stellvertreter dürfen die Zustandsreihen (= Anzeige der anderen) nie verändern
       }
       snaps.delete(n - VERZUG - 3);
     }
     // Vorhersage ohne kollisionen muss exakt v11 sein (gleiche Pose wie die Vorhersage ohne Daten)
     const gleich = vOhne.vp.x === vAus.vp.x && vOhne.vp.z === vAus.vp.z && vOhne.vp.heading === vAus.vp.heading && vOhne.vp.vLaengs === vAus.vp.vLaengs;
-    return { stoesse, mit: stat[0], ohne: stat[1], aus: stat[2], gleich, rueckfluss, V: vMit };
+    return { stoesse, mit: stat[0], ohne: stat[1], aus: stat[2], v12: stat[3], kurveInfo, gleich, rueckfluss, V: vMit };
+  }
+  // v13: Kurven-Szenarien (stärkste Kurve der Wiese, beide Autos mit Autopilot, Zustände 100 ms verzögert): Stellvertreter folgen der Kurve
+  //   (Gierrate aus zwei Server-Zuständen) gegen v12 (geradeaus, Gierrate per Test-Option gierrate:false aus) gegen ganz ohne Stellvertreter.
+  for (const sz of ['kurve-seitlich', 'kurve-hinten']) {
+    const o = lauf(sz, true), m = o.mit, v12 = o.v12, oh = o.ohne;
+    const f = (x) => `Ø ${(x.summe / Math.max(1, x.n)).toFixed(3)} m / max ${x.max.toFixed(2)} m`;
+    pruefe(`K Kurve (${sz}): Server stößt (≥ 3 Stöße), Stellvertreter mit Gierrate deutlich besser als v12 (geradeaus)`,
+      o.stoesse >= 3 && v12.max > 0.03 && m.max < 0.6 * v12.max && m.summe < 0.8 * v12.summe && m.max < 0.5 * oh.max,
+      `${o.stoesse} Stöße; neu ${f(m)}, v12 ${f(v12)}, ohne ${f(oh)}; Kurve ${o.kurveInfo.drehung.toFixed(2)} rad/40 m`);
+    pruefe(`K Kurve (${sz}): mit kollisionen: false bitgleich zu v11, Stoß fließt nicht in die Server-Zustände zurück`, o.gleich && o.rueckfluss === 0 && o.V.stat.mitGier > 0, `${o.rueckfluss} Änderungen, ${o.V.stat.mitGier} Abgleiche mit Gierrate`);
+  }
+  {
+    // Gültigkeit der Gierrate (Einheit): Abstand, Reset, Flug/Looping, Begrenzung, kein vorheriger Zustand
+    const katalog = C.carCatalog.waehlbare(), au = katalog.find(a => a.id === 'passat');
+    const V = new C.NetzVorhersage({ strecke: null, auto: au, tempoKlasse: 'normal', fahrhilfe: 'aus', kollisionen: true, andere: [{ nr: 0, auto: au }] });
+    const Z = (h, extra) => [[0, 0, 0, h, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, extra && extra.loop]];
+    const g = (a0, k0, a1, k1) => { V._vorher = null; if (a0) V._gierSetzen(a0, k0); V._gierSetzen(a1, k1); return V.stellvertreter[0].gier; };
+    const dt = 1 / 60, r1 = g(Z(0), 100, Z(0.1), 103), r2 = g(Z(0), 100, Z(0.1), 120), r3 = g(Z(3.1), 100, Z(-3.1), 103);
+    const a1 = Z(0.1); a1[0][13] = 1;
+    const a2 = Z(0.1); a2[0][6] = 32;
+    const r4 = g(Z(0), 100, a1, 103), r5 = g(Z(0), 100, a2, 103), r6 = g(Z(0), 100, Z(0.1, { loop: [1, 0, 0] }), 103), r7 = g(null, 0, Z(0.1), 103), r8 = g(Z(0), 100, Z(2), 103);
+    pruefe('K Gierrate: 0,1 rad in 3 Ticks = 2 rad/s; Winkelsprung ±π richtig; Lücke > 0,25 s / Reset / Flug / Looping / kein Vorgänger → 0; Begrenzung',
+      Math.abs(r1 - 0.1 / (3 * dt)) < 1e-9 && r2 === 0 && Math.abs(r3 - (R_(-3.1, 3.1)) / (3 * dt)) < 1e-9 && r4 === 0 && r5 === 0 && r6 === 0 && r7 === 0 && r8 === 3.5,
+      [r1, r2, r3, r4, r5, r6, r7, r8].map(x => x.toFixed(2)).join(' '));
+    function R_(h1, h0) { return C.Vehicle.winkelDiff(h1, h0); }
   }
   for (const sz of ['hinten', 'seitlich']) {
     const o = lauf(sz, true);
@@ -185,6 +237,8 @@ function autopilot(st, v, idx) {
     pruefe(`K Rempeln (${sz}): Server stößt (≥ 3 Stöße), Vorhersage mit Stellvertretern deutlich näher am Server als ohne`,
       o.stoesse >= 3 && oh.max > 0.1 && m.summe < 0.5 * oh.summe && m.max < 0.5 * oh.max,
       `${o.stoesse} Stöße; Fehler mit Ø ${(m.summe / Math.max(1, m.n)).toFixed(3)} m / max ${m.max.toFixed(2)} m, ohne Ø ${(oh.summe / Math.max(1, oh.n)).toFixed(3)} m / max ${oh.max.toFixed(2)} m, Stöße in der Vorhersage ${o.V.stat.stoesse}`);
+    pruefe(`K Rempeln (${sz}): Gierrate macht die gerade Strecke nicht schlechter als v12`, o.mit.max <= o.v12.max + 0.01 && o.mit.summe <= o.v12.summe * 1.05 + 0.01,
+      `neu max ${o.mit.max.toFixed(3)} / Σ ${o.mit.summe.toFixed(2)}, v12 max ${o.v12.max.toFixed(3)} / Σ ${o.v12.summe.toFixed(2)}`);
     pruefe(`K Rempeln (${sz}): mit kollisionen: false ist die Vorhersage bitgleich zu v11 (trotz übergebener Daten)`, o.gleich);
     pruefe(`K Rempeln (${sz}): Stoß der Stellvertreter fließt nicht in die Server-Zustände (= Anzeige der anderen Autos) zurück`, o.rueckfluss === 0 && o.V.stat.stoesse > 0, `${o.rueckfluss} Änderungen`);
   }
