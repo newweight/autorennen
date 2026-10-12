@@ -297,5 +297,46 @@ for (const rempeln of ['sanft', 'echt']) {
       fz.map(f => f.looping.geschafft).join('/'));
   }
 }
+// Runde 6 (W4-I): Überführung (Alpen) – zwei Autos übereinander an der Kreuzung kollidieren nicht (|Δy| ≥ 2 m),
+// dasselbe Auto-Paar auf gleicher Höhe schon. Beide fahren gleichzeitig durch die Kreuzung (oben quer über unten).
+{
+  const st = new R.Strecke(R.trackCatalog.find(t => t.id === 'alpen')), sp2 = st.spline, kr = st.ueberfuehrungen[0].kreuzung;
+  const setze = (s, nr) => {
+    const v = new R.Vehicle({}), p = sp2.punktBei(s);
+    v.setzen(p.x, p.z, R.headingAus(p.tx, p.tz)); v.vLaengs = 20; v._idx = sp2.indexBei(s);
+    v.y = st.hoeheAn(v.x, v.z, v._idx); v.nr = nr;
+    return v;
+  };
+  const schritt2 = (v) => {
+    const n = st.abfrage(v.x, v.z, v._idx); v._idx = n.index; v.untergrund = n.untergrund;
+    v.schritt(dt, { gas: 0.4, bremse: 0, lenkung: 0 });
+    K.bande(v, st);
+    v.y = st.hoeheAn(v.x, v.z, v._idx);
+  };
+  // Start so, dass beide gleichzeitig an der Kreuzung sind (je 30 m davor, gleiches Tempo)
+  const oben = setze(kr.sOben - 30, 0), unten = setze(kr.sUnten - 30, 1);
+  let stoesse = 0, minAbst = Infinity, minDy = Infinity, sObenMax = 0;
+  for (let i = 0; i < 60 * 4; i++) {
+    schritt2(oben); schritt2(unten);
+    const d = Math.hypot(oben.x - unten.x, oben.z - unten.z);
+    if (d < minAbst) { minAbst = d; minDy = Math.abs(oben.y - unten.y); }
+    stoesse += K.autoAuto([oben, unten], { dt }).length;
+    sObenMax = Math.max(sObenMax, sp2.differenzS(st.abfrage(oben.x, oben.z, oben._idx).s, kr.sOben));
+  }
+  pruefe('Überführung: Autos übereinander (Abstand in x/z < 3 m, Δy ≥ 7 m) kollidieren nicht', minAbst < 3 && minDy >= 7 && stoesse === 0,
+    'min. Abstand ' + minAbst.toFixed(2) + ' m bei Δy ' + minDy.toFixed(2) + ' m, Stöße ' + stoesse);
+  pruefe('Überführung: oberes Auto fährt über die Kreuzung hinweg (bleibt auf seinem Abschnitt)', sObenMax > 20, sObenMax.toFixed(1) + ' m');
+  // Gegenprobe: gleiche Lage, aber gleiche Höhe → Stoß
+  const a = setze(kr.sUnten, 0), b = setze(kr.sUnten, 1);
+  b.x += 1.0; b.y = a.y;
+  K.autoAuto([a, b], { dt });
+  pruefe('Gegenprobe: gleiche Höhe + Überlappung → getrennt (Stoß wirkt)', Math.hypot(a.x - b.x, a.z - b.z) > 1.0,
+    'Abstand nach Stoß ' + Math.hypot(a.x - b.x, a.z - b.z).toFixed(2) + ' m');
+  const c = setze(kr.sUnten, 0), e = setze(kr.sUnten, 1);
+  e.x += 1.0; e.y = c.y + 2.5;
+  const vorher = [e.x, e.z];
+  K.autoAuto([c, e], { dt });
+  pruefe('Δy 2,5 m + Überlappung → keine Trennung (übereinander)', e.x === vorher[0] && e.z === vorher[1]);
+}
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');
 process.exit(fehler ? 1 : 0);

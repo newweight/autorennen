@@ -75,10 +75,13 @@
   /** Ist das Auto in der Luft? (dann ersetzt anzeigeNicken die Straßensteigung) */
   function inLuft(fz) { return !!(fz && fz.aktiv); }
 
-  /** Höhe des Autos (Welt-y): im Flug aus dem Flugzustand, auf der Rampe Boden + Rampenhöhe, sonst Boden. */
-  function hoehe(fz, vehicle, strecke) {
+  /**
+   * Höhe des Autos (Welt-y): im Flug aus dem Flugzustand, auf der Rampe Boden + Rampenhöhe, sonst Boden.
+   * W4-I: index (optional) = Streckenindex des Autos → an einer Überführung die richtige Ebene (Höhenmodell 'gelaende': ignoriert).
+   */
+  function hoehe(fz, vehicle, strecke, index) {
     if (fz && fz.aktiv) return fz.y;
-    const b = strecke.hoeheAn(vehicle.x, vehicle.z);
+    const b = strecke.hoeheAn(vehicle.x, vehicle.z, index);
     return fz && fz.rampe ? b + fz.rampenH : b;
   }
 
@@ -97,6 +100,7 @@
   function nachSchritt(fz, vehicle, strecke, nah, xAlt, zAlt, dt) {
     if (!fz || fz.aktiv) return null;
     fz.nickenVorher = fz.nicken;
+    if (nah) fz.index = nah.index;     // W4-I: Streckenindex für Flug/Landung (Ebene an einer Überführung)
     const l = liste(strecke);
     let ziel = 0, ereignis = null;
     if (l.length && nah) {
@@ -147,7 +151,7 @@
   function abflug(fz, vehicle, strecke, S) {
     const c = C(), v = Math.max(0, vehicle.vLaengs);
     fz.vy = Math.min(v * S.sin, wert(c.vyMax, 5));
-    fz.y = strecke.hoeheAn(vehicle.x, vehicle.z) + S.hoehe;
+    fz.y = strecke.hoeheAn(vehicle.x, vehicle.z, fz.index) + S.hoehe;
     fz.yVorher = fz.y; fz.t = 0; fz.aktiv = true; fz.rampe = null; fz.rampenH = 0;
     fz.startX = vehicle.x; fz.startZ = vehicle.z; fz.sprungGemeldet = false; fz.fluege++;
     vehicle.imFlug = true;
@@ -183,14 +187,15 @@
     vehicle.untergrund = 'strasse';
     let ereignis = null;
     if (!fz.sprungGemeldet && fz.t >= wert(c.sprungMeldung, 0.8)) { fz.sprungGemeldet = true; ereignis = 'sprung'; }
-    const boden = strecke.hoeheAn(vehicle.x, vehicle.z);
+    const boden = strecke.hoeheAn(vehicle.x, vehicle.z, fz.index);    // W4-I: fz.index = Index beim Absprung
     if (fz.y <= boden) return landen(fz, vehicle, strecke, boden);
     return ereignis;
   }
 
   /** Landung: Tempoverlust je nach Lage, Nick-Impuls, Statistik. */
   function landen(fz, vehicle, strecke, boden) {
-    const c = C(), sp = strecke.spline, n = strecke.abfrage(vehicle.x, vehicle.z);
+    // W4-I: nur an Strecken mit Überführung mit Index suchen (sonst exakt wie bisher global)
+    const c = C(), sp = strecke.spline, n = strecke.abfrage(vehicle.x, vehicle.z, strecke.ueberfuehrungen && strecke.ueberfuehrungen.length ? fz.index : undefined);
     const p = sp.punktBei(n.s);
     const diff = Math.abs(R.Vehicle.winkelDiff(R.headingAus(p.tx, p.tz), vehicle.heading)) * 180 / Math.PI;
     const breite = strecke.breiteBei ? strecke.breiteBei(n.s) : strecke.breite;
@@ -219,7 +224,7 @@
     if (fz.aktiv) {
       const e = flugSchritt(fz, vehicle, strecke, steuerung, dt);
       const n = strecke.abfrage(vehicle.x, vehicle.z, index);
-      vehicle.y = hoehe(fz, vehicle, strecke);
+      vehicle.y = hoehe(fz, vehicle, strecke, n.index);
       return { ereignis: e, index: n.index, untergrund: fz.aktiv ? 'luft' : n.untergrund };
     }
     const n = strecke.abfrage(vehicle.x, vehicle.z, index);
@@ -229,7 +234,7 @@
     // Runde 5: Anlauf-Bremse (track/anlauf.js) vor der Rampe, wie in main.js (anlauf = Anlauf.zustand(), optional)
     const ea = anlauf && R.Anlauf ? R.Anlauf.nachSchritt(anlauf, vehicle, strecke, n, xAlt, zAlt, steuerung, dt) : null;
     const e = nachSchritt(fz, vehicle, strecke, n, xAlt, zAlt, dt) || ea;
-    vehicle.y = hoehe(fz, vehicle, strecke);
+    vehicle.y = hoehe(fz, vehicle, strecke, n.index);
     return { ereignis: e, index: n.index, untergrund: n.untergrund };
   }
 

@@ -157,11 +157,41 @@
       return best;
     }
 
-    /** Lokale Suche ± LOKAL_FENSTER um startIndex. */
-    _naechsterIndexLokal(x, z, startIndex) {
-      const pk = this.punkte, N = pk.length;
+    /** Runde 6 (W4-I): Abtastindex zur Bogenlänge s (Index vor s). */
+    indexBei(s) { return Math.floor(this.wrapS(s) / this.ds) % this.punkte.length; }
+
+    /**
+     * Runde 6 (W4-I): Projektion auf JEDEN Streckenabschnitt, der (x, z) näher als radius kommt – z. B. an einer
+     * Überführung liegen zwei Abschnitte übereinander. Abschnitte = Gruppen von Abtastpunkten, deren s mehr als
+     * trennS auseinanderliegt. Ergebnis wie naechster() (index, t, s, seitenabstand, abstand), nach abstand sortiert.
+     */
+    abschnitte(x, z, radius, trennS) {
+      const pk = this.punkte, trenn = trennS || 60, r2 = radius * radius;
+      const cx = Math.floor(x / ZELLE), cz = Math.floor(z / ZELLE), ring = Math.ceil(radius / ZELLE);
+      const kand = [];
+      for (let ix = cx - ring; ix <= cx + ring; ix++) for (let iz = cz - ring; iz <= cz + ring; iz++) {
+        const liste = this._raster.get(this._schluessel(ix, iz));
+        if (!liste) continue;
+        for (const i of liste) {
+          const dx = pk[i].x - x, dz = pk[i].z - z, d2 = dx * dx + dz * dz;
+          if (d2 <= r2 + 4 * this.ds * this.ds) kand.push([d2, i]);
+        }
+      }
+      kand.sort((a, b) => a[0] - b[0]);
+      const erg = [];
+      for (const [, i] of kand) {
+        if (erg.some(e => Math.abs(this.differenzS(pk[i].s, e.s)) < trenn)) continue;
+        const pr = this._projektion(x, z, i);
+        if (pr.abstand <= radius) erg.push(pr);
+      }
+      return erg.sort((a, b) => a.abstand - b.abstand);
+    }
+
+    /** Lokale Suche ± fenster (Standard LOKAL_FENSTER) Abtastpunkte um startIndex. */
+    _naechsterIndexLokal(x, z, startIndex, fenster) {
+      const pk = this.punkte, N = pk.length, F = fenster || LOKAL_FENSTER;
       let best = startIndex, bestD2 = Infinity;
-      for (let k = -LOKAL_FENSTER; k <= LOKAL_FENSTER; k++) {
+      for (let k = -F; k <= F; k++) {
         const i = ((startIndex + k) % N + N) % N;
         const dx = pk[i].x - x, dz = pk[i].z - z, d2 = dx * dx + dz * dz;
         if (d2 < bestD2) { bestD2 = d2; best = i; }
@@ -177,14 +207,17 @@
      * @returns {{index:number, s:number, seitenabstand:number, t:number, abstand:number, x:number, z:number}}
      *   index = Abtastpunkt vor der Projektion, t = Anteil 0..1 bis zum nächsten Punkt,
      *   seitenabstand = signiert (rechts positiv), abstand = |seitenabstand|
+     * @param {number} [fenster] W4-I: lokales Suchfenster in Abtastpunkten (Standard 30 ≈ ±60 m)
+     * @param {number} [globalAb] W4-I: erst ab diesem Abstand (m) global gegenprüfen (Standard 20)
      */
-    naechster(x, z, startIndex) {
+    naechster(x, z, startIndex, fenster, globalAb) {
       let i;
       if (startIndex !== undefined && startIndex !== null && startIndex >= 0) {
-        const lokal = this._naechsterIndexLokal(x, z, startIndex | 0);
+        const lokal = this._naechsterIndexLokal(x, z, startIndex | 0, fenster);
         i = lokal.index;
         // Weit weg (Abkürzung, Reset, Teleport)? Dann global gegenprüfen.
-        if (lokal.abstand > 20) {
+        // W4-I: globalAb (Standard 20 m) – an Überführungen größer, damit die Index-Kontinuität gewinnt.
+        if (lokal.abstand > (globalAb || 20)) {
           const g = this._naechsterIndexGlobal(x, z);
           const pg = this.punkte[g];
           if (Math.hypot(pg.x - x, pg.z - z) < lokal.abstand - 1) i = g;

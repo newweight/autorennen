@@ -313,28 +313,29 @@
     /** Streifenwagen festgefahren: 10 m zurück auf die Straßenmitte (freie Stelle). */
     _zuruecksetzen(i) {
       const sp = this.spiel, f = sp.fahrzeuge[i], st = sp.strecke, spl = st.spline;
-      const n = spl.naechster(f.vehicle.x, f.vehicle.z);
+      const n = spl.naechster(f.vehicle.x, f.vehicle.z, f.index >= 0 ? f.index : undefined);   // W4-I: eigene Ebene
       let pose = null;
       for (let k = 1; k <= 12 && !pose; k++) {
         const p = spl.punktBei(n.s - 10 * k), x = p.x, z = p.z;
-        if (sp.fahrzeuge.every((g, j) => j === i || Math.hypot(g.vehicle.x - x, g.vehicle.z - z) >= 6) || k === 12) pose = { x, z, heading: R.headingAus(p.tx, p.tz) };
+        if (sp.fahrzeuge.every((g, j) => j === i || Math.hypot(g.vehicle.x - x, g.vehicle.z - z) >= 6) || k === 12) pose = { x, z, heading: R.headingAus(p.tx, p.tz), s: p.s };
       }
       if (f.looping && (f.looping.aktiv || f.looping.fallen)) { f.looping.aktiv = false; f.looping.fallen = false; f.vehicle.imLooping = false; }
       if (f.flug && R.Schanzen) R.Schanzen.abbrechen(f.flug, f.vehicle);
       if (f.kleber && R.Kleber) { R.Kleber.abbrechen(f.kleber); R.Kleber.optik(f, false); }
       if (f.anlauf && R.Anlauf) f.anlauf = R.Anlauf.zustand();
       f.vehicle.setzen(pose.x, pose.z, pose.heading);
-      f.vehicle.y = st.hoeheAn(pose.x, pose.z);
+      const idx = spl.indexBei(pose.s);                 // W4-I: Index-Kontinuität (Überführung)
+      f.vehicle.y = st.hoeheAn(pose.x, pose.z, idx);
       if (sp._vorherAngleichen) sp._vorherAngleichen(f);
-      f.index = -1; f.stehZeit = 0;
-      f.polizeiFahrer.zurueckgesetzt();
+      f.index = idx; f.stehZeit = 0;
+      f.polizeiFahrer.zurueckgesetzt(idx);
     }
 
     /** Daten eines Fahrzeugs für die Logik (wiederverwendetes Objekt). */
     _daten(f, ziel, i) {
       const v = f.vehicle, o = ziel || {};
       o.x = v.x; o.z = v.z; o.heading = v.heading; o.laenge = v.daten.laenge || 4.5; o.breite = v.daten.breite || 1.8;
-      o.s = f.nah ? f.nah.s : this.spiel.strecke.spline.naechster(v.x, v.z).s;
+      o.s = f.nah ? f.nah.s : this.spiel.strecke.spline.naechster(v.x, v.z, f.index >= 0 ? f.index : undefined).s;
       return o;
     }
 

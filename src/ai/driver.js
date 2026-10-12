@@ -30,6 +30,12 @@
 // SCHANZE_VORLAUF m bis zur Kante mindestens SCHANZE_TEMPO – gedeckelt auf das 100-%-Ideallinientempo an der Stelle
 // (nie schneller als die Kurve erlaubt). Katalog-Feld minTempoBereiche [{ s0, s1, v }] wird zusätzlich übernommen.
 // Grund: in Tempo-Klasse „normal" und auf „leicht" sprang die KI sonst mit ~75 km/h (Hüpfer) – Ziel ≥ 90 km/h.
+// Runde 6 (W4-J): niveaugleiche Kreuzung (strecke.kreuzungen, Fantasie) – Querverkehr (_querverkehr): Autos auf dem
+// querenden Abschnitt sind KEINE Autos „vor mir in der Spur", sondern kreuzen. Aus beiden Ankunftszeiten (Einfahrt/Ausfahrt
+// der Kreuzungsfläche) wird ein Konflikt erkannt; wer später einfährt, lässt den anderen vorbei (bremst so, dass er erst
+// nach dessen Ausfahrt ankommt). Bei Gleichstand hat Abschnitt A (erste Durchfahrt) Vorfahrt. Wer schon an/auf der
+// Kreuzung ist oder nicht mehr anhalten kann, fährt durch (kein Hängenbleiben, kein Rückwärts-Manöver beim Warten);
+// nach QUER_GEDULD s Warten fährt die KI trotzdem. Stehende Autos AUF der Kreuzung bleiben normale Hindernisse (ausweichen).
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -102,6 +108,14 @@
   const RUECK_ZEIT = 1.2;          // s
   const FEST_VERSUCHE = 3;
   const FALSCH_WINKEL = 110 * Math.PI / 180;
+
+  // --- Runde 6 (W4-J): Querverkehr an niveaugleichen Kreuzungen ---
+  const QUER_AUTO = 3.2;           // m: Kreuzungsfläche (halbL) + halbe Autolänge + Luft = „belegt"
+  const QUER_MARGE = 0.5;          // s Sicherheitsabstand zwischen den Belegungszeiten
+  const QUER_VORAUS_ANDERE = 120;  // m: Autos so weit vor der Kreuzung (anderer Abschnitt) werden beachtet
+  const QUER_GEDULD = 5;           // s langsames Warten (< 3 m/s) → dann trotzdem fahren (für QUER_MUTIG s)
+  const QUER_MUTIG = 2.5;
+  const QUER_NOTBREMS = 1.5;       // Bremsweg-Rechnung mit stärkerer Bremse (aBrems × 1,5) – kann ich noch anhalten?
 
   /** Kleiner deterministischer Zufallsgenerator (mulberry32) → Werte 0..1. */
   function mulberry32(seed) {
@@ -183,6 +197,8 @@
       this.schlenkerWert = 0;
       this.naechsterSchlenker = this._schlenkerAbstand();
 
+      this.querWarten = false;      // W4-J: lässt gerade Querverkehr an einer Kreuzung vorbei
+      this.querWarteZeit = 0; this.querMutigRest = 0; this.querGewartet = 0;
       this.festZeit = 0;            // so lange schon (fast) Stillstand
       this.rueckRest = 0;           // laufendes Rückwärtsmanöver (s)
       this.rueckLenkung = 0;
@@ -256,9 +272,9 @@
 
     _schlenkerAbstand() { return 10 + this.zufall() * 15; }
 
-    /** Nach einem Reset durch main.js aufrufen: Zustände zurücksetzen. */
-    zurueckgesetzt() {
-      this.index = -1;
+    /** Nach einem Reset durch main.js aufrufen: Zustände zurücksetzen. index (W4-I, optional) = Streckenindex nach dem Reset. */
+    zurueckgesetzt(index) {
+      this.index = index !== undefined && index !== null && index >= 0 ? index : -1;
       this.brauchtReset = false;
       this.festZeit = 0; this.rueckRest = 0; this.fehlversuche = 0; this.freiZeit = 0;
       this.lenkung = 0; this.schlenkerRest = 0;
@@ -275,7 +291,9 @@
     steuerung(dt, umfeld) {
       const u = umfeld || {};
       const v = this.vehicle, sp = this.spline, strecke = this.strecke;
-      const n = sp.naechster(v.x, v.z, this.index);
+      // W4-J: an einer niveaugleichen Kreuzung mit Index-Kontinuität (eigener Abschnitt bleibt)
+      const kreuz = !!(strecke.kreuzungen && strecke.kreuzungen.length && strecke._naechsterKont);
+      const n = kreuz ? strecke._naechsterKont(v.x, v.z, this.index) : sp.naechster(v.x, v.z, this.index);
       this.index = n.index;
 
       // Vor dem Start: stehen bleiben (Bremse würde im Stand rückwärts fahren)
@@ -286,6 +304,9 @@
       this.zeit += dt;
       const tempo = v.vLaengs;
       const p = sp.punktBei(n.s);
+      // W4-J: Querverkehr an Kreuzungen (vor dem Festfahr-Check: Warten ist kein Festfahren)
+      const quer = kreuz ? this._querverkehr(n, tempo, u.andere || [], dt) : null;
+      if (quer && quer.wartet) this.festZeit = 0;
 
       // ---------- Festfahren: rückwärts frei fahren ----------
       if (this.rueckRest > 0) {
@@ -344,9 +365,11 @@
       for (const o of andere) {
         const ov = o.vehicle;
         if (!ov || ov === v) continue;
+        if (quer && quer.quer.has(ov)) continue;     // W4-J: Querverkehr (kreuzt, fährt nicht vor mir) – eigene Regel oben
         const dx = ov.x - v.x, dz = ov.z - v.z, abst = Math.hypot(dx, dz);
         if (abst > fensterLangsam + 15) continue;
         const on = sp.naechster(ov.x, ov.z, this.index);
+        if (this._andereEbene(ov, on)) continue;     // W4-I: Auto auf der anderen Ebene (Überführung) – kein Gegner hier
         if (abst < naechsterAbstand) { naechsterAbstand = abst; naechsterAndererQ = on.seitenabstand; }
         const voraus = sp.differenzS(on.s, n.s);
         const vo = ov.vLaengs || 0;
@@ -457,9 +480,10 @@
         if (this.rang >= (RP.kiAbRang || 4)) {
           for (const o of andere) {
             const ov = o.vehicle;
-            if (!ov || ov === v || ov.imLooping || ov.imFlug) continue;
+            if (!ov || ov === v || ov.imLooping || ov.imFlug || (quer && quer.quer.has(ov))) continue;   // W4-J: Querverkehr nicht rammen
             if (Math.hypot(ov.x - v.x, ov.z - v.z) > (RP.kiAbstand || 6) + 3) continue;
             const on = sp.naechster(ov.x, ov.z, this.index);
+            if (this._andereEbene(ov, on)) continue;   // W4-I
             const voraus = sp.differenzS(on.s, n.s), dq = on.seitenabstand - n.seitenabstand;
             if (voraus <= 0 || voraus > (RP.kiAbstand || 6) || Math.abs(dq) >= (RP.kiVersatz || 1.5) || Math.abs(dq) < 0.2) continue;
             this.rammWert = Math.sign(dq) * (RP.kiLenkung || 0.35);   // rechts (+) = Lenkung positiv
@@ -486,6 +510,7 @@
         if (mt > soll) soll = Math.max(soll, Math.min(mt, this.profil.tempoBei(n.s + Math.max(0, tempo) * 0.1)));
       }
       soll *= hindernisFaktor;
+      if (quer && quer.soll < soll) soll = quer.soll;   // W4-J: Querverkehr vorbeilassen
       if (langsamVoraus) soll *= LANGSAM_FAKTOR;   // vorsichtig vorbei, aber weiterfahren
       if (kriechen) soll = Math.min(soll, KRIECH_TEMPO);
       this.zieltempo = soll;
@@ -498,6 +523,55 @@
       if (bremsNoetig > 0 && tempo > 0.5) bremse = Math.max(bremse, bremsNoetig);
       if (bremse > 0) gas = 0;
       return { gas, bremse, lenkung: this.lenkung };
+    }
+
+    /**
+     * W4-J: Querverkehr an niveaugleichen Kreuzungen. n = eigene Abfrage, andere = Teilnehmer ({ vehicle, s? }).
+     * Liefert { soll (m/s, Infinity = frei), quer: Set der kreuzenden Autos (fahren, also nicht „vor mir"), wartet }.
+     * Konflikt: Belegungszeiten der Kreuzungsfläche (± QUER_MARGE) überlappen; später Einfahrender gibt nach.
+     */
+    _querverkehr(n, tempo, andere, dt) {
+      const st = this.strecke, sp = this.spline, v = this.vehicle;
+      const erg = this._querErg || (this._querErg = { soll: Infinity, quer: new Set(), wartet: false });
+      erg.soll = Infinity; erg.quer.clear(); erg.wartet = false;
+      if (this.querMutigRest > 0) this.querMutigRest -= dt;
+      const aNot = this.aBrems * QUER_NOTBREMS;
+      for (const k of st.kreuzungen) {
+        const dA = sp.differenzS(k.sA, n.s), dB = sp.differenzS(k.sB, n.s);
+        const meinA = Math.abs(dA) <= Math.abs(dB), dMe = meinA ? dA : dB, sO = meinA ? k.sB : k.sA;
+        const B = k.halbL + QUER_AUTO;
+        const vorMe = Math.max(70, tempo * tempo / (2 * aNot) + B + 30);
+        if (dMe < -B || dMe > vorMe) continue;
+        const vMe = Math.max(1, tempo);
+        const inMe = (dMe - B) / vMe, outMe = (dMe + B) / vMe;
+        // schon an/auf der Kreuzung oder Anhalten unmöglich → durchfahren (die anderen müssen warten)
+        const fest = dMe - B <= 0.5 || tempo * tempo / (2 * aNot) > dMe - B - 0.5;
+        for (const o of andere) {
+          const ov = o && o.vehicle;
+          if (!ov || ov === v || o.ausgeschieden || ov.imLooping) continue;
+          const so = typeof o.s === 'number' ? o.s : sp.naechster(ov.x, ov.z).s;
+          const dO = sp.differenzS(sO, so);
+          if (dO < -B || dO > QUER_VORAUS_ANDERE) continue;          // nicht (mehr) auf der Zufahrt des anderen Abschnitts
+          const vo = Math.max(0, ov.vLaengs || 0);
+          if (vo < 0.8) continue;                                     // steht: vor der Kreuzung egal, auf ihr = normales Hindernis
+          erg.quer.add(ov);
+          if (fest || this.querMutigRest > 0) continue;
+          const inO = (dO - B) / vo, outO = (dO + B) / vo;
+          if (!(inMe < outO + QUER_MARGE && inO < outMe + QUER_MARGE)) continue;   // kein Konflikt
+          if (inMe < inO - 0.05 || (Math.abs(inMe - inO) <= 0.05 && meinA)) continue;   // ich bin zuerst dran
+          // nachgeben: erst nach der Ausfahrt des anderen (+ Marge) an der Haltelinie ankommen
+          const ziel = Math.max(0, (dMe - B - 1.5) / (Math.max(0, outO) + QUER_MARGE));
+          if (ziel < erg.soll) erg.soll = ziel;
+          erg.wartet = true;
+        }
+      }
+      if (erg.wartet) {
+        this.querGewartet += dt;
+        if (tempo < 3) this.querWarteZeit += dt;
+        if (this.querWarteZeit > QUER_GEDULD) { this.querMutigRest = QUER_MUTIG; this.querWarteZeit = 0; erg.soll = Infinity; erg.wartet = false; }
+      } else if (tempo > 6) this.querWarteZeit = 0;
+      this.querWarten = erg.wartet;
+      return erg;
     }
 
     /** Grundversatz an Stelle s (Seed-Versatz, innen in Kurven verringert). */
@@ -553,6 +627,16 @@
       // Runde 4: am Zielpunkt gilt dessen Fahrbahnbreite (enge Spur voraus → rechtzeitig zur Mitte)
       const g = Math.min(grenze, this._grenzeBei(sAuto + d));
       return { q: clamp(q, -g, g), w: wBest };
+    }
+
+    /**
+     * W4-I: Liegt das andere Auto ov auf einer anderen Ebene (Überführung)? on = seine Projektion auf MEINEN Abschnitt.
+     * Nur Strecken mit Überführungen; sonst immer false (Verhalten unverändert).
+     */
+    _andereEbene(ov, on) {
+      const st = this.strecke;
+      if (!st || !st.ueberfuehrungen || !st.ueberfuehrungen.length || typeof ov.y !== 'number') return false;
+      return Math.abs(ov.y - st.hoeheBeiS(on.s, on.seitenabstand)) > 3;
     }
 
     /** Erlaubter seitlicher Versatz (Auto-Mitte) an Bogenlänge s: ±max(0,5; Breite/2 − SPUR_GRENZE_RAND). */

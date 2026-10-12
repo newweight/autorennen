@@ -11,6 +11,9 @@
     constructor(aspect) {
       const g = R.config.grafik;
       this.kamera = new THREE.PerspectiveCamera(g.fov, aspect, 0.3, g.sichtweite + 200);
+      // Polierrunde W3: Euler-Reihenfolge YXZ (erst Gieren, dann Nicken, zuletzt Rollen) – sonst rollt der Horizont im
+      // Cockpit bei Fahrtrichtung ±90° (Gimbal-Lock der Standard-Reihenfolge XYZ, wenn rotation.z nach lookAt gesetzt wird)
+      this.kamera.rotation.order = 'YXZ';
       this.modusIndex = 0;
       this.ziel = null;                       // Vehicle (für Vergleiche, z. B. Wackeln nach Stößen)
       this.quelle = null;                     // geglättete Darstellung (x, y, z, neigung, richtung()) – sonst = ziel
@@ -99,6 +102,8 @@
         const bw = lin(c.blickWeite || 30, c.blickWeiteSchnell, tA);
         this.kamera.position.set(f.x + r.x * c.vor, f.y + c.hoehe, f.z + r.z * c.vor);
         this.kamera.lookAt(f.x - Math.sin(h) * bw, f.y + c.hoehe - 0.5, f.z - Math.cos(h) * bw);
+        // lookAt baut die Drehung mit up = (0,1,0) (Horizont waagerecht); danach nur die gewollte Wankneigung als Roll
+        // um die Blickachse (YXZ: z = reiner Roll, unabhängig von der Fahrtrichtung)
         this.kamera.rotation.z = f.neigung * 0.5;
         this._wackelnAnwenden(dt);
         return;

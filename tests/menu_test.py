@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Menü-/Modus-Test (Playwright, headless Chromium):
-a) Menü-Screenshot (Runde 5b: 5 Streckenkarten inkl. Dino), b) per Tastatur: zu zweit, Strecke, Fahrer (P1 Senna, P2 versucht Senna -> springt weiter), Autos (P1 Porsche, P2 Multivan), Runden 1, Gegner 2, Start
+a) Menü-Screenshot (Runde 5b: 5 Streckenkarten inkl. Dino; W4-I: 6 mit Alpen), b) per Tastatur: zu zweit, Strecke, Fahrer (P1 Senna, P2 versucht Senna -> springt weiter), Autos (P1 Porsche, P2 Multivan), Runden 1, Gegner 2, Start
    -> Split-Screen-Screenshot, c) Autopilot für beide, Schnellvorlauf bis 'ergebnis' -> Ergebnis-Screenshot + Prüfung,
 e) Runde 4: Welt-Pillen je Strecke, Jahreszeit/Wetter/Wind/Schaden/Gegner(10) im Einstellungen-Schritt, Emojis Emmy 🦁 / Jonas 🐯, Layout ohne Überlauf
 d) Titel "Jonas Hot Steering Wheel" im Menü, Fahrernamen in HUD/Meldungen/Ergebnis, KI-Namen aus der Restliste; Enter = Nochmal, Esc = Pause, Weiter, Hauptmenü, keine JS-Fehler, Draw-Calls im Split-Screen < 120.
@@ -119,8 +119,8 @@ with sync_playwright() as p:
     pruefe('Modus zu zweit', page.evaluate('Rennspiel.spiel.einstellungen.modus') == 'zwei')
     taste('Enter'); page.wait_for_timeout(200); snap('menu_2_strecke.png')
     karten = page.evaluate("Array.from(document.querySelectorAll('.karte.strecke')).map(k => k.dataset.a)")
-    pruefe('Streckenwahl: 5 Karten (Wiese, Wald, Wüste, Fantasie, Dino)', karten == ['strecke:wiese', 'strecke:wald', 'strecke:wueste', 'strecke:fantasie', 'strecke:dino'], karten)
-    # 5 Karten in EINER Reihe (gleiches offsetTop), im Bild, ohne Überlappung – bei 1280×800 und 1440×900
+    pruefe('Streckenwahl: 6 Karten (Wiese, Wald, Wüste, Fantasie, Dino, Alpen)', karten == ['strecke:wiese', 'strecke:wald', 'strecke:wueste', 'strecke:fantasie', 'strecke:dino', 'strecke:alpen'], karten)
+    # 6 Karten (W4-I: + Alpen) in EINER Reihe (gleiches offsetTop), im Bild, ohne Überlappung – bei 1280×800 und 1440×900
     LAGE = """(() => { const k = Array.from(document.querySelectorAll('.karte.strecke')), r = k.map(e => e.getBoundingClientRect());
       return { gleicheReihe: new Set(k.map(e => e.offsetTop)).size === 1,
         ok: r.every(a => a.left >= 0 && a.right <= innerWidth && a.bottom <= innerHeight) &&
@@ -135,9 +135,9 @@ with sync_playwright() as p:
     for vw, vh in ((1280, 800), (1440, 900)):
         page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(400)
         lage = page.evaluate(LAGE)
-        pruefe(f'Streckenwahl {vw}×{vh}: 5 Karten in einer Reihe (gleiches offsetTop), im Bild, ohne Überlappung', lage['gleicheReihe'] and lage['ok'] and lage['scroll'] and not lage['textUeber'], lage)
+        pruefe(f'Streckenwahl {vw}×{vh}: 6 Karten in einer Reihe (gleiches offsetTop), im Bild, ohne Überlappung', lage['gleicheReihe'] and lage['ok'] and lage['scroll'] and not lage['textUeber'], lage)
         snap(f'menu_2_strecke_{vw}.png')
-    pruefe('Streckenkarten: Schwierigkeits-Pillen leicht/mittel/schnell/spaß/mittel', lage['pilleText'] == ['leicht', 'mittel', 'schnell', 'spaß', 'mittel'], lage['pilleText'])
+    pruefe('Streckenkarten: Schwierigkeits-Pillen leicht/mittel/schnell/spaß/mittel/mittel', lage['pilleText'] == ['leicht', 'mittel', 'schnell', 'spaß', 'mittel', 'mittel'], lage['pilleText'])
     pruefe('Dino-Karte: eigene Farbe (Rahmen/Hintergrund) + Vulkan-Himmel im Bild', lage['farbe4'] != lage['farbe0'] and '242, 179, 106' in lage['bild4'], [lage['farbe4'], lage['bild4'][:80]])
     pruefe('Fantasie-Karte: eigene Farbe + Hinweis 2 Loopings, Bälle, Wasserstrahl', lage['farbe3'] != lage['farbe0'] and '2 Loopings' in lage['hinweis'] and 'Bälle' in lage['hinweis'] and 'Wasserstrahl' in lage['hinweis'], [lage['farbe3'], lage['hinweis']])
     page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
@@ -274,6 +274,17 @@ with sync_playwright() as p:
     pruefe('Ergebnis: Zeiten der Spieler > 0', all(sek(z[3]) > 0 and sek(z[4]) > 0 for z in spieler_zeilen), spieler_zeilen)
     plaetze = [z[0] for z in zeilen]
     pruefe('Ergebnis: Plätze 1.–4.', plaetze == ['1.', '2.', '3.', '4.'], plaetze)
+    # Polierrunde W3: Spalte „🪙 Preisgeld" – Spieler Platz 1/2/3 = 30/20/15, sonst 5; KI „–"
+    import re as _re
+    kopf = page.evaluate("Array.from(document.querySelectorAll('#ergebnis thead th')).map(t => t.textContent.trim())")
+    pruefe('Ergebnis: Spalte „🪙 Preisgeld" im Kopf', bool(kopf) and kopf[-1] == '🪙 Preisgeld' and len(kopf) == 6, kopf)
+    sp_z = [z for z in zeilen if not z[1].startswith('🤖')]   # Name-Zelle enthält Sterne → nicht per Gleichheit filtern
+    pruefe('Ergebnis: 2 Spieler-Zeilen', len(sp_z) == 2, len(sp_z))
+    erwartet = {'1.': 30, '2.': 20, '3.': 15}
+    def geld(z):
+        m = _re.match(r'\+(\d+) 🪙', z[5]); return int(m.group(1)) if m else None
+    pruefe('Ergebnis: Preisgeld je Spieler passend zum Platz', all(geld(z) == erwartet.get(z[0], 5) for z in sp_z), [(z[0], z[5]) for z in sp_z])
+    pruefe('Ergebnis: KI-Zeilen zeigen „–" beim Preisgeld', all(z[5] == '–' for z in zeilen if z[1].startswith('🤖')), [z[5] for z in zeilen])
     # Runde 6 (D3): Sterne – Spieler 1–3 ⭐ (Platz 1 = 3, Platz 2–3 = 2 oder beste Runde unter Zielzeit), KI keine
     stern = lambda z: z[1].count('⭐')
     pruefe('Ergebnis: Sterne – jeder Spieler 1–3 ⭐, KI keine', all(1 <= stern(z) <= 3 for z in spieler_zeilen) and all(stern(z) == 0 for z in zeilen if z[1].startswith('🤖')), [stern(z) for z in zeilen])

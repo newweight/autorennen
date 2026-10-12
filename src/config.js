@@ -266,6 +266,7 @@ Rennspiel.config = {
     mindestAbstand: 0.1,       // m Luft nach der Auflösung
     restitution: 0.3, reibung: 0.3,
     loopingAbstand: 0.1,       // m Luft zwischen zwei Autos im selben Looping (Bogenlänge)
+    hoeheTrennung: 2,          // Runde 6 (W4-I): ab |Δy| ≥ 2 m keine Auto-Auto-Kollision (übereinander an einer Überführung)
     rempeln: {
       standard: 'sanft',
       flachGrad: 15,           // < 15° zwischen den Autos: nebeneinander schieben, keine Drehung

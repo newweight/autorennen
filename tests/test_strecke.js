@@ -18,12 +18,24 @@ const ERWARTUNG = {
   wald:   { kurven: [16, 30], geraden: { min: 200, anzahl: [0, 1] }, hoehe: 14, hoeheMin: 18, laenge: [2440, 2520] },
   wueste: { kurven: [7, 16], geraden: { min: 250, anzahl: [2, 4] }, hoehe: 14, hoeheMin: 15, laenge: [3290, 3370] },
   // Fantasie (Runde 3): kürzer, 2 Loopings auf langen Geraden, nur 1–2 Hindernisse
-  fantasie: { kurven: [4, 12], geraden: { min: 150, anzahl: [2, 3] }, hoehe: 10, laenge: [1300, 1500], hindernisse: [1, 2] },
+  // W4-J: Acht mit 270°-Schleife und EINER niveaugleichen Kreuzung (Ausnahme vom 40-m-Abstand, Δy < 1 m, 70–110°)
+  fantasie: { kurven: [4, 12], geraden: { min: 150, anzahl: [2, 3] }, hoehe: 10, laenge: [1300, 1500], hindernisse: [1, 2], kreuzungen: 1 },
   // Runde 5b: Dino (mittel) 2.300–2.800 m, Hügel kräftig, 1 Schikane + 1 Haarnadel, lange Gerade (≥ 500 m) mit Schanze
   dino:   { kurven: [16, 30], geraden: { min: 150, anzahl: [2, 4] }, hoehe: 14, hoeheMin: 18, laenge: [2300, 2800], haarnadeln: 1, langeGerade: 500,
             hindernisse: [5, 6] },   // Runde 6 (W2-C): + 2 Lava-Zungen
+  // Runde 6 (W4-I): Alpen 2.600–3.000 m, Pass +40 m, kräftiges Höhenprofil (≥ 40 m), 3 Haarnadeln (2 Serpentinen + Kehre),
+  // Steigung bis 10 % (s. STEIGUNG_JE), eine Überführung (Ausnahme vom 40-m-Abstand), Höhenmodell 'strasse'
+  alpen:  { kurven: [14, 30], geraden: { min: 150, anzahl: [3, 5] }, hoehe: 40, hoeheMin: 40, laenge: [2600, 3000], haarnadeln: 3,
+            hindernisse: [4, 4], ueberfuehrungen: 1 },
 };
 const STEIGUNG_MAX = 0.08;
+// W4-I: Alpen dürfen steiler sein (Pass, Serpentinen): bis 10 %. Begründung: vehicle.js kennt keine Hangabtriebskraft – die
+// Steigung wirkt nur optisch (Nicken/Kamera), Fahrbarkeit/KI ändern sich nicht; 10 % ist für eine Alpenstraße normal und
+// im Bild deutlich zu sehen. Gebaut sind höchstens ~8 %.
+const STEIGUNG_JE = { alpen: 0.10 };
+// W4-J: Paare an einer niveaugleichen Kreuzung (beide Abschnitte je ± Kreuzungsbereich + 40 m) dürfen näher als 40 m liegen
+const anKreuzung = (st, sa, sb) => (st.kreuzungen || []).some(k =>
+  (st._inBereich(k.a, sa, 40) && st._inBereich(k.b, sb, 40)) || (st._inBereich(k.a, sb, 40) && st._inBereich(k.b, sa, 40)));
 const nurId = process.argv[2];
 for (const daten of R.trackCatalog) {
 if (nurId && daten.id !== nurId) continue;
@@ -34,6 +46,10 @@ const erw = ERWARTUNG[daten.id] || { kurven: [6, 40], geraden: { min: 150, anzah
 const weltH = Object.keys(daten.welten || {}).find(w => daten.welten[w].hindernisse);
 const strecke = new R.Strecke(daten, { welt: weltH });
 const sp = strecke.spline, N = sp.anzahl, L = strecke.laenge;
+const steigMax = STEIGUNG_JE[daten.id] || STEIGUNG_MAX;
+// W4-I: Paare an einer Überführung (oben im Brückenbereich, unten am unteren Abschnitt) dürfen näher als 40 m liegen
+const anUeberfuehrung = (sa, sb) => (strecke.ueberfuehrungen || []).some(u => u.unten &&
+  ((strecke._inBereich(u, sa) && strecke._inBereich(u.unten, sb, 40)) || (strecke._inBereich(u, sb) && strecke._inBereich(u.unten, sa, 40))));
 
 /** Haarnadeln: zusammenhängende Kurve (R < 150 m) mit ≥ 150° Richtungsänderung → { s0, s1, scheitel } */
 function haarnadelnSuchen() {
@@ -60,12 +76,35 @@ sp.punkte.forEach(p => { const r = 1 / Math.max(1e-9, Math.abs(p.kruemmung)); if
 pruefe('Mindestradius ≥ 25 m', minR >= 25, minR.toFixed(1) + ' m bei s=' + minRs.toFixed(0));
 
 // Abstand nicht benachbarter Streckenteile (> 150 m Bogenlänge auseinander)
-let minAbst = Infinity;
+let minAbst = Infinity, minUeber = Infinity, minDy = Infinity, nUeber = 0, nKreuz = 0, maxDyKreuz = 0;
 for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
   if (Math.abs(sp.differenzS(sp.punkte[i].s, sp.punkte[j].s)) < 150) continue;
-  minAbst = Math.min(minAbst, Math.hypot(sp.punkte[i].x - sp.punkte[j].x, sp.punkte[i].z - sp.punkte[j].z));
+  const d = Math.hypot(sp.punkte[i].x - sp.punkte[j].x, sp.punkte[i].z - sp.punkte[j].z);
+  // W4-J: Ausnahme genau an der niveaugleichen Kreuzung – dort |Δy| < 1 m (sonst wäre es eine Überführung)
+  if (d < 40 && anKreuzung(strecke, sp.punkte[i].s, sp.punkte[j].s)) {
+    nKreuz++;
+    if (d < 3) maxDyKreuz = Math.max(maxDyKreuz, Math.abs(sp.punkte[i].y - sp.punkte[j].y));
+    continue;
+  }
+  // W4-I: Ausnahme genau an der Überführung – dort nur mit Höhenunterschied ≥ 7 m
+  if (d < 40 && anUeberfuehrung(sp.punkte[i].s, sp.punkte[j].s)) {
+    nUeber++; minUeber = Math.min(minUeber, d);
+    if (d < 20) minDy = Math.min(minDy, Math.abs(sp.punkte[i].y - sp.punkte[j].y));
+    continue;
+  }
+  minAbst = Math.min(minAbst, d);
 }
-pruefe('Abstand nicht benachbarter Teile ≥ 40 m (keine Überschneidung)', minAbst >= 40, minAbst.toFixed(1) + ' m');
+pruefe('Abstand nicht benachbarter Teile ≥ 40 m (keine Überschneidung' + (nUeber ? ', außer an der Überführung' : '') + (nKreuz ? ', außer an der Kreuzung' : '') + ')', minAbst >= 40, minAbst.toFixed(1) + ' m');
+if (erw.kreuzungen) {
+  pruefe(erw.kreuzungen + ' Kreuzung(en) erkannt (Katalog kreuzungen)', (strecke.kreuzungen || []).length === erw.kreuzungen && (daten.kreuzungen || []).length === erw.kreuzungen,
+    (strecke.kreuzungen || []).map(k => Math.round(k.sA) + '/' + Math.round(k.sB)).join(', '));
+  pruefe('Kreuzung: Abstand < 40 m nur an der Kreuzung, dort |Δy| < 1 m', nKreuz > 0 && maxDyKreuz < 1, 'Paare ' + nKreuz + ', Δy max ' + maxDyKreuz.toFixed(2) + ' m');
+} else pruefe('keine Kreuzung (Strecke ohne kreuzungen)', !(strecke.kreuzungen || []).length && nKreuz === 0);
+if (erw.ueberfuehrungen) {
+  pruefe(erw.ueberfuehrungen + ' Überführung(en), Kreuzung erkannt', strecke.ueberfuehrungen.length === erw.ueberfuehrungen && strecke.ueberfuehrungen.every(u => u.kreuzung),
+    strecke.ueberfuehrungen.map(u => u.kreuzung ? Math.round(u.kreuzung.sOben) + '/' + Math.round(u.kreuzung.sUnten) : '-').join(', '));
+  pruefe('Überführung: Abstand < 40 m nur an der Kreuzung, dort Δy ≥ 7 m', nUeber > 0 && minDy >= 7, 'Paare ' + nUeber + ', min ' + minUeber.toFixed(1) + ' m, Δy ' + minDy.toFixed(2) + ' m');
+}
 
 // Kurven zählen: zusammenhängende Bereiche mit Radius < 150 m und Richtungswechsel > 25°
 {
@@ -110,11 +149,24 @@ pruefe('Abstand nicht benachbarter Teile ≥ 40 m (keine Überschneidung)', minA
   }
   pruefe('Höhe |y| ≤ ' + erw.hoehe + ' m', maxY <= erw.hoehe, maxY.toFixed(2) + ' m');
   if (erw.hoeheMin) pruefe('Höhenunterschied ≥ ' + erw.hoeheMin + ' m', yMax - yMin >= erw.hoeheMin, yMin.toFixed(1) + ' … ' + yMax.toFixed(1) + ' m');
-  pruefe('Steigung ≤ ' + STEIGUNG_MAX * 100 + ' %', maxSteig <= STEIGUNG_MAX, (maxSteig * 100).toFixed(2) + ' %');
+  pruefe('Steigung ≤ ' + Math.round(steigMax * 100) + ' %', maxSteig <= steigMax, (maxSteig * 100).toFixed(2) + ' %');
   // Spline-Höhe passt zum Gelände (Straße liegt auf dem Boden)
   let maxAbw = 0;
-  sp.punkte.forEach(p => { maxAbw = Math.max(maxAbw, Math.abs(p.y - strecke.gelaendeHoehe(p.x, p.z))); });
-  pruefe('Mittellinie liegt auf dem Gelände (< 5 cm)', maxAbw < 0.05, (maxAbw * 100).toFixed(1) + ' cm');
+  if (strecke.sModell) {
+    // W4-I (Höhenmodell 'strasse'): Boden = Fahrbahn bis zum Randstreifen (außer auf der Überführung), Querneigung 0
+    let wo = 0;
+    sp.punkte.forEach((p) => {
+      if (strecke.ueberfuehrungBei(p.s, 1)) return;
+      for (const q of [0, -strecke.breite / 2 - strecke.randBreite, strecke.breite / 2 + strecke.randBreite]) {
+        const d = Math.abs(p.y - strecke.hoeheAn(p.x + p.nx * q, p.z + p.nz * q));
+        if (d > maxAbw) { maxAbw = d; wo = p.s; }
+      }
+    });
+    pruefe('Höhenmodell strasse: Boden = Fahrbahn bis zum Rand (< 5 cm, außer Überführung)', maxAbw < 0.05, (maxAbw * 100).toFixed(1) + ' cm bei s=' + wo.toFixed(0));
+  } else {
+    sp.punkte.forEach(p => { maxAbw = Math.max(maxAbw, Math.abs(p.y - strecke.gelaendeHoehe(p.x, p.z))); });
+    pruefe('Mittellinie liegt auf dem Gelände (< 5 cm)', maxAbw < 0.05, (maxAbw * 100).toFixed(1) + ' cm');
+  }
 }
 // Start auf einer Geraden
 pruefe('Start auf einer Geraden', [-40, -20, 0, 20, 40].every(d => Math.abs(sp.punktBei(d).kruemmung) < 1 / 500));
@@ -126,6 +178,8 @@ if (erw.haarnadeln !== undefined) pruefe(erw.haarnadeln + ' Haarnadel(n)', haarn
   let ok = true, info = '';
   for (let k = 0; k < 200; k++) {
     const p = sp.punkte[(k * 37) % N];
+    if (strecke.ueberfuehrungNah(p.s, 10)) continue;    // W4-I: an der Kreuzung ist „global" mehrdeutig (dafür eigener Test)
+    if (strecke.kreuzungNah(p.s, 15)) continue;         // W4-J: niveaugleiche Kreuzung ebenso (eigener Test unten)
     const q = ((k % 7) - 3) * 2.5;          // -7.5 .. 7.5 m seitlich
     const x = p.x + p.nx * q, z = p.z + p.nz * q;
     const g = sp.naechster(x, z), l = sp.naechster(x, z, (p.s / sp.ds + 5) | 0);
@@ -146,6 +200,109 @@ if (erw.haarnadeln !== undefined) pruefe(erw.haarnadeln + ' Haarnadel(n)', haarn
     if (n.abstand > best + 0.01) { ok2 = false; break; }
   }
   pruefe('naechster() global findet den nächsten Punkt (300 Zufallsorte)', ok2);
+}
+
+// ---------- Runde 6 (W4-I): Überführung – Höhe aus s, Index-Kontinuität ----------
+for (const u of strecke.ueberfuehrungen || []) {
+  const kr = u.kreuzung, po = sp.punktBei(kr.sOben), pu = sp.punktBei(kr.sUnten);
+  pruefe('Überführung: Kreuzung rechtwinklig-ish (≥ 60°), Δy ≥ 7 m', kr.winkel >= 60 && kr.dy >= 7, kr.winkel.toFixed(0) + '°, Δy ' + kr.dy.toFixed(2) + ' m');
+  pruefe('Überführung: Brücke (s0–s1) umfasst die Kreuzung mit ≥ 40 m je Seite', sp.differenzS(kr.sOben, u.s0) >= 40 && sp.differenzS(u.s1, kr.sOben) >= 40,
+    u.s0 + '–' + u.s1 + ' Kreuzung ' + kr.sOben.toFixed(0));
+  // hoeheBeiS vs. hoeheAn an der Kreuzung
+  const yO = strecke.hoeheBeiS(kr.sOben, 0), yU = strecke.hoeheBeiS(kr.sUnten, 0), yBoden = strecke.hoeheAn(po.x, po.z);
+  pruefe('hoeheBeiS oben = Spline-y oben, unten = Spline-y unten', Math.abs(yO - po.y) < 1e-6 && Math.abs(yU - pu.y) < 1e-6, yO.toFixed(2) + ' / ' + yU.toFixed(2));
+  pruefe('hoeheAn(x, z) an der Kreuzung = Boden = untere Fahrbahn (< 5 cm)', Math.abs(yBoden - pu.y) < 0.05, yBoden.toFixed(2) + ' m');
+  pruefe('hoeheAn(x, z, Index oben) = obere Fahrbahn, (…, Index unten) = untere', Math.abs(strecke.hoeheAn(po.x, po.z, sp.indexBei(kr.sOben)) - po.y) < 0.05 &&
+    Math.abs(strecke.hoeheAn(po.x, po.z, sp.indexBei(kr.sUnten)) - pu.y) < 0.05);
+  // Index-Kontinuität: ein Auto fährt auf der oberen Bahn über die Kreuzung (seitlich versetzt) → bekommt obere s-Werte
+  let okO = true, okU = true, infoO = '', infoU = '';
+  for (const q of [-4, 0, 4]) {
+    let idx = sp.indexBei(kr.sOben - 60), idxU = sp.indexBei(kr.sUnten - 60);
+    for (let d = -60; d <= 60; d += 0.5) {
+      const a = sp.punktBei(kr.sOben + d), n = strecke.abfrage(a.x + a.nx * q, a.z + a.nz * q, idx); idx = n.index;
+      if (Math.abs(sp.differenzS(n.s, kr.sOben + d)) > 0.5) { okO = false; infoO = 'd=' + d + ' q=' + q + ' s=' + n.s.toFixed(1); }
+      const b = sp.punktBei(kr.sUnten + d), m = strecke.abfrage(b.x + b.nx * q, b.z + b.nz * q, idxU); idxU = m.index;
+      if (Math.abs(sp.differenzS(m.s, kr.sUnten + d)) > 0.5) { okU = false; infoU = 'd=' + d + ' q=' + q + ' s=' + m.s.toFixed(1); }
+    }
+  }
+  pruefe('abfrage(): Auto oben bekommt obere s-Werte (Index-Kontinuität, nicht die unteren)', okO, infoO);
+  pruefe('abfrage(): Auto unten bleibt unten', okU, infoU);
+  // auf der Überführung: Bande = Geländer, Untergrund rand bis zum Geländer; unten normale Bande
+  pruefe('Überführung: Bande oben = Geländer (grenzeEng), unten normal', Math.abs(strecke.grenzeBei(kr.sOben) - strecke.grenzeEng) < 1e-6 &&
+    Math.abs(strecke.grenzeBei(kr.sUnten) - strecke.seitenabstandMax) < 1e-6, strecke.grenzeBei(kr.sOben).toFixed(1) + ' / ' + strecke.grenzeBei(kr.sUnten).toFixed(1));
+  // Boden unter der Brücke liegt unter der Brückenplatte (≥ 4 m Luft, Platte 1,3 m)
+  let minLuft = Infinity;
+  for (let s = u.s0 + 14; s <= u.s1 - 14; s += 2) { const p = sp.punktBei(s); minLuft = Math.min(minLuft, p.y - strecke.hoeheAn(p.x, p.z)); }
+  pruefe('Überführung: Boden unter der Brücke mind. 3 m tiefer (Tal, 14 m nach den Enden)', minLuft >= 3, minLuft.toFixed(2) + ' m');
+  pruefe('Überführung: ueberfuehrungNah oben/unten, sonst nicht', strecke.ueberfuehrungNah(kr.sOben) && strecke.ueberfuehrungNah(kr.sUnten) &&
+    !strecke.ueberfuehrungNah(sp.wrapS(kr.sUnten + 200)) && !strecke.ueberfuehrungNah(sp.wrapS(u.s1 + 100)));
+  // Fahrbahn stetig: hoeheBeiS entlang der Strecke ohne Sprünge > 0,3 m je 2 m (auch neben der Fahrbahn bis zur Bande)
+  let sprung = 0, wo = 0;
+  for (const q of [0, 8, -8, 14]) {
+    let alt = null;
+    for (let s0 = 0; s0 <= L; s0 += 2) { const y = strecke.hoeheBeiS(s0, q); if (alt !== null && Math.abs(y - alt) > sprung) { sprung = Math.abs(y - alt); wo = s0; } alt = y; }
+  }
+  pruefe('hoeheBeiS stetig (≤ 0,4 m je 2 m, auch neben der Fahrbahn)', sprung <= 0.4, sprung.toFixed(2) + ' m bei s=' + wo);
+}
+
+// ---------- Runde 6 (W4-J): niveaugleiche Kreuzung ----------
+for (const k of strecke.kreuzungen || []) {
+  const pa = sp.punktBei(k.sA), pb = sp.punktBei(k.sB), b2 = strecke.breite / 2;
+  pruefe('Kreuzung: Winkel 70–110°, |Δy| < 1 m, beide Mittellinien treffen sich (< 0,5 m)', k.winkel >= 70 && k.winkel <= 110 && k.dy < 1 && k.abstand < 0.5,
+    k.winkel.toFixed(1) + '°, Δy ' + k.dy.toFixed(3) + ' m, sA ' + k.sA.toFixed(1) + ' / sB ' + k.sB.toFixed(1));
+  pruefe('Kreuzung: Katalog-Bereich s0–s1 umfasst sA', k.sA >= k.s0 && k.sA <= k.s1, k.s0 + '–' + k.s1);
+  pruefe('Kreuzung: Höhe beider Fahrbahnen gleich (hoeheBeiS, hoeheAn mit Index A/B, < 1 cm)', Math.abs(strecke.hoeheBeiS(k.sA, 0) - strecke.hoeheBeiS(k.sB, 0)) < 0.01 &&
+    Math.abs(strecke.hoeheAn(k.x, k.z, sp.indexBei(k.sA)) - strecke.hoeheAn(k.x, k.z, sp.indexBei(k.sB))) < 0.01);
+  pruefe('Kreuzung: nicht im Looping-/Anlauf-Bereich (Looping-s − 165 … Ausfahrt + 30)', [k.sA, k.sB].every(s => strecke.loopings.every(l => {
+    const d = sp.differenzS(s, l.s); return d < -165 || d > l.versatz + l.radius * 1.3 + 30; })));
+  pruefe('Kreuzung: ≥ 100 m vom Start/Ziel, Abschnitte ≥ 150 m auseinander', [k.sA, k.sB].every(s => Math.abs(sp.differenzS(s, 0)) >= 100) &&
+    Math.abs(sp.differenzS(k.sA, k.sB)) >= 150);
+  pruefe('kreuzungNah: an sA/sB (± Bereich), nicht 60 m daneben', strecke.kreuzungNah(k.sA) && strecke.kreuzungNah(k.sB) && strecke.kreuzungNah(k.sA + 14) &&
+    !strecke.kreuzungNah(k.sA + 60) && !strecke.kreuzungNah(k.sB - 60) && strecke.kreuzungBei(k.sB).pass === 'b');
+  // Index-Kontinuität: Fahrt quer über die Kreuzung (seitlich versetzt) → s bleibt im eigenen Abschnitt
+  let okA = true, okB = true, infoA = '', infoB = '', ugOk = true, ugInfo = '';
+  for (const q of [-5, -2, 0, 3, 5.5]) {
+    let ia = sp.indexBei(k.sA - 80), ib = sp.indexBei(k.sB - 80);
+    for (let d = -80; d <= 80; d += 0.5) {
+      const a = sp.punktBei(k.sA + d), n = strecke.abfrage(a.x + a.nx * q, a.z + a.nz * q, ia); ia = n.index;
+      if (Math.abs(sp.differenzS(n.s, k.sA + d)) > 0.5) { okA = false; infoA = 'd=' + d + ' q=' + q + ' s=' + n.s.toFixed(1); }
+      const b = sp.punktBei(k.sB + d), m = strecke.abfrage(b.x + b.nx * q, b.z + b.nz * q, ib); ib = m.index;
+      if (Math.abs(sp.differenzS(m.s, k.sB + d)) > 0.5) { okB = false; infoB = 'd=' + d + ' q=' + q + ' s=' + m.s.toFixed(1); }
+      if (n.untergrund !== 'strasse' || m.untergrund !== 'strasse') { ugOk = false; ugInfo = 'd=' + d + ' q=' + q + ' ' + n.untergrund + '/' + m.untergrund; }
+    }
+  }
+  pruefe('abfrage(): Auto auf Abschnitt A behält A über die Kreuzung (Index-Kontinuität)', okA, infoA);
+  pruefe('abfrage(): Auto auf Abschnitt B behält B über die Kreuzung', okB, infoB);
+  pruefe('Untergrund auf beiden Fahrbahnen durchgehend strasse (auch auf der Kreuzung)', ugOk, ugInfo);
+  // querende Fahrbahn zählt als Straße/Rand (Auto auf A, Punkt auf der Fahrbahn von B neben A)
+  const iA = sp.indexBei(k.sA), qB = (q) => { const x = pb.x + pb.nx * q + pb.tx * (b2 + 4), z = pb.z + pb.nz * q + pb.tz * (b2 + 4); return strecke.abfrage(x, z, iA); };
+  const r1 = qB(0), r2 = qB(b2 + 0.7), r3 = qB(b2 + 5);
+  pruefe('Kreuzung: Fahrbahn des anderen Abschnitts = strasse/rand, daneben Gras (Auto bleibt seinem Abschnitt zugeordnet)',
+    r1.untergrund === 'strasse' && r2.untergrund === 'rand' && r3.untergrund === (daten.abseitsUntergrund || 'gras') && Math.abs(sp.differenzS(r1.s, k.sA)) < 15,
+    r1.untergrund + '/' + r2.untergrund + '/' + r3.untergrund + ' s=' + r1.s.toFixed(1));
+  // Bande: im Kreuzungsbereich normal (Zaun fehlt dort optisch automatisch), weit seitlich trotzdem (Index-Kontinuität: eigener Abschnitt)
+  pruefe('Kreuzung: Bande normal (seitenabstandMax), Global-Fallback erst > Bande + 15 m', strecke.grenzeBei(k.sA) === strecke.seitenabstandMax && strecke.grenzeBei(k.sB) === strecke.seitenabstandMax &&
+    Math.abs(sp.differenzS(strecke.abfrage(pa.x + pa.nx * 20, pa.z + pa.nz * 20, iA).s, k.sA)) < 3);
+  // Masten: 4, je Zufahrt rechts / Ausfahrt links, neben beiden Fahrbahnen (nicht auf Straße oder Rand)
+  const mOk = k.masten.length === 4 && k.masten.every((m) => {
+    const ug = strecke.untergrundAn(m.x, m.z, sp.indexBei(m.s)), aa = sp.abschnitte(m.x, m.z, 30);
+    return ug !== 'strasse' && ug !== 'rand' && aa.every(e => e.abstand > b2 + strecke.randBreite + 0.5) && strecke.saeulen.some(sa => sa.x === m.x && sa.z === m.z);
+  });
+  pruefe('Kreuzung: 4 Warnlicht-Masten neben den Fahrbahnen (Säulen für die Bande)', mOk, k.masten.map(m => m.pass + ' q=' + m.q.toFixed(1)).join(', '));
+  // Listen nicht an der Kreuzung (Kleber, Hindernisse, Bälle, Wasser, Stroh, Turbo, Schilde, Loopings): ≥ Kreuzungsbereich + 20 m
+  const nahe = [];
+  (daten.kleber || []).forEach(e => { for (let s = e.s0; s <= e.s1; s += 2) if (strecke.kreuzungNah(s, 20)) { nahe.push('kleber@' + e.s0); break; } });
+  ['hindernisse', 'baelle', 'wasserstrahlen', 'strohballen', 'boostFelder', 'schilde', 'loopings', 'wracks', 'schanzen', 'dinos'].forEach(fk =>
+    (daten[fk] || []).forEach(e => { if (strecke.kreuzungNah(e.s, 20)) nahe.push(fk + '@' + e.s); }));
+  pruefe('Kreuzung: keine Katalog-Listen (Kleber, Hindernisse, Bälle, Wasser, Turbo, Schilde …) an der Kreuzung (± 35 m)', nahe.length === 0, nahe.join(', '));
+  pruefe('Kreuzung: Deko-Sperre um die Mitte', strecke.dekoSperre(k.x + 20, k.z + 20) && strecke.dekoSperre(k.x, k.z) && !strecke.dekoSperre(k.x + 200, k.z + 200));
+  // Warnlicht-Logik: Auto 30 m vor der Kreuzung auf A → Masten an B warnen (und umgekehrt), weit weg → keine Warnung
+  strecke.kreuzungWarnung([{ s: sp.wrapS(k.sA - 30) }]); const w1 = [k.warnA, k.warnB];
+  strecke.kreuzungWarnung([{ nah: { s: sp.wrapS(k.sB - 50) } }]); const w2 = [k.warnA, k.warnB];
+  strecke.kreuzungWarnung([{ s: sp.wrapS(k.sA - 90) }, { s: sp.wrapS(k.sB + 30) }]); const w3 = [k.warnA, k.warnB];
+  strecke.kreuzungWarnung([]);
+  pruefe('Warnlicht: Auto auf A < 60 m → Masten an B warnen, Auto auf B → Masten an A, sonst aus', !w1[0] && w1[1] && w2[0] && !w2[1] && !w3[0] && !w3[1],
+    JSON.stringify([w1, w2, w3]));
 }
 
 // ---------- Untergrund ----------
@@ -236,7 +393,9 @@ if (erw.haarnadeln !== undefined) pruefe(erw.haarnadeln + ' Haarnadel(n)', haarn
     // nicht auf Start/Ziel, nicht in Tunnel/Brücke (± 20 m), nicht direkt vor einer Haarnadel
     const s0 = h.s0, s1 = sp.wrapS(h.s0 + h.laenge);
     const nahStart = Math.min(Math.abs(sp.differenzS(s0, 0)), Math.abs(sp.differenzS(s1, 0))) < 60 || s1 < s0;
-    const inEng = strecke._engstellen.some(b => [s0, h.s, s1].some(s => strecke._inBereich(b, s, 20)));
+    const inEng = strecke._engstellen.some(b => [s0, h.s, s1].some(s => strecke._inBereich(b, s, 20))) ||
+      [s0, h.s, s1].some(s => strecke.ueberfuehrungNah(s, 20)) ||    // W4-I: auch nicht unter der Überführung
+      [s0, h.s, s1].some(s => strecke.kreuzungNah(s, 20));           // W4-J: nicht an der Kreuzung
     const vorHaar = haarnadeln.find(a => { const d = sp.differenzS(a, s1); return d > -10 && d < 50; });
     pruefe(name + ': nicht am Start, nicht in Tunnel/Brücke, nicht vor einer Haarnadel', !nahStart && !inEng && vorHaar === undefined,
       'Haarnadeln ' + haarnadeln.map(Math.round).join('/'));
@@ -362,6 +521,8 @@ if (daten.welten) {
     const g = [];
     if (Math.min(Math.abs(sp.differenzS(s0, 0)), Math.abs(sp.differenzS(s1, 0))) < 60 || sp.differenzS(s1, s0) < 0 || (sp.differenzS(0, s0) > 0 && sp.differenzS(0, s1) < 0)) g.push('Start');
     if (alle._engstellen.some(b => [s0, (s0 + s1) / 2, s1].some(s => alle._inBereich(b, s, 20)))) g.push('Tunnel/Brücke');
+    if (alle.ueberfuehrungNah && [s0, (s0 + s1) / 2, s1].some(s => alle.ueberfuehrungNah(s, 20))) g.push('Überführung');   // W4-I: auch darunter
+    if (alle.kreuzungNah && [s0, (s0 + s1) / 2, s1].some(s => alle.kreuzungNah(s, 20))) g.push('Kreuzung');            // W4-J
     if (alle.loopings.some(l => bereichAbstand(s0, s1, l.s0, l.s1) < 30)) g.push('Looping');
     if (hn.some(h => bereichAbstand(s0, s1, h.s0, h.s1) < 5)) g.push('Haarnadel');
     if (eng.some(e => bereichAbstand(s0, s1, e.s0 - UE, e.s1 + UE) < 10)) g.push('1 Spur');
@@ -685,9 +846,18 @@ for (const daten of R.trackCatalog) {
     let minAbst = Infinity;
     for (let i = 0; i < sp.anzahl; i += 2) for (let j = i + 1; j < sp.anzahl; j += 2) {
       if (Math.abs(sp.differenzS(sp.punkte[i].s, sp.punkte[j].s)) < 150) continue;
-      minAbst = Math.min(minAbst, Math.hypot(sp.punkte[i].x - sp.punkte[j].x, sp.punkte[i].z - sp.punkte[j].z));
+      const dd = Math.hypot(sp.punkte[i].x - sp.punkte[j].x, sp.punkte[i].z - sp.punkte[j].z);
+      if (dd < 40 && anKreuzung(st, sp.punkte[i].s, sp.punkte[j].s)) continue;   // W4-J
+      minAbst = Math.min(minAbst, dd);
     }
-    pruefe('Abstand nicht benachbarter Teile ≥ 40 m', minAbst >= 40, minAbst.toFixed(0) + ' m');
+    pruefe('Abstand nicht benachbarter Teile ≥ 40 m' + (st.kreuzungen.length ? ' (außer an der Kreuzung)' : ''), minAbst >= 40, minAbst.toFixed(0) + ' m');
+    // W4-J: Kreuzung auch in der Variante (s-Bereich skaliert mit, Stelle wird neu gesucht)
+    if ((daten.kreuzungen || []).length) {
+      const k = st.kreuzungen[0], k0 = basis.kreuzungen[0];
+      pruefe('Kreuzung auch in der Variante: erkannt, 70–110°, |Δy| < 1 m, sA ≈ ' + f + ' × Normal (±2 %)', st.kreuzungen.length === daten.kreuzungen.length && k &&
+        k.winkel >= 70 && k.winkel <= 110 && k.dy < 1 && Math.abs(k.sA / k0.sA - f) < 0.02 * f && Math.abs(k.sB / k0.sB - f) < 0.02 * f,
+        k ? k.sA.toFixed(0) + '/' + k.sB.toFixed(0) + ', ' + k.winkel.toFixed(1) + '°, Δy ' + k.dy.toFixed(3) : '-');
+    }
     pruefe('Mittellinie auf dem (skalierten) Gelände', sp.punkte.every(p => Math.abs(p.y - st.gelaendeHoehe(p.x, p.z)) < 0.05));
     // alle s-Felder: ×f und innerhalb [0, L]
     let anz = 0, ok = true, info = '';

@@ -48,6 +48,7 @@
       this.ausgeschiedene = [];            // in Ausscheid-Reihenfolge
       this._zuschauZeit = 0;
 
+      this._kreuz = !!(this.strecke.kreuzungen && this.strecke.kreuzungen.length && this.strecke._naechsterKont);   // W4-J
       this.teilnehmer = teilnehmer.map((t, i) => {
         const v = t.vehicle;
         const n = this.spline.naechster(v.x, v.z);
@@ -71,7 +72,7 @@
           zielZeit: null,
           ausgeschieden: false,    // Runde 6 (W3-F): „Letzter fliegt raus"
           platz: i + 1,
-          startPose: { x: v.x, z: v.z, heading: v.heading },
+          startPose: { x: v.x, z: v.z, heading: v.heading, s: n.s },   // W4-I: s = Index-Hinweis für den Reset
           _x: v.x, _z: v.z, _s: n.s,
         };
       });
@@ -123,7 +124,8 @@
     /** Position eines Teilnehmers auf der Strecke nachführen und Checkpoints prüfen. */
     _verfolgen(t, zaehlen) {
       const v = t.vehicle, sp = this.spline;
-      const n = sp.naechster(v.x, v.z, t.index);
+      // W4-J: an einer niveaugleichen Kreuzung mit Index-Kontinuität (sonst springt s evtl. auf den querenden Abschnitt)
+      const n = this._kreuz ? this.strecke._naechsterKont(v.x, v.z, t.index) : sp.naechster(v.x, v.z, t.index);
       const weg = Math.hypot(v.x - t._x, v.z - t._z);
       const dsSchritt = sp.differenzS(n.s, t._s);
       t.index = n.index; t.s = n.s; t.seitenabstand = n.seitenabstand;
@@ -280,9 +282,9 @@
         pose = Object.assign({}, t.startPose);
       } else {
         const cp = this.strecke.checkpoints[t.letzterCheckpoint];
-        pose = { x: cp.x, z: cp.z, heading: R.headingAus(cp.tx, cp.tz) };
+        pose = { x: cp.x, z: cp.z, heading: R.headingAus(cp.tx, cp.tz), s: cp.s };   // W4-I: s des Checkpoints
       }
-      this.verfolgungSetzen(t, pose.x, pose.z);
+      this.verfolgungSetzen(t, pose.x, pose.z, pose.s);
       return pose;
     }
 
@@ -290,9 +292,11 @@
      * Interne Verfolgung auf eine neue Position umsetzen (nach Reset/Versatz),
      * damit der Sprung keinen Checkpoint auslöst.
      */
-    verfolgungSetzen(t, x, z) {
+    verfolgungSetzen(t, x, z, s) {
       if (typeof t === 'number') t = this.teilnehmer[t];
-      const n = this.spline.naechster(x, z);
+      // W4-I: mit s (Checkpoint) lokal suchen – an einer Überführung liegen zwei Abschnitte übereinander
+      const idx = s !== undefined && s !== null ? this.spline.indexBei(s) : undefined;
+      const n = this._kreuz && idx !== undefined ? this.strecke._naechsterKont(x, z, idx) : this.spline.naechster(x, z, idx);   // W4-J
       t.index = n.index; t.s = n.s; t._s = n.s; t._x = x; t._z = z; t.seitenabstand = n.seitenabstand;
     }
   }

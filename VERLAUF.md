@@ -561,3 +561,87 @@
   Bremsen 3 Stufen, Schalter „Upgrades zählen"), Ölfalle-Item (Space / E), Flugsaurier ×1,8 nah. 20 Node-Tests, menu_test,
   welten_test grün bis auf die bekannte lageabhängige Abschlepp-Prüfung Wald (einmal rot). → Version v9.
   Offen: Preisgeld in Ergebnistafel anzeigen; Cockpit-Kamera rollt bei ±90° (rotation.order 'YXZ' setzen) – Polierrunde.
+- W4 gestartet: I Alpen + Überführung (Opus), parallel Polierrunde (Sonnet: Preisgeld-Anzeige, Cockpit-Kamera, Doku W3); danach
+  J Fantasie-Kreuzung (Opus). Sicherung: Autorennen-Sicherung/w4_vorher
+- 12.10. Polierrunde W3 (Sonnet) – Ergebnis-Preisgeld, Cockpit-Roll, Doku W3 – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w4p_vorher.
+  menu.js (nur ErgebnisAnzeige): neue Spalte „🪙 Preisgeld“ (Spieler „+30 🪙 (+n gesammelt)“, KI „–“; Daten aus ergebnis.zeilen preisgeld/muenzenRennen).
+  cameras.js: kamera.rotation.order = 'YXZ' (Gimbal-Lock bei Fahrtrichtung ±90°; alt gemessen ±87° Roll bei Neigung 0,1, neu 2,9° = gewollte Neigung × 0,5).
+  Neu tests/cockpit_test.py (5/5: 8 Richtungen Roll 0°, Neigung wirkt gleich, keine JS-Fehler; Bild tests/out/cockpit/cockpit_heading_90.png angesehen: Horizont waagerecht).
+  menu_test.py: +3 Prüfungen Preisgeld-Spalte. ANLEITUNG.md: Pokal, Letzter fliegt raus, Münzen/Garage, Ölfalle, Flugsaurier, Space/E/G. ERWEITERN.md: pokal/muenzen/garage/Ölfalle,
+  Speicherformate (rennspiel.pokale.v1, garage.v1, sterne.v1), neue Tests. Hinweis: bestehende menu_test-Prüfungen mit spieler_zeilen (Name == 'Senna') sind wegen der Sterne im Namen leer (greifen nie) – nicht angefasst.
+- 12.10. Agent W4-I (Opus) – B1 Alpen mit Überführung – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w4i_vorher,
+  nachher: …/w4i_nachher.
+  Höhenlogik „aus eigenem s" (trackBuilder.js): neues Höhenmodell 'strasse' (Katalog hoehenModell) – Fahrbahnhöhe = Spline-y der
+  Kontrollpunkte, Querneigung 0; hoeheBeiS(s, q); hoeheAn(x, z) = Boden (an der Überführung das untere Niveau), hoeheAn(x, z, index) =
+  Fahrbahn des Abschnitts zum Index; abfrage/untergrundAn mit Index-Kontinuität (_naechsterKont: lokal ±60 Punkte ≈ ±120 m, global erst
+  > Bande + 15 m). Boden = geglättete Straßenhöhe (Gauß σ 45 m, Raster 10 m, Cache je Katalog, ~160 ms einmalig) + Hügel + See-Mulde,
+  an die Fahrbahnen angeglichen (bis Rand + 2,5 m exakt, bis 28 m weich, mehrere Abschnitte symmetrisch gemischt); feine Böschung
+  (Querstreifen alle 4 m, steil = Fels), grobes Bodengitter im Korridor 3 m tiefer. Überführungen [{ s0, s1 }]: Kreuzung wird gesucht
+  (sOben/sUnten/Δy/Winkel), obere Fahrbahn zieht den Boden nicht mit (Tal darunter), Brücke (Platte, Brüstung + blauer Handlauf an der
+  Bande, Pfeiler nie auf der unteren Fahrbahn, Widerlager), Geländer = Engstelle (grenzeBei), ueberfuehrungNah() = Sperrzone oben/unten
+  (Deko, Münzen, Laternen, Katalog-Listen). Höhenmodell 'gelaende' (alle anderen Strecken) unverändert (Tests bitgleich grün).
+  spline.js: indexBei(s), abschnitte(x, z, r) (Projektion je Abschnitt), naechster(…, fenster, globalAb).
+  Index-Kontinuität eingebaut: main.js (Fahrzeughöhe + Nicken mit f.index, Reset: Index aus dem Checkpoint-s, KI zurueckgesetzt(index),
+  Menü-Kamera hoeheBeiS), raceManager (resetPose.s, verfolgungSetzen(t, x, z, s)), schanze.js (hoehe/Flug/Landung mit Index – Landung nur
+  bei Überführung mit Index), polizei.js, pickups.js (Kugeln/Fässer/Felder aus s, Ölfleck mit Index, wirkt nicht auf der anderen Ebene),
+  muenzen.js (y aus s, nicht auf/unter der Überführung), driver.js (_andereEbene: Autos auf der anderen Ebene kein Gegner), collisions.js
+  (Auto↔Auto nur bei |Δy| < config.kollision.hoeheTrennung = 2 m), hud.js (Minimap: Brücke obenauf, heller). Kamera folgt schon anzeige.y.
+  Strecke 'alpen' (trackCatalog, Bauplan tests/bauplan/alpen.json; generator.js kann jetzt Höhenmarken ["Y", h] + Acht ohne 360°):
+  2.913 m, Acht: Start im Tal (y −5), unter der Brücke durch (s 346, y 9,6), Serpentinen mit 2 Haarnadeln (R 28), Pass y 40 (s 1298,
+  Gipfelkreuz), Felstunnel 100 m im Berg-Massiv (Fels + Schnee), Abfahrt mit Kehre (R 28), über die Brücke (s 2123, y 19,0, Δy 9,3 m,
+  rechtwinklig, Brücke 2068–2178), Talfahrt, Bergsee + Steinbrücke (2672–2722). Steigung max. 7,8 % (Regel für Alpen 10 %: vehicle.js kennt
+  keine Hangabtriebskraft, Steigung wirkt nur optisch). Welten klassisch/hindernisse/stunt/verrueckt/alles; Schanzen auf Start-Gerade und
+  Talfahrt-Gerade (≥ 90 km/h). Thema alpen (themes.js): Almwiesen, Nadelwald, Latschen, Felsen, Kühe braun-weiß mit Glocke, 4 Almhütten,
+  Gipfelkreuz, Bergsee mit Ufersteinen, Almblumen, Schneegipfel-Kranz am Horizont (22 Low-Poly-Kegel, Kulisse wie der Vulkan), Laternen;
+  Jahreszeiten wie Wald. Menü: 6 Streckenkarten in einer Reihe (nur styles.css: schmaler, Alpen-Karte mit Gipfel-Bild).
+  Tests: test_strecke (Alpen-Erwartung, Steigung je Strecke, 40-m-Ausnahme nur an der Überführung mit Δy ≥ 7 m, hoeheBeiS/hoeheAn an der
+  Kreuzung, Index-Kontinuität oben/unten, Bande, Tal ≥ 3 m, Stetigkeit, Listen nicht unter der Überführung), test_rundenzeit (Alpen mittel
+  normal 121,9 s, schnell 118 s), test_welten_ki (+ keine Höhensprünge > 1 m/Schritt, Alpen alle Welten 0 Resets, Δy ≤ 0,09 m/Schritt),
+  test_kollisionen (+ Autos übereinander kollidieren nicht, Gegenprobe), rennen_test alpen (3 KI × 3 Runden), screenshot_test alpen
+  (+ 40–46: Pass, Serpentinen, Überführung unten/oben/seitlich/von oben, Fahrten darüber/darunter (Höhe bleibt, Auto darunter unberührt),
+  Tunnel, See, Gipfelkreuz; 2 Iterationen angesehen: Blumen zu groß (wirkten wie Pfützen/Schnee) → klein; Ufersteine am See), menu_test
+  (6 Karten bei 1280×800 und 1440×900). Alle Node-Tests grün.
+  Schwächen: Berg-Massiv über dem Tunnel hat seitlich harte Kanten (Reichweite an anderen Streckenteilen begrenzt); hoeheAn(x, z) ohne
+  Index liefert an der Überführung immer den Boden (Aufrufer ohne Index – Deko, Regen-Spritzer – sehen die untere Ebene).
+- 12.10. Agent W4-J (Opus) – Fantasie-Kreuzung – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w4j_vorher, nachher: …/w4j_nachher (pokal_test 42/42 nach W4-J ebenfalls grün).
+  Strecke Fantasie neu als Acht (Bauplan tests/bauplan/fantasie.json: G260 K40/90 G130 K45/90 G?(405) K30/-270 G?(210) K35/90 G85, Gesamtdrehung 0°):
+  1.420 m (vorher 1.388, +2,3 %), Start-Gerade + Looping 1 und Ost-Gerade + Looping 2 (s 170/800) unverändert, die alten S-Kurven entfallen,
+  dafür unten rechts eine 270°-Schleife (R 30). Niveaugleiche Kreuzung („Bahnübergang") auf der Ost-Geraden 72 m nach Looping 2 (sA 898,8) mit
+  dem Schleifen-Ausgang (sB 1100,1) bei (215, 120): 88,9°, Δy 0,003 m (Höhenmodell 'gelaende' – gleiche Geländehöhe für beide). XL: 1797/2200, 88,8°.
+  Listen verschoben (alle ≥ 35 m von der Kreuzung, nicht in Looping-/Anlauf-Zonen): Kleber 220–255/385–440/980–1040/1180–1240, Öl 560, Ast 1260,
+  Bälle 340/660/1300, Wasser 600/1175, Stroh 295/1325, Turbo 680/1140, Schilde 390/1205.
+  trackBuilder.js: Katalog kreuzungen [{ s0, s1 }] → _kreuzungBerechnen (sA/sB/Winkel/Δy < 1 m, Bereiche a/b = ±15 m, halbW/halbL, 4 Masten),
+  kreuzungBei/kreuzungNah (Sperrzone), _querAbstand, _kreuzungUntergrund (querende Fahrbahn = strasse/rand statt Gras), _naechsterKont auch bei
+  Kreuzungen (Index-Kontinuität), dekoSperre (Kreis 36 m), Randsteine/Mittellinie auf der Kreuzung ausgespart, _kreuzungBauen (Kreuzungsplatte
+  polygonOffset 3 gegen Z-Fighting, Haltelinien, Regenbogen-Zauberkreis, 4 Warnlicht-Masten: Zuckerstangen-Mast, Andreaskreuz rot-weiß, Stern,
+  2 rote Leuchtkugeln + additiver Lichthof je Mast), Masten als Säulen (Bande), kreuzungWarnung/kreuzungAnimieren (abwechselnd, ruhig 1,2 Hz
+  gedämpft, bei Querverkehr < 60 m im anderen Abschnitt 3 Hz hell; dunkle Höfe unsichtbar). Zaun entfällt dort automatisch (zaunPunkte).
+  driver.js: _querverkehr – Autos der querenden Zufahrt (s der Rennleitung, ≤ 120 m) sind Querverkehr (nicht „Auto vor mir", nicht rammen);
+  Belegungszeiten der Kreuzungsfläche ± 0,5 s überlappen → später Einfahrender bremst auf Ankunft nach der Ausfahrt des anderen (Gleichstand: A
+  hat Vorfahrt); wer an/auf der Kreuzung ist oder nicht mehr anhalten kann, fährt durch; Warten ≠ Festfahren; nach 5 s Warten fährt die KI
+  trotzdem; stehende Autos auf der Kreuzung = normales Hindernis (ausweichen). Eigene Position mit _naechsterKont.
+  raceManager.js (Verfolgung/verfolgungSetzen) und collisions.js (Bande je Auto für den eigenen Abschnitt) mit _naechsterKont – nur wenn die
+  Strecke Kreuzungen hat. main.js: kreuzungAnimieren je Frame, Spieler-Meldung „🚦 Achtung Kreuzung! Links und rechts schauen!" (einmal je
+  Zufahrt, nur bei Querverkehr), Reset-Suche setzt nicht auf die Kreuzung. muenzen.js (Sperre ± 35 m je Abschnitt), themes.js (Laternen),
+  hud.js (Minimap: rotes Andreaskreuz). trackCatalog: Fantasie-Beschreibung „… eine Kreuzung mit Warnlicht …" (kürzer, Menü passt).
+  Tests: test_strecke (Kreuzung erkannt, 70–110°, |Δy| < 1 m, 40-m-Ausnahme nur an der Kreuzung, Index-Kontinuität A/B quer über die Kreuzung,
+  querende Fahrbahn = Straße, Bande, 4 Masten neben der Fahrbahn, Deko-Sperre, Warnlicht-Logik, Listen ≥ 35 m, XL ebenso) – alle Strecken grün;
+  test_rundenzeit Fantasie KI mittel normal 62,2 → 61,1 s (−1,8 %), schnell 59,0 → 57,0 s (−3,4 %), XL 93,1/80,5 s; test_welten_ki + W4-J-Teil:
+  a) 13 erzwungene Begegnungen je Variante alle durch, 0 Resets, nachgegeben in 3 (XL 7) Fällen, 0 Zusammenstöße KI↔KI; b) Auto parkt auf der
+  Kreuzung → KI auf A 3,9 s / B 6,4 s vorbei; c) 7 Stufen gemeinsam × 3 Runden (alle Welten + XL) alle im Ziel, 0 Resets (690 s Laufzeit gesamt).
+  Alle Node-Tests grün (test_kollisionen unverändert). Fingerabdruck (Spline, Checkpoints, Höhen, Untergrund, Bande, KI-Fahrt 20 s) von Wiese,
+  Wald, Wüste, Dino, Alpen vorher/nachher bitgleich. Playwright: screenshot_test fantasie +50–56 (Bilder tests/out/fantasie/ angesehen: Platte
+  ohne Flimmern, Randstein-Lücken sauber, Masten/Lichthof gut sichtbar), alle OK (1. Lauf parallel zu test_welten_ki: „Zu langsam"-Meldung
+  vor dem Auslesen abgelaufen – Lastproblem, allein grün); rennen_test fantasie OK (3 KI × 3 Runden, 10–11 Loopings); welten_test grün bis auf
+  die bekannte Abschlepp-Prüfung Wald/Stunt; menu_test 170 OK (1. Lauf: längere Fantasie-Beschreibung → Menü scrollte, Text gekürzt); xl_screenshot OK.
+  Schwächen: Fantasie hat jetzt nur noch 4 Kurven (Testgrenze 4) und weniger Kurvencharakter (S-Kurven weg); KI↔KI-Unfälle an der Kreuzung
+  kommen praktisch nicht vor (die KI gibt nach) – krachen tut es mit Spielern; wer auf der Kreuzung abbiegen will, stößt nach 23 m an eine
+  unsichtbare Bande (dort steht kein Zaun); das Warnlicht blinkt auch ohne Querverkehr (gedämpft), ist nie ganz aus; das Andreaskreuz auf
+  der Minimap wird vom Autopunkt verdeckt, wenn man drauf steht.
+- 12.10. W4 abgeschlossen (Fable-Prüfung): Alpen mit Überführung (W4-I) + Fantasie-Kreuzung mit Warnlicht (W4-J, Fantasie ist
+  dafür eine Acht mit 270°-Schleife, Loopings/Start unverändert, 1.420 m). Geprüft: alle 24 Node-Tests nacheinander grün
+  (test_ki beide Tempo-Klassen, test_welten_ki inkl. Kreuzungsteil), rennen_test alpen (3 KI × 3 Runden, 560 s), menu_test 170 OK,
+  Bilder Alpen 40–46 und Fantasie 50–56 angesehen (Brücke, Andreaskreuz/Blinklicht, Kreuzungsplatte ohne Flimmern).
+  → Version v10 (Alpen + Kreuzung). Sicherungen: Autorennen-Sicherung/w4j_vorher|nachher.
+  Offen für später: Fantasie-Acht als Variante „klassisch (ohne Kreuzung)" falls gewünscht; Minimap-Kreuz unter dem eigenen Auto;
+  unsichtbare Bande 23 m hinter der Kreuzung beim Abbiegen.

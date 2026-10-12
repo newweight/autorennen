@@ -23,6 +23,9 @@ src/world/pickups.js     Runde 4: Turbo-Felder + Schutzschild (R.Pickups)
 src/world/wetter.js      Runde 4: Jahreszeit/Wetter/Wind (R.Wetter: erlaubt, aufloesen, umwelt, Partikel, Wolken); Runde 6: Tageszeit (Licht, Himmelskuppel, Sterne, Mond)
 src/race/startBoost.js   Runde 6: Start-Boost (R.StartBoost, reine Logik)
 src/race/sterne.js       Runde 6: Sterne-Wertung (R.Sterne, localStorage)
+src/race/pokal.js        Runde 6: Pokal-Serie, Punkte, Siegerehrung, „Letzter fliegt raus“-Anzeige (R.Pokal, R.PokalAnzeige, R.Puff)
+src/world/muenzen.js     Runde 6: Münzen auf der Strecke (R.Muenzen)
+src/ui/garage.js         Runde 6: Garage – Konto, Lack, Upgrades, Reparatur (R.Garage, R.Garage.Bildschirm)
 src/physics/schaden.js   Runde 4: Schaden/Gesundheit, Wracks-Grafik, Abschleppwagen (R.Schaden)
 src/world/themes.js      Wiese / Wald / Wüste / Fantasie: Farben, Nebel, Deko (InstancedMesh)
 src/ai/driver.js         Computerfahrer (Ideallinie, Skill, Gummiband, Ausweichen)
@@ -56,6 +59,7 @@ Optionale Felder (Position immer als Bogenlänge `s` in m; nicht auf Start/Ziel,
 - `loopings`: `[{ s, radius }]` (Fantasie, Radius 12 m; Mindesttempo/Versatz in `config.fantasie.looping`).
 - `baelle`: `[{ s, von (-1 links/1 rechts), abRunde ('letzte' oder Zahl), intervall, tempo, radius, farbe }]`.
 - `wasserstrahlen`: `[{ s, seitenabstand, intervall, dauer, vorwarnung }]` (Zeiten in s).
+- `kreuzungen` (Runde 6, W4-J, Fantasie): `[{ s0, s1 }]` – niveaugleiche Kreuzung mit sich selbst; s0..s1 = Bereich des ERSTEN Abschnitts, in dem sie liegt (siehe unten „Kreuzung“).
 Das Menü zeigt für Strecken mit `loopings`/`baelle`/`wasserstrahlen` automatisch einen Hinweis („2 Loopings, Bälle, Wasserstrahl“).
 `node tests/test_rundenzeit.js` zeigt die simulierte Rundenzeit. `tests/bauplan/` enthält einen Generator-Ansatz.
 
@@ -123,9 +127,50 @@ Die 3D-Autowahl (src/ui/autoVorschau) rendert diese Modelle; neue Autos erschein
 **Neue Einstellungsfelder** (`spiel.einstellungen`, Standard/Prüfung in `main.js einstellungenPruefen`): `rempeln` ('sanft'|'echt'), `tageszeit` ('tag'|'daemmerung'|'nacht'), `variante` ('' = Normal | Name aus `varianten`), dazu `tempoKlasse`, `polizei` (Runde 5). Menü: Pillen „🌀 Rempeln“ (rechts), „🌗 Tageszeit“ (links unten), Zeile „📏 Variante“.
 **Neue Katalogfelder**: `varianten`, `welten.alles`; Dino-/Wald-Ausbau (W2-C, laut VERLAUF noch in Arbeit, Details im Code prüfen): `tiere: [{ art: 'reh'|'baer', s, von, intervall, tempo }]` (Wald, Schicht `dinos`, `config.tiere`), Dino-Strecke zusätzlich `meteoriten`, `flugsaurier`, `vulkan` (`config.dino`).
 
+## Runde 6 (W3): Pokal, Münzen, Garage, Ölfalle
+- **`src/race/pokal.js`**: `R.Pokal` (rein, Node-testbar): `strecken(groesse)`, `punkte(platz)`, `staerke(start, nr)`, `gewinne(name)`/`gutschreiben(name)`, `new Serie({groesse, startStaerke, basis})` mit `rennenEinstellungen()`, `ergebnisEintragen(zeilen)`, `tabelle()`. Dazu `R.PokalAnzeige` (DOM: Zwischenstand, Siegerehrung, Rückfrage) und `R.Puff` (Three.js). Werte in `config.pokal` (Größen, Reihenfolge je Größe, Punkte, `maxStaerke`, `elimination`). Einstellungen `spielart` ('rennen'|'pokal'|'elimination') und `pokalGroesse`; Pokal-Rennen laufen über `rennenStarten(ein, { temporaer: true })` (nicht gespeichert). „Letzter fliegt raus“ steckt im RaceManager (Option `elimination`); `ergebnis.zeilen[i].raus` = Runde des Ausscheidens.
+- **`src/world/muenzen.js`**: `R.Muenzen(strecke)` – `bauen()` (eine InstancedMesh), `schritt(dt, fahrzeuge)` → Einsammel-Ereignisse, `animieren(zeit)`, `anzahlVon(nr)`. Platzierung deterministisch aus der Strecke (`config.garage.muenzen`). Keine Physik. Rechenteil ohne Three.js.
+- **`src/ui/garage.js`**: `R.Garage` (Konto, `gutschreiben`, `farbeKaufen`, `upgradeKaufen`, `reparieren`, `restSetzen`, `faktoren`, `preisgeld`) und `R.Garage.Bildschirm` (Fahrer → Auto → Werkstatt). Werte in `config.garage` (Preise, Farben je Auto, `upgradeJeStufe`, `restMin`). Einstellung `upgradesZaehlen` (Schalter). Nur Spieler bekommen Garage-Werte.
+- **Ölfalle** (`src/world/pickups.js`, `config.stunt.oelfalle`): Ölfässer 35 m hinter jeder Schild-Kugel (nur wo es Schilde gibt), Item 🛢️, Tasten `config.tasten.item1/item2` (Space/E), Fleck = Untergrund `'oel'`, KI sammelt und legt selbst. Flugsaurier-Größe: `config.dino.flugsaurier`.
+- **Ergebnistafel** (`menu.js ErgebnisAnzeige`): `ergebnis.zeilen[i]` hat `preisgeld`, `muenzenRennen`, `muenzenGesamt` (nur Spieler; KI: Spalte „–“).
+- **Cockpit-Kamera** (`cameras.js`): `kamera.rotation.order = 'YXZ'`, sonst rollt der Horizont bei Fahrtrichtung ±90° (Gimbal-Lock); getestet in `tests/cockpit_test.py`.
+
+**Speicherformate** (`localStorage`, alle Zugriffe in try/catch, Rückfall im Arbeitsspeicher):
+- `rennspiel.pokale.v1`: Pokal-Gewinne je Fahrername (nur menschliche Sieger).
+- `rennspiel.garage.v1`: `{ "<Fahrer>": { muenzen, autos: { "<autoId>": { farbe (null = Original), farben: [gekaufte], motor, reifen, bremsen (0–3), rest (0–100) } } } }`.
+- `rennspiel.sterne.v1`: `{ "<Fahrername>": Summe der Sterne }`.
+
+## Runde 6 (W4-J): niveaugleiche Kreuzung (Fantasie)
+Die Fantasie-Strecke ist seit W4-J eine **Acht** (Bauplan `tests/bauplan/fantasie.json`: `G260 K40/90 G130 K45/90 G? K30/-270 G? K35/90 G85`,
+1.420 m): die Ost-Gerade nach Looping 2 kreuzt den Ausgang der 270°-Schleife auf gleicher Höhe (sA ≈ 898, sB ≈ 1100, ≈ 89°).
+- **Katalog** `kreuzungen: [{ s0, s1 }]`. `trackBuilder._kreuzungBerechnen` sucht im Bereich die Stelle, an der ein fremder Abschnitt (Δs > 80 m)
+  am nächsten ist → `strecke.kreuzungen[i] = { sA, sB, x, z, winkel, dy, a: { s0, s1 }, b: { s0, s1 }, halbW, halbL, masten, warnA, warnB }`;
+  `|Δy| ≥ 1 m` → keine Kreuzung (das wäre eine Überführung, `ueberfuehrungen`). Varianten (XL) skalieren s0/s1 mit, die Stelle wird neu gesucht.
+- **Sperrzone**: `strecke.kreuzungNah(s, zugabe)` (sA bzw. sB ± 15 m + zugabe), `kreuzungBei(s, zugabe)` → `{ k, pass: 'a'|'b', d }`.
+  Deko: `dekoSperre` (Kreis 36 m um die Mitte), Münzen (± 35 m je Abschnitt), Laternen, Reset-Suche (main.js) und die Katalog-Listen
+  (`test_strecke`: Sperrzone „Kreuzung“) halten Abstand.
+- **Index-Kontinuität** wie an der Überführung: `strecke._naechsterKont` (lokal ± 60 Punkte, global erst > Bande + 15 m) gilt auch bei Kreuzungen –
+  benutzt von `abfrage/untergrundAn`, `RaceManager` (Checkpoints, `verfolgungSetzen`), `driver.js` (eigene Position) und `collisions.bande`
+  (die Bande gilt für den EIGENEN Abschnitt, sperrt also die querende Fahrbahn nicht). Ohne Kreuzung bleibt alles bitgleich.
+- **Untergrund**: auf der querenden Fahrbahn liefert `abfrage` 'strasse'/'rand' (`_kreuzungUntergrund`), sonst wäre sie für Autos des anderen
+  Abschnitts „Gras“.
+- **Grafik** (`_kreuzungBauen`): Randsteine und Mittellinie sind auf der Kreuzungsfläche ausgespart (`_querAbstand`), eine Kreuzungsplatte
+  (Parallelogramm |qA|, |qB| ≤ Fahrbahn + Rand, polygonOffset 3) überdeckt beide Fahrbahnbänder (kein Z-Fighting), weiße Haltelinien,
+  bunter Zauberkreis. Der Zaun entfällt dort automatisch (`zaunPunkte`: anderer Abschnitt näher).
+- **Warnlicht**: 4 Masten (`k.masten`, je Zufahrt rechts, je Ausfahrt links; feste Säulen in `strecke.saeulen`): Zuckerstangen-Mast,
+  Andreaskreuz, 2 rote Leuchtkugeln + Lichthof. `strecke.kreuzungWarnung(fahrzeuge)` setzt `warnA/warnB` (Auto im anderen Abschnitt
+  < 60 m vor der Kreuzung oder darauf), `strecke.kreuzungAnimieren(zeit, fahrzeuge)` (main.js je Frame) blinkt abwechselnd: ruhig 1,2 Hz
+  gedämpft, bei Querverkehr 3 Hz hell. Spieler bekommen „🚦 Achtung Kreuzung!“ (einmal je Zufahrt, nur bei Querverkehr). Minimap: rotes Andreaskreuz.
+- **KI** (`driver._querverkehr`): Autos der querenden Zufahrt (bis 120 m davor, über `o.s` der Rennleitung) sind Querverkehr, nicht „Auto vor
+  mir“. Überlappen die Belegungszeiten der Kreuzungsfläche (± 0,5 s), gibt der später Einfahrende nach (bremst auf Ankunft nach der Ausfahrt
+  des anderen); Gleichstand: Abschnitt A hat Vorfahrt. Wer schon an/auf der Kreuzung ist oder nicht mehr anhalten kann, fährt durch; nach
+  5 s Warten fährt die KI trotzdem (kein Hängen); Warten zählt nicht als Festfahren. Stehende Autos auf der Kreuzung = normales Hindernis.
+- Neue Kreuzung woanders: Strecke als Acht (Gesamtdrehung 0°, `G?` schließt die Lage) im Bauplan, `kreuzungen` eintragen, Listen ≥ 35 m
+  weg; `node tests/test_strecke.js <id>` prüft Winkel 70–110°, |Δy| < 1 m, 40-m-Ausnahme nur an der Kreuzung, Index-Kontinuität, Masten.
+
 ## Testdateien (`tests/`)
-Node (`node tests/<datei>`): `lade.js` lädt die Script-Dateien ohne Three.js für die Tests · `test_autos.js` Auto-Katalog, Werte, Rad-Dreiecke, Multivan bronze · `test_dynamik.js` Bälle + Wasserstrahl · `test_fahrer.js` Fahrerliste/Computer-Namen · `test_hindernisse.js` Öl, Sand, Ast, Baustelle · `test_ki.js` KI-Fahrer (Mathe, beide Tempo-Klassen) · `test_kleber.js` Kleberstreifen · `test_kollisionen.js` Bande, Auto-Auto (OBB, kein Verschmelzen), Rempeln, Looping-Abstand · `test_looping.js` Looping · `test_physik.js` Fahrphysik inkl. Gras/Sand-Deckel · `test_pickups.js` Turbo + Schild · `test_polizei.js` Polizei-Logik · `test_rundenzeit.js` KI-Rundenzeiten aller Strecken, auch XL · `test_schaden.js` Schaden-System · `test_schanze.js` Schanzen · `test_startboost.js` Start-Boost + Sterne · `test_strecke.js` Strecken, Welten, Varianten, Regeln · `test_welten_ki.js` KI in allen Strecken × Welten × 7 Stufen (auch Rempeln, XL) · `test_wetter.js` Jahreszeit/Wetter/Wind/Tageszeit · `zaun_test.js` Zaun dicht, Pflanzen-Kollider.
-Python/Playwright (`python3 tests/<datei>`): `audio_test.py` Ton · `autos_screenshot.py` Auto-Vorschaubilder · `fahrbarkeit_test.py` Fahrbarkeit mit echter Tastatur · `interpolation_test.py` Ruckeln des Auto-Meshes · `leistung_test.py` fps/Draw-Calls · `menu_test.py` Menü und Modi · `polizei_test.py` Polizei im Browser · `rempeln_test.py` Rempeln „echt“ im Rennen · `rennen_test.py` ganzes Rennen im Schnellvorlauf · `schaden_screenshot.py` Wracks/Brand/Schaden-Bilder · `screenshot_test.py <strecke>` Strecke starten + Bild · `startboost_test.py` Start-Boost im echten Spiel · `stunt_screenshot.py` Schanzen/Turbo/Schild-Bilder · `tageszeit_screenshot.py` Tag/Dämmerung/Nacht (Referenz `tageszeit_tag_referenz.json`) · `welten_test.py` alle Strecken × Welten mit Schaden/Regen/Wind · `wetter_screenshot.py` Wetter-Bilder · `xl_screenshot.py` XL-Varianten. Hilfsdaten: `tests/bauplan/`, `tests/out/` (Ausgaben), `leistung_vorher.json`, `autos_vorschau.html`.
+Node (`node tests/<datei>`): `lade.js` lädt die Script-Dateien ohne Three.js für die Tests · `test_autos.js` Auto-Katalog, Werte, Rad-Dreiecke, Multivan bronze · `test_dynamik.js` Bälle + Wasserstrahl · `test_fahrer.js` Fahrerliste/Computer-Namen · `test_hindernisse.js` Öl, Sand, Ast, Baustelle · `test_ki.js` KI-Fahrer (Mathe, beide Tempo-Klassen) · `test_kleber.js` Kleberstreifen · `test_garage.js` Münzen + Garage (Konto, Preise, Upgrades) · `test_pokal.js` Pokal-Punkte, Stärke, Serie, Elimination · `test_kollisionen.js` Bande, Auto-Auto (OBB, kein Verschmelzen), Rempeln, Looping-Abstand · `test_looping.js` Looping · `test_physik.js` Fahrphysik inkl. Gras/Sand-Deckel · `test_pickups.js` Turbo + Schild · `test_polizei.js` Polizei-Logik · `test_rundenzeit.js` KI-Rundenzeiten aller Strecken, auch XL · `test_schaden.js` Schaden-System · `test_schanze.js` Schanzen · `test_startboost.js` Start-Boost + Sterne · `test_strecke.js` Strecken, Welten, Varianten, Regeln (W4-J: Kreuzung) · `test_welten_ki.js` KI in allen Strecken × Welten × 7 Stufen (auch Rempeln, XL; W4-J: Kreuzungs-Begegnungen, Auto parkt auf der Kreuzung, 7 Stufen × 3 Runden) · `test_wetter.js` Jahreszeit/Wetter/Wind/Tageszeit · `zaun_test.js` Zaun dicht, Pflanzen-Kollider.
+Python/Playwright (`python3 tests/<datei>`): `audio_test.py` Ton · `autos_screenshot.py` Auto-Vorschaubilder · `fahrbarkeit_test.py` Fahrbarkeit mit echter Tastatur · `interpolation_test.py` Ruckeln des Auto-Meshes · `leistung_test.py` fps/Draw-Calls · `cockpit_test.py` Cockpit-Kamera ohne Roll in 8 Richtungen + Bilder · `garage_test.py` Garage im Browser · `menu_test.py` Menü und Modi (inkl. Ergebnis-Spalte Preisgeld) · `oel_test.py` Ölfalle + Flugsaurier · `pokal_test.py` Pokal im Browser · `polizei_test.py` Polizei im Browser · `rempeln_test.py` Rempeln „echt“ im Rennen · `rennen_test.py` ganzes Rennen im Schnellvorlauf · `schaden_screenshot.py` Wracks/Brand/Schaden-Bilder · `screenshot_test.py <strecke>` Strecke starten + Bild (Fantasie: 50–56 Kreuzung) · `startboost_test.py` Start-Boost im echten Spiel · `stunt_screenshot.py` Schanzen/Turbo/Schild-Bilder · `tageszeit_screenshot.py` Tag/Dämmerung/Nacht (Referenz `tageszeit_tag_referenz.json`) · `welten_test.py` alle Strecken × Welten mit Schaden/Regen/Wind · `wetter_screenshot.py` Wetter-Bilder · `xl_screenshot.py` XL-Varianten. Hilfsdaten: `tests/bauplan/`, `tests/out/` (Ausgaben), `leistung_vorher.json`, `autos_vorschau.html`.
 
 ## Versionen
 Nach jeder Welle wird der Stand gesichert UND spielbar abgelegt: `Spiele/Autorennen-Versionen/vN_…/` (jeder Ordner mit eigener `Autorennen.html`). Neue Versionen immer in neue Ordner (iCloud-Platzhalter lassen sich vom Container aus nicht überschreiben). Zwischenstände während der Arbeit: `versionen_r6/` und `Autorennen-Sicherung/`.

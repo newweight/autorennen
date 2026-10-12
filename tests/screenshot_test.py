@@ -2,8 +2,14 @@
 """Headless-Test: öffnet Autorennen.html per file://, startet ein Rennen auf einer Strecke,
 macht Screenshots und liest Zustand aus window.Rennspiel.
 Aufruf: python3 tests/screenshot_test.py [streckenId] [ausgabeordner]
-  streckenId: wiese (Standard) | wald | wueste | fantasie | dino | alle
+  streckenId: wiese (Standard) | wald | wueste | fantasie | dino | alpen | alle
         Runde 5b Dino: 30_vulkan, 31_lavasee, 32_deko_dino, 33_dino_strasse_<art>, 33b_dino_nah, 34_dino_treffer, 35_felsbrocken
+        Runde 6 (W4-I) Alpen: 40_pass, 41_serpentinen, 42_ueberfuehrung_unten, 43_ueberfuehrung_oben, 43b_ueberfuehrung_seite,
+        43c_kreuzung_von_oben, 44_tunnel_berg, 45_see, 46_gipfelkreuz (+ Fahrt über/unter der Brücke: Höhe bleibt auf der Ebene)
+        Runde 6 (W4-J) Fantasie-Kreuzung: 50_kreuzung_vorn (Fahrersicht A, Auto quert), 50b_kreuzung_vorn_b (aus der Schleife),
+        51_kreuzung_seitlich, 52_kreuzung_oben, 53_warnlicht_ruhig / 53b_warnlicht_an (Mast nah, Lampe an) / 53c_warnlicht_aus
+        (Lampe aus), 54_auto_quert (Auto mitten auf der Kreuzung, Blick von A), 55_kreuzung_fahrt (Autopilot über die Kreuzung),
+        56_minimap_kreuzung (+ Fahrt A/B: Abschnitt bleibt, Reset auf B bleibt auf B, Warnlicht schnell bei Querverkehr)
 Bilder: 01_start, 02_fahrt, 03_links_abseits, 04_reset, 05_cockpit, 06_weit, 07_huegel,
         08_uebersicht, 09_kurve (engste Stelle: Haarnadel/Schikane), 10_minimap (Ausschnitt),
         Wald: 11_tunnel (Baumtunnel) · Wüste: 11_oase, 12_gerade
@@ -605,6 +611,183 @@ def wald_tiere_bilder(page, snap):
     return erg
 
 
+# Runde 6 (W4-I): Alpen – Auto an (s, q) setzen MIT Streckenindex (an der Überführung sonst falsche Ebene), Fahrer nr
+AUTO_SQ_INDEX = """([s, q, nr]) => { const sp = Rennspiel.spiel.strecke.spline, st = Rennspiel.spiel.strecke, p = sp.punktBei(s), f = Rennspiel.spiel.fahrzeuge[nr];
+  f.vehicle.setzen(p.x + p.nx * q, p.z + p.nz * q, Rennspiel.headingAus(p.tx, p.tz)); f.index = sp.indexBei(s);
+  f.vehicle.y = st.hoeheAn(f.vehicle.x, f.vehicle.z, f.index); f.vehicle.vLaengs = 0; f.vehicle.vQuer = 0;
+  if (Rennspiel.spiel._vorherAngleichen) Rennspiel.spiel._vorherAngleichen(f); Rennspiel.spiel.kameras[0]._erstesMal = true; }"""
+JAGD_KAMERA = """(() => { const k = Rennspiel.spiel.kameras[0]; delete k.update; k._erstesMal = true;
+  const s = Rennspiel.spiel; if (s.qualitaet) s.kameras.forEach(kk => kk.sichtweiteSetzen(s.qualitaet.sicht + 20)); })()"""
+
+
+def alpen_bilder(page, snap):
+    """W4-I: Pass, Serpentinen, Überführung von unten/oben/seitlich, Tunnel im Berg, See, Gipfelkreuz + Fahrten über/unter der Brücke."""
+    erg = {}
+    page.evaluate('Rennspiel.config.grafik.adaptiv = false')
+    # Gegner bremsen (sie stören die Bilder nicht), Spieler 0 wird gesetzt
+    # (Bremse 0: im Stand würde die Bremse rückwärts rollen lassen)
+    page.evaluate("Rennspiel.spiel.fahrzeuge.forEach((f, i) => { if (i > 0 && f.driver) f.driver.steuerung = () => ({ gas: 0, bremse: 0, lenkung: 0 }); })")
+    info = page.evaluate("""(() => { const s = Rennspiel.spiel, st = s.strecke, sp = st.spline, u = st.ueberfuehrungen[0];
+      let pass = sp.punkte[0]; sp.punkte.forEach(p => { if (p.y > pass.y) pass = p; });
+      let deko = null, kranz = 0, see = null, kreuz = null; s.szene.traverse(o => { if (o.name === 'Bergkranz') kranz++; if (o.name === 'Bergsee') see = o.position.toArray(); });
+      s.szene.children.forEach(g => { if (g.name.startsWith('Deko')) deko = g.userData.anzahl; });
+      let ueb = 0; s.szene.traverse(o => { if (o.name === 'Ueberfuehrung') ueb++; });
+      return { kr: u.kreuzung, s0: u.s0, s1: u.s1, pass: { s: pass.s, y: pass.y }, tunnel: st.tunnel.map(t => [t.s0, t.s1]), deko, kranz, see, ueb,
+        bruecke: st.bruecken.map(b => [b.s0, b.s1]), haar: (() => { let b = sp.punkte[0]; sp.punkte.forEach(p => { if (Math.abs(p.kruemmung) > Math.abs(b.kruemmung)) b = p; }); return b.s; })() }; })()""")
+    erg['info'] = info
+    kr = info['kr']
+    # 40 Pass (Fahrersicht, kurz vor dem höchsten Punkt)
+    page.evaluate(JAGD_KAMERA); page.evaluate(AUTO_SQ_INDEX, [info['pass']['s'] - 35, 0, 0]); page.wait_for_timeout(1500); snap('40_pass.png')
+    erg['pass'] = page.evaluate(ZUSTAND)
+    # 41 Serpentinen von schräg oben (Kamera frei, ohne Nebel)
+    sp = page.evaluate("""(s) => { const st = Rennspiel.spiel.strecke, sp = st.spline, a = sp.punktBei(s);
+      let mx = 0, mz = 0, n = 0; for (let d = -250; d <= 250; d += 10) { const p = sp.punktBei(s + d); mx += p.x; mz += p.z; n++; } return [mx / n, a.y, mz / n]; }""", info['haar'])
+    page.evaluate(KAMERA_FREI, [sp[0] + 40, sp[1] + 120, sp[2] + 230, sp[0], sp[1], sp[2], False]); page.wait_for_timeout(800); snap('41_serpentinen.png')
+    # 42 Überführung von unten: Spieler auf der unteren Bahn vor der Kreuzung, KI 1 steht oben auf der Brücke
+    page.evaluate(JAGD_KAMERA)
+    page.evaluate(AUTO_SQ_INDEX, [kr['sOben'] + 1, 2, 1]); page.evaluate(AUTO_SQ_INDEX, [kr['sUnten'] - 26, 0, 0])
+    page.wait_for_timeout(1500); snap('42_ueberfuehrung_unten.png')
+    # 43 von oben: Spieler auf der Brücke, KI 1 steht unten unter der Brücke
+    page.evaluate(AUTO_SQ_INDEX, [kr['sUnten'] + 1, -2, 1]); page.evaluate(AUTO_SQ_INDEX, [kr['sOben'] - 22, 0, 0])
+    page.wait_for_timeout(1500); snap('43_ueberfuehrung_oben.png')
+    erg['oben_stand'] = page.evaluate("""(() => { const f = Rennspiel.spiel.fahrzeuge; return { y0: f[0].vehicle.y, y1: f[1].vehicle.y }; })()""")
+    # 43b seitlich (quer zur Brücke, tief) mit beiden Autos an der Kreuzung
+    page.evaluate(AUTO_SQ_INDEX, [kr['sOben'] - 2, 2, 0])
+    blick = page.evaluate("""(s) => { const p = Rennspiel.spiel.strecke.spline.punktBei(s);
+      return [p.x + p.nx * 55 - p.tx * 12, p.y - 1, p.z + p.nz * 55 - p.tz * 12, p.x, p.y - 3, p.z, true]; }""", kr['sOben'])
+    page.wait_for_timeout(300); page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(800); snap('43b_ueberfuehrung_seite.png')
+    page.evaluate(KAMERA_FREI, [kr['x'] - 120, kr['dy'] + 80, kr['z'] + 120, kr['x'], 10, kr['z'], False]); page.wait_for_timeout(800); snap('43c_kreuzung_von_oben.png')
+    # Fahrt ÜBER die Brücke (Autopilot, KI 1 steht unten): Höhe bleibt oben, kein Stoß mit dem Auto darunter
+    page.evaluate(JAGD_KAMERA)
+    page.evaluate(AUTO_SQ_INDEX, [kr['sUnten'] + 1, 0, 1]); page.evaluate(AUTO_SQ_INDEX, [kr['sOben'] - 70, 0, 0])
+    page.evaluate("""(() => { const s = Rennspiel.spiel; window._alpenLog = []; s.autopilot(0, true);
+      const f = s.fahrzeuge[0].vehicle; f.vLaengs = 20; })()""")
+    log_js = """(() => { const s = Rennspiel.spiel, st = s.strecke, f = s.fahrzeuge[0], g = s.fahrzeuge[1];
+      return { s: f.nah ? f.nah.s : null, y: f.vehicle.y, ySoll: f.nah ? st.hoeheBeiS(f.nah.s, f.nah.seitenabstand) : null, kmh: f.vehicle.tempoKmh,
+        y1: g.vehicle.y, x1: g.vehicle.x, z1: g.vehicle.z, abst: Math.hypot(f.vehicle.x - g.vehicle.x, f.vehicle.z - g.vehicle.z) }; })()"""
+    def fahren(sK, bild):
+        # Schnellvorlauf in 0,1-s-Schritten (Software-Grafik ist zu langsam für Echtzeit); das Bild danach extra
+        f = []
+        for k in range(80):
+            page.evaluate('Rennspiel.spiel.schnellvorlauf(0.1)'); f.append(page.evaluate(log_js))
+        return f
+    erg['fahrt_oben'] = fahren(kr['sOben'], None)
+    page.evaluate(AUTO_SQ_INDEX, [kr['sUnten'] + 1, 0, 1]); page.evaluate(AUTO_SQ_INDEX, [kr['sOben'] - 30, 0, 0])
+    page.evaluate("(() => { Rennspiel.spiel.fahrzeuge[0].vehicle.vLaengs = 20; })()"); page.wait_for_timeout(900)
+    snap('43d_ueberfuehrung_fahrt_oben.png')
+    # Fahrt UNTER der Brücke durch (KI 1 steht oben)
+    page.evaluate(AUTO_SQ_INDEX, [kr['sOben'] + 1, 0, 1]); page.evaluate(AUTO_SQ_INDEX, [kr['sUnten'] - 70, 0, 0])
+    page.evaluate("(() => { Rennspiel.spiel.fahrzeuge[0].vehicle.vLaengs = 20; })()")
+    erg['fahrt_unten'] = fahren(kr['sUnten'], None)
+    page.evaluate(AUTO_SQ_INDEX, [kr['sOben'] + 1, 0, 1]); page.evaluate(AUTO_SQ_INDEX, [kr['sUnten'] - 30, 0, 0])
+    page.evaluate("(() => { Rennspiel.spiel.fahrzeuge[0].vehicle.vLaengs = 20; })()"); page.wait_for_timeout(900)
+    snap('43e_ueberfuehrung_fahrt_unten.png')
+    page.evaluate('Rennspiel.spiel.autopilot(0, false)')
+    # 44 Tunnel im Berg (von außen, Fahrersicht 45 m vor dem Portal)
+    page.evaluate(JAGD_KAMERA); page.evaluate(AUTO_SQ_INDEX, [info['tunnel'][0][0] - 45, 0, 0]); page.wait_for_timeout(1500); snap('44_tunnel_berg.png')
+    # 45 See + Steinbrücke (frei, schräg von oben)
+    if info['see']:
+        sx, sy, sz = info['see']
+        page.evaluate(KAMERA_FREI, [sx - 70, sy + 35, sz - 90, sx + 10, sy, sz + 40, True]); page.wait_for_timeout(800); snap('45_see.png')
+    # 46 Gipfelkreuz am Pass (frei)
+    gk = page.evaluate("""(() => { let p = null; Rennspiel.spiel.szene.traverse(o => { if (o.name === 'Gipfelkreuz' && o.count) { const m = new THREE.Matrix4(); o.getMatrixAt(0, m); p = new THREE.Vector3().setFromMatrixPosition(m).toArray(); } }); return p; })()""")
+    erg['gipfelkreuz'] = gk
+    if gk:
+        page.evaluate(KAMERA_FREI, [gk[0] + 18, gk[1] + 6, gk[2] + 22, gk[0], gk[1] + 4, gk[2], True]); page.wait_for_timeout(800); snap('46_gipfelkreuz.png')
+    # Minimap: an der Kreuzung liegt die (hellere) Brückenfahrbahn obenauf
+    erg['minimap'] = page.evaluate("""(([x, z]) => { const k = Rennspiel.Minimap._cache && Object.values(Rennspiel.Minimap._cache).find(e => e.strecke === Rennspiel.spiel.strecke);
+      if (!k) return null; const [px, py] = k.nachPx(x, z), d = k.canvas.getContext('2d').getImageData(Math.round(px), Math.round(py), 1, 1).data; return [d[0], d[1], d[2]]; })""", [kr['x'], kr['z']])
+    page.evaluate(JAGD_KAMERA)
+    return erg
+
+
+def fantasie_kreuzung_bilder(page, snap):
+    """W4-J: niveaugleiche Kreuzung – Bilder (vorn, seitlich, oben, Warnlicht an/aus, Auto quert, Fahrt) + Messwerte."""
+    erg = {}
+    page.evaluate('Rennspiel.config.grafik.adaptiv = false')
+    page.evaluate(LOOP_WEITER)
+    # Gegner anhalten (Bremse 0: im Stand würde die Bremse rückwärts rollen lassen); Spieler 0 wird gesetzt
+    page.evaluate("Rennspiel.spiel.fahrzeuge.forEach((f, i) => { if (i > 0 && f.driver) f.driver.steuerung = () => ({ gas: 0, bremse: 0, lenkung: 0 }); })")
+    # Warnlicht-Zeit im Test festhalten (window._kzeit), sonst blinkt es zufällig im Bild
+    page.evaluate("""(() => { const st = Rennspiel.spiel.strecke, orig = st.kreuzungAnimieren.bind(st);
+      st.kreuzungAnimieren = (z, f) => orig(window._kzeit !== undefined ? window._kzeit : z, f); })()""")
+    info = page.evaluate("""(() => { const s = Rennspiel.spiel, st = s.strecke, k = st.kreuzungen[0];
+      let platte = 0, masten = 0, lampen = 0, hoefe = 0; s.szene.traverse(o => { if (o.name === 'Kreuzungsplatte') platte++; if (o.name === 'Warnlicht-Masten') masten++;
+        if (o.name === 'Warnlampen') lampen++; if (o.name === 'Warnlicht-Hof') hoefe++; });
+      return { sA: k.sA, sB: k.sB, x: k.x, z: k.z, y: st.hoeheAn(k.x, k.z), winkel: k.winkel, dy: k.dy, platte, masten, lampen, hoefe,
+        masts: k.masten.map(m => ({ x: m.x, z: m.z, pass: m.pass, bx: m.blick.x, bz: m.blick.z })) }; })()""")
+    erg['info'] = info
+    sA, sB = info['sA'], info['sB']
+    LAMPEN = """(() => { const k = Rennspiel.spiel.strecke.kreuzungen[0];
+      return { warnA: k.warnA, warnB: k.warnB, lampen: k._lampen.map(l => ({ pass: l.pass, seite: l.seite, farbe: l.mat.color.getHex(), hof: +l.hmat.opacity.toFixed(2) })) }; })()"""
+    # 50 Fahrersicht auf Abschnitt A, 45 m vor der Kreuzung; KI 1 quert gerade auf B
+    page.evaluate('window._kzeit = 0.1')
+    page.evaluate(JAGD_KAMERA)
+    page.evaluate(AUTO_SQ_INDEX, [sB - 3, 1.5, 1]); page.evaluate(AUTO_SQ_INDEX, [sA - 45, 0, 0])
+    page.wait_for_timeout(1500); snap('50_kreuzung_vorn.png')
+    erg['vorn'] = page.evaluate(LAMPEN)
+    # 50b aus der Schleife (Abschnitt B), 40 m vor der Kreuzung, KI 1 auf A in der Kreuzung
+    page.evaluate(AUTO_SQ_INDEX, [sA - 2, -2, 1]); page.evaluate(AUTO_SQ_INDEX, [sB - 40, 0, 0])
+    page.wait_for_timeout(1500); snap('50b_kreuzung_vorn_b.png')
+    # 51 seitlich (aus der Ecke zwischen beiden Ausfahrten, flach) – 52 von oben
+    page.evaluate(AUTO_SQ_INDEX, [sB - 1, 1.5, 1]); page.evaluate(AUTO_SQ_INDEX, [sA - 12, 0, 0])
+    page.wait_for_timeout(300)
+    blick = page.evaluate("""(() => { const st = Rennspiel.spiel.strecke, k = st.kreuzungen[0], sp = st.spline, a = sp.punktBei(k.sA), b = sp.punktBei(k.sB);
+      const dx = a.tx + b.tx, dz = a.tz + b.tz, l = Math.hypot(dx, dz), y = st.hoeheAn(k.x, k.z);
+      return [k.x + dx / l * 38, y + 5.5, k.z + dz / l * 38, k.x, y + 1.2, k.z, true]; })()""")
+    page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(900); snap('51_kreuzung_seitlich.png')
+    page.evaluate(KAMERA_FREI, [info['x'] + 6, info['y'] + 70, info['z'] + 22, info['x'], info['y'], info['z'], True]); page.wait_for_timeout(900); snap('52_kreuzung_oben.png')
+    # 53 Warnlicht nah (Mast an der Zufahrt A): ruhig (niemand auf B), dann Querverkehr auf B → schnell/hell, dann Lampe aus
+    m = [mm for mm in info['masts'] if mm['pass'] == 'a'][0]
+    page.evaluate(AUTO_SQ_INDEX, [sB + 150, 0, 1]); page.evaluate(AUTO_SQ_INDEX, [sA - 160, 0, 0])
+    nah = [m['x'] + m['bx'] * 7.5 + m['bz'] * 2.5, info['y'] + 2.6, m['z'] + m['bz'] * 7.5 - m['bx'] * 2.5, m['x'], info['y'] + 2.6, m['z'], True]
+    page.evaluate(KAMERA_FREI, nah); page.wait_for_timeout(900); snap('53_warnlicht_ruhig.png')
+    erg['ruhig'] = page.evaluate(LAMPEN)
+    page.evaluate(AUTO_SQ_INDEX, [sB - 30, 0, 1]); page.wait_for_timeout(900); snap('53b_warnlicht_an.png')
+    erg['warn'] = page.evaluate(LAMPEN)
+    page.evaluate('window._kzeit = 0.27'); page.wait_for_timeout(700); snap('53c_warnlicht_aus.png')
+    erg['warnAus'] = page.evaluate(LAMPEN)
+    page.evaluate('delete window._kzeit')
+    # 54 Auto mitten auf der Kreuzung (quer), Blick von der Zufahrt A (Kamera hinter Spieler 0, steht 30 m davor)
+    page.evaluate(JAGD_KAMERA)
+    page.evaluate(AUTO_SQ_INDEX, [sB, 0, 1]); page.evaluate(AUTO_SQ_INDEX, [sA - 30, -2, 0])
+    page.wait_for_timeout(1500); snap('54_auto_quert.png')
+    # Fahrten: Autopilot über die Kreuzung auf A (KI 1 steht auf B kurz hinter der Kreuzung), dann auf B
+    log_js = """(() => { const s = Rennspiel.spiel, st = s.strecke, f = s.fahrzeuge[0], t = s.rennen.teilnehmer[0];
+      return { s: f.nah ? f.nah.s : null, sRennen: t.s, ug: f.vehicle.untergrund, y: f.vehicle.y, ySoll: st.hoeheAn(f.vehicle.x, f.vehicle.z), kmh: f.vehicle.tempoKmh }; })()"""
+    def fahren(n):
+        f = []
+        for k in range(n):
+            page.evaluate('Rennspiel.spiel.schnellvorlauf(0.1)'); f.append(page.evaluate(log_js))
+        return f
+    page.evaluate(AUTO_SQ_INDEX, [sB + 20, 0, 1]); page.evaluate(AUTO_SQ_INDEX, [sA - 60, 0, 0])
+    page.evaluate("(() => { const s = Rennspiel.spiel; s.rennen.verfolgungSetzen(0, s.fahrzeuge[0].vehicle.x, s.fahrzeuge[0].vehicle.z, %f); s.autopilot(0, true); s.fahrzeuge[0].vehicle.vLaengs = 22; })()" % (sA - 60))
+    erg['fahrtA'] = fahren(45)
+    page.evaluate(AUTO_SQ_INDEX, [sA + 20, 0, 1]); page.evaluate(AUTO_SQ_INDEX, [sB - 50, 0, 0])
+    page.evaluate("(() => { const s = Rennspiel.spiel; s.rennen.verfolgungSetzen(0, s.fahrzeuge[0].vehicle.x, s.fahrzeuge[0].vehicle.z, %f); s.fahrzeuge[0].vehicle.vLaengs = 18; })()" % (sB - 50))
+    erg['fahrtB'] = fahren(40)
+    page.evaluate(AUTO_SQ_INDEX, [sB + 20, 0, 1]); page.evaluate(AUTO_SQ_INDEX, [sA - 25, 0, 0])
+    page.evaluate("(() => { Rennspiel.spiel.fahrzeuge[0].vehicle.vLaengs = 18; })()"); page.wait_for_timeout(900)
+    snap('55_kreuzung_fahrt.png')
+    page.evaluate('Rennspiel.spiel.autopilot(0, false)')
+    # Reset-Taste auf Abschnitt B (letzter Checkpoint vor der Kreuzung auf B) → bleibt auf B
+    erg['reset'] = page.evaluate("""(() => { const s = Rennspiel.spiel, st = s.strecke, k = st.kreuzungen[0], t = s.rennen.teilnehmer[0];
+      let cp = st.checkpoints[0]; st.checkpoints.forEach(c => { const d = st.spline.differenzS(k.sB, c.s); if (d > 0 && d < st.spline.differenzS(k.sB, cp.s) || st.spline.differenzS(k.sB, cp.s) <= 0) cp = c; });
+      t.letzterCheckpoint = cp.nr; t.naechsterCheckpoint = (cp.nr + 1) % st.checkpoints.length;
+      s.spielerZuruecksetzen(0); return { cpS: cp.s, index: s.fahrzeuge[0].index, sIndex: st.spline.punkte[Math.max(0, s.fahrzeuge[0].index)].s }; })()""")
+    page.evaluate("(() => { const s = Rennspiel.spiel; s.autopilot(0, true); })()")
+    erg['nachReset'] = fahren(60)
+    page.evaluate('Rennspiel.spiel.autopilot(0, false)')
+    # 56 Minimap mit Andreaskreuz (Pixel an der Kreuzung rot/weiß)
+    mm = page.evaluate(MINIMAP)
+    if mm:
+        page.screenshot(path=os.path.join(page._ausgabe, '56_minimap_kreuzung.png'), clip={'x': max(0, mm['x'] - 10), 'y': max(0, mm['y'] - 10), 'width': mm['w'] + 20, 'height': mm['h'] + 20})
+    erg['minimap'] = page.evaluate("""(([x, z]) => { const k = Rennspiel.Minimap._cache && Object.values(Rennspiel.Minimap._cache).find(e => e.strecke === Rennspiel.spiel.strecke);
+      if (!k) return null; const [px, py] = k.nachPx(x, z), d = k.canvas.getContext('2d').getImageData(Math.round(px), Math.round(py), 1, 1).data; return [d[0], d[1], d[2]]; })""", [info['x'], info['z']])
+    page.evaluate(JAGD_KAMERA)
+    return erg
+
+
 def lauf(browser, sid, out):
     os.makedirs(out, exist_ok=True)
     page = browser.new_page(viewport={'width': 1280, 'height': 800})
@@ -676,11 +859,14 @@ def lauf(browser, sid, out):
     z['elemente'] = runde3_bilder(page, snap)
     if sid == 'fantasie':
         z['fantasie'] = fantasie_bilder(page, snap)
+        z['kreuzung'] = fantasie_kreuzung_bilder(page, snap)   # Runde 6 (W4-J)
     if sid == 'dino':
         z['dino'] = dino_bilder(page, snap)
         z['w2c'] = dino_w2c_bilder(page, snap)      # Runde 6 (W2-C)
     if sid == 'wald':
         z['tiere'] = wald_tiere_bilder(page, snap)  # Runde 6 (W2-C)
+    if sid == 'alpen':
+        z['alpen'] = alpen_bilder(page, snap)       # Runde 6 (W4-I)
     if sid == 'wueste':
         # Stelle der Strecke, die der Oase am nächsten liegt
         s_oase = page.evaluate('''(() => { const s = Rennspiel.spiel; let w = null;
@@ -746,6 +932,30 @@ def lauf(browser, sid, out):
         pruefe('Kleber: nach 5 s gelöst (Optik aus, Schonzeit)', fz['geloest']['klebt'] == 0 and not fz['geloest']['optik'] and fz['geloest']['frei'] > 0, fz['geloest'])
         pruefe('Ball-Treffer: Tempo −60 % (25 → 10 m/s = 36 km/h), Meldung', abs(fz['ball']['kmhNachher'] - 36) <= 3 and fz['ball']['meldung'] != '', fz['ball'])
         pruefe('Wasser-Treffer: Tempo −40 % (≈ 54 km/h) + Schlingern', abs(fz['wasser']['kmhNachher'] - 54) <= 4 and abs(fz['wasser']['vQuer']) > 2, fz['wasser'])
+    if z.get('kreuzung'):
+        kz = z['kreuzung']; i = kz['info']
+        pruefe('W4-J Kreuzung: Platte, 4 Masten (1 Mesh), 4 Lampen-Meshes, 8 Lichthöfe, 70–110°, |Δy| < 1 m', i['platte'] == 1 and i['masten'] == 1 and
+               i['lampen'] == 4 and i['hoefe'] == 8 and 70 <= i['winkel'] <= 110 and i['dy'] < 1, {k: i[k] for k in ('platte', 'masten', 'lampen', 'hoefe', 'winkel', 'dy')})
+        ru, wa, au = kz['ruhig'], kz['warn'], kz['warnAus']
+        an_r = [l for l in ru['lampen'] if l['pass'] == 'a' and l['hof'] > 0]
+        an_w = [l for l in wa['lampen'] if l['pass'] == 'a' and l['hof'] > 0]
+        pruefe('W4-J Warnlicht: ruhig blinkt gedämpft (Hof 0,45), bei Querverkehr auf B an den A-Masten hell (Hof 1), Lampen abwechselnd',
+               not ru['warnA'] and wa['warnA'] and len(an_r) == 1 and an_r[0]['hof'] < 0.6 and len(an_w) == 1 and an_w[0]['hof'] == 1 and
+               [l['hof'] for l in au['lampen'] if l['pass'] == 'a'] != [l['hof'] for l in wa['lampen'] if l['pass'] == 'a'], [ru, wa, au])
+        def fahrt(f, sK, name):
+            nah = [e for e in f if e['s'] is not None and abs(e['s'] - sK) < 30]
+            ok = len(nah) >= 3 and all(abs(e['sRennen'] - e['s']) < 3 and e['ug'] in ('strasse', 'rand') and abs(e['y'] - e['ySoll']) < 0.3 for e in nah) and \
+                max(e['s'] for e in f if e['s'] is not None) > sK + 10
+            pruefe('W4-J Fahrt über die Kreuzung auf ' + name + ': Abschnitt bleibt (s, Rennleitung), Straße, Höhe = Gelände', ok,
+                   [(round(e['s']), round(e['sRennen']), e['ug']) for e in nah][:10])
+        fahrt(kz['fahrtA'], i['sA'], 'A')
+        fahrt(kz['fahrtB'], i['sB'], 'B')
+        nr = kz['nachReset']
+        pruefe('W4-J Reset-Taste vor der Kreuzung auf B: Index auf B, fährt danach auf B über die Kreuzung', abs(kz['reset']['sIndex'] - kz['reset']['cpS']) < 3 and
+               max(e['s'] for e in nr if e['s'] is not None) > i['sB'] + 5 and all(abs(e['s'] - i['sA']) > 40 for e in nr if e['s'] is not None),
+               [kz['reset'], [round(e['s']) for e in nr if e['s'] is not None][::5]])
+        mmk = kz['minimap']
+        pruefe('W4-J Minimap: Andreaskreuz an der Kreuzung (rot/weiß)', mmk is not None and mmk[0] > 200 and mmk[2] < 120 or (mmk and min(mmk) > 220), mmk)
     if z.get('dino'):
         dz = z['dino']
         pruefe('Dino: Vulkan + Rauch gebaut, Vulkan im Startblick (Bildmitte oben)', dz['info']['vulkan'] == 1 and dz['info']['rauch'] == 1 and
@@ -784,6 +994,32 @@ def lauf(browser, sid, out):
                str(dc['meshes']) + ' + ' + str(t['drawCallsDynamik']['meshes']) + ' ' + str(t['drawCallsDynamik']['namen']))
         if t.get('baerTreffer'):
             pruefe('Wald: Bär-Treffer → Meldung „Bär!", Tempo −60 % (≈ 36 km/h)', t['baerTreffer']['meldung'].startswith('Bär') and t['baerTreffer']['kmh'] <= 40, t['baerTreffer'])
+    if z.get('alpen'):
+        a = z['alpen']; i = a['info']; kr = i['kr']
+        d = i['deko'] or {}
+        pruefe('Alpen: Überführung gebaut, Schneegipfel-Kranz, See, Gipfelkreuz, Hütten ≥ 3, Kühe ≥ 5, Tannen ≥ 500', i['ueb'] == 1 and i['kranz'] == 1 and
+               bool(i['see']) and d.get('gipfelkreuz') and d.get('huetten', 0) >= 3 and d.get('kuehe', 0) >= 5 and d.get('tannen', 0) >= 500, d)
+        so = a['oben_stand']
+        pruefe('Alpen: Auto oben auf der Brücke ≈ Kreuzung oben, Auto darunter ≈ unten (Δy ≥ 7 m)', so['y0'] - so['y1'] >= 7, so)
+        def fahrt_ok(f, oben):
+            # alle Messpunkte nahe der Kreuzung: Höhe = Fahrbahn des eigenen Abschnitts (±0,5 m), s im richtigen Abschnitt
+            nah = [e for e in f if e['s'] is not None and abs(e['s'] - (kr['sOben'] if oben else kr['sUnten'])) < 40]
+            return len(nah) >= 5 and all(abs(e['y'] - e['ySoll']) < 0.5 for e in nah), nah
+        ok_o, nah_o = fahrt_ok(a['fahrt_oben'], True)
+        dicht = min(a['fahrt_oben'], key=lambda e: e['abst'])     # Messpunkt direkt über dem Auto darunter
+        pruefe('Alpen: Fahrt über die Brücke – Höhe bleibt oben (s oben, ±0,5 m), über dem Auto darunter Δy ≥ 7 m', ok_o and
+               max(e['s'] for e in a['fahrt_oben']) > kr['sOben'] + 5 and dicht['y'] - dicht['y1'] >= 7,
+               'über dem Auto: Abstand ' + str(round(dicht['abst'], 2)) + ' m, Δy ' + str(round(dicht['y'] - dicht['y1'], 2)) + ' m; ' +
+               str([(round(e['s']), round(e['y'], 2)) for e in nah_o][:8]))
+        ok_u, nah_u = fahrt_ok(a['fahrt_unten'], False)
+        pruefe('Alpen: Fahrt unter der Brücke durch – Höhe bleibt unten', ok_u and max(e['s'] for e in a['fahrt_unten']) > kr['sUnten'] + 5,
+               [(round(e['s']), round(e['y'], 2)) for e in nah_u])
+        x1 = [(e['x1'], e['z1']) for e in a['fahrt_oben']]
+        weg1 = max(((p[0] - x1[0][0]) ** 2 + (p[1] - x1[0][1]) ** 2) ** 0.5 for p in x1)
+        pruefe('Alpen: Auto darunter wird beim Überfahren nicht angestoßen (bewegt sich < 5 cm), Abstand x/z dabei < 6 m', weg1 < 0.05 and
+               min(e['abst'] for e in a['fahrt_oben']) < 6, 'Weg ' + str(round(weg1, 3)) + ' m, min. Abstand ' + str(round(min(e['abst'] for e in a['fahrt_oben']), 2)) + ' m')
+        mm = a['minimap']
+        pruefe('Alpen: Minimap zeigt die Brückenfahrbahn obenauf (hell an der Kreuzung)', mm is not None and mm[0] > 100 and abs(mm[0] - 0x7d) < 30, mm)
     au = z['abseits_untergrund']
     pruefe('Untergrund neben der Straße = Thema', au['ist'] == au['erwartet'], au)
     page.close()
@@ -834,7 +1070,7 @@ def spur_lauf(browser, sid, out):
     return info, zeilen
 
 
-ids = ['wiese', 'wald', 'wueste', 'fantasie', 'dino'] if wahl == 'alle' else [wahl]
+ids = ['wiese', 'wald', 'wueste', 'fantasie', 'dino', 'alpen'] if wahl == 'alle' else [wahl]
 with sync_playwright() as p:
     browser = p.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
     alle = []
@@ -843,7 +1079,7 @@ with sync_playwright() as p:
         z, pruef = lauf(browser, sid, out)
         print(json.dumps(z, indent=1, ensure_ascii=False))
         alle += pruef
-        if sid in ('wiese', 'wald', 'wueste', 'dino'):
+        if sid in ('wiese', 'wald', 'wueste', 'dino', 'alpen'):
             info, pruef = spur_lauf(browser, sid, out)
             print(json.dumps({'stunt': info}, ensure_ascii=False))
             alle += pruef

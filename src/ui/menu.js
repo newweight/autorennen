@@ -729,11 +729,13 @@
           `<td class="platz">${z.platz}.</td><td class="name">${z.istSpieler ? '' : '🤖 '}${z.name}` +
           (z.sterne ? ` <span class="sterne" title="Sterne gesamt: ${z.sterneGesamt}">${R.Sterne ? R.Sterne.text(z.sterne) : '⭐'.repeat(z.sterne)}</span>` : '') + `</td>` +
           `<td class="auto"><i style="background:${farbe}"></i>${z.auto ? z.auto.name : ''}</td>` +
-          `<td class="zeit">${zeit}</td><td class="zeit">${z.beste !== null ? R.zeitText(z.beste) : '–'}</td></tr>`;
+          `<td class="zeit">${zeit}</td><td class="zeit">${z.beste !== null ? R.zeitText(z.beste) : '–'}</td>` +
+          // Runde 6 (Polierrunde W3): Preisgeld + im Rennen gesammelte Münzen (nur Spieler; KI „–")
+          `<td class="zeit preisgeld">${z.istSpieler && z.preisgeld !== undefined ? `+${z.preisgeld} 🪙` + (z.muenzenRennen ? ` <small>(+${z.muenzenRennen} gesammelt)</small>` : '') : '–'}</td></tr>`;
       }).join('');
       this.wurzel.innerHTML =
         `<div class="ergebnis-karte"><h1>${erg.elimination ? '🚪 Letzter fliegt raus' : '🏆 Ergebnis'}</h1>` +
-        `<table><thead><tr><th>Platz</th><th>Name</th><th>Auto</th><th>Gesamtzeit</th><th>Beste Runde</th></tr></thead>` +
+        `<table><thead><tr><th>Platz</th><th>Name</th><th>Auto</th><th>Gesamtzeit</th><th>Beste Runde</th><th>🪙 Preisgeld</th></tr></thead>` +
         `<tbody>${zeilen}</tbody></table>` +
         `<div class="knoepfe"><div class="knopf gruen" data-a="nochmal">🔄 Nochmal <kbd>Enter</kbd></div>` +
         `<div class="knopf blau" data-a="menue">🏠 Hauptmenü <kbd>Esc</kbd></div></div></div>`;

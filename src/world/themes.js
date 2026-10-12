@@ -124,6 +124,28 @@
         knochen: 60, skelette: 7, dinos: { langhals: 3, dreihorn: 3, zweibeiner: 3 } },
       vulkan: { richtung: 0.12, abstand: 1300, hoehe: 610, radius: 860 },   // W2-C1: größer (vorher 470/700). Kulisse: richtung 0 = Startrichtung (rad, + = rechts)
     },
+    // Runde 6 (W4-I): Alpen – Almwiesen, Nadelwald, Kühe, Almhütten, Gipfelkreuz am Pass, Bergsee im Tal,
+    // Felsen; am Horizont ein Kranz aus Schneegipfeln (große Low-Poly-Kegel, Kulisse wie der Vulkan). Jahreszeiten wie Wald.
+    alpen: {
+      name: 'Alpen',
+      boden: 0x67a546,           // sattes Almgrün
+      boden2: 0x93b956,          // hellere Almflecken
+      himmel: 0x8ec9f5,          // klares Bergblau
+      nebel: 0xb9d9f0,           // blauer Dunst
+      sichtweite: 560,
+      lichtHimmel: 0xeaf5ff,
+      lichtBoden: 0x4d7a32,
+      sonnenFarbe: 0xfff6e2,
+      sonnenIntensitaet: 1.18,
+      laternen: true,            // Straßenlaternen bei Nacht
+      asphalt: 0x45474b,
+      fels: 0x8d8981,            // steile Böschung (trackBuilder._boeschungBauen)
+      zaun: { latten: 0x8a6a44, pfosten: 0x5a4028 },   // Holzzaun (Weidezaun)
+      seed: 61,
+      deko: { bandAbstand: 5, fernBaeume: 520, waeldchen: 14, buesche: 160, kuehe: 9, huetten: 4, blumen: 600, felsen: 150 },
+      berge: { anzahl: 22, seed: 4242 },   // Schneegipfel-Kranz am Horizont
+      bergFarben: { unten: [0x6f7a62, 0x7d8670], mitte: [0x8a8680, 0x7a766f], oben: [0xf3f6f8, 0xe2e8ee] },   // Bergmassiv über dem Tunnel
+    },
   };
 
   // ------------------------------------------------------------------ Helfer
@@ -1304,7 +1326,7 @@
    * Stirnwand mit Loch in Tunnelform (der Steinrahmen der Röhre steht 0,6 m davor). 1 Mesh, Vertex-Farben.
    * @returns {{mesh: THREE.Mesh, drin: (x:number, z:number, rand?:number) => boolean}|null}
    */
-  function bergmassivBauen(gruppe, strecke, berg) {
+  function bergmassivBauen(gruppe, strecke, berg, farben) {
     const sp = strecke.spline, tunnel = strecke.tunnel || [];
     if (!berg || !tunnel.length) return null;
     const HOCH = 46, W = strecke.grenzeEng + 0.35, WAND = 3.4, HT = 6.6, K = 16;
@@ -1342,6 +1364,12 @@
     const farbeH = (h, s, q) => {
       // unten Vulkangestein, oben Moos/Urwald, dazwischen Felsbänder
       const n = 0.5 + 0.5 * Math.sin(s * 0.11 + q * 0.17);
+      if (farben) {   // W4-I (Alpen): unten Almgrün, Mitte Fels, oben Schnee
+        if (h > 30 + n * 8) c.setHex(farben.oben[n > 0.5 ? 0 : 1]);
+        else if (h > 9 + n * 5) c.setHex(farben.mitte[n > 0.55 ? 0 : 1]);
+        else c.setHex(farben.unten[n > 0.45 ? 0 : 1]);
+        return [c.r, c.g, c.b];
+      }
       if (h > 26 + n * 8) c.setHex(n > 0.5 ? 0x4c6a2c : 0x587a34);
       else if (h > 12 + n * 6) c.setHex(n > 0.6 ? 0x5e5246 : 0x4f463c);
       else c.setHex(n > 0.4 ? 0x3e352d : 0x4a4038);
@@ -1358,7 +1386,7 @@
       return { x, y, z, h: y - boden };
     };
     liste.forEach((e) => {
-      e.p = sp.punktBei(e.s); e.yc = strecke.hoeheAn(e.p.x, e.p.z); e.H = huelle(e.s);
+      e.p = sp.punktBei(e.s); e.yc = strecke.hoeheBeiS ? strecke.hoeheBeiS(e.s, 0) : strecke.hoeheAn(e.p.x, e.p.z); e.H = huelle(e.s);
       e.QL = reichweite(e.s, -1); e.QR = reichweite(e.s, 1);
       // Schlucht/Vorfeld: Felswand erst 1,5 m hinter der Bande (Trichter vor den Portalen); Tunnel: fest
       e.qi = e.tun ? qi : Math.max(qi, (strecke.grenzeBei ? strecke.grenzeBei(e.s) : 0) + 1.5);
@@ -1591,12 +1619,261 @@
    * null = nichts ändern (Sommer, oder Thema ohne Bäume wie Wüste/Fantasie bei den Bäumen).
    * @returns {{laub:number[]|null, bluete:number[]|null, bluetenAnteil:number, tanneMisch, buschMisch, bodenMisch, randSchnee}|null}
    */
+  // ------------------------------------------------------------------ Alpen (Runde 6, W4-I)
+
+  /** Almhütte: Steinsockel, Holzwände, flaches Satteldach (dunkel), Kamin, kleine Fenster. Ursprung = Mitte unten. */
+  function huetteGeo() {
+    const teile = [];
+    const box = (sx, sy, sz, x, y, z, farbe, rz) => { const g = new THREE.BoxGeometry(sx, sy, sz); if (rz) g.rotateZ(rz); g.translate(x, y, z); teile.push({ geo: g, farbe }); };
+    box(6.4, 0.9, 5.2, 0, 0.35, 0, 0x8d8a83);                 // Steinsockel (reicht in den Hang)
+    box(6.0, 2.6, 4.8, 0, 2.1, 0, 0x8a5a32);                  // Holzwände
+    box(6.1, 0.22, 4.9, 0, 1.35, 0, 0x6e4626);                // Balkenlage
+    const w = 0.42;                                           // Dachneigung (rad)
+    box(3.6, 0.22, 5.6, -1.62, 4.05, 0, 0x4b3a30, w);           // Dach links
+    box(3.6, 0.22, 5.6, 1.62, 4.05, 0, 0x4b3a30, -w);           // Dach rechts
+    // Giebel (Dreiecke vorn/hinten) als flache Prismen
+    [-2.4, 2.4].forEach((z) => {
+      const g = new THREE.CylinderGeometry(0.01, 3.15, 1.35, 3, 1); g.rotateY(Math.PI / 6); g.scale(1, 1, 0.07); g.translate(0, 4.08, z);
+      teile.push({ geo: g, farbe: 0x7a4e2a });
+    });
+    box(0.55, 1.6, 0.55, 1.6, 4.6, 1.2, 0x7c7770);              // Kamin
+    [[-1.7, 2.3, 2.41], [1.7, 2.3, 2.41], [-1.7, 2.3, -2.41], [1.7, 2.3, -2.41]].forEach(([x, y, z]) => box(0.9, 0.8, 0.05, x, y, z, 0x2f3b48));   // Fenster
+    [[-1.7, 2.3, 2.46], [1.7, 2.3, 2.46]].forEach(([x, y, z]) => box(1.05, 0.12, 0.06, x, y - 0.46, z, 0xd04a3a));   // Blumenkasten rot
+    box(1.0, 1.9, 0.06, 0, 1.75, 2.42, 0x5a3820);              // Tür
+    return vereinen(teile);
+  }
+
+  /** Gipfelkreuz auf einem Felshaufen. Ursprung = Fuß. */
+  function gipfelkreuzGeo() {
+    const teile = [];
+    const fels = [[0, 0.5, 0, 2.2], [1.4, 0.3, 0.6, 1.3], [-1.2, 0.3, -0.7, 1.4], [0.3, 1.2, -0.4, 1.2]];
+    fels.forEach(([x, y, z, r], i) => { const g = new THREE.DodecahedronGeometry(r, 0); g.scale(1, 0.7, 1); g.translate(x, y, z); teile.push({ geo: g, farbe: i % 2 ? 0x8a867e : 0x9a968d }); });
+    const balken = new THREE.BoxGeometry(0.32, 6.2, 0.32); balken.translate(0, 4.6, 0); teile.push({ geo: balken, farbe: 0x6b4428 });
+    const quer = new THREE.BoxGeometry(2.8, 0.3, 0.3); quer.translate(0, 6.3, 0); teile.push({ geo: quer, farbe: 0x6b4428 });
+    const dach = new THREE.BoxGeometry(0.6, 0.12, 0.6); dach.translate(0, 7.74, 0); teile.push({ geo: dach, farbe: 0xc9a44a });   // goldene Kappe
+    return vereinen(teile);
+  }
+
+  /**
+   * Schneegipfel-Kranz am Horizont: anzahl Low-Poly-Kegel (6–8 Seiten) rundum, unten Fels im Dunst, oben Schnee.
+   * Kulisse wie der Vulkan: ohne Tiefentest als Erstes gezeichnet, je Kamera um die Kamera in Sichtweite gestellt.
+   */
+  function bergKranzBauen(gruppe, thema) {
+    const B = thema.berge || {}, n = B.anzahl || 20, rnd = zufall(B.seed || 1);
+    const pos = [], col = [], c = new THREE.Color(), dunst = new THREE.Color(thema.nebel), schnee = new THREE.Color(0xf6f9fc);
+    for (let k = 0; k < n; k++) {
+      const w = (k + rnd() * 0.6) / n * Math.PI * 2, r = 0.92 + rnd() * 0.08;
+      const hoch = 0.13 + rnd() * 0.16, breit = 0.12 + rnd() * 0.1, seiten = 6 + Math.floor(rnd() * 3);
+      const mx = Math.cos(w) * r, mz = Math.sin(w) * r, spitze = [mx + (rnd() - 0.5) * breit * 0.3, hoch, mz + (rnd() - 0.5) * breit * 0.3];
+      const fern = 0.35 + 0.25 * (1 - r) / 0.08;           // weiter hinten = mehr Dunst
+      const ring = [];
+      for (let j = 0; j < seiten; j++) {
+        const a = j / seiten * Math.PI * 2 + rnd() * 0.3, rr = breit * (0.75 + rnd() * 0.5);
+        ring.push([mx + Math.cos(a) * rr, -0.04, mz + Math.sin(a) * rr]);
+      }
+      // Schneegrenze: Mittelring bei 55–65 % der Höhe
+      const u = 0.55 + rnd() * 0.1;
+      const mitte = ring.map(p => [p[0] + (spitze[0] - p[0]) * u, -0.04 + (hoch + 0.04) * u, p[2] + (spitze[2] - p[2]) * u]);
+      for (let j = 0; j < seiten; j++) {
+        const a = ring[j], b = ring[(j + 1) % seiten], am = mitte[j], bm = mitte[(j + 1) % seiten];
+        const hell = 0.85 + 0.3 * ((j % 3) / 2);
+        c.setHex(rnd() < 0.5 ? 0x6d7480 : 0x7c838e).multiplyScalar(hell).lerp(dunst, fern);
+        const f = c.toArray();
+        pos.push(...a, ...b, ...bm, ...a, ...bm, ...am); for (let t = 0; t < 6; t++) col.push(...f);
+        c.copy(schnee).multiplyScalar(0.88 + 0.12 * hell).lerp(dunst, fern * 0.6);
+        const g = c.toArray();
+        pos.push(...am, ...bm, ...spitze); for (let t = 0; t < 3; t++) col.push(...g);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
+    m.name = 'Bergkranz'; m.frustumCulled = false; m.renderOrder = -10; m.matrixAutoUpdate = false;
+    const v3 = new THREE.Vector3(), q0 = new THREE.Quaternion(), sk = new THREE.Vector3(), kam = new THREE.Vector3();
+    m.onBeforeRender = function (r, sz, camera) {
+      kam.setFromMatrixPosition(camera.matrixWorld);
+      const D = camera.far * 0.8;
+      v3.set(kam.x, kam.y - D * 0.03, kam.z); sk.set(D, D, D);
+      this.matrixWorld.compose(v3, q0, sk);
+    };
+    gruppe.add(m);
+    return n;
+  }
+
+  function alpenDeko(gruppe, thema, strecke, rnd) {
+    const sp = strecke.spline, L = sp.laenge, D = thema.deko;
+    const b2 = strecke.breite / 2, grenze = dekoGrenze(strecke), zaun = hinterZaun(strecke), mitte = streckenMitte(strecke);
+    const dummy = new THREE.Object3D();
+    // Berg-Massiv über dem Tunnel (Fels + Schnee), Schneegipfel am Horizont
+    const massiv = bergmassivBauen(gruppe, strecke, (strecke.katalog || strecke.daten || {}).berg, thema.bergFarben);
+    const amBerg = (x, z, extra) => !!massiv && massiv.drin(x, z, extra || 0);
+    const berge = bergKranzBauen(gruppe, thema);
+    // Bergsee (Mulde aus dem Katalog): Wasserspiegel knapp unter dem niedrigsten Uferpunkt
+    const see = strecke.see;
+    let seeInfo = null;
+    if (see) {
+      let hMin = Infinity;
+      for (let k = 0; k < 24; k++) { const w = k / 24 * Math.PI * 2; hMin = Math.min(hMin, strecke.bodenHoehe(see.x + Math.cos(w) * see.r * 1.02, see.z + Math.sin(w) * see.r * 1.02)); }
+      const wasser = wasserFlaeche(see.x, hMin - 0.25, see.z, see.r * 1.05, rnd, 0x3f8fc6);
+      wasser.name = 'Bergsee';
+      gruppe.add(wasser);
+      seeInfo = { x: see.x, z: see.z, r: see.r * 1.15, y: hMin - 0.25 };
+    }
+    const amSee = (x, z, extra) => seeInfo && Math.hypot(x - seeInfo.x, z - seeInfo.z) < seeInfo.r + (extra || 0);
+    // Steinbrücke im Tal: Bach unter der Brücke freihalten
+    const br = strecke.bruecke || null, bachMitte = br ? sp.punktBei((br.von + br.bis) / 2) : null;
+    const amBach = (x, z) => {
+      if (!bachMitte) return false;
+      const dx = x - bachMitte.x, dz = z - bachMitte.z;
+      return Math.abs(dx * bachMitte.tx + dz * bachMitte.tz) < 12 && Math.abs(dx * bachMitte.nx + dz * bachMitte.nz) < strecke.seitenabstandMax + 70;
+    };
+    const frei = (x, z, extra) => !amBerg(x, z, (extra || 0) + 3) && !amSee(x, z, extra) && !amBach(x, z);
+    // Gipfelkreuz am Pass (höchster Punkt), auf der Außenseite hinter dem Zaun
+    let pass = sp.punkte[0];
+    sp.punkte.forEach((p) => { if (p.y > pass.y) pass = p; });
+    let kreuz = null;
+    for (const sg of [1, -1]) {
+      for (const d of [zaun + 8, zaun + 14, zaun + 22]) {
+        const x = pass.x + pass.nx * d * sg, z = pass.z + pass.nz * d * sg;
+        if (!kreuz && istFrei(strecke, x, z, zaun + 6) && frei(x, z, 4)) kreuz = { x, z, y: strecke.bodenHoehe(x, z), winkel: Math.atan2(pass.tx, pass.tz) };
+      }
+    }
+    if (kreuz) instanzMesh(gruppe, 'Gipfelkreuz', gipfelkreuzGeo(), vertexMaterial(true), [kreuz], (b, d) => {
+      d.position.set(b.x, b.y - 0.3, b.z); d.rotation.set(0, b.winkel, 0); d.scale.setScalar(1.2);
+    });
+    const istKreuz = (x, z, r) => kreuz && Math.hypot(x - kreuz.x, z - kreuz.z) < r;
+
+    // ---------- Almhütten (vor den Bäumen: Lichtung) ----------
+    const huetten = [];
+    for (let i = 0; i < D.huetten * 40 && huetten.length < D.huetten; i++) {
+      const st = stelleSuchen(strecke, rnd, zaun + 10, zaun + 60, zaun + 10, 10, 1.2);
+      if (!st || !frei(st.x, st.z, 10) || istKreuz(st.x, st.z, 30) || huetten.some(o => Math.hypot(o.x - st.x, o.z - st.z) < 180)) continue;
+      // Blick (Giebel/Tür) zur Straße
+      const p = sp.punktBei(st.s);
+      st.drehung = Math.atan2(-p.nx * -st.seite, -p.nz * -st.seite);
+      st.y = Math.min(strecke.bodenHoehe(st.x, st.z), strecke.bodenHoehe(st.x + 3, st.z + 3), strecke.bodenHoehe(st.x - 3, st.z - 3));
+      huetten.push(st);
+    }
+    instanzMesh(gruppe, 'Huetten', huetteGeo(), vertexMaterial(true), huetten, (b, d) => {
+      d.position.set(b.x, b.y - 0.1, b.z); d.rotation.set(0, b.drehung, 0); d.scale.setScalar(1.05);
+    });
+    const lichtung = (x, z, r) => huetten.some(h => Math.hypot(x - h.x, z - h.z) < r) || istKreuz(x, z, 14);
+
+    // ---------- Nadelwald: Wäldchen an den Hängen + lockeres Band hinter dem Zaun + Wald in der Ferne ----------
+    const tannen = [];
+    const neu = (x, z, groesse) => { if (frei(x, z, 2) && !lichtung(x, z, 16)) tannen.push({ x, z, y: strecke.bodenHoehe(x, z), winkel: rnd() * Math.PI * 2, groesse }); };
+    for (let s = 0; s < L; s += D.bandAbstand) {
+      const dicht = 0.5 + 0.5 * Math.sin(s * 0.011 + 1.3);          // abschnittsweise Wald / Wiese
+      if (rnd() > dicht * 0.9) continue;
+      const p = sp.punktBei(s + rnd() * 2);
+      [-1, 1].forEach((seite) => {
+        const d = zaun + 1 + Math.pow(rnd(), 1.4) * 40;
+        const x = p.x + p.nx * d * seite, z = p.z + p.nz * d * seite;
+        if (istFrei(strecke, x, z, zaun)) neu(x, z, 0.8 + rnd() * 0.7);
+      });
+    }
+    for (let i = 0; i < D.waeldchen; i++) {
+      const st = stelleSuchen(strecke, rnd, 50, 220, zaun + 25, 30, 1);
+      if (!st || !frei(st.x, st.z, 30)) continue;
+      for (let k = 0; k < 28; k++) {
+        const x = st.x + (rnd() - 0.5) * 70, z = st.z + (rnd() - 0.5) * 70;
+        if (istFrei(strecke, x, z, zaun + 1)) neu(x, z, 0.9 + rnd() * 0.8);
+      }
+    }
+    for (let i = 0; i < D.fernBaeume; i++) {
+      const st = stelleSuchen(strecke, rnd, 60, 320, zaun + 30, 8, 1);
+      if (st && aufBoden(mitte, st.x, st.z, 40)) neu(st.x, st.z, 1.1 + rnd() * 0.8);
+    }
+    instanzMesh(gruppe, 'Tannen', tanneGeo(), vertexMaterial(true), tannen, (b, d, f) => {
+      d.position.set(b.x, b.y - 0.15, b.z);
+      d.rotation.set(0, b.winkel, 0);
+      d.scale.set(b.groesse, b.groesse * (1.1 + rnd() * 0.5), b.groesse);
+      f.setHSL(0.33, 0.25, 0.7 + rnd() * 0.3);
+    });
+
+    // ---------- Büsche (Latschen) und Felsen ----------
+    const buesche = [];
+    for (let i = 0; i < D.buesche; i++) {
+      const st = stelleSuchen(strecke, rnd, grenze + 1, zaun + 30, grenze + 0.5, 10, 1.3);
+      if (st && frei(st.x, st.z, 1) && !lichtung(st.x, st.z, 6)) buesche.push(st);
+    }
+    instanzMesh(gruppe, 'Buesche', new THREE.IcosahedronGeometry(1, 0),
+      new THREE.MeshLambertMaterial({ color: 0x3f7a35, flatShading: true }), buesche, (b, d, f) => {
+        const g = 0.6 + rnd() * 0.8;
+        d.position.set(b.x, b.y + 0.25 * g, b.z); d.rotation.set(0, b.winkel, 0); d.scale.set(1.5 * g, 0.75 * g, 1.3 * g);
+        f.setHSL(0.27 + rnd() * 0.06, 0.45, 0.6 + rnd() * 0.3);
+      });
+    const felsen = [];
+    for (let i = 0; i < D.felsen; i++) {
+      const st = stelleSuchen(strecke, rnd, zaun + 1, zaun + 90, zaun + 1.5, 10, 1.3);
+      if (st && frei(st.x, st.z, 2) && !lichtung(st.x, st.z, 8)) felsen.push(st);
+    }
+    // Ufersteine am Bergsee (halb im Wasser)
+    if (seeInfo) for (let k = 0; k < 14; k++) {
+      const w = k / 14 * Math.PI * 2 + rnd() * 0.3, r = see.r * (0.95 + rnd() * 0.2), x = seeInfo.x + Math.cos(w) * r, z = seeInfo.z + Math.sin(w) * r;
+      if (istFrei(strecke, x, z, zaun)) felsen.push({ x, z, y: Math.max(strecke.bodenHoehe(x, z), seeInfo.y - 0.2), winkel: rnd() * 6.28 });
+    }
+    instanzMesh(gruppe, 'Felsen', new THREE.DodecahedronGeometry(1, 0),
+      new THREE.MeshLambertMaterial({ color: 0x9a968e, flatShading: true }), felsen, (b, d, f) => {
+        const g = 0.6 + rnd() * 1.9;
+        d.position.set(b.x, b.y + 0.15 * g, b.z); d.rotation.set(rnd() * 0.6, b.winkel, rnd() * 0.6); d.scale.set(1.3 * g, 0.8 * g, 1.1 * g);
+        f.setHSL(0.1 + rnd() * 0.1, 0.05 + rnd() * 0.06, 0.7 + rnd() * 0.25);
+      });
+
+    // ---------- Kühe (braun-weiß, Glocke) auf den Almwiesen ----------
+    const kastenGeo = new THREE.BoxGeometry(1, 1, 1);
+    const teile = {
+      braun: [[0, 1.15, 0, 0.9, 0.8, 1.8], [0, 1.45, -1.15, 0.5, 0.5, 0.6], [-0.3, 0.38, -0.65, 0.18, 0.75, 0.18], [0.3, 0.38, -0.65, 0.18, 0.75, 0.18],
+        [-0.3, 0.38, 0.65, 0.18, 0.75, 0.18], [0.3, 0.38, 0.65, 0.18, 0.75, 0.18]],
+      weiss: [[0.46, 1.2, 0.3, 0.02, 0.45, 0.7], [-0.46, 1.1, -0.2, 0.02, 0.4, 0.6], [0, 1.35, -1.47, 0.42, 0.28, 0.08], [0, 0.82, 0.1, 0.6, 0.06, 0.9]],
+      glocke: [[0, 0.98, -1.05, 0.22, 0.26, 0.2]],
+    };
+    const listen = { braun: [], weiss: [], glocke: [] }, kuh = new THREE.Object3D();
+    let kuehe = 0;
+    for (let i = 0; i < D.kuehe * 20 && kuehe < D.kuehe; i++) {
+      const st = stelleSuchen(strecke, rnd, zaun + 4, zaun + 45, zaun + 4, 10, 1.2);
+      if (!st || !frei(st.x, st.z, 3) || lichtung(st.x, st.z, 6)) continue;
+      kuh.position.set(st.x, st.y, st.z); kuh.rotation.set(0, st.winkel, 0); kuh.updateMatrixWorld(true);
+      Object.keys(teile).forEach((k) => teile[k].forEach((t) => {
+        dummy.position.set(t[0], t[1], t[2]); dummy.rotation.set(0, 0, 0); dummy.scale.set(t[3], t[4], t[5]); dummy.updateMatrix();
+        listen[k].push(new THREE.Matrix4().multiplyMatrices(kuh.matrixWorld, dummy.matrix));
+      }));
+      kuehe++;
+    }
+    [['braun', 0x8a5a32], ['weiss', 0xf2efe8], ['glocke', 0xd8b04a]].forEach(([k, f]) => {
+      instanzMesh(gruppe, 'Kuehe', kastenGeo, new THREE.MeshLambertMaterial({ color: f }), listen[k], (mat, d) => mat.decompose(d.position, d.quaternion, d.scale));
+    });
+
+    // ---------- Almblumen (Enzian blau, Edelweiß weiß, Alpenrosen pink, gelb) ----------
+    const blumen = [];
+    for (let i = 0; i < D.blumen / 6; i++) {
+      const st = stelleSuchen(strecke, rnd, b2 + 9, 80, b2 + 8, 10, 1.3);
+      if (!st || !frei(st.x, st.z, 2)) continue;
+      const farbe = Math.floor(rnd() * 4);
+      for (let k = 0; k < 6; k++) {
+        const x = st.x + (rnd() - 0.5) * 9, z = st.z + (rnd() - 0.5) * 9;
+        if (istFrei(strecke, x, z, b2 + 6.5) && frei(x, z, 1)) blumen.push({ x, z, y: strecke.bodenHoehe(x, z), winkel: rnd() * 6.28, farbe });
+      }
+    }
+    const FARBEN = [0x4f7dff, 0xf4f4ee, 0xff6fb5, 0xffd84a];      // Enzian, Edelweiß, Alpenrose, Arnika
+    const blumenGeo = new THREE.CircleGeometry(0.8, 6); blumenGeo.rotateX(-Math.PI / 2);
+    instanzMesh(gruppe, 'Blumen', blumenGeo, new THREE.MeshLambertMaterial({
+      color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), blumen, (b, d, f) => {
+      const g = 0.45 + rnd() * 0.5;                               // kleine Tupfen (große Scheiben wirkten wie Pfützen/Schnee)
+      d.position.set(b.x, b.y + 0.06, b.z); d.rotation.set(0, b.winkel, 0); d.scale.set(g * (1 + rnd() * 0.6), 1, g);
+      f.setHex(FARBEN[b.farbe]);
+    });
+    return { tannen: tannen.length, huetten: huetten.length, kuehe, felsen: felsen.length, buesche: buesche.length, blumen: blumen.length,
+      gipfelkreuz: !!kreuz, see: !!seeInfo, berge, massiv: !!massiv };
+  }
+
   function jahreszeitFarben(themaName, jahreszeit) {
     const J = R.config.jahreszeiten;
     if (!J || !jahreszeit || !J[jahreszeit]) return null;
     let d = J[jahreszeit];
     if (d[themaName]) d = Object.assign({}, d, d[themaName]);
-    const baeume = themaName === 'wiese' || themaName === 'wald' || themaName === 'dino';    // Wüste/Fantasie: eigene Pflanzen bleiben
+    const baeume = themaName === 'wiese' || themaName === 'wald' || themaName === 'dino' || themaName === 'alpen';    // Wüste/Fantasie: eigene Pflanzen bleiben
     const f = {
       laub: baeume ? d.laub : null, bluete: baeume ? d.bluete : null, bluetenAnteil: d.bluetenAnteil || 0,
       tanneMisch: baeume ? d.tanneMisch : null, buschMisch: baeume ? d.buschMisch : null,
@@ -1665,7 +1942,7 @@
     const rnd = zufall(textSeed(strecke.id || 'strecke') ^ thema.seed);
     const gruppe = new THREE.Group();
     gruppe.name = 'Deko ' + themaName;
-    const bauer = { wiese: wieseDeko, wald: waldDeko, wueste: wuesteDeko, fantasie: fantasieDeko, dino: dinoDeko }[themaName] || wieseDeko;
+    const bauer = { wiese: wieseDeko, wald: waldDeko, wueste: wuesteDeko, fantasie: fantasieDeko, dino: dinoDeko, alpen: alpenDeko }[themaName] || wieseDeko;
     const anzahl = bauer(gruppe, thema, strecke, rnd);
     // Instanzen bewegen sich nicht: Begrenzungskugeln einmal berechnen
     gruppe.children.forEach((m) => {
@@ -1774,6 +2051,8 @@
     for (let s = 30; s < L - 15; s += abstand, seite = -seite) {
       if (strecke.imTunnel && strecke.imTunnel(s, 20)) continue;
       if (strecke.brueckeBei && strecke.brueckeBei(s, 12)) continue;
+      if (strecke.ueberfuehrungNah && strecke.ueberfuehrungNah(s, 12)) continue;      // W4-I: nicht auf/unter der Überführung
+      if (strecke.kreuzungNah && strecke.kreuzungNah(s, 25)) continue;                // W4-J: nicht an der Kreuzung (Warnlicht-Masten)
       const b = (strecke.breiteBei ? strecke.breiteBei(s) : strecke.breite) / 2 + (strecke.randBreite || 0.6);
       const d = b + 2.2;
       if (strecke.grenzeBei && strecke.grenzeBei(s) < d + 1) continue;          // Zaun zu nah (Trichter)

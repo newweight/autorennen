@@ -55,7 +55,10 @@
     const sp = strecke.spline;
     const maxStd = strecke.seitenabstandMax !== undefined ? strecke.seitenabstandMax : strecke.breite / 2 + 40;
     const grenze = (s) => (strecke.grenzeBei ? strecke.grenzeBei(s) : maxStd);
-    const n = nah || sp.naechster(vehicle.x, vehicle.z, vehicle._bandeIndex);
+    // W4-J: an einer niveaugleichen Kreuzung mit Index-Kontinuität – die Bande gilt für den EIGENEN Abschnitt
+    const kont = strecke.kreuzungen && strecke.kreuzungen.length && strecke._naechsterKont;
+    const such = kont ? (x, z, i) => strecke._naechsterKont(x, z, i) : (x, z, i) => sp.naechster(x, z, i);
+    const n = nah || such(vehicle.x, vehicle.z, vehicle._bandeIndex);
     vehicle._bandeIndex = n.index;
     const pk = sp.punkte, d = vehicle.daten;
     const hl = (d.laenge || 4.4) / 2, hb = (d.breite || 1.8) / 2;
@@ -67,7 +70,7 @@
       for (let k = 0; k < 5; k++) {
         const la = k === 4 ? 0 : (k < 2 ? hl : -hl), qa = k === 4 ? 0 : (k % 2 ? hb : -hb);
         const x = vehicle.x + r.x * la + q.x * qa, z = vehicle.z + r.z * la + q.z * qa;
-        const e = sp.naechster(x, z, vehicle._bandeIndex);
+        const e = such(x, z, vehicle._bandeIndex);
         const ue = Math.abs(e.seitenabstand) - grenze(e.s);
         if (ue > tief) { tief = ue; best = e; }
       }
@@ -273,6 +276,8 @@
           const A = autos[i], B = autos[j];
           // Auto im Looping (track/looping.js) oder im Flug über eine Schanze (track/schanze.js): keine Auto-Auto-Stöße
           if (A.imLooping || B.imLooping || A.imFlug || B.imFlug) continue;
+          // W4-I: übereinander (Überführung, |Δy| ≥ hoeheTrennung, Standard 2 m) → keine Berührung
+          if (Math.abs((A.y || 0) - (B.y || 0)) >= (C.hoeheTrennung !== undefined ? C.hoeheTrennung : 2)) continue;
           const dxg = B.x - A.x, dzg = B.z - A.z;
           const weit = Math.hypot(A.daten.laenge, A.daten.breite) / 2 + Math.hypot(B.daten.laenge, B.daten.breite) / 2 + luft + 0.05;
           if (dxg * dxg + dzg * dzg > weit * weit) continue;

@@ -14,7 +14,7 @@
 | Spieler 1 | ↑ | ↓ | ← → | R |
 | Spieler 2 | W | S | A D | T |
 
-Weitere Tasten: **C** Kamera (Verfolger / Cockpit / weit), **M** Ton an/aus, **Esc** Pause, **H** Leistungs-Anzeige (fps), **F** Vollbild.
+Weitere Tasten: **Space** (Spieler 1) bzw. **E** (Spieler 2) legt eine Ölfalle (nur mit Ölfass-Item), **G** im Modus-Schritt öffnet die Garage, **C** Kamera (Verfolger / Cockpit / weit), **M** Ton an/aus, **Esc** Pause, **H** Leistungs-Anzeige (fps), **F** Vollbild.
 Im Menü: Pfeile oder WASD bewegen, **Enter** weiter, **Esc** zurück – oder mit der Maus klicken.
 Bei der Fahrer- und Autowahl bewegt Spieler 1 mit den Pfeilen, Spieler 2 mit WASD.
 
@@ -24,7 +24,7 @@ Bei der Fahrer- und Autowahl bewegt Spieler 1 mit den Pfeilen, Spieler 2 mit WAS
    - **Wiese** (leicht): Hügel, lange Start-Gerade, Steinbrücke über den Teich
    - **Wald** (mittel): viele Kurven, steil rauf und runter, Felstunnel, Baumtunnel, Holzbrücke; **Rehe und Bären** laufen über die Straße (ab Welt Hindernisse)
    - **Wüste** (schnell): lange Geraden, Tunnel unter der großen Düne, Brücke über die Schlucht
-   - **Fantasie** (spaß, lila Karte): kurze Zauberland-Strecke mit 2 Loopings, Bällen und Wasserstrahl (siehe unten)
+   - **Fantasie** (spaß, lila Karte): kurze Zauberland-Strecke mit 2 Loopings, einer **Kreuzung mit Warnlicht**, Bällen und Wasserstrahl (siehe unten)
    - **Dino** (mittel): Urwald mit Vulkan, Baumstamm-Brücke über den Sumpf, Dino-Höhle und **laufenden Dinos** (ab Welt Hindernisse: Treffer −60 % Tempo, „Dino! 🦕“) und rollenden Felsbrocken
 3. **Fahrer**: Jeder Spieler wählt einen Namen: Emmy 🦁, Sara, Jonas 🐯, Kerle, Opa, Oma, Elki, Basti, Schumacher, Senna, Verstappen oder Röhrl (Karte mit Emoji). Zwei Spieler können nicht denselben Fahrer wählen. Der Name erscheint im Rennen und in der Ergebnistafel; die Computer-Gegner heißen wie die nicht gewählten Fahrer (zuerst Schumacher, Senna, Verstappen, Röhrl), z. B. „🤖 Senna“.
 4. **Auto**: 9 Autos als echte 3D-Modelle mit neuen, detaillierten **Reifen** (Profilrillen, Felgen mit Speichen, Bremsscheibe und rotem Sattel; der Formel-Renner hat glatte Slicks) – VW T-Roc Cabrio, VW Multivan 6.1 (jetzt **bronze** mit cremeweißem Dach), VW Passat B8, Porsche 911, BMW M4, Mercedes-AMG GT, Audi RS6 Avant, Mini Cooper und der **Formel-Renner** (das schnellste Auto, extrem viel Haftung). Der Streifenwagen ist nicht wählbar.
@@ -81,7 +81,27 @@ Die Einstellungen werden gemerkt.
 - **Anlauf** (Looping, Schanze): Wer zu langsam ankommt, wird 10 m vorher sanft gestoppt. Mit **R** (Spieler 1) bzw. **T** (Spieler 2) setzt du das Auto auf die Anlaufposition (150–160 m davor) und gibst Vollgas.
 - **Kleber** (Fantasie): grüne Streifen am Rand – wer länger darauf fährt, **klebt 5 Sekunden fest** (Steuerung aus), danach geht es weiter.
 - **Dinos** (Strecke Dino): laufen quer über die Straße; Felsbrocken rollen wie Strohballen („Steinschlag! 🪨“).
+- **Flugsaurier** (Strecke Dino): fliegen alle ca. 40 s von vorn an, sehr groß (ca. 15 m Spannweite) und tief über die Straße – mit Schrei beim Auftauchen. In der Cockpit-Kamera duckt sich das Bild kurz.
 - **Polizei** (Schalter in Schritt 5, Standard aus): Ein Streifenwagen fährt hinter dem Feld los und jagt den nächsten Spieler. Bleibt er 1,5 s dicht dran (Blaulicht, Sirene), musst du **10 s anhalten** („🚨 Polizei! Anhalten…“); je Auto und Runde nur einmal, danach 30 s Ruhe. Ein Schutzschild platzt stattdessen. Der Streifenwagen zählt nicht im Ergebnis.
+
+### Pokal und „Letzter fliegt raus“ (Schritt 1, Modus)
+Der Modus-Schritt hat vier Karten: Allein, Zu zweit, **🏆 Pokal** und **🚪 Letzter fliegt raus** (←→ wählt die Karte, ↑↓ schaltet bei Pokal und „Letzter fliegt raus“ zwischen allein und zu zweit).
+- **Pokal**: 3, 4 oder 5 Rennen hintereinander auf festen Strecken (3: Wiese, Wald, Fantasie · 4: dazu Wüste · 5: dazu Dino). Nach jedem Rennen kommt der **Zwischenstand**. Punkte: **1. = 10, 2. = 8, 3. = 6, 4. = 5, 5. = 4, 6. = 3, 7. = 2**, ab dem 8. Platz **1 Punkt**. Bei Gleichstand zählen Siege, dann die besten Platzierungen, dann das letzte Rennen.
+- **Die Computer-Stärke steigt** mit jedem Rennen um eine Stufe (höchstens bis „legende“; „unschlagbar“ bleibt unschlagbar). Welt, Wetter und Tageszeit kommen aus deinen Einstellungen, soweit sie zur Strecke passen.
+- Am Ende gibt es die **Siegerehrung** (Podest, Konfetti, Fanfare). Gewinnt ein Mensch, zählt der **🏆-Zähler** an seiner Fahrerkarte. Mit Esc kannst du den Pokal abbrechen (Rückfrage); danach gelten wieder deine alten Einstellungen.
+- **Letzter fliegt raus**: ein Rennen, bei dem nach und nach der jeweils Letzte ausscheidet („🚪 raus in Runde n“, mit „Puff“-Wolke). Die Rundenzahl ergibt sich aus der Zahl der Teilnehmer (mindestens 3 Computer-Gegner), die Polizei ist aus. Sieger ist, wer als Letzter übrig bleibt.
+
+### Münzen und Garage
+- **Münzen 🪙** liegen auf jeder Strecke (20–40 Stück, auf Geraden oft in Reihen). Einfach durchfahren – sie bremsen nicht und stoßen nicht. Im Looping und in der Luft sammelst du nichts. Das HUD zeigt die Münzen des Rennens.
+- Nach dem Rennen gibt es **Preisgeld**: Platz 1 = 30, Platz 2 = 20, Platz 3 = 15, sonst 5 Münzen. Die **Ergebnistafel** zeigt es in der Spalte „🪙 Preisgeld“ (bei den Computer-Gegnern „–“), dazu in Klammern die im Rennen gesammelten Münzen.
+- **Garage** (Karte im Modus-Schritt oder Taste **G**; Fahrer → Auto → Werkstatt, Esc = zurück). Jeder Fahrer hat sein eigenes Konto und je Auto eigene Werte:
+  - **Lack**: 4 Farben je Auto, je 20 Münzen, einmal kaufen und danach gratis wechseln; „Original“ bleibt immer.
+  - **Upgrades**: Motor, Reifen, Bremsen, je 3 Stufen (30 / 60 / 100 Münzen) – schneller, mehr Grip, kürzere Bremswege.
+  - **Reparatur** (10 Münzen, nur bei **Schaden an**): Das Auto startet das nächste Rennen mit 100 %. Ohne Reparatur startet es mit dem Rest aus dem letzten Rennen (mindestens 30 %).
+  - **Schalter „Upgrades zählen“**: aus = alle fahren gleich schnell, nur die Farben bleiben. Die Computer-Gegner bekommen nie Upgrades.
+
+### Ölfalle (Welt Verrückt und Alles)
+**Ölfässer** (schwarz mit gelben Ringen) stehen auf der Gegenseite hinter den Schutzschild-Kugeln und kommen nach 10 s wieder. Einsammeln gibt ein Item (🛢️ im HUD). Mit **Space** (Spieler 1) bzw. **E** (Spieler 2) legst du 8 m hinter dem Auto einen **Ölfleck** (20 s, höchstens 6 gleichzeitig). Wer hineinfährt, schlingert wie auf Öl („Öl!“). Das eigene Auto ist 1 s immun, ein Schutzschild fängt den Fleck ab. Die Computer-Gegner sammeln Fässer und legen auch selbst Öl, weichen den Flecken aber nicht aus.
 
 ## Tempo
 Neu: Schritt 5 hat die **Tempo-Klasse**. **Normal** (Standard) ist gemütlich: ca. **154–196 km/h** Höchsttempo (Formel-Renner 196), mit weniger Beschleunigung und Bremse. **Schnell** nutzt die vollen Katalogwerte unten.
@@ -99,6 +119,13 @@ In **Schnell** fahren die Autos **220 bis 270 km/h** (Multivan 220 … Porsche 2
   - **Looping** (2 Stück): braucht **mindestens 90 km/h Anlauf**. Wer zu langsam ist, fällt herunter und wird zurück vor die Einfahrt gesetzt („Mehr Anlauf! 🚀“) – also vorher Vollgas.
   - **Bälle** rollen quer über die Straße, ab Runde 2 bzw. in der letzten Runde. Ein Treffer bremst stark (−60 %).
   - **Wasserstrahl**: alle ca. 20 Sekunden schießt eine Fontäne aus dem Boden (vorher blubbert es). Treffer: langsamer und Schlingern.
+  - **🚦 Achtung Kreuzung im Zauberland!** Die Strecke ist eine Acht: Nach dem zweiten Looping fährst du über eine **Kreuzung**, durch
+    eine große Schleife – und kommst danach **quer über dieselbe Kreuzung** zurück. Dort können sich Autos treffen und zusammenstoßen!
+    An allen vier Ecken stehen **Warnlicht-Masten** (rot-weißes Kreuz, zwei rote Lampen): Sie blinken immer ein bisschen – wenn auf
+    der anderen Straße gerade ein Auto kommt, blinken sie **schnell und hell**, und oben steht „Achtung Kreuzung!“.
+    Wer blinkt, hat Vorfahrt …? Nein: **Schau nach links und rechts!** Lieber kurz vom Gas gehen, als quer erwischt zu werden.
+    Die Computer-Autos lassen den Querverkehr vorbei (wer später an der Kreuzung ankommt, wartet) – du musst selbst aufpassen.
+    Auf der Kreuzung darfst du **nicht abbiegen** (die Runde geht geradeaus weiter); **R** setzt dich auf deine eigene Straße zurück.
 
 ## Tipps
 - Eine Runde dauert ungefähr 2 Minuten (Fantasie kürzer). Für Kleine: 1–2 Runden, Fahrhilfe „viel", Computer „leicht".

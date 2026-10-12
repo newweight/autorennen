@@ -58,7 +58,7 @@
     }
     const grundMat = new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.32, depthWrite: false,
       side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-    const P = (s, q, hoch) => { const p = sp.punktBei(s), x = p.x + p.nx * q, z = p.z + p.nz * q; return [x, strecke.hoeheAn(x, z) + hoch, z]; };
+    const P = (s, q, hoch) => { const p = sp.punktBei(s), x = p.x + p.nx * q, z = p.z + p.nz * q; return [x, (strecke.hoeheBeiS ? strecke.hoeheBeiS(s, q) : strecke.hoeheAn(x, z)) + hoch, z]; };
     const geoAus = (dreiecke) => {
       const pos = new Float32Array(dreiecke.length * 9);
       dreiecke.forEach((d, i) => d.forEach((e, j) => pos.set(e, i * 9 + j * 3)));
@@ -106,19 +106,21 @@
     constructor(strecke) {
       const sp = strecke.spline, b = CB(), c = CS();
       this.strecke = strecke;
+      this._ueber = !!(strecke.ueberfuehrungen && strecke.ueberfuehrungen.length);   // W4-I: Strecke mit Überführung
       this.zeit = 0;
       this.felder = (strecke.boostFelder || []).map((e, nr) => ({
         nr, s: sp.wrapS(e.s), laenge: e.laenge || 12, q: e.seitenabstand || 0, halb: wert(b.halbbreite, 2) }));
       this.kugeln = (strecke.schilde || []).map((e, nr) => {
         const p = sp.punktBei(e.s), q = e.seitenabstand || 0, x = p.x + p.nx * q, z = p.z + p.nz * q;
-        return { nr, s: sp.wrapS(e.s), q, x, z, y: strecke.hoeheAn(x, z) + wert(c.hoehe, 1.3), da: true, timer: 0, erschienen: 1 };
+        const y = strecke.hoeheBeiS ? strecke.hoeheBeiS(e.s, q) : strecke.hoeheAn(x, z);     // W4-I: Höhe aus s
+        return { nr, s: sp.wrapS(e.s), q, x, z, y: y + wert(c.hoehe, 1.3), da: true, timer: 0, erschienen: 1 };
       });
       // Ölfässer: aus den Schild-Kugeln abgeleitet (versatz m weiter, Gegenseite; Mitte → 1,5 m rechts)
       const co = CO();
       this.faesser = (strecke.schilde || []).map((e, nr) => {
         const s = sp.wrapS(e.s + wert(co.versatz, 35)), q = e.seitenabstand ? -e.seitenabstand : 1.5, p = sp.punktBei(s);
         const x = p.x + p.nx * q, z = p.z + p.nz * q;
-        return { nr, s, q, x, z, y: strecke.hoeheAn(x, z) + 0.55, da: true, timer: 0, erschienen: 1 };
+        return { nr, s, q, x, z, y: (strecke.hoeheBeiS ? strecke.hoeheBeiS(s, q) : strecke.hoeheAn(x, z)) + 0.55, da: true, timer: 0, erschienen: 1 };
       });
       this.oel = [];            // aktive Ölflecken { x, z, heading, alter, owner, geschuetzt:Set }
       this.rutscher = [];       // [{ nr }] seit dem letzten schritt(): Auto ist gerade in einen Fleck gefahren
@@ -263,7 +265,8 @@
       if (v.imLooping || v.imFlug) return null;
       const r = v.richtung ? v.richtung() : { x: -Math.sin(v.heading), z: -Math.cos(v.heading) }, ab = wert(co.abstand, 8);
       while (this.oel.length >= wert(co.max, 6)) this.oel.shift();         // der älteste weicht
-      const o = { x: v.x - r.x * ab, z: v.z - r.z * ab, heading: v.heading, alter: 0, owner: i, geschuetzt: new Set() };
+      const o = { x: v.x - r.x * ab, z: v.z - r.z * ab, heading: v.heading, alter: 0, owner: i, geschuetzt: new Set(),
+        index: a.index >= 0 ? a.index : undefined };   // W4-I: Streckenindex → richtige Ebene an einer Überführung
       this.oel.push(o);
       a.item = 0; a.itemZeit = 0; a.oelGelegt++; this.oelGelegtAnzahl++;
       return o;
@@ -283,6 +286,8 @@
         const l = (dx * rx + dz * rz) / hl, q = (dx * rz - dz * rx) / hb;
         if (l * l + q * q > 1) continue;
         if (o.geschuetzt.has(i)) continue;
+        // W4-I: Fleck auf der anderen Ebene (Überführung) wirkt nicht
+        if (this._ueber && typeof v.y === 'number' && Math.abs(v.y - this.strecke.hoeheAn(o.x, o.z, o.index)) > 2) continue;
         if (a.schild) { o.geschuetzt.add(i); this.schildVerbrauchen(i); continue; }
         drin = true; break;
       }
@@ -514,7 +519,7 @@
           m.visible = !!o;
           if (!o) return;
           const wachs = Math.min(1, o.alter / 0.35), aus = Math.min(1, (dauer - o.alter) / 2);   // wächst auf, blendet die letzten 2 s aus
-          m.position.set(o.x, this.strecke.hoeheAn(o.x, o.z) + 0.13, o.z);
+          m.position.set(o.x, this.strecke.hoeheAn(o.x, o.z, o.index) + 0.13, o.z);   // W4-I: Index (Höhenmodell 'gelaende': ignoriert)
           m.rotation.y = o.heading; m.scale.set(hb * (0.3 + 0.7 * wachs), 1, hl * (0.3 + 0.7 * wachs));
           m.material.opacity = 0.92 * aus;
         });

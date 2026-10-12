@@ -41,6 +41,12 @@
 //   dinos:       [{ s, von: -1 | 1, intervall, tempo, art: 'dreihorn' | 'langhals' }]  laufende Dinos (world/dynamik.js)
 //   strohOptik:  'fels' → Strohballen rollen als Felsbrocken (gleiche Mechanik)
 //   bruecken art 'stamm' (Baumstamm-Brücke über Sumpf), tunnel art 'hoehle' (Höhle mit Stalaktiten, Fackeln)
+// Runde 6 (W4-I, Alpen): hoehenModell: 'strasse' → y der Kontrollpunkte ist die Fahrbahnhöhe (nicht aus den Hügeln);
+//   ueberfuehrungen: [{ s0, s1, art: 'beton' }]  obere Fahrbahn = Brücke über die eigene Strecke (Kreuzung wird gesucht, Δy ≥ 7 m)
+//   see: { x, z, r, tiefe }  Mulde für den Bergsee. Listen-Einträge nicht auf/unter der Überführung (test_strecke prüft das).
+// Runde 6 (W4-J, Fantasie): kreuzungen: [{ s0, s1 }]  niveaugleiche Kreuzung mit sich selbst (Bahnübergang mit Warnlicht);
+//   s0..s1 = Bereich des ersten Abschnitts, die Stelle (sA/sB, Winkel 70–110°, |Δy| < 1 m) sucht trackBuilder.
+//   Listen-Einträge nicht an der Kreuzung (kreuzungNah, test_strecke prüft das).
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -374,8 +380,8 @@
       id: 'fantasie',
       name: 'Fantasie',
       thema: 'fantasie',
-      beschreibung: 'Zauberland mit Riesenpilzen und Ballons: zwei Loopings (Vollgas!), ' +
-        'bunte Bälle rollen über die Straße und Wasserfontänen spritzen aus dem Boden.',
+      beschreibung: 'Zauberland mit Riesenpilzen und Ballons: zwei Loopings (Vollgas!), eine Kreuzung mit Warnlicht, ' +
+        'bunte Bälle und Wasserfontänen.',
       schwierigkeit: 'spass',
       breite: 14,
       randBreite: 1.5,
@@ -396,52 +402,58 @@
       wracks: [],
       schanzen: [],
       // Runde 5: Klebe-Seitenstreifen (world/kleber.js) auf dem Randstreifen: seite −1 links, 1 rechts, 0 beide.
-      // Nicht in den Anlauf-Zonen der Loopings (10–170, 640–800) und mind. 30 m weg von den Bällen.
+      // Nicht in den Anlauf-Zonen der Loopings (10–170, 640–800), mind. 30 m weg von den Bällen, nicht an der Kreuzung.
+      // W4-J: Listen an die neue Streckenführung (Acht mit Schleife) angepasst – alle Elemente ≥ 35 m von der Kreuzung.
       kleber: [
-        { s0: 220, s1: 270, seite: -1 },     // vor der Rechtskurve, Außenseite
-        { s0: 470, s1: 530, seite: 0 },      // Gerade nach der S-Kurve, beidseits
-        { s0: 975, s1: 1035, seite: -1 },    // enge Rechtskurve, Außenseite
-        { s0: 1170, s1: 1230, seite: 1 },    // Gerade vor dem Ast
+        { s0: 220, s1: 255, seite: -1 },     // vor der Rechtskurve, Außenseite
+        { s0: 385, s1: 440, seite: 0 },      // obere Gerade, beidseits
+        { s0: 980, s1: 1040, seite: 1 },     // Schleife (Linkskurve), Außenseite
+        { s0: 1180, s1: 1240, seite: 1 },    // Gerade vor dem Ast
       ],
       strohballen: [
         { s: 295, von: 1, intervall: 10, tempo: 4 },
-        { s: 1295, von: -1, intervall: 12, tempo: 4 },
+        { s: 1325, von: -1, intervall: 12, tempo: 4 },
       ],
       boostFelder: [
         { s: 680, seitenabstand: 0, laenge: 12 },      // Turbo vor dem zweiten Looping
-        { s: 1030, seitenabstand: 2, laenge: 12 },
+        { s: 1140, seitenabstand: -2, laenge: 12 },    // Turbo nach der Kreuzung (Schleifen-Ausgang)
       ],
       schilde: [
-        { s: 400, seitenabstand: 0 },
-        { s: 1100, seitenabstand: -2 },
+        { s: 390, seitenabstand: 0 },
+        { s: 1205, seitenabstand: -2 },
       ],
       bruecken: [],
       tunnel: [],
       hindernisse: [
-        { typ: 'oel', s: 520, seite: 0.3 },
-        { typ: 'ast', s: 1220, seite: -1 },
+        { typ: 'oel', s: 560, seite: 0.3 },
+        { typ: 'ast', s: 1260, seite: -1 },
       ],
       // Loopings (track/looping.js): s = Einfahrt auf einer Geraden mit ≥ 120 m Anlauf, Radius 12 m
       // → Mindest-Einfahrtstempo sqrt(5·g·r) ≈ 24 m/s ≈ 87 km/h
       loopings: [
         { s: 170, radius: 12 },      // Start-Gerade (Anlauf ab s ≈ 1340 der Vorrunde bzw. ab Start)
-        { s: 800, radius: 12 },      // lange Gerade nach Süden (Anlauf ab s ≈ 650)
+        { s: 800, radius: 12 },      // lange Gerade nach Süden (Gerade ab s ≈ 524; W4-J: danach die Kreuzung bei s ≈ 898)
       ],
       // Dynamische Objekte (world/dynamik.js): die KI kennt sie nicht – Überraschung für alle.
       // baelle: von = Seite, aus der sie rollen (-1 links, 1 rechts); abRunde: 'letzte' oder Rundennummer
       // (Bezug: führender Spieler); intervall s; tempo m/s quer; radius m
       baelle: [
-        { s: 350, von: -1, abRunde: 2, intervall: 8, tempo: 9, radius: 2.2, farbe: 0xff4fa3 },
-        { s: 620, von: 1, abRunde: 'letzte', intervall: 8, tempo: 9, radius: 2.2, farbe: 0x4fc3ff },
-        { s: 1130, von: -1, abRunde: 'letzte', intervall: 8, tempo: 9, radius: 2.2, farbe: 0xffd23a },
+        { s: 340, von: -1, abRunde: 2, intervall: 8, tempo: 9, radius: 2.2, farbe: 0xff4fa3 },
+        { s: 660, von: 1, abRunde: 'letzte', intervall: 8, tempo: 9, radius: 2.2, farbe: 0x4fc3ff },
+        { s: 1300, von: -1, abRunde: 'letzte', intervall: 8, tempo: 9, radius: 2.2, farbe: 0xffd23a },
       ],
       // wasserstrahlen: Düse bei s, seitenabstand (m, rechts +); alle intervall s: vorwarnung s Blubbern, dauer s Strahl
       wasserstrahlen: [
-        { s: 470, seitenabstand: -3, intervall: 20, dauer: 2, vorwarnung: 1 },
-        { s: 940, seitenabstand: 3, intervall: 20, dauer: 2, vorwarnung: 1 },
+        { s: 600, seitenabstand: -3, intervall: 20, dauer: 2, vorwarnung: 1 },
+        { s: 1175, seitenabstand: 3, intervall: 20, dauer: 2, vorwarnung: 1 },
       ],
-      // Bauplan (tests/bauplan/fantasie.json):
-      // G260 K40/90 G60 K32/-60 K32/60 G120 K45/90 G? K28/90 G70 K45/-50 K45/50 G? K35/90 G60
+      // Runde 6 (W4-J): niveaugleiche Kreuzung („Bahnübergang"): s0..s1 = Bereich des ERSTEN Abschnitts, in dem sie liegt.
+      // trackBuilder sucht die Stelle (sA erster, sB zweiter Abschnitt, Winkel, |Δy| < 1 m). Ost-Gerade nach Looping 2 (sA ≈ 898)
+      // kreuzt den Ausgang der 270°-Schleife (sB ≈ 1100), fast rechtwinklig. Warnlicht-Masten an allen 4 Zufahrten.
+      kreuzungen: [{ s0: 870, s1: 930 }],
+      // Bauplan (tests/bauplan/fantasie.json), W4-J: Acht mit 270°-Schleife (Gesamtdrehung 0°), Länge 1.420 m (vorher 1.388 m):
+      // G260 K40/90 G130 K45/90 G?(405) K30/-270 G?(210) K35/90 G85
+      // (vorher: G260 K40/90 G60 K32/-60 K32/60 G120 K45/90 G? K28/90 G70 K45/-50 K45/50 G? K35/90 G60)
       huegel: [
         { x: 160, z: -170, r: 55, h: 7 },
         { x: 170, z: 30, r: 45, h: -3 },
@@ -452,17 +464,16 @@
       punkte: [
         [0, 0.62, 0], [0, 0.81, -32.5], [0, 0.75, -65], [0, 0.51, -97.5], [0, 0.29, -130], [0, 0.17, -162.5],
         [0, 0.11, -195], [0, 0.06, -227.5], [0, 0.03, -260], [1, 0.02, -268.9], [4, 0.02, -277.4], [8.7, 0.02, -284.9],
-        [15.1, 0.02, -291.3], [22.6, 0.02, -296], [31.1, 0.03, -299], [40, 0.04, -300], [70, 0.11, -300], [100, 0.24, -300],
-        [108.3, 0.26, -301.1], [116, 0.26, -304.3], [122.6, 0.22, -309.4], [127.7, 0.17, -316], [132.8, 0.13, -322.6], [139.4, 0.11, -327.7],
-        [147.1, 0.09, -330.9], [155.4, 0.09, -332], [185.4, 0.08, -332], [215.4, 0.06, -332], [245.4, 0.03, -332], [275.4, 0.01, -332],
-        [284.2, 0.01, -331.1], [292.6, 0.01, -328.6], [300.4, 0.01, -324.4], [307.2, 0.01, -318.8], [312.8, 0.02, -312], [317, 0.03, -304.2],
-        [319.6, 0.04, -295.8], [320.4, 0.06, -287], [320.4, 0.16, -254.8], [320.4, 0.36, -222.6], [320.4, 0.66, -190.4], [320.4, 0.96, -158.3],
-        [320.4, 1.14, -126.1], [320.4, 1.1, -93.9], [320.4, 0.88, -61.7], [320.4, 0.56, -29.5], [320.4, 0.29, 2.7], [320.4, 0.12, 34.9],
-        [319.1, 0.09, 43.5], [315.1, 0.06, 51.3], [308.9, 0.03, 57.5], [301.1, 0.01, 61.5], [292.4, -0.01, 62.9], [257.4, -0.27, 62.9],
-        [222.4, -0.99, 62.9], [212.7, -1.22, 63.9], [203.4, -1.33, 67.1], [195, -1.27, 72.1], [188, -1, 78.9], [180.9, -0.64, 85.7],
-        [172.5, -0.31, 90.8], [163.2, -0.06, 93.9], [153.5, 0.09, 95], [123.9, 0.36, 95], [94.2, 0.45, 95], [64.6, 0.33, 95],
-        [35, 0.17, 95], [25.9, 0.13, 93.8], [17.5, 0.1, 90.3], [10.3, 0.09, 84.7], [4.7, 0.1, 77.5], [1.2, 0.13, 69.1],
-        [0, 0.17, 60], [0, 0.36, 30],
+        [15.1, 0.02, -291.3], [22.6, 0.02, -296], [31.1, 0.03, -299], [40, 0.04, -300], [72.5, 0.12, -300], [105, 0.26, -300],
+        [137.5, 0.39, -300], [170, 0.42, -300], [178.8, 0.42, -299.1], [187.2, 0.44, -296.6], [195, 0.48, -292.4], [201.8, 0.55, -286.8],
+        [207.4, 0.65, -280], [211.6, 0.8, -272.2], [214.1, 1.01, -263.8], [215, 1.29, -255], [215, 2.76, -221.2], [215, 4.05, -187.5],
+        [215, 4.08, -153.7], [215, 2.82, -120], [215, 1.28, -86.2], [215, 0.11, -52.5], [215, -0.91, -18.7], [215, -1.68, 15],
+        [215, -1.55, 48.8], [215, -0.51, 82.5], [215, 0.76, 116.3], [215, 1.91, 150], [216.5, 2.12, 159.3], [220.7, 2.14, 167.6],
+        [227.4, 1.98, 174.3], [235.7, 1.69, 178.5], [245, 1.35, 180], [254.3, 1.03, 178.5], [262.6, 0.78, 174.3], [269.3, 0.6, 167.6],
+        [273.5, 0.47, 159.3], [275, 0.4, 150], [273.5, 0.36, 140.7], [269.3, 0.35, 132.4], [262.6, 0.36, 125.7], [254.3, 0.4, 121.5],
+        [245, 0.49, 120], [210, 0.97, 120], [175, 1.48, 120], [140, 1.7, 120], [105, 1.41, 120], [70, 0.81, 120],
+        [35, 0.33, 120], [25.9, 0.24, 118.8], [17.5, 0.17, 115.3], [10.3, 0.12, 109.7], [4.7, 0.09, 102.5], [1.2, 0.09, 94.1],
+        [0, 0.1, 85], [0, 0.18, 56.7], [0, 0.38, 28.3],
       ],
     },
     {
@@ -583,6 +594,117 @@
         [237.6, 4.04, 162.8], [226.9, 4.52, 167.2], [215.5, 5.02, 168.7], [172.7, 6.69, 168.7], [129.8, 7.83, 168.7], [86.9, 8.06, 168.7],
         [44, 7.29, 168.7], [1.2, 5.8, 168.7], [-41.7, 4.05, 168.7], [-53.1, 3.59, 167.2], [-63.8, 3.14, 162.8], [-72.9, 2.75, 155.8],
         [-79.9, 2.45, 146.7], [-84.3, 2.24, 136], [-85.8, 2.13, 124.6], [-85.8, 2.05, 88.4], [-85.8, 2.24, 52.1], [-85.8, 2.71, 15.9],
+      ],
+    },
+    {
+      id: 'alpen',
+      name: 'Alpen',
+      thema: 'alpen',
+      beschreibung: 'Hoch in die Berge: Serpentinen mit Haarnadeln hinauf zum Pass, durch den Felstunnel, ' +
+        'in Kehren hinab und über die Brücke über die eigene Strecke – unten im Tal glitzert der Bergsee.',
+      schwierigkeit: 'mittel',
+      breite: 12,
+      randBreite: 1.5,
+      zaunAbstand: 10,
+      abseitsUntergrund: 'gras',
+      checkpointAbstand: 110,
+      zielRundenzeit: 125,
+      // Runde 6 (W4-I): Höhenmodell „strasse": Fahrbahnhöhe = y der Kontrollpunkte (eigenes Höhenprofil, Querneigung 0),
+      // der Boden wird an die Straße angeglichen (trackBuilder.js). Nur so kann die Strecke über sich selbst führen.
+      hoehenModell: 'strasse',
+      weltStandard: 'hindernisse',
+      welten: vierWelten(),
+      // Berge am Rand der Bodenplatte (Gelände, weit weg von der Strecke) + Mulde für den Bergsee im Tal
+      huegel: [
+        { x: 220, z: -1060, r: 170, h: 80 },
+        { x: -420, z: -380, r: 160, h: 70 },
+        { x: 720, z: -330, r: 170, h: 75 },
+        { x: 120, z: 480, r: 150, h: 45 },
+        { x: -300, z: 250, r: 140, h: 50 },
+      ],
+      see: { x: 120, z: 5, r: 40, tiefe: 4 },
+      // Steinbrücke über den Abfluss des Sees (Tal), Felstunnel auf der Passgeraden (Berg-Massiv: themes.js bergmassivBauen)
+      bruecken: [{ s0: 2672, s1: 2722, art: 'stein', tiefe: 5 }],
+      tunnel: [{ s0: 1370, s1: 1470, art: 'fels' }],
+      berg: { s0: 1325, s1: 1500 },
+      // Überführung: die Abfahrt (oben, s ≈ 2123, y ≈ 19) kreuzt die Auffahrt (unten, s ≈ 346, y ≈ 10) rechtwinklig auf einer
+      // Betonbrücke mit Pfeilern (Δy ≈ 9 m). Im Brückenbereich zieht die obere Fahrbahn den Boden nicht mit (Tal darunter).
+      ueberfuehrungen: [{ s0: 2068, s1: 2178, art: 'beton' }],
+      hindernisse: [
+        { typ: 'sand', s: 470, seite: -0.3 },
+        { typ: 'baustelle', s: 790, seite: 1 },
+        { typ: 'ast', s: 1600, seite: -1 },
+        { typ: 'oel', s: 1950, seite: 0.3 },
+      ],
+      spuren: [
+        { s0: 580, s1: 630, spuren: 1 },       // enger Bergweg vor der ersten Haarnadel
+        { s0: 2350, s1: 2400, spuren: 3 },     // breit auf der Talfahrt
+      ],
+      wracks: [
+        { s: 520, seitenabstand: -3.5, brennt: false, autoId: 'passat' },
+        { s: 1530, seitenabstand: 3.5, brennt: true, autoId: 'multivan' },
+      ],
+      strohballen: [
+        { s: 1645, von: 1, intervall: 10, tempo: 4 },
+        { s: 2220, von: -1, intervall: 12, tempo: 4 },
+      ],
+      // Schanzen nur auf Geraden ohne Überführung darunter/darüber: Start-Gerade und Talfahrt-Gerade (genug Anlauf für ≥ 90 km/h)
+      schanzen: [
+        { s: 65, winkel: 8, laenge: 10 },
+        { s: 2450, winkel: 12, laenge: 10 },
+      ],
+      boostFelder: [
+        { s: 1300, seitenabstand: 2, laenge: 12 },
+        { s: 2290, seitenabstand: 0, laenge: 12 },
+      ],
+      schilde: [
+        { s: 430, seitenabstand: 0 },
+        { s: 2000, seitenabstand: -2 },
+      ],
+      baelle: [
+        { s: 1230, von: -1, abRunde: 2, intervall: 8, tempo: 9, radius: 2.2, farbe: 0xff4fa3 },
+        { s: 2600, von: 1, abRunde: 'letzte', intervall: 8, tempo: 9, radius: 2.2, farbe: 0x4fc3ff },
+      ],
+      wasserstrahlen: [
+        { s: 2560, seitenabstand: -2, intervall: 20, dauer: 2, vorwarnung: 1 },
+      ],
+      // Bauplan (tests/bauplan/alpen.json, Höhenmarken Y): Acht – G150 K100/45 G180 (Kreuzung unten) K50/-45 G40 K40/90
+      // G125 K28/-180 G125 K28/180 G125 (Serpentinen) K40/-90 G40 K40/-90 G235 (Pass + Tunnel) K40/-90 G100 K30/90 G60
+      // K28/-180 G60 K30/90 (Kehre) G60 K60/-45 G200 (Brücke = Kreuzung oben) K80/45 G?(189) K80/90 G?(84, Steinbrücke) K80/90 G50
+      punkte: [
+        [0, -5, 0], [0, -5, -30], [0, -5, -60], [0, -5, -90], [0, -5, -120], [0, -4.41, -150],
+        [0.4, -4.03, -158.7], [1.5, -3.55, -167.4], [3.4, -2.98, -175.9], [6, -2.33, -184.2], [9.4, -1.66, -192.3], [13.4, -0.99, -200],
+        [18.1, -0.33, -207.4], [23.4, 0.34, -214.3], [29.3, 1.01, -220.7], [50.1, 3.26, -241.5], [70.8, 5.5, -262.3], [91.6, 7.75, -283],
+        [112.4, 9.66, -303.8], [127.1, 10.63, -318.5], [141.8, 11.32, -333.3], [156.6, 11.86, -348], [161.7, 12.03, -354], [165.8, 12.19, -360.6],
+        [168.8, 12.32, -367.9], [170.6, 12.44, -375.5], [171.2, 12.55, -383.3], [171.2, 12.83, -403.3], [171.2, 13.12, -423.3], [172.2, 13.24, -432.2],
+        [175.2, 13.37, -440.7], [179.9, 13.49, -448.3], [186.3, 13.62, -454.6], [193.9, 13.78, -459.4], [202.3, 13.97, -462.3], [211.2, 14.2, -463.3],
+        [236.2, 15.01, -463.3], [261.2, 16, -463.3], [286.2, 16.99, -463.3], [311.2, 17.99, -463.3], [336.2, 18.99, -463.3], [344.9, 19.34, -464.7],
+        [352.7, 19.69, -468.7], [358.9, 20.05, -474.9], [362.8, 20.4, -482.7], [364.2, 20.75, -491.3], [362.8, 21.1, -500], [358.9, 21.45, -507.8],
+        [352.7, 21.8, -514], [344.9, 22.15, -518], [336.2, 22.5, -519.3], [311.2, 23.5, -519.3], [286.2, 24.5, -519.3], [261.2, 25.5, -519.3],
+        [236.2, 26.5, -519.3], [211.2, 27.5, -519.3], [202.6, 27.85, -520.7], [194.8, 28.2, -524.7], [188.6, 28.55, -530.9], [184.6, 28.9, -538.7],
+        [183.2, 29.25, -547.3], [184.6, 29.6, -556], [188.6, 29.95, -563.8], [194.8, 30.31, -570], [202.6, 30.66, -574], [211.2, 31.01, -575.3],
+        [236.2, 32.01, -575.3], [261.2, 33.01, -575.3], [286.2, 34, -575.3], [311.2, 35, -575.3], [336.2, 35.88, -575.3], [345.1, 36.15, -576.3],
+        [353.6, 36.41, -579.3], [361.2, 36.65, -584.1], [367.5, 36.87, -590.4], [372.3, 37.08, -598], [375.2, 37.3, -606.4], [376.2, 37.52, -615.3],
+        [376.2, 38, -635.3], [376.2, 38.48, -655.3], [375.2, 38.7, -664.2], [372.3, 38.92, -672.7], [367.5, 39.13, -680.3], [361.2, 39.35, -686.6],
+        [353.6, 39.53, -691.4], [345.1, 39.69, -694.3], [336.2, 39.81, -695.3], [306.2, 40, -695.3], [276.2, 39.78, -695.3], [247, 39.17, -695.3],
+        [217.9, 38.33, -695.3], [188.7, 37.5, -695.3], [159.5, 36.67, -695.3], [130.4, 35.83, -695.3], [101.2, 35.02, -695.3], [92.3, 34.78, -694.3],
+        [83.9, 34.54, -691.4], [76.3, 34.31, -686.6], [69.9, 34.08, -680.3], [65.2, 33.85, -672.7], [62.2, 33.62, -664.2], [61.2, 33.39, -655.3],
+        [61.2, 32.75, -630.3], [61.2, 32.11, -605.3], [61.2, 31.47, -580.3], [61.2, 30.83, -555.3], [60.2, 30.63, -547.6], [57.2, 30.43, -540.3],
+        [52.4, 30.23, -534.1], [46.2, 30.03, -529.4], [39, 29.82, -526.4], [31.2, 29.62, -525.3], [1.2, 28.85, -525.3], [-28.8, 28.09, -525.3],
+        [-37.4, 27.86, -524], [-45.2, 27.64, -520], [-51.4, 27.41, -513.8], [-55.4, 27.19, -506], [-56.8, 26.96, -497.3], [-55.4, 26.73, -488.7],
+        [-51.4, 26.51, -480.9], [-45.2, 26.28, -474.7], [-37.4, 26.06, -470.7], [-28.8, 25.83, -469.3], [1.2, 25.07, -469.3], [31.2, 24.3, -469.3],
+        [39, 24.1, -468.3], [46.2, 23.89, -465.3], [52.4, 23.69, -460.6], [57.2, 23.49, -454.3], [60.2, 23.29, -447.1], [61.2, 23.09, -439.3],
+        [61.2, 22.32, -409.3], [61.2, 21.55, -379.3], [61.7, 21.35, -371.5], [63.3, 21.15, -363.8], [65.8, 20.95, -356.4], [69.3, 20.75, -349.3],
+        [73.6, 20.55, -342.8], [78.8, 20.35, -336.9], [97.4, 19.67, -318.3], [116, 18.73, -299.7], [136.8, 17.23, -278.9], [157.7, 15.45, -258],
+        [178.5, 13.68, -237.2], [199.4, 11.91, -216.3], [220.2, 10.14, -195.5], [226.2, 9.6, -188.8], [231.4, 9.06, -181.5], [235.7, 8.52, -173.6],
+        [239.2, 7.98, -165.4], [241.6, 7.44, -156.7], [243.1, 6.9, -147.9], [243.6, 6.36, -138.9], [243.6, 4.74, -111.9], [243.6, 3.11, -84.9],
+        [243.6, 1.49, -58], [243.6, -0.13, -31], [243.6, -1.75, -4], [243.6, -3.37, 23], [243.6, -4.53, 50], [243.1, -4.76, 59],
+        [241.6, -4.92, 67.8], [239.2, -4.99, 76.4], [235.7, -5, 84.7], [231.4, -5, 92.6], [226.2, -5, 99.9], [220.2, -5, 106.6],
+        [213.5, -5, 112.5], [206.2, -5, 117.7], [198.4, -5, 122.1], [190.1, -5, 125.5], [181.4, -5, 128], [172.6, -5, 129.5],
+        [163.6, -5, 130], [135.8, -5, 130], [107.9, -5, 130], [80, -5, 130], [71, -5, 129.5], [62.2, -5, 128],
+        [53.6, -5, 125.5], [45.3, -5, 122.1], [37.4, -5, 117.7], [30.1, -5, 112.5], [23.4, -5, 106.6], [17.5, -5, 99.9],
+        [12.3, -5, 92.6], [7.9, -5, 84.7], [4.5, -5, 76.4], [2, -5, 67.8], [0.5, -5, 59], [0, -5, 50],
+        [0, -5, 25],
       ],
     },
   ];

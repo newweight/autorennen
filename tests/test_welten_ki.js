@@ -47,7 +47,7 @@ function schritt(lp, fz, v, st, s, index) {
   const xAlt = v.x, zAlt = v.z;
   v.schritt(dt, s);
   let e = S.nachSchritt(fz, v, st, n, xAlt, zAlt, dt);
-  v.y = S.hoehe(fz, v, st);
+  v.y = S.hoehe(fz, v, st, n.index);   // W4-I: Ebene über den Streckenindex
   if (st.loopings && st.loopings.length) {
     const pt = st.spline.punktBei(n.s), dx = v.x - xAlt, dz = v.z - zAlt;
     e = LP.einfahrt(lp, v, st, n.s, n.s + dx * pt.tx + dz * pt.tz, n.seitenabstand + dx * pt.nx + dz * pt.nz) || e;
@@ -64,12 +64,15 @@ function kiFahrt(st, stufe) {
   if (d.hindernisseSetzen) d.hindernisseSetzen(st.hindernisse);
   const t = rennen.teilnehmer[0], lp = LP.zustand(), fz = S.zustand();
   let index = -1, abseits = 0, zeit = 0, reset = false, sprungMin = Infinity, spruenge = 0, startSprung = Infinity, weg = 0;
+  let yAlt = null, maxDy = 0, maxDyS = 0;   // W4-I: Höhen-Sprünge je Schritt (Überführung: Ebene darf nicht wechseln)
   for (let k = 0; k < 60 * 500 && !t.imZiel; k++) {
     const s = d.steuerung(dt, { andere: [], spielerFortschrittMax: null, eigenerFortschritt: t.fortschritt, laeuft: true });
     if (d.brauchtReset) { reset = true; break; }
-    const vorher = v.vLaengs;
+    const vorher = v.vLaengs, warLuft = fz.aktiv || lp.aktiv || lp.fallen;
     const r = schritt(lp, fz, v, st, s, index);
     index = r.index;
+    if (yAlt !== null && !warLuft && !fz.aktiv && !lp.aktiv && !lp.fallen && Math.abs(v.y - yAlt) > maxDy) { maxDy = Math.abs(v.y - yAlt); maxDyS = st.spline.punkte[index].s; }
+    yAlt = v.y;
     weg += Math.abs(v.vLaengs) * dt;
     if (r.ereignis === 'abflug') {
       spruenge++;
@@ -81,7 +84,7 @@ function kiFahrt(st, stufe) {
     rennen.schritt(dt);
     zeit += dt;
   }
-  return { imZiel: t.imZiel, reset, anteil: abseits / Math.max(zeit, dt), r2: t.rundenzeiten[1], sprungMin, spruenge, startSprung,
+  return { imZiel: t.imZiel, reset, anteil: abseits / Math.max(zeit, dt), r2: t.rundenzeiten[1], sprungMin, spruenge, startSprung, maxDy, maxDyS,
     loop: { geschafft: lp.geschafft, gefallen: lp.gefallen, zuLangsam: lp.zuLangsam } };
 }
 
@@ -96,13 +99,13 @@ for (const daten of R.trackCatalog) {
     for (const stufe of STUFEN) {
       const e = kiFahrt(st, stufe);
       sprungMinAlle = Math.min(sprungMinAlle, e.sprungMin); startMinAlle = Math.min(startMinAlle, e.startSprung);
-      const ok = e.imZiel && !e.reset && e.anteil < 0.03 &&
+      const ok = e.imZiel && !e.reset && e.anteil < 0.03 && e.maxDy <= 1 &&
         (!nSch || (e.spruenge >= 2 * nSch && e.sprungMin >= SPRUNG_MIN && e.startSprung >= START_MIN)) &&
         (!nLoop || (e.loop.geschafft === 2 * nLoop && e.loop.gefallen === 0 && e.loop.zuLangsam === 0));
       if (!ok) { allesOk = false; zeilen.push(stufe + ': ' + JSON.stringify(e)); }
-      else zeilen.push(stufe + ' ' + (e.r2 ? e.r2.toFixed(1) + ' s' : '-'));
+      else zeilen.push(stufe + ' ' + (e.r2 ? e.r2.toFixed(1) + ' s' : '-') + (st.ueberfuehrungen.length ? ' Δy≤' + e.maxDy.toFixed(2) : ''));
     }
-    pruefe(`[${daten.id}/${welt}] 7 Stufen × 2 Runden: im Ziel, kein Reset, abseits < 3 %` +
+    pruefe(`[${daten.id}/${welt}] 7 Stufen × 2 Runden: im Ziel, kein Reset, abseits < 3 %, Höhe ohne Sprung (≤ 1 m/Schritt)` +
       (nSch ? `, ${nSch} Schanzen je Runde mit ≥ 90 km/h` : '') + (nLoop ? `, ${nLoop} Loopings ohne Sturz` : ''),
       allesOk, (nSch ? 'Absprung min ' + (sprungMinAlle * 3.6).toFixed(0) + ' km/h' +
         (startMinAlle < Infinity ? ', Start-Schanze (Runde 1) ' + (startMinAlle * 3.6).toFixed(0) + ' km/h' : '') + ' | ' : '') + zeilen.join(', '));
@@ -197,6 +200,110 @@ if (!process.env.OHNE_REMPELN) {
         'Zeit ' + (schritte * dt).toFixed(0) + ' s, im Ziel ' + tn.filter(t => t.imZiel).length + '/7, Resets ' + resets +
         ' (' + fz.filter(f => f.resets).map(f => f.driver.name + ' ' + f.resets).join(', ') + '), Stöße ' + stoesse + ', Dreher ' + dreher +
         ', KI-Rempler ' + rempler + ', Baum-Treffer ' + baeume);
+    }
+  }
+}
+
+// ---------- Runde 6 (W4-J): niveaugleiche Kreuzung (Fantasie, alle Welten + XL) ----------
+// a) Begegnungen erzwingen: KI auf Abschnitt A und KI auf Abschnitt B kommen (bei 13 Zeitversätzen) gleichzeitig an der Kreuzung an.
+//    Prüft: beide kommen durch (kein Hängen, kein Reset), Querverkehr wird erkannt (einer lässt den anderen vorbei), Zusammenstöße selten.
+// b) Ein Auto steht MITTEN auf der Kreuzung (Spieler parkt): die KI auf A und auf B fahren vorbei (≤ 25 s), kein Reset.
+// c) Alle 7 Stufen gemeinsam, 3 Runden (Fantasie alle Welten + XL), rempeln echt: alle im Ziel, 0 Resets, keine NaN,
+//    Kreuzungs-Begegnungen gezählt (Autos auf A und B gleichzeitig in der Kreuzung ± 25 m).
+if (!process.env.OHNE_KREUZUNG && (!nurId || nurId === 'fantasie')) {
+  const R5 = ladeModule(dateien);
+  R5.Vehicle.klasseStandard = KLASSE;
+  const K5 = R5.Kollisionen, LP5 = R5.Looping, S5 = R5.Schanzen;
+  const daten = R5.trackCatalog.find(d => d.id === 'fantasie');
+  /** Autos (Liste { vehicle, driver|null, index, looping, flug }) dt-weise wie main.js bewegen, mit Bande/Auto-Auto; liefert Stöße A↔B. */
+  const schrittAlle = (st, fz, rennen, umf) => {
+    const sp = st.spline;
+    fz.forEach((f, i) => {
+      if (rennen && rennen.teilnehmer[i].imZiel) { f.vehicle.vLaengs *= 0.98; return; }
+      if (rennen) umf.eigenerFortschritt = rennen.teilnehmer[i].fortschritt;
+      const s = f.driver ? f.driver.steuerung(dt, umf) : { gas: 0, bremse: 1, lenkung: 0 };
+      if (f.driver && f.driver.brauchtReset) { f.resets = (f.resets || 0) + 1; f.driver.zurueckgesetzt(f.index); return; }
+      const r = LP5.fahrzeugSchritt(f.looping, f.vehicle, st, s, dt, f.index);   // Looping oder Boden (wie main.js)
+      f.index = r.index;
+    });
+    fz.forEach(f => K5.bande(f.vehicle, st));
+    const sts = K5.autoAuto(fz, { rempeln: 'echt', dt });
+    fz.forEach(f => K5.bande(f.vehicle, st));
+    if (rennen) rennen.schritt(dt);
+    let ab = 0;
+    for (const x of sts) {
+      const a = fz[x.a] || fz[x.i], b = fz[x.b] || fz[x.j];
+      if (!a || !b) continue;
+      const na = st.abfrage(a.vehicle.x, a.vehicle.z, a.index), nb = st.abfrage(b.vehicle.x, b.vehicle.z, b.index);
+      if (Math.abs(sp.differenzS(na.s, nb.s)) > 100) ab++;
+    }
+    return ab;
+  };
+  const neuesAuto = (st, s, q, stufe, seed, vStart) => {
+    const p = st.spline.punktBei(s), v = new R5.Vehicle({});
+    v.setzen(p.x + p.nx * q, p.z + p.nz * q, R5.headingAus(p.tx, p.tz)); v.vLaengs = vStart || 0;
+    const d = stufe ? new R5.Driver(v, st, { schwierigkeit: stufe, seed, name: stufe + seed }) : null;
+    if (d) { d.hindernisseSetzen(st.hindernisse); d.zurueckgesetzt(st.spline.indexBei(s)); }
+    return { vehicle: v, driver: d, index: st.spline.indexBei(s), looping: LP5.zustand(), flug: S5.zustand(), resets: 0 };
+  };
+  for (const variante of ['', 'xl']) {
+    const st = new R5.Strecke(daten, { welt: 'alles', variante }), sp = st.spline, k = st.kreuzungen[0];
+    const name = '[fantasie' + (variante ? ' ' + variante : '') + '] W4-J Kreuzung';
+    // a) Begegnungen
+    let durch = 0, gewartet = 0, stoesse = 0, maxZeit = 0, resets = 0, faelle = 0;
+    for (let off = -60; off <= 60; off += 10) {
+      const fa = neuesAuto(st, k.sA - 160, 1.5, 'mittel', 1, 30), fb = neuesAuto(st, k.sB - 70 + off * 0.5, -1.5, 'schwer', 2, 15);
+      const fz = [fa, fb], umf = { andere: fz.map(f => ({ vehicle: f.vehicle, get s() { return st.abfrage(f.vehicle.x, f.vehicle.z, f.index).s; } })), laeuft: true, rempeln: 'echt' };
+      let zeit = 0, fertig = false;
+      while (zeit < 40 && !fertig) {
+        stoesse += schrittAlle(st, fz, null, umf) ? 1 : 0;
+        zeit += dt;
+        const da = sp.differenzS(st.abfrage(fa.vehicle.x, fa.vehicle.z, fa.index).s, k.sA), db = sp.differenzS(st.abfrage(fb.vehicle.x, fb.vehicle.z, fb.index).s, k.sB);
+        fertig = da > 40 && db > 40;
+      }
+      faelle++; if (fertig) durch++; maxZeit = Math.max(maxZeit, zeit);
+      if (fa.driver.querGewartet > 0 || fb.driver.querGewartet > 0) gewartet++;
+      resets += fa.resets + fb.resets;
+    }
+    pruefe(name + ' a) gleichzeitige Ankunft (' + faelle + ' Versätze): beide durch, 0 Resets, Querverkehr erkannt, ≤ 3 Fälle mit Zusammenstoß',
+      durch === faelle && resets === 0 && gewartet >= 3 && stoesse <= 3 * 60, 'durch ' + durch + '/' + faelle + ', nachgegeben in ' + gewartet + ' Fällen, Stoß-Schritte ' + stoesse +
+      ', längste ' + maxZeit.toFixed(1) + ' s');
+    // b) Auto steht auf der Kreuzung
+    let okB = true, infoB = '';
+    for (const [sStart, pass] of [[k.sA - 60, 'A'], [k.sB - 90, 'B']]) {   // A: erst nach Looping 2 starten
+      const park = neuesAuto(st, k.sA + 1, 2, null, 0, 0), ki = neuesAuto(st, sStart, 0, 'mittel', 5, 20);
+      const fz = [park, ki], umf = { andere: fz.map(f => ({ vehicle: f.vehicle, get s() { return st.abfrage(f.vehicle.x, f.vehicle.z, f.index).s; } })), laeuft: true, rempeln: 'sanft' };
+      const sZiel = pass === 'A' ? k.sA : k.sB;
+      let zeit = 0, ok = false;
+      while (zeit < 25 && !ok) { schrittAlle(st, fz, null, umf); zeit += dt; ok = sp.differenzS(st.abfrage(ki.vehicle.x, ki.vehicle.z, ki.index).s, sZiel) > 30; }
+      if (!ok || ki.resets) { okB = false; }
+      infoB += pass + ' ' + zeit.toFixed(1) + ' s' + (ki.resets ? ' Reset' : '') + '; ';
+    }
+    pruefe(name + ' b) Auto parkt auf der Kreuzung: KI auf A und B fahren vorbei (≤ 25 s, 0 Resets)', okB, infoB);
+    // c) 7 Stufen gemeinsam, 3 Runden
+    for (const welt of variante ? ['alles'] : Object.keys(daten.welten)) {
+      const st2 = new R5.Strecke(daten, { welt, variante }), sp2 = st2.spline, k2 = st2.kreuzungen[0];
+      const starts = st2.startpositionen(STUFEN.length);
+      const fz = STUFEN.map((stufe, i) => {
+        const v = new R5.Vehicle({}); v.setzen(starts[i].x, starts[i].z, starts[i].heading);
+        const d = new R5.Driver(v, st2, { schwierigkeit: stufe, seed: 31 + i, name: stufe }); d.hindernisseSetzen(st2.hindernisse);
+        return { vehicle: v, driver: d, index: -1, looping: LP5.zustand(), flug: S5.zustand(), resets: 0 };
+      });
+      const rennen = new R5.RaceManager(st2, fz.map(f => ({ vehicle: f.vehicle, name: f.driver.name, istSpieler: false })), { runden: 3, countdown: 0 });
+      const tn = rennen.teilnehmer, umf = { andere: tn, spielerFortschrittMax: null, laeuft: true, rempeln: 'echt' };
+      let schritte = 0, nan = false, begegnung = 0, abStoss = 0, warten = 0;
+      while (!tn.every(t => t.imZiel) && schritte < 60 * 900) {
+        abStoss += schrittAlle(st2, fz, rennen, umf) ? 1 : 0;
+        fz.forEach(f => { if (!Number.isFinite(f.vehicle.x) || !Number.isFinite(f.vehicle.z)) nan = true; });
+        const aDa = tn.some(t => Math.abs(sp2.differenzS(t.s, k2.sA)) < 25), bDa = tn.some(t => Math.abs(sp2.differenzS(t.s, k2.sB)) < 25);
+        if (aDa && bDa) begegnung++;
+        schritte++;
+      }
+      fz.forEach(f => { warten += f.driver.querGewartet; });
+      const res = fz.reduce((a, f) => a + f.resets, 0);
+      pruefe(name + ' c) [' + welt + '] 7 Stufen gemeinsam, 3 Runden, rempeln echt: alle im Ziel, 0 Resets, keine NaN',
+        tn.every(t => t.imZiel) && res === 0 && !nan, 'Zeit ' + (schritte * dt).toFixed(0) + ' s, im Ziel ' + tn.filter(t => t.imZiel).length + '/7, Resets ' + res +
+        ', Begegnungen an der Kreuzung ' + (begegnung * dt).toFixed(1) + ' s, Stoß-Schritte A↔B ' + abStoss + ', KI-Wartezeit gesamt ' + warten.toFixed(1) + ' s');
     }
   }
 }

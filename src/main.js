@@ -785,7 +785,7 @@
         let steigung = 0;
         if (this.strecke) {
           const st = this.strecke, r = d.richtung();
-          steigung = Math.atan2(st.hoeheAn(d.x + r.x * 1.6, d.z + r.z * 1.6) - st.hoeheAn(d.x - r.x * 1.6, d.z - r.z * 1.6), 3.2);
+          steigung = Math.atan2(st.hoeheAn(d.x + r.x * 1.6, d.z + r.z * 1.6, f.index) - st.hoeheAn(d.x - r.x * 1.6, d.z - r.z * 1.6, f.index), 3.2);   // W4-I: Index
         }
         // Runde 4: in der Luft ersetzt das Flug-Nicken die Straßensteigung; Rampe/Landung: Zusatz-Nicken (interpoliert)
         const fz = f.flug;
@@ -803,6 +803,8 @@
       else if (this.rennen && this.rennen.elimination) this._zuschauerKameras();   // W3-F (vor dem Kamera-Update)
       if (this.zustand !== 'menue' && !this.pausiert) for (let i = 0; i < this.kameras.length; i++) { this.kameras[i].update(dt); this._loopingKamera(this.kameras[i], dt, alpha); }
       if (this.strecke) this.strecke.hindernisseAnimieren(this._physikZeit || 0);
+      // W4-J: Warnlicht an der Kreuzung (blinkt; schnell, wenn im anderen Abschnitt ein Auto < 60 m vor der Kreuzung ist)
+      if (this.strecke && this.strecke.kreuzungen && this.strecke.kreuzungen.length) this.strecke.kreuzungAnimieren(this._physikZeit || 0, this.zustand === 'menue' ? null : this.fahrzeuge);
       if (this.wetter) this.wetter.update(dt, this.zustand === 'menue' ? [this.menueKamera] : this.kameras);
       if (this.dynamik) this.dynamik.animieren();
       if (this.puffs.length) this.puffs = this.puffs.filter(p => p.update(this.pausiert ? 0 : dt));   // W3-F
@@ -875,8 +877,9 @@
       const sp = st.spline, p = sp.punktBei(this.menueS), q = sp.punktBei(this.menueS + 70);
       const seite = Math.sin(this.menueS / 90) * 16;     // schwenkt langsam über die Straße
       const x = p.x + p.nx * seite, z = p.z + p.nz * seite;
-      this.menueKamera.position.set(x, st.hoeheAn(p.x, p.z) + 13 + Math.sin(this.menueS / 55) * 4, z);
-      this.menueKamera.lookAt(q.x, st.hoeheAn(q.x, q.z) + 1.5, q.z);
+      // W4-I: Höhe aus s (an einer Überführung die richtige Ebene); Höhenmodell 'gelaende' unverändert
+      this.menueKamera.position.set(x, st.hoeheBeiS(this.menueS, 0) + 13 + Math.sin(this.menueS / 55) * 4, z);
+      this.menueKamera.lookAt(q.x, st.hoeheBeiS(this.menueS + 70, 0) + 1.5, q.z);
     }
 
     /** Motorgeräusche, Countdown-Pieptöne, Bremsquietschen, Bande – jeden Frame. */
@@ -1126,7 +1129,7 @@
           umgebung.eigenerFortschritt = t.fortschritt; umgebung.laeuft = rennen.gasErlaubt;
           umgebung.rempeln = rempeln;   // Runde 6: KI ab profi darf bei 'echt' gezielt rempeln
           s = fahrer.steuerung(dt, umgebung);
-          if (fahrer.brauchtReset) { this.zuruecksetzen(i); fahrer.zurueckgesetzt(); return; }
+          if (fahrer.brauchtReset) { this.zuruecksetzen(i); fahrer.zurueckgesetzt(f.index); return; }   // W4-I: Index aus dem Reset
         }
         // --- Runde 6 (D3): Start-Boost bewerten (Gas-Eingabe VOR der Countdown-Sperre), „Zu früh" sperrt das Gas 1 s ---
         const sb = this.startBoost;
@@ -1366,10 +1369,21 @@
       }
 
       // --- 11. Höhe (Rampe/Flug/Straße + Ast-Hüpfer), Feststecken, Rennleitung ---
-      this.fahrzeuge.forEach((f) => {
+      // W4-J: Spieler nähert sich einer Kreuzung, auf der anderen Seite kommt jemand → einmal je Zufahrt warnen
+      const kreuz = strecke && strecke.kreuzungen && strecke.kreuzungen.length && rennen && rennen.gasErlaubt ? strecke : null;
+      if (kreuz) kreuz.kreuzungWarnung(this.fahrzeuge);
+      this.fahrzeuge.forEach((f, i) => {
         if (f.ausgeschieden) return;          // W3-F
         const v = f.vehicle;
-        if (strecke && !v.imLooping) v.y = f.flug ? R.Schanzen.hoehe(f.flug, v, strecke) : strecke.hoeheAn(v.x, v.z);
+        if (kreuz && f.istSpieler && f.nah) {
+          const kb = kreuz.kreuzungBei(f.nah.s, 55);
+          if (kb && kb.d < -8 && (kb.pass === 'a' ? kb.k.warnA : kb.k.warnB)) {
+            const schl = kb.pass + Math.round(kb.k.sA);
+            if (f.kreuzGewarnt !== schl) { f.kreuzGewarnt = schl; this._meldung(i, '🚦 Achtung Kreuzung!\nLinks und rechts schauen!', 1800); }
+          } else if (!kb) f.kreuzGewarnt = null;
+        }
+        // W4-I: mit dem eigenen Streckenindex (Index-Kontinuität) – an einer Überführung bleibt das Auto auf seiner Ebene
+        if (strecke && !v.imLooping) v.y = f.flug ? R.Schanzen.hoehe(f.flug, v, strecke, f.index) : strecke.hoeheAn(v.x, v.z, f.index);
         // Hüpfer (Ast): kleine Sprungbewegung, nur Optik
         if (v.huepfer) { f.hoppV = v.huepfer; v.huepfer = 0; f.hoppY = f.hoppY || 0; }
         if (f.hoppV || f.hoppY > 0) {
@@ -1494,25 +1508,28 @@
       if (!f || !this.rennen || f.ausgeschieden) return;     // W3-F: ausgeschiedene Autos bleiben geparkt
       const sp = this.strecke.spline;
       let pose = this.rennen.resetPose(i);
+      // W4-I: Streckenindex aus dem Checkpoint (s) – an einer Überführung sonst evtl. die falsche Ebene
+      const hinweis = () => (pose.s !== undefined ? sp.indexBei(pose.s) : undefined);
       const frei = (x, z) => this.fahrzeuge.every((g, j) => j === i || Math.hypot(g.vehicle.x - x, g.vehicle.z - z) >= 6);
       if (!frei(pose.x, pose.z)) {
-        const n = sp.naechster(pose.x, pose.z);
+        const n = sp.naechster(pose.x, pose.z, hinweis());
         for (let k = 1; k <= 12; k++) {
           const p = sp.punktBei(n.s - 8 * k);
+          if (k < 12 && this.strecke.kreuzungNah && this.strecke.kreuzungNah(p.s, 6)) continue;   // W4-J: nicht mitten auf die Kreuzung
           const x = p.x + p.nx * n.seitenabstand, z = p.z + p.nz * n.seitenabstand;
-          if (frei(x, z) || k === 12) { pose = { x, z, heading: R.headingAus(p.tx, p.tz) }; break; }
+          if (frei(x, z) || k === 12) { pose = { x, z, heading: R.headingAus(p.tx, p.tz), s: p.s }; break; }
         }
-        this.rennen.verfolgungSetzen(i, pose.x, pose.z);
+        this.rennen.verfolgungSetzen(i, pose.x, pose.z, pose.s);
       }
       // Nicht direkt vor/in eine Baustelle, einen Ast oder ein Wrack setzen: dann auf die freie Fahrbahnhälfte
-      const nr = sp.naechster(pose.x, pose.z);
+      const nr = sp.naechster(pose.x, pose.z, hinweis());
       for (const h of this.strecke.hindernisse) {
         if (!h.seite || (h.typ !== 'baustelle' && h.typ !== 'ast' && h.typ !== 'wrack' && h.typ !== 'brand' && h.typ !== 'lava')) continue;
         const d = sp.differenzS(nr.s, h.s0);
         if (d > -30 && d < h.laenge + 2) {
           const b = this.strecke.breiteBei ? this.strecke.breiteBei(nr.s) : this.strecke.breite;   // Runde 4: Spuren
           const p = sp.punktBei(nr.s), q = -h.seite * b / 4;
-          pose = { x: p.x + p.nx * q, z: p.z + p.nz * q, heading: R.headingAus(p.tx, p.tz) };
+          pose = { x: p.x + p.nx * q, z: p.z + p.nz * q, heading: R.headingAus(p.tx, p.tz), s: nr.s };
         }
       }
       if (f.looping && (f.looping.aktiv || f.looping.fallen)) { f.looping.aktiv = false; f.looping.fallen = false; f.vehicle.imLooping = false; }
@@ -1520,9 +1537,10 @@
       if (f.kleber) { R.Kleber.abbrechen(f.kleber); R.Kleber.optik(f, false); }   // Runde 5: Kleber lösen
       if (f.anlauf) f.anlauf = R.Anlauf.zustand();                                // Runde 5: Anlauf-Bremse aus
       f.vehicle.setzen(pose.x, pose.z, pose.heading);
-      f.vehicle.y = this.strecke.hoeheAn(pose.x, pose.z);
+      const idx = hinweis();
+      f.vehicle.y = this.strecke.hoeheAn(pose.x, pose.z, idx);
       this._vorherAngleichen(f);
-      f.index = -1;
+      f.index = idx !== undefined ? idx : -1;      // W4-I: Index-Kontinuität ab dem Reset
       f.stehZeit = 0; f.resetHinweis = false; f.falschHerum = false; f.falschZeit = 0;
     }
 

@@ -68,6 +68,28 @@
       const breite = Math.max(4 * dpr, strecke.breite * mass);
       pfad(); g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = breite + 3 * dpr; g.stroke();   // heller Rand
       pfad(); g.strokeStyle = '#3a3f4a'; g.lineWidth = breite; g.stroke();                        // Fahrbahn
+      // Runde 6 (W4-I): Überführungen obenauf – Brücke mit hellem Rand und hellerer Fahrbahn (man sieht, wer oben fährt)
+      (strecke.ueberfuehrungen || []).forEach((u) => {
+        const sp = strecke.spline, len = sp.differenzS(u.s1, u.s0) + 8, n = Math.max(4, Math.round(len / 2));
+        const bruecke = () => {
+          g.beginPath();
+          for (let k = 0; k <= n; k++) { const p = sp.punktBei(u.s0 - 4 + len * k / n), [x, y] = nachPx(p.x, p.z); if (k) g.lineTo(x, y); else g.moveTo(x, y); }
+        };
+        g.lineCap = 'butt';
+        bruecke(); g.strokeStyle = '#1d2230'; g.lineWidth = breite + 6 * dpr; g.stroke();          // Schatten/Kante
+        bruecke(); g.strokeStyle = 'rgba(255,255,255,0.95)'; g.lineWidth = breite + 3 * dpr; g.stroke();
+        bruecke(); g.strokeStyle = '#7d8596'; g.lineWidth = breite; g.stroke();                    // Brückenfahrbahn heller
+        g.lineCap = 'round';
+      });
+      // Runde 6 (W4-J): niveaugleiche Kreuzung – kleines Andreaskreuz (rot mit weißem Rand) auf der Kreuzung
+      (strecke.kreuzungen || []).forEach((k) => {
+        const [cx, cy] = nachPx(k.x, k.z), r = Math.max(4 * dpr, breite * 0.9);
+        g.lineCap = 'round';
+        [['#ffffff', 4.5 * dpr], ['#e0262f', 2.2 * dpr]].forEach(([farbe, lw]) => {
+          g.strokeStyle = farbe; g.lineWidth = lw; g.beginPath();
+          g.moveTo(cx - r, cy - r); g.lineTo(cx + r, cy + r); g.moveTo(cx + r, cy - r); g.lineTo(cx - r, cy + r); g.stroke();
+        });
+      });
       // Startlinie: quer zur Fahrbahn, schwarz-weiß
       const s0 = strecke.spline.punktBei(0), q = breite / mass / 2 + 3;
       const [ax, ay] = nachPx(s0.x - s0.nx * q, s0.z - s0.nz * q), [bx, by] = nachPx(s0.x + s0.nx * q, s0.z + s0.nz * q);

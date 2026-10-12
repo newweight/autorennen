@@ -15,6 +15,24 @@
 //   strecke.breiteBei(s): Fahrbahnbreite an s (Spuren: 1 Spur 5 m, 3 Spuren 15 m, Übergang 40 m);
 //   Straße, Randsteine, Mittellinien, Bande (grenzeBei), Untergrund und Checkpoints nutzen sie.
 //   Enge Stellen (1 Spur): Leitplanke direkt hinter dem Randstreifen (_leitplankenBauen).
+//
+// Runde 6 (W4-I, Alpen): Höhenmodell 'strasse' (Katalog hoehenModell) + Überführungen (Katalog ueberfuehrungen [{ s0, s1 }]).
+//   hoeheBeiS(s, q)        Fahrbahnhöhe aus dem eigenen s (Spline-y, Querneigung 0; neben der Fahrbahn = Boden)
+//   hoeheAn(x, z)          Boden (an einer Überführung das UNTERE Niveau); hoeheAn(x, z, index) = Fahrbahn des Abschnitts zum Index
+//   abfrage/untergrundAn   mit Index-Kontinuität (±120 m lokal, global erst > Bande + 15 m) – oben bleibt oben
+//   ueberfuehrungBei(s), ueberfuehrungNah(s, zugabe)  Brückenbereich oben bzw. oben ODER unten (Sperrzone für Deko/Münzen/Listen)
+//   Boden = geglättete Straßenhöhe + Hügel + See-Mulde, an die Fahrbahnen angeglichen; feine Böschung (_boeschungBauen),
+//   Brücke mit Pfeilern (_ueberfuehrungBauen). Höhenmodell 'gelaende' (alle anderen Strecken): Verhalten unverändert.
+//
+// Runde 6 (W4-J, Fantasie): niveaugleiche Kreuzungen (Katalog kreuzungen [{ s0, s1 }] = Bereich des ersten Abschnitts).
+//   kreuzungen[i] = { sA, sB, x, z, winkel, dy, a: { s0, s1 }, b: { s0, s1 }, halb, … } (_kreuzungBerechnen, |Δy| < 1 m)
+//   kreuzungNah(s, zugabe) / kreuzungBei(s, zugabe)  Sperrzone ±KREUZ_HALB m um sA bzw. sB (Deko, Münzen, Listen)
+//   abfrage/untergrundAn   Index-Kontinuität wie an der Überführung; im Kreuzungsbereich zählt die querende Fahrbahn als
+//                          Straße/Rand (_kreuzungUntergrund) – sonst wäre sie für Autos des anderen Abschnitts „Gras"
+//   Grafik: Randsteine/Mittellinie an der Kreuzung ausgespart, Kreuzungsplatte (überdeckt beide Fahrbahnen, kein
+//   Z-Fighting), Haltelinien, 4 Warnlicht-Masten (Andreaskreuz, rote Lampen) → kreuzungAnimieren(zeit, fahrzeuge).
+//   Zaun: entfällt automatisch dort, wo die querende Strecke näher ist (zaunPunkte); die Bande gilt je Auto für SEINEN
+//   Abschnitt (Index-Kontinuität), sperrt also die querende Fahrbahn nicht.
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -40,6 +58,19 @@
   const SCHICHT_FELD = { hindernisse: 'hindernisse', wracks: 'wracks', strohballen: 'strohballen', spuren: 'spuren',
     schanzen: 'schanzen', baelle: 'baelle', wasserstrahlen: 'wasserstrahlen', boost: 'boostFelder', schild: 'schilde', loopings: 'loopings',
     kleber: 'kleber', dinos: 'dinos' };
+  // Runde 6 (W4-I): Höhenmodell „strasse" (Alpen) – Fahrbahnhöhe = Spline-y (Katalog), Querneigung 0; der Boden wird an die
+  // Straße angeglichen: bis flachQ (Fahrbahn + Rand + FLACH_ZUGABE) exakt Straßenhöhe, bis BLEND_R weich ins Gelände.
+  // Gelände = geglättete Straßenhöhe (GLATT_SIGMA, Raster GRUND_ZELLE) + Hügel + See-Mulde. Überführungen: die obere Fahrbahn
+  // zieht den Boden NICHT mit (Gewicht 0 im Brückenbereich, UEB_RAMPE m Übergang) → Boden darunter = untere Straße/Tal.
+  const FLACH_ZUGABE = 2.5, BLEND_R = 28, UEB_RAMPE = 12, GLATT_SIGMA = 45, GRUND_ZELLE = 10;
+  const KORRIDOR_SENKE = 3;      // grobes Bodengitter im Straßenkorridor so viel tiefer (die feine Böschung liegt darüber)
+  const BOESCHUNG_BIS = BLEND_R + 26;   // feine Böschung quer bis hierhin (m ab Mitte)
+  const UNTEN_HALB = 45;         // unterer Abschnitt an einer Überführung: ± so viel m um die Kreuzung gilt als „darunter"
+  // Runde 6 (W4-J): niveaugleiche Kreuzung
+  const KREUZ_HALB = 15;         // m: Kreuzungsbereich je Abschnitt (± um sA bzw. sB) – Sperrzone, Fahrbahn der anderen Strecke
+  const KREUZ_DY_MAX = 1;        // m: höchstens so viel Höhenunterschied (sonst wäre es eine Überführung)
+  const KREUZ_DEKO = 36;         // m Radius um die Kreuzungsmitte ohne Deko
+  const KREUZ_WARN = 60;         // m: Auto im anderen Abschnitt so nah vor der Kreuzung → Warnlicht blinkt schnell
 
   /** Weicher Übergang 0 → 1 zwischen a und b. */
   function glatt(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
@@ -144,7 +175,11 @@
         breite: SPUR_BREITE[e.spuren] || this.breite }));
       this._spurEng = this.spuren.filter(e => e.breite < this.breite);
       // Höhe der Mittellinie exakt aus dem Gelände (die y-Werte im Katalog sind gerundet)
-      if (this.huegel.length) this.spline.punkte.forEach((p) => { p.y = this.gelaendeHoehe(p.x, p.z); });
+      // W4-I: Höhenmodell 'strasse' (Alpen): y bleibt aus dem Katalog (eigenes Höhenprofil, Überführung möglich)
+      this.hoehenModell = daten.hoehenModell === 'strasse' ? 'strasse' : 'gelaende';
+      this.sModell = this.hoehenModell === 'strasse';
+      if (this.huegel.length && !this.sModell) this.spline.punkte.forEach((p) => { p.y = this.gelaendeHoehe(p.x, p.z); });
+      this.see = daten.see || null;      // W4-I: { x, z, r, tiefe } Mulde für den Bergsee (nur Höhenmodell 'strasse')
       // Unsichtbare weiche Bande (physics/collisions.js) + sichtbarer Holzzaun genau dort
       this.zaunAbstand = daten.zaunAbstand || 18;   // m ab Straßenrand
       this.seitenabstandMax = this.breite / 2 + this.zaunAbstand;
@@ -167,7 +202,12 @@
       });
       this.bruecke = this.bruecken[0] || null;          // Kurzform (erste Brücke) für Deko/ältere Aufrufer
       this.tunnel = (daten.tunnel || []).map(t => this._bereich(t, t.art === 'sandstein' || t.art === 'hoehle' ? t.art : 'fels'));
-      this._engstellen = this.bruecken.concat(this.tunnel);
+      // W4-I: Überführungen (obere Fahrbahn = Brücke über die eigene Strecke): [{ s0, s1, art }] → Kreuzung (sOben, sUnten, dy)
+      this.ueberfuehrungen = (daten.ueberfuehrungen || []).map(u => this._ueberfuehrungBerechnen(u));
+      // W4-J: niveaugleiche Kreuzungen [{ s0, s1 }] → { sA, sB, winkel, dy, a, b, … }
+      this.kreuzungen = (daten.kreuzungen || []).map(k => this._kreuzungBerechnen(k)).filter(Boolean);
+      this._flachQ = this.breite / 2 + this.randBreite + FLACH_ZUGABE;
+      this._engstellen = this.bruecken.concat(this.tunnel, this.ueberfuehrungen);
       this.hindernisse = this._hindernisseBerechnen(sicht.hindernisse || []);
       this._flecken = this.hindernisse.filter(h => h.untergrund);
       // Loopings (Fantasie): Datenstruktur hier, Fahrlogik + Grafik in track/looping.js
@@ -188,6 +228,8 @@
       const pS = this.spline.punktBei(0), weite = this.breite / 2 + this.randBreite + 1.2;
       this.saeulen = [-1, 1].map(sg => ({ x: pS.x + pS.nx * weite * sg, z: pS.z + pS.nz * weite * sg, r: 0.35, art: 'startbogen' }));
       if (this.loopings.length && R.Looping && R.Looping.beine) this.saeulen = this.saeulen.concat(R.Looping.beine(this));
+      // W4-J: Warnlicht-Masten an der Kreuzung sind feste Säulen (Bande)
+      this.kreuzungen.forEach(k => k.masten.forEach(m => this.saeulen.push({ x: m.x, z: m.z, r: 0.22, art: 'warnlicht' })));
     }
 
     /** Runde 5: Klebestreifen an Bogenlänge s auf der Seite sg (−1 links, 1 rechts) oder null. */
@@ -208,10 +250,284 @@
       return h;
     }
 
-    /** Höhe der Straße (und des Bodens außerhalb von Senken) an (x, z). Autos fahren auf dieser Höhe. */
+    /**
+     * Höhe der Straße (und des Bodens außerhalb von Senken) an (x, z). Autos fahren auf dieser Höhe.
+     * W4-I (Höhenmodell 'strasse'): ohne startIndex = Boden (an einer Überführung das UNTERE Niveau);
+     * mit startIndex (≥ 0, letzter Streckenindex des Fahrzeugs) = Fahrbahn des Abschnitts, der zum Index passt
+     * (Index-Kontinuität) → hoeheBeiS(s, seitenabstand). Höhenmodell 'gelaende' (alle anderen Strecken): unverändert.
+     */
     hoeheAn(x, z, startIndex) {
+      if (this.sModell) {
+        if (startIndex !== undefined && startIndex !== null && startIndex >= 0) {
+          const n = this._naechsterKont(x, z, startIndex);
+          return this.hoeheBeiS(n.s, n.seitenabstand);
+        }
+        return this._bodenS(x, z);
+      }
       if (this.huegel.length) return this.gelaendeHoehe(x, z);
       return this.spline.hoeheBei(x, z, startIndex);
+    }
+
+    /**
+     * W4-I: Fahrbahnhöhe aus dem eigenen s (Spline-y, Querneigung 0) – für alles, was seinen Streckenindex/s kennt
+     * (Fahrzeuge, Münzen, Pickups …). Neben der Fahrbahn (|q| > flachQ, nicht auf einer Überführung) = Boden.
+     * Höhenmodell 'gelaende': hoeheAn am Punkt (s, q) – exakt wie bisher.
+     */
+    hoeheBeiS(s, seitenabstand) {
+      const p = this.spline.punktBei(s), q = seitenabstand || 0;
+      if (!this.sModell) return this.hoeheAn(p.x + p.nx * q, p.z + p.nz * q);
+      if (Math.abs(q) <= this._flachQ) return p.y;
+      const boden = this._bodenS(p.x + p.nx * q, p.z + p.nz * q);
+      // Überführung: auf der Brücke flach bis zum Geländer, danach weich (TRICHTER m) in den Boden – stetig
+      for (const u of this.ueberfuehrungen) {
+        const aussen = this._aussen(u, s);
+        if (aussen < TRICHTER) return p.y + (boden - p.y) * glatt(0, TRICHTER, aussen);
+      }
+      return boden;
+    }
+
+    /**
+     * W4-I: naechster() mit Index-Kontinuität: lokales Suchfenster ±120 m (60 Abtastpunkte) um startIndex, global erst,
+     * wenn das Auto weiter als Bande + 15 m von „seinem" Abschnitt entfernt ist (Teleport). An einer Überführung bleibt
+     * ein Auto so auf seiner Ebene. Ohne Überführungen: wie spline.naechster (unverändert).
+     */
+    _naechsterKont(x, z, startIndex) {
+      // W4-J: auch an niveaugleichen Kreuzungen (beide Abschnitte liegen auf gleicher Höhe übereinander)
+      if ((this.ueberfuehrungen.length || this.kreuzungen.length) && startIndex !== undefined && startIndex !== null && startIndex >= 0) {
+        return this.spline.naechster(x, z, startIndex, 60, this.seitenabstandMax + 15);
+      }
+      return this.spline.naechster(x, z, startIndex);
+    }
+
+    /** W4-I: Überführung an Bogenlänge s (obere Fahrbahn, ± zugabe) oder null. */
+    ueberfuehrungBei(s, zugabe) {
+      for (const u of this.ueberfuehrungen) if (this._inBereich(u, s, zugabe)) return u;
+      return null;
+    }
+
+    /** W4-I: Liegt s an einer Überführung – oben (Brücke ± zugabe) ODER unten (± UNTEN_HALB + zugabe um die Kreuzung)? */
+    ueberfuehrungNah(s, zugabe) {
+      const z = zugabe || 0;
+      for (const u of this.ueberfuehrungen) {
+        if (this._inBereich(u, s, z)) return true;
+        if (u.unten && this._inBereich(u.unten, s, z)) return true;
+      }
+      return false;
+    }
+
+    /** W4-I: Kreuzung einer Überführung bestimmen: Stelle im Brückenbereich, an der ein fremder Abschnitt am nächsten ist. */
+    _ueberfuehrungBerechnen(e) {
+      const b = this._bereich(e, e.art || 'beton'), sp = this.spline;
+      let best = null;
+      for (let s = b.s0; s <= b.s1; s += 1) {
+        const p = sp.punktBei(s);
+        const fremd = sp.abschnitte(p.x, p.z, 40).filter(a => Math.abs(sp.differenzS(a.s, s)) > 80);
+        if (fremd.length && (!best || fremd[0].abstand < best.abstand)) best = { sOben: sp.wrapS(s), sUnten: fremd[0].s, abstand: fremd[0].abstand, x: p.x, z: p.z };
+      }
+      if (best) {
+        const po = sp.punktBei(best.sOben), pu = sp.punktBei(best.sUnten);
+        best.dy = po.y - pu.y;
+        best.winkel = Math.acos(Math.min(1, Math.abs(po.tx * pu.tx + po.tz * pu.tz))) * 180 / Math.PI;   // 90 = rechtwinklig
+        b.kreuzung = best;
+        b.unten = { s0: sp.wrapS(best.sUnten - UNTEN_HALB), s1: sp.wrapS(best.sUnten + UNTEN_HALB) };   // _inBereich: Rundenübergang ok
+      }
+      return b;
+    }
+
+    /**
+     * W4-J: Niveaugleiche Kreuzung bestimmen: im Bereich e.s0..e.s1 die Stelle, an der ein fremder Abschnitt (Δs > 80 m)
+     * am nächsten ist, dann fein (0,25 m) nachgesucht. Liefert null, wenn dort kein anderer Abschnitt kreuzt.
+     *   sA/sB   Kreuzungsstelle im ersten/zweiten Abschnitt, x/z Mitte, winkel (90 = rechtwinklig), dy = |yA − yB|
+     *   a/b     Bereiche { s0, s1 } = sA/sB ± KREUZ_HALB (für _inBereich), halbW = Fahrbahn + Rand (halbe Breite)
+     *   halbL   halbe Länge der Kreuzungsfläche längs jeder Fahrbahn (halbW / sin winkel)
+     *   masten  4 Warnlicht-Masten [{ x, z, s, q, pass: 'a'|'b', blick }] (je Zufahrt rechts, Ausfahrt links)
+     */
+    _kreuzungBerechnen(e) {
+      const sp = this.spline;
+      let best = null;
+      const suche = (s) => {
+        const p = sp.punktBei(s);
+        const fremd = sp.abschnitte(p.x, p.z, 40).filter(a => Math.abs(sp.differenzS(a.s, s)) > 80);
+        if (fremd.length && (!best || fremd[0].abstand < best.abstand)) best = { sA: sp.wrapS(s), sB: fremd[0].s, abstand: fremd[0].abstand };
+      };
+      for (let s = e.s0; s <= e.s1; s += 1) suche(s);
+      if (!best) return null;
+      const grob = best.sA;
+      for (let s = grob - 1.5; s <= grob + 1.5; s += 0.25) suche(s);
+      const pa = sp.punktBei(best.sA), pb = sp.punktBei(best.sB);
+      const winkel = Math.acos(Math.min(1, Math.abs(pa.tx * pb.tx + pa.tz * pb.tz))) * 180 / Math.PI;
+      const sin = Math.max(0.35, Math.sin(winkel * Math.PI / 180));
+      const halbW = this.breite / 2 + this.randBreite;
+      const k = {
+        s0: e.s0, s1: e.s1, sA: best.sA, sB: best.sB, abstand: best.abstand, winkel,
+        x: (pa.x + pb.x) / 2, z: (pa.z + pb.z) / 2, dy: Math.abs(pa.y - pb.y),
+        tA: { x: pa.tx, z: pa.tz }, tB: { x: pb.tx, z: pb.tz }, halbW, halbL: halbW / sin, sin,
+        a: { s0: sp.wrapS(best.sA - KREUZ_HALB), s1: sp.wrapS(best.sA + KREUZ_HALB) },
+        b: { s0: sp.wrapS(best.sB - KREUZ_HALB), s1: sp.wrapS(best.sB + KREUZ_HALB) },
+        warnA: false, warnB: false,   // Warnlicht der Masten an Abschnitt A (Auto auf B nah) bzw. B (Auto auf A nah)
+      };
+      if (k.dy >= KREUZ_DY_MAX) return null;                  // keine niveaugleiche Kreuzung (das wäre eine Überführung)
+      // Masten: je Abschnitt an der Zufahrt rechts (vor der Kreuzung) und an der Ausfahrt links (Spiegelbild)
+      const M = halbW + 1.1, L = k.halbL + 2.2;
+      k.masten = [];
+      [['a', k.sA], ['b', k.sB]].forEach(([pass, sK]) => {
+        [[-1, 1], [1, -1]].forEach(([vz, sg]) => {
+          const s = sp.wrapS(sK + vz * L), p = sp.punktBei(s);
+          // blick: Richtung, in die das Schild zeigt (der Zufahrt entgegen)
+          k.masten.push({ pass, s, q: sg * M, x: p.x + p.nx * sg * M, z: p.z + p.nz * sg * M, blick: { x: -vz * p.tx, z: -vz * p.tz }, vz });
+        });
+      });
+      return k;
+    }
+
+    /** W4-J: Kreuzung, deren Bereich (sA bzw. sB ± KREUZ_HALB + zugabe) s berührt → { k, pass: 'a'|'b', d } oder null. */
+    kreuzungBei(s, zugabe) {
+      const z = zugabe || 0;
+      for (const k of this.kreuzungen) {
+        if (this._inBereich(k.a, s, z)) return { k, pass: 'a', d: this.spline.differenzS(s, k.sA) };
+        if (this._inBereich(k.b, s, z)) return { k, pass: 'b', d: this.spline.differenzS(s, k.sB) };
+      }
+      return null;
+    }
+
+    /** W4-J: Liegt s an einer Kreuzung (einer der beiden Abschnitte, ± KREUZ_HALB + zugabe)? Sperrzone für Deko/Münzen/Listen. */
+    kreuzungNah(s, zugabe) { return this.kreuzungen.length > 0 && this.kreuzungBei(s, zugabe) !== null; }
+
+    /**
+     * W4-J: Seitenabstand (Betrag, m) des Punkts (x, z) zur QUERENDEN Fahrbahn einer Kreuzung, wenn s (eigener Abschnitt)
+     * im Kreuzungsbereich liegt – sonst Infinity. Die querende Fahrbahn ist an der Kreuzung gerade genug (Tangente reicht).
+     */
+    _querAbstand(s, x, z, zugabe) {
+      if (!this.kreuzungen.length) return Infinity;
+      const kb = this.kreuzungBei(s, zugabe === undefined ? 10 : zugabe);
+      if (!kb) return Infinity;
+      const k = kb.k, sO = kb.pass === 'a' ? k.sB : k.sA, p = this.spline.punktBei(sO);
+      const dx = x - p.x, dz = z - p.z;
+      if (Math.abs(dx * p.tx + dz * p.tz) > KREUZ_HALB + 25) return Infinity;
+      return Math.abs(dx * p.nx + dz * p.nz);
+    }
+
+    /** W4-J: Untergrund u am Punkt (x, z) des eigenen Abschnitts (n) – auf der querenden Fahrbahn Straße bzw. Rand. */
+    _kreuzungUntergrund(x, z, n, u) {
+      if (u === 'strasse' || u === 'oel' || u === 'sandFleck') return u;
+      const q = this._querAbstand(n.s, x, z);
+      if (q === Infinity) return u;
+      if (q <= this.breite / 2) return 'strasse';
+      if (q <= this.breite / 2 + this.randBreite && u !== 'rand' && u !== 'kleber') return 'rand';
+      return u;
+    }
+
+    /** W4-I: Gewicht (0..1), mit dem die Fahrbahn an s den Boden mitzieht – 0 auf Überführungen (Boden = Tal darunter). */
+    _bodenGewicht(s) {
+      let g = 1;
+      const sp = this.spline;
+      for (const u of this.ueberfuehrungen) {
+        if (this._aussen(u, s) > 0) continue;
+        const innen = Math.min(sp.differenzS(s, u.s0), sp.differenzS(u.s1, s));   // m vom nächsten Brückenende nach innen
+        g = Math.min(g, 1 - glatt(0, UEB_RAMPE, innen));     // am Brückenende 1 (Boden = Fahrbahn), UEB_RAMPE m weiter innen 0
+      }
+      return g;
+    }
+
+    /**
+     * W4-I: Boden im Höhenmodell 'strasse': Gelände (_grundHoehe) an die nahen Fahrbahnen angeglichen
+     * (bis flachQ exakt, bis BLEND_R weich). Mehrere Abschnitte (Serpentinen) werden symmetrisch gemischt.
+     */
+    _bodenS(x, z) {
+      const T = this._grundHoehe(x, z);
+      const sp = this.spline, pk = sp.punkte, N = pk.length;
+      const ab = sp.abschnitte(x, z, BLEND_R);
+      let sw = 0, sy = 0, A = 0;
+      for (let k = 0; k < ab.length; k++) {
+        const e = ab[k];
+        let a = 1 - glatt(this._flachQ, BLEND_R, e.abstand);
+        if (a <= 0) continue;
+        if (this.ueberfuehrungen.length) a *= this._bodenGewicht(e.s);
+        if (a <= 0) continue;
+        const p = pk[e.index], q = pk[(e.index + 1) % N], y = p.y + (q.y - p.y) * e.t;
+        sw += a * a; sy += y * a * a; if (a > A) A = a;
+      }
+      return sw > 0 ? T + (sy / sw - T) * A : T;
+    }
+
+    /**
+     * W4-I: Gelände (ohne Straßenkorridor): geglättete Straßenhöhe (Gauß σ = GLATT_SIGMA, Überführungen ausgenommen,
+     * weit weg ein breiter Mittelwert), dazu Hügel (huegel) und die See-Mulde. Einmal als Raster (GRUND_ZELLE m) berechnet,
+     * bilinear gelesen; Cache je Katalog-Daten.
+     */
+    _grundHoehe(x, z) {
+      const g = this._grund || (this._grund = this._grundRaster());
+      const fx = (x - g.x0) / g.zelle, fz = (z - g.z0) / g.zelle;
+      const ix = Math.max(0, Math.min(g.nx - 2, Math.floor(fx))), iz = Math.max(0, Math.min(g.nz - 2, Math.floor(fz)));
+      const u = Math.max(0, Math.min(1, fx - ix)), v = Math.max(0, Math.min(1, fz - iz));
+      const w = g.werte, a = w[iz * g.nx + ix], b = w[iz * g.nx + ix + 1], c = w[(iz + 1) * g.nx + ix], d = w[(iz + 1) * g.nx + ix + 1];
+      let h = (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+      if (this.huegel.length) h += this.gelaendeHoehe(x, z);
+      const see = this.see;
+      if (see) {
+        const r = Math.hypot(x - see.x, z - see.z);
+        if (r < see.r * 1.6) h -= (see.tiefe || 3) * (1 - glatt(see.r * 0.75, see.r * 1.6, r));
+      }
+      return h;
+    }
+
+    _grundRaster() {
+      const cache = Strecke._grundCache || (Strecke._grundCache = new Map());
+      const schl = this.katalog;
+      if (cache.has(schl)) return cache.get(schl);
+      const pk = this.spline.punkte, sig = GLATT_SIGMA, Z = GRUND_ZELLE;
+      let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, yMittel = 0;
+      pk.forEach((p) => { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); yMittel += p.y; });
+      yMittel /= pk.length;
+      x0 -= BODEN_SICHT + 400; x1 += BODEN_SICHT + 400; z0 -= BODEN_SICHT + 400; z1 += BODEN_SICHT + 400;
+      const nx = Math.ceil((x1 - x0) / Z) + 1, nz = Math.ceil((z1 - z0) / Z) + 1;
+      // Stützpunkte alle ~6 m (Gewicht 0 auf Überführungen), in ein grobes Raster sortiert
+      const stuetz = [];
+      for (let i = 0; i < pk.length; i += 3) {
+        const gw = this._bodenGewicht(pk[i].s);
+        if (gw > 0.01) stuetz.push([pk[i].x, pk[i].z, pk[i].y, gw]);
+      }
+      const R3 = 3 * sig, ZR = 60, raster = new Map();
+      stuetz.forEach((st) => { const k = Math.floor(st[0] / ZR) * 100003 + Math.floor(st[1] / ZR); (raster.get(k) || raster.set(k, []).get(k)).push(st); });
+      // breiter Mittelwert (σ 250 m) für die Ferne: auf einem groben Raster (FZ = 50 m), bilinear gelesen
+      const werte = new Float32Array(nx * nz), sig2 = 2 * sig * sig, SB = 250, sigB2 = 2 * SB * SB, FZ = 50;
+      const fnx = Math.ceil((x1 - x0) / FZ) + 2, fnz = Math.ceil((z1 - z0) / FZ) + 2, fernW = new Float32Array(fnx * fnz);
+      for (let j = 0; j < fnz; j++) for (let i = 0; i < fnx; i++) {
+        const x = x0 + i * FZ, z = z0 + j * FZ;
+        let bw = 0, by = 0;
+        for (let k = 0; k < stuetz.length; k += 2) {
+          const dx = stuetz[k][0] - x, dz = stuetz[k][1] - z, w = Math.exp(-(dx * dx + dz * dz) / sigB2) * stuetz[k][3];
+          bw += w; by += w * stuetz[k][2];
+        }
+        fernW[j * fnx + i] = bw > 1e-6 ? by / bw : yMittel;
+      }
+      const fernBei = (x, z) => {
+        const fx = (x - x0) / FZ, fz = (z - z0) / FZ, i = Math.min(fnx - 2, Math.floor(fx)), j = Math.min(fnz - 2, Math.floor(fz));
+        const u = fx - i, v = fz - j, a = fernW[j * fnx + i], b = fernW[j * fnx + i + 1], c = fernW[(j + 1) * fnx + i], d = fernW[(j + 1) * fnx + i + 1];
+        return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+      };
+      for (let j = 0; j < nz; j++) {
+        for (let i = 0; i < nx; i++) {
+          const x = x0 + i * Z, z = z0 + j * Z;
+          let sw = 0, sy = 0;
+          const cx = Math.floor(x / ZR), cz = Math.floor(z / ZR), r = Math.ceil(R3 / ZR);
+          for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) {
+            const l = raster.get((cx + a) * 100003 + (cz + b));
+            if (!l) continue;
+            for (let k = 0; k < l.length; k++) {
+              const dx = l[k][0] - x, dz = l[k][1] - z, d2 = dx * dx + dz * dz;
+              if (d2 > R3 * R3) continue;
+              const w = Math.exp(-d2 / sig2) * l[k][3];
+              sw += w; sy += w * l[k][2];
+            }
+          }
+          const fern = fernBei(x, z), wf = 0.05;
+          werte[j * nx + i] = (sy + fern * wf) / (sw + wf);
+        }
+      }
+      const g = { x0, z0, nx, nz, zelle: Z, werte };
+      cache.set(schl, g);
+      return g;
     }
 
     /**
@@ -273,6 +589,12 @@
      * Darf an (x, z) keine Deko stehen? (Tunnelhügel, Brückensenke) n = naechster(x, z), falls schon bekannt.
      */
     dekoSperre(x, z, n) {
+      // W4-J: Kreuzung – Kreis um die Kreuzungsmitte frei (Masten, freie Sicht auf den Querverkehr)
+      for (const k of this.kreuzungen) if ((x - k.x) * (x - k.x) + (z - k.z) * (z - k.z) < KREUZ_DEKO * KREUZ_DEKO) return true;
+      // W4-I: Überführung – unter und neben der Brücke (bis Geländer + 12 m) und am unteren Abschnitt darunter frei halten
+      if (this.ueberfuehrungen.length) {
+        for (const e of this.spline.abschnitte(x, z, this.grenzeEng + 12)) if (this.ueberfuehrungNah(e.s, 6)) return true;
+      }
       if (this.tunnel.length) {
         const nn = n || this.spline.naechster(x, z);
         if (this.imTunnel(nn.s, 8) && Math.abs(nn.seitenabstand) < this.grenzeEng + 16) return true;
@@ -337,7 +659,7 @@
 
     /** Liegt Bogenlänge s auf einer Brücke? */
     _aufBruecke(s) {
-      return this.brueckeBei(s) !== null;
+      return this.brueckeBei(s) !== null || (this.ueberfuehrungen.length > 0 && this.ueberfuehrungBei(s) !== null);
     }
 
     /** Untergrund aus Seitenabstand (+ Bogenlänge s für Brücke und Hindernis-Flecken). */
@@ -364,14 +686,19 @@
 
     /** 'strasse' | 'rand' | 'gras' | 'sand'. startIndex (optional) beschleunigt die Suche. */
     untergrundAn(x, z, startIndex) {
-      const n = this.spline.naechster(x, z, startIndex);
-      return this._untergrundAus(n.seitenabstand, n.s);
+      const n = this._naechsterKont(x, z, startIndex);
+      const u = this._untergrundAus(n.seitenabstand, n.s);
+      return this.kreuzungen.length ? this._kreuzungUntergrund(x, z, n, u) : u;   // W4-J: querende Fahrbahn
     }
 
-    /** Alles auf einmal: naechster()-Ergebnis + untergrund (für die Spielschleife). */
+    /**
+     * Alles auf einmal: naechster()-Ergebnis + untergrund (für die Spielschleife).
+     * W4-I: an Überführungen mit Index-Kontinuität (_naechsterKont) – ein Auto oben bekommt die oberen s-Werte.
+     */
     abfrage(x, z, startIndex) {
-      const n = this.spline.naechster(x, z, startIndex);
+      const n = this._naechsterKont(x, z, startIndex);
       n.untergrund = this._untergrundAus(n.seitenabstand, n.s);
+      if (this.kreuzungen.length) n.untergrund = this._kreuzungUntergrund(x, z, n, n.untergrund);   // W4-J: querende Fahrbahn
       return n;
     }
 
@@ -576,7 +903,12 @@
         gruppe.add(this._brueckeBauen(b, thema));
       });
       if (this.tunnel.length) this._tunnelBauen(thema).forEach(m => gruppe.add(m));
+      // W4-I: Höhenmodell 'strasse': feine Böschung entlang der Straße + Überführungen (Brücke über die eigene Strecke)
+      if (this.sModell) gruppe.add(this._boeschungBauen(thema));
+      this.ueberfuehrungen.forEach(u => gruppe.add(this._ueberfuehrungBauen(u, thema)));
       if (this.loopings.length && R.Looping && R.Looping.bauen) gruppe.add(R.Looping.bauen(this, thema));
+      // W4-J: niveaugleiche Kreuzungen (Platte, Haltelinien, Warnlicht-Masten)
+      this.kreuzungen.forEach(k => gruppe.add(this._kreuzungBauen(k, thema)));
       // Runde 4 (W2-D): Sprungschanzen und Turbo-Felder (nur wenn die Welt sie einschaltet)
       if (this.aktiveSchichten.schanzen && this.schanzen.length) gruppe.add(this.schanzenBauen(thema));
       if (this.aktiveSchichten.boost && this.boostFelder.length) gruppe.add(this.boostBauen());
@@ -612,6 +944,8 @@
     /** Punkt neben der Mittellinie (q > 0 = rechts) inkl. Höhe + Anhebung. */
     _seitPunkt(p, q, anheben) {
       const x = p.x + p.nx * q, z = p.z + p.nz * q;
+      // W4-I: Höhenmodell 'strasse' – Fahrbahn aus dem eigenen s (auch auf der Überführung), sonst wie bisher
+      if (this.sModell && p.s !== undefined) return [x, this.hoeheBeiS(p.s, q) + anheben, z];
       return [x, this.hoeheAn(x, z) + anheben, z];
     }
 
@@ -678,7 +1012,8 @@
       for (let i = 0; i < pos.count; i++) {
         const x = pos.getX(i) + mx, z = pos.getZ(i) + mz;
         // Unter Brücken: grobes Gitter tiefer als die feine Senke (_senkeBauen), damit es nicht durchsticht
-        pos.setXYZ(i, x, this.hoeheAn(x, z) - (this.bruecken.length ? this.senkeTiefe(x, z, true) : 0), z);
+        // W4-I: Höhenmodell 'strasse': im Straßenkorridor tiefer als die feine Böschung (_boeschungBauen)
+        pos.setXYZ(i, x, this.hoeheAn(x, z) - (this.bruecken.length ? this.senkeTiefe(x, z, true) : 0) - (this.sModell ? this._korridorSenke(x, z) : 0), z);
         this._bodenFarbe(x, z, basis, zweite, farbe2 !== undefined, c);
         farben[i * 3] = c.r; farben[i * 3 + 1] = c.g; farben[i * 3 + 2] = c.b;
       }
@@ -687,6 +1022,282 @@
       const boden = new THREE.Mesh(geo, this._material(undefined, 0));
       boden.name = 'Boden';
       return boden;
+    }
+
+    /** W4-I: Absenkung des groben Bodengitters im Straßenkorridor (die feine Böschung liegt exakt darüber). */
+    _korridorSenke(x, z) {
+      let d = Infinity;
+      for (const e of this.spline.abschnitte(x, z, BLEND_R + 22)) {
+        if (this.ueberfuehrungen.length && this._bodenGewicht(e.s) < 0.5) continue;
+        d = Math.min(d, e.abstand);
+      }
+      return d === Infinity ? 0 : KORRIDOR_SENKE * (1 - glatt(BLEND_R + 6, BLEND_R + 22, d));
+    }
+
+    /**
+     * W4-I: Feine Böschung (Höhenmodell 'strasse'): Querstreifen alle 4 m beidseits von der Fahrbahnkante bis BOESCHUNG_BIS,
+     * Höhe exakt bodenHoehe (Straße flach, dann weich ins Gelände) – das grobe Gitter (16 m) würde sonst an steilen
+     * Hängen durch die Fahrbahn stechen. Steile Stellen felsgrau. Auf Überführungen keine Böschung (dort ist die Brücke).
+     */
+    _boeschungBauen(thema) {
+      const sp = this.spline, L = sp.laenge, b2 = this.breite / 2;
+      const QS = [b2 - 0.5, b2 + this.randBreite, this._flachQ, this._flachQ + 3, this._flachQ + 7, this._flachQ + 11, this._flachQ + 15,
+        BLEND_R, BLEND_R + 6, BLEND_R + 12, BLEND_R + 19, BOESCHUNG_BIS];
+      const basis = new THREE.Color(thema.boden !== undefined ? thema.boden : 0x5f9e3a);
+      const zweite = new THREE.Color(thema.boden2 !== undefined ? thema.boden2 : basis.getHex());
+      const fels = new THREE.Color(thema.fels !== undefined ? thema.fels : 0x8a8478), c = new THREE.Color();
+      const ST = 4, n = Math.ceil(L / ST), reihen = [];
+      for (let k = 0; k <= n; k++) {
+        const s = Math.min(L, k * ST), p = sp.punktBei(s), ub = this.ueberfuehrungen.length && this._bodenGewicht(s) < 0.5;
+        const reihe = { ub, punkte: [] };
+        [-1, 1].forEach((sg) => {
+          const seite = QS.map((q) => {
+            const x = p.x + p.nx * q * sg, z = p.z + p.nz * q * sg;
+            return [x, this.bodenHoehe(x, z) - 0.02, z];
+          });
+          reihe.punkte.push(seite);
+        });
+        reihen.push(reihe);
+      }
+      const pos = [], col = [];
+      const farbe = (a, b) => {
+        // Steigung zwischen zwei Querpunkten → Fels
+        const st = Math.abs(b[1] - a[1]) / Math.max(0.5, Math.hypot(b[0] - a[0], b[2] - a[2]));
+        this._bodenFarbe(a[0], a[2], basis, zweite, thema.boden2 !== undefined, c);
+        c.lerp(fels, Math.max(0, Math.min(1, (st - 0.55) / 0.5)));
+        return [c.r, c.g, c.b];
+      };
+      for (let k = 0; k < n; k++) {
+        const A = reihen[k], B = reihen[k + 1];
+        if (A.ub || B.ub) continue;
+        for (let sgi = 0; sgi < 2; sgi++) {
+          const pa = A.punkte[sgi], pb = B.punkte[sgi];
+          for (let j = 0; j < QS.length - 1; j++) {
+            const f1 = farbe(pa[j], pa[j + 1]), f2 = farbe(pb[j], pb[j + 1]);
+            pos.push(...pa[j], ...pa[j + 1], ...pb[j + 1], ...pa[j], ...pb[j + 1], ...pb[j]);
+            col.push(...f1, ...f1, ...f2, ...f1, ...f2, ...f2);
+          }
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
+      geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+      m.name = 'Boeschung';
+      return m;
+    }
+
+    /**
+     * W4-I: Überführung u (obere Fahrbahn über die eigene Strecke): Betonplatte (Fahrbahn selbst = _strasseBauen),
+     * Brüstung mit Stahl-Handlauf genau an der Bande (grenzeEng), Pfeiler bis zum Boden (Tal/untere Straße) – nie auf
+     * der unteren Fahrbahn: die zwei Pfeiler neben der Kreuzung stehen hinter deren Randstreifen. Widerlager an den Enden.
+     */
+    _ueberfuehrungBauen(u) {
+      const w = this.grenzeEng, v = [], sp = this.spline, s0 = u.s0, s1 = u.s1, bb = this.breite / 2;
+      const DICKE = 1.3, schritte = Math.max(4, Math.round(u.laenge / 2));
+      const sAt = (k) => s0 + (s1 - s0) * k / schritte;
+      for (let k = 0; k < schritte; k++) {
+        const a = sAt(k), e = sAt(k + 1), pa = sp.punktBei(a), pe = sp.punktBei(e);
+        v.push(this._band(pa, pe, -w - 0.4, w + 0.4, -DICKE, 0x8b8780));                      // Unterseite
+        [-1, 1].forEach((sg) => {
+          const q = (w + 0.4) * sg;
+          v.push(this._wandSQ(a, q, e, q, -DICKE, 0.95, 0xb3ada3));                             // Plattenrand + Brüstung außen
+          v.push(this._wandSQ(a, w * sg, e, w * sg, 0, 0.95, 0xc4beb3));                        // Brüstung innen
+          v.push(this._band(pa, pe, Math.min(w * sg, q), Math.max(w * sg, q), 0.95, 0xd2ccc0));  // Brüstung oben
+          v.push(this._wandSQ(a, (w - 0.05) * sg, e, (w - 0.05) * sg, 1.1, 1.22, 0x3f6fae));     // Stahl-Handlauf (blau)
+          v.push(this._wandSQ(a, (w - 0.05) * sg, e, (w - 0.05) * sg, -DICKE - 0.01, -DICKE + 0.25, 0x6f6b64));   // dunkle Kante unten
+        });
+        if (k % 3 === 0) [-1, 1].forEach((sg) => {                                                // Handlauf-Stützen
+          const p = this._punktSQ(a, (w - 0.05) * sg, 0);
+          this._kiste(v, p[0], p[2], pa.tx, pa.tz, 0.05, 0.05, p[1] + 0.95, p[1] + 1.22, 0x3f6fae);
+        });
+      }
+      // Pfeiler: zwei neben der unteren Fahrbahn (hinter deren Randstreifen + 2,5 m), dann alle ~15 m bis zu den Enden
+      const kr = u.kreuzung, stellen = [];
+      if (kr) {
+        const frei = (this.breite / 2 + this.randBreite + 2.5) / Math.max(0.35, Math.sin((kr.winkel || 90) * Math.PI / 180)) + 1.2;
+        for (const sg of [-1, 1]) for (let d = frei; d < u.laenge; d += 15) {
+          const s = kr.sOben + sg * d;
+          if (this._aussen(u, s) > 0 || Math.abs(sp.differenzS(s, s0)) < 5 || Math.abs(sp.differenzS(s, s1)) < 5) continue;
+          stellen.push(s);
+        }
+      }
+      stellen.forEach((s) => {
+        const p = sp.punktBei(s), yo = p.y - DICKE + 0.05;
+        // Pfeiler nur, wenn darunter keine andere Fahrbahn (+ Rand) liegt
+        const fremd = sp.abschnitte(p.x, p.z, 30).some(a => Math.abs(sp.differenzS(a.s, s)) > 60 && a.abstand < this.breite / 2 + this.randBreite + 1.5);
+        if (fremd) return;
+        const yu = Math.min(this.bodenHoehe(p.x, p.z), this.bodenHoehe(p.x + p.nx * bb * 0.6, p.z + p.nz * bb * 0.6), this.bodenHoehe(p.x - p.nx * bb * 0.6, p.z - p.nz * bb * 0.6)) - 1;
+        if (yo - yu < 0.6) return;
+        this._kiste(v, p.x, p.z, p.tx, p.tz, 0.75, bb - 1.6, yu, yo, 0xa29d94);                    // Pfeilerscheibe
+        this._kiste(v, p.x, p.z, p.tx, p.tz, 1.1, bb + 0.4, yo - 0.7, yo, 0x948f86);              // Pfeilerkopf
+      });
+      // Widerlager an beiden Enden (Mauer quer bis in den Boden)
+      [s0, s1].forEach((s) => {
+        const p = sp.punktBei(s), y = p.y, yb = Math.min(this.bodenHoehe(p.x, p.z), y) - 1.5;
+        this._kiste(v, p.x, p.z, p.tx, p.tz, 1.0, w + 0.8, yb, y - 0.3, 0x9a948b);
+      });
+      const mesh = new THREE.Mesh(this._viereckeZuGeometrie(v),
+        new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+      mesh.name = 'Ueberfuehrung';
+      return mesh;
+    }
+
+    /**
+     * W4-J: Kreuzung k als Gruppe:
+     *   Platte    Asphalt-Parallelogramm über der Schnittfläche beider Fahrbahnen inkl. Rand (|qA|, |qB| ≤ halbW), Raster 8×8 auf
+     *             dem Gelände, stärker zur Kamera gezogen (polygonOffset 3) → kein Z-Fighting der zwei Fahrbahnbänder
+     *   Zeichen   weiße Haltelinien an beiden Zufahrten, bunter „Zauberkreis" in der Mitte (Regenbogenfarben des Themas)
+     *   Masten    4 Warnlicht-Masten (Fantasie-Stil: Zuckerstangen-Mast, Andreaskreuz rot-weiß, schwarzer Lampenträger,
+     *             2 rote Leuchtkugeln + Lichthof) – Lampen getrennt nach Mastgruppe (a/b) und Seite (links/rechts),
+     *             damit kreuzungAnimieren sie abwechselnd blinken lassen kann.
+     */
+    _kreuzungBauen(k, thema) {
+      const g = new THREE.Group();
+      g.name = 'Kreuzung';
+      const W = k.halbW, D = W / k.sin + 0.6, N = 8;
+      const tA = k.tA, tB = k.tB;
+      // Punkt aus Längsanteilen entlang beider Fahrbahnen (a längs A, b längs B) – liegt im Parallelogramm, wenn |a|,|b| ≤ D
+      const P = (a, b, hoch) => { const x = k.x + tA.x * a + tB.x * b, z = k.z + tA.z * a + tB.z * b; return [x, this.hoeheAn(x, z) + hoch, z]; };
+      const platte = [];
+      const asphalt = new THREE.Color(thema.asphalt || 0x3c3f45);
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+        const a0 = -D + 2 * D * i / N, a1 = -D + 2 * D * (i + 1) / N, b0 = -D + 2 * D * j / N, b1 = -D + 2 * D * (j + 1) / N;
+        platte.push({ a: P(a0, b0, 0.075), b: P(a1, b0, 0.075), c: P(a1, b1, 0.075), d: P(a0, b1, 0.075), farbe: asphalt.getHex() });
+      }
+      // Umlaufsinn: Normalen nach oben (je nach Drehsinn der beiden Tangenten)
+      const kreuzY = tA.x * tB.z - tA.z * tB.x;
+      if (kreuzY > 0) platte.forEach((v) => { const h = v.b; v.b = v.d; v.d = h; });
+      const pm = new THREE.Mesh(this._viereckeZuGeometrie(platte), this._material(undefined, 3));
+      pm.name = 'Kreuzungsplatte';
+      g.add(pm);
+      // Haltelinien (je Zufahrt, 0,6 m breit, quer über die Fahrbahn) + Zauberkreis
+      const zeichen = [], sp = this.spline;
+      [k.sA, k.sB].forEach((sK) => {
+        const s0 = sK - k.halbL - 1.6, p = sp.punktBei(s0), q = sp.punktBei(s0 + 0.6);
+        zeichen.push(this._band(p, q, -this.breite / 2 + 0.3, this.breite / 2 - 0.3, 0.1, 0xf4f4f4));
+      });
+      const rb = thema.regenbogen || [0xff4f8b, 0xffd23a, 0x4cd97b, 0x45a8ff, 0xa66bff], NR = 24;
+      for (let i = 0; i < NR; i++) {
+        const w0 = i / NR * Math.PI * 2, w1 = (i + 1) / NR * Math.PI * 2;
+        const ring = (r, w) => { const x = k.x + Math.cos(w) * r, z = k.z + Math.sin(w) * r; return [x, this.hoeheAn(x, z) + 0.1, z]; };
+        const v = { a: ring(2.6, w0), b: ring(3.6, w0), c: ring(3.6, w1), d: ring(2.6, w1), farbe: rb[i % rb.length] };
+        zeichen.push(v);
+      }
+      const zm = new THREE.Mesh(this._viereckeZuGeometrie(zeichen), new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide,
+        polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+      zm.name = 'Kreuzungszeichen';
+      g.add(zm);
+      // Masten
+      const teile = [], lampen = { a: [[], []], b: [[], []] };
+      const HOCH = 3.3, STREIFEN = [0xffffff, 0xff5fa2];
+      const box = (sx, sy, sz, x, y, z, drehY, drehZ, farbe) => {
+        const geo = new THREE.BoxGeometry(sx, sy, sz);
+        if (drehZ) geo.rotateZ(drehZ);
+        geo.rotateY(drehY); geo.translate(x, y, z);
+        teile.push({ geo, farbe });
+      };
+      k.masten.forEach((m) => {
+        const y0 = this.hoeheAn(m.x, m.z), dreh = Math.atan2(m.blick.x, m.blick.z);   // lokale +z zeigt in Blickrichtung
+        // Zuckerstangen-Mast (Ringe abwechselnd weiß/pink) + Sockel
+        const nRing = 8;
+        for (let r = 0; r < nRing; r++) {
+          const geo = new THREE.CylinderGeometry(0.11, 0.11, HOCH / nRing, 8);
+          geo.translate(m.x, y0 + (r + 0.5) * HOCH / nRing, m.z);
+          teile.push({ geo, farbe: STREIFEN[r % 2] });
+        }
+        box(0.5, 0.18, 0.5, m.x, y0 + 0.09, m.z, dreh, 0, 0x8a7bb8);
+        // Andreaskreuz (zwei gekreuzte Balken rot-weiß) oben, leicht vor dem Mast
+        const fx = m.x + m.blick.x * 0.14, fz = m.z + m.blick.z * 0.14, yk = y0 + HOCH + 0.15;
+        [Math.PI / 4, -Math.PI / 4].forEach((w) => {
+          box(1.9, 0.3, 0.05, fx, yk, fz, dreh, w, 0xf6f6f6);
+          box(1.6, 0.14, 0.09, fx, yk, fz, dreh, w, 0xd8262f);
+        });
+        // Stern als Spitze (Fantasie)
+        const stern = new THREE.OctahedronGeometry(0.22, 0); stern.translate(m.x, yk + 0.85, m.z);
+        teile.push({ geo: stern, farbe: 0xffd23a });
+        // Lampenträger (schwarz) quer, 2 Lampen links/rechts mit Blende
+        const yl = y0 + HOCH - 0.85, qx = Math.cos(dreh), qz = -Math.sin(dreh);       // quer zur Blickrichtung (lokale +x)
+        box(1.35, 0.26, 0.12, m.x + m.blick.x * 0.12, yl, m.z + m.blick.z * 0.12, dreh, 0, 0x1d1d22);
+        [-1, 1].forEach((sg, li) => {
+          const lx = m.x + qx * 0.5 * sg + m.blick.x * 0.24, lz = m.z + qz * 0.5 * sg + m.blick.z * 0.24;
+          box(0.42, 0.42, 0.1, lx - m.blick.x * 0.08, yl, lz - m.blick.z * 0.08, dreh, 0, 0x111114);   // Lampenschild
+          box(0.44, 0.05, 0.2, lx, yl + 0.24, lz, dreh, 0, 0x111114);                                   // Blende
+          lampen[m.pass][li].push({ x: lx, y: yl, z: lz });
+        });
+      });
+      const mm = new THREE.Mesh(this._teileVereinen(teile), new THREE.MeshLambertMaterial({ vertexColors: true }));
+      mm.name = 'Warnlicht-Masten';
+      g.add(mm);
+      // Leuchtkugeln (MeshBasic, leuchten ohne Licht) + Lichthof (additives Sprite) je Gruppe/Seite: 4 Materialien
+      const halo = this._haloTextur();
+      k._lampen = [];
+      ['a', 'b'].forEach((pass) => [0, 1].forEach((li) => {
+        const mat = new THREE.MeshBasicMaterial({ color: 0x3a0c0c });
+        const liste = lampen[pass][li];
+        const geos = liste.map((l) => { const geo = new THREE.SphereGeometry(0.17, 10, 8); geo.translate(l.x, l.y, l.z); return { geo, farbe: 0xffffff }; });
+        const lm = new THREE.Mesh(this._teileVereinen(geos), mat);
+        lm.name = 'Warnlampen';
+        g.add(lm);
+        const hmat = new THREE.SpriteMaterial({ map: halo, color: 0xff3020, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+        const hoefe = liste.map((l) => { const sp2 = new THREE.Sprite(hmat); sp2.position.set(l.x, l.y, l.z); sp2.scale.set(1.9, 1.9, 1); sp2.name = 'Warnlicht-Hof'; g.add(sp2); return sp2; });
+        k._lampen.push({ pass, seite: li, mat, hmat, hoefe });
+      }));
+      this.kreuzungAnimieren(0, null);
+      return g;
+    }
+
+    /** W4-J: weicher Lichthof (Canvas, einmal je Strecke). */
+    _haloTextur() {
+      if (this._halo) return this._halo;
+      if (typeof document === 'undefined') return null;
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const g = c.getContext('2d'), v = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      v.addColorStop(0, 'rgba(255,255,255,1)'); v.addColorStop(0.35, 'rgba(255,255,255,0.55)'); v.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = v; g.fillRect(0, 0, 64, 64);
+      this._halo = new THREE.CanvasTexture(c);
+      return this._halo;
+    }
+
+    /**
+     * W4-J: Warnlicht-Zustand (rein, ohne Three.js): je Kreuzung warnA/warnB (true = an den Masten dieses Abschnitts
+     * kommt Querverkehr: ein Auto im ANDEREN Abschnitt ist < KREUZ_WARN m vor der Kreuzung oder mitten drauf).
+     * fahrzeuge: Liste mit .s, .nah.s (main.js) oder .vehicle + .index; ausgeschiedene/Polizei zählen mit (Auto ist Auto).
+     */
+    kreuzungWarnung(fahrzeuge) {
+      const sp = this.spline;
+      for (const k of this.kreuzungen) {
+        k.warnA = false; k.warnB = false;
+        for (const f of fahrzeuge || []) {
+          if (!f || f.ausgeschieden) continue;
+          const s = typeof f.s === 'number' ? f.s : (f.nah && typeof f.nah.s === 'number' ? f.nah.s : null);
+          if (s === null) continue;
+          const dA = sp.differenzS(k.sA, s), dB = sp.differenzS(k.sB, s);
+          if (dA > -k.halbL - 2 && dA < KREUZ_WARN) k.warnB = true;    // Auto auf A → Masten an B warnen
+          if (dB > -k.halbL - 2 && dB < KREUZ_WARN) k.warnA = true;    // Auto auf B → Masten an A warnen
+        }
+      }
+    }
+
+    /**
+     * W4-J: Warnlicht blinken lassen (je Frame aus main.js): die zwei Lampen eines Masts abwechselnd; ruhig 1,2 Hz und
+     * gedämpft, bei Querverkehr (kreuzungWarnung) 3 Hz, heller und mit großem Lichthof.
+     */
+    kreuzungAnimieren(zeit, fahrzeuge) {
+      if (!this.kreuzungen.length) return;
+      if (fahrzeuge) this.kreuzungWarnung(fahrzeuge);
+      for (const k of this.kreuzungen) {
+        for (const l of k._lampen || []) {
+          const warn = l.pass === 'a' ? k.warnA : k.warnB, hz = warn ? 3 : 1.2;
+          const an = (Math.floor(zeit * hz * 2) + l.seite) % 2 === 0;
+          l.mat.color.setHex(an ? (warn ? 0xff3a22 : 0xd8261c) : 0x3a0c0c);
+          l.hmat.opacity = an ? (warn ? 1 : 0.45) : 0;
+          l.hmat.color.setHex(warn ? 0xff5030 : 0xff2a1a);
+          for (const h of l.hoefe || []) h.visible = an;      // dunkler Hof wird gar nicht gezeichnet (Draw-Calls)
+        }
+        k.blinkAn = (Math.floor(zeit * 2.4) % 2) === 0;
+      }
     }
 
     /** Mitte und halbe Kantenlängen der Bodenplatte (Mitte = Schwerpunkt der Mittellinie). */
@@ -750,6 +1361,8 @@
         // Strich in 1-m-Stücken, damit er Kurven folgt
         for (let t = 0; t < strich; t += 1) {
           const p = sp.punktBei(s + t), q = sp.punktBei(s + t + 1);
+          // W4-J: auf der Kreuzungsfläche (querende Fahrbahn + Rand + 1,5 m) keine Mittellinie
+          if (this.kreuzungen.length && Math.min(this._querAbstand(p.s, p.x, p.z), this._querAbstand(q.s, q.x, q.z)) < this.breite / 2 + this.randBreite + 1.5) continue;
           if (spur && spur.spuren === 3) {
             const a = this.breiteBei(s + t) / 6, e = this.breiteBei(s + t + 1) / 6;
             [-1, 1].forEach(vz => vierecke.push(this._band2(p, q, vz * a - w, vz * a + w, vz * e - w, vz * e + w, 0.08, 0xf0f0f0)));
@@ -776,8 +1389,14 @@
         let farbe = kurve ? (i % 2 === 0 ? 0xd42a2a : 0xf4f4f4) : 0x8f9294;
         if (rb6) farbe = (kurve ? rb6 : hell)[i % rb6.length];
         const b = this.breiteBei(p.s) / 2, bq = this.breiteBei(q.s) / 2;   // Runde 4: Breite je Stelle
-        vierecke.push(this._band2(p, q, -b - rb, -b, -bq - rb, -bq, 0.07, farbe));
-        vierecke.push(this._band2(p, q, b, b + rb, bq, bq + rb, 0.07, farbe));
+        // W4-J: Randstein dort weglassen, wo die querende Fahrbahn (+ Rand) liegt – die Kreuzungsplatte deckt die Lücke
+        const frei = (sg) => {
+          if (!this.kreuzungen.length) return true;
+          const m = b + rb / 2, x0 = p.x + p.nx * m * sg, z0 = p.z + p.nz * m * sg, x1 = q.x + q.nx * m * sg, z1 = q.z + q.nz * m * sg;
+          return Math.min(this._querAbstand(p.s, x0, z0), this._querAbstand(q.s, x1, z1)) > b + rb + 0.3;
+        };
+        if (frei(-1)) vierecke.push(this._band2(p, q, -b - rb, -b, -bq - rb, -bq, 0.07, farbe));
+        if (frei(1)) vierecke.push(this._band2(p, q, b, b + rb, bq, bq + rb, 0.07, farbe));
       }
       const m = new THREE.Mesh(this._viereckeZuGeometrie(vierecke), this._material(undefined, 1));
       m.name = 'Randsteine';

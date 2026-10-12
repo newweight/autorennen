@@ -35,6 +35,15 @@
     const sperre = [];
     (strecke.loopings || []).forEach((l) => { const a = l.s0 - 15; let b = l.s1 + 15; if (b < a) b += L; sperre.push([a, b]); });
     (strecke.schanzen || []).forEach((s) => sperre.push([s.s - 20, s.s + (s.laenge || 10) + schFrei]));
+    // W4-I: Überführung – weder auf der Brücke noch darunter (sonst sammelt das Auto unten die Münze oben ein)
+    (strecke.ueberfuehrungen || []).forEach((u) => {
+      const a = u.s0 - 15; let b = u.s1 + 15; if (b < a) b += L; sperre.push([a, b]);
+      if (u.unten) { const c = u.unten.s0 - 15; let d = u.unten.s1 + 15; if (d < c) d += L; sperre.push([c, d]); }
+    });
+    // W4-J: niveaugleiche Kreuzung – nicht auf/vor der Kreuzung (beide Abschnitte, sonst sammelt der Querverkehr mit)
+    (strecke.kreuzungen || []).forEach((k) => [k.a, k.b].forEach((b) => {
+      const a = b.s0 - 20; let e = b.s1 + 20; if (e < a) e += L; sperre.push([a, e]);
+    }));
     const frei = (s) => {
       if (s < startFrei || s > L - zielFrei) return false;
       for (const [a, b] of sperre) {
@@ -99,7 +108,8 @@
       this.radius = wert(c.radius, 1.9);
       this.liste = platzieren(strecke).map((m, k) => {
         const p = sp.punktBei(m.s), x = p.x + p.nx * m.q, z = p.z + p.nz * m.q;
-        const y = typeof strecke.hoeheAn === 'function' ? strecke.hoeheAn(x, z) + h : (p.y || 0) + h;
+        // W4-I: Höhe aus dem eigenen s (Höhenmodell 'gelaende': identisch mit hoeheAn(x, z))
+        const y = typeof strecke.hoeheBeiS === 'function' ? strecke.hoeheBeiS(m.s, m.q) + h : typeof strecke.hoeheAn === 'function' ? strecke.hoeheAn(x, z) + h : (p.y || 0) + h;
         return { k, s: m.s, q: m.q, x, y, z, reihe: m.reihe, da: true, weg: 0 };
       });
       this.gesammelt = [];       // je Fahrzeug-Index: Anzahl in diesem Rennen
