@@ -42,6 +42,9 @@ Jede Strecke hat Welten – die Streckenform bleibt, die Welt schaltet Dinge daz
 - **🎪 Alles** (letzte Welt jeder Strecke): **alle Hindernisarten zugleich** – dazu Schanzen, Spuren, Bälle, Wasser, Turbo und Schilde (Fantasie: auch Loopings und Kleber; Dino: auch die Dinos). Die Polizei bleibt ein eigener Schalter.
 - **Fantasie-Strecke**: nur drei Welten – **Fantasie** (Loopings, Bälle, Wasserstrahl; Standard), **Verrückt** (dazu Turbo-Felder, Schutzschilde, Strohballen) und **Alles**.
 
+### Hindernisse: Normal / Viele / Sehr viele (Schritt 2)
+Unter der Welt wählst du in der Zeile **🚧 Hindernisse** (Taste **O**) **Normal**, **Viele** (ungefähr dreimal so viele Öl-/Sandflecken, Äste, Baustellen und Strohballen, mindestens eins je 150 m) oder **Sehr viele** (ungefähr fünfmal so viele, mindestens eins je 80 m – mit Slalom) – das gilt nur in Welten mit Hindernissen (in „Klassisch“ ist die Zeile grau). Die zusätzlichen Hindernisse stehen bei jedem Start an denselben Stellen und lassen immer eine freie Spur; online stellt sie der Host in der Lobby ein und alle fahren dieselbe Strecke.
+
 ### Variante XL (Schritt 2, nur Wüste und Fantasie)
 Zeile **📏 Variante**: **Normal** (Standard) oder **XL** (Taste **V** schaltet um). **Wüste XL** ist 1,6-mal so lang (ca. 5.300 m, rund 3 Minuten pro Runde), **Fantasie XL** doppelt so lang (ca. 2.800 m) – gleiche Loopings, längere Geraden. Beim Streckenwechsel springt die Variante auf Normal.
 
@@ -65,7 +68,7 @@ Zeile **📏 Variante**: **Normal** (Standard) oder **XL** (Taste **V** schaltet
 - Standard ist wie früher: Sommer, klar, kein Wind.
 
 ### Schaden (Schritt 5, Standard aus)
-Mit **Schaden an** zeigt das HUD einen **Gesundheitsbalken**. Jeder Treffer (Auto, Hindernis) kostet **5 %**, ein brennendes Auto **10 %**; **Zaun und Bäume/Felsen** am Rand kosten **3 %** (und bremsen). Ein Auto-Treffer zählt schon ab kleinem Tempounterschied (1 m/s). **Je 20 %** Verlust wird das Auto **etwas langsamer** (Höchsttempo, Beschleunigung, Grip); unter 40 % raucht es, unter 20 % qualmt und blinkt es. Bei **0 %** bleibt es liegen (5 s, Warnblinker), dann kommt der **Abschleppwagen** und setzt es mit **60 %** zurück an den letzten Checkpoint. Für die Computer-Autos gilt dasselbe.
+Mit **Schaden an** zeigt das HUD einen **Gesundheitsbalken**. Jeder Treffer (Auto, Hindernis) kostet **5 %**, ein brennendes Auto **10 %**; **Zaun und Bäume/Felsen** am Rand kosten **3 %** (und bremsen). Ein Auto-Treffer zählt schon ab kleinem Tempounterschied (1 m/s). **Je 20 %** Verlust wird das Auto **etwas langsamer** (Höchsttempo, Beschleunigung, Grip); unter 40 % raucht es, unter 20 % qualmt und blinkt es. Bei **0 %** bleibt es liegen (5 s, Warnblinker), dann kommt der **Abschleppwagen** und setzt es zurück an den letzten Checkpoint – und dort wird es **repariert**: alle **1 Sekunde** springt die Anzeige um **10 %** weiter (0, 10, 20 …). **Ab 30 %** kannst du **Gas geben und losfahren** (du behältst den Wert, den du hast), oder du **wartest bis 40, 50, 60 … bis 100 %**. Unter 30 % tut das Gas noch nichts – das Bild sagt dir „Noch nicht!“. Die Computer-Autos warten immer bis **60 %** und fahren dann los. (In `src/config.js` unter `schaden`: `reparaturJe10`, `losfahrenAb`, `kiLosfahrenAb`; `reparaturJe10: 0` schaltet die Reparatur ab – dann gibt es wie früher gleich 60 %.)
 
 **Computer-Stärke (7 Stufen):** leicht · mittel · schwer · profi · meister · legende · 💀 unschlagbar (fährt die Ideallinie ohne Fehler – kaum zu schlagen).
 
@@ -114,7 +117,7 @@ ist die Karte „🌐 Online“ grau („Online geht nur über ‚Mehrspieler st
    - öffnen die Adresse **https://mac-mini-von-sebastian.tail39c1c2.ts.net:8443/**, wählen 🌐 Online → **🔑 Raum beitreten** und tippen den Code ein
      (nur Buchstaben/Ziffern, es gibt kein 0, O, 1 oder I).
 4. In der Lobby wählt jeder **Fahrer, Auto und Fahrhilfe** (↑↓ Zeile, ←→ ändern oder anklicken; ein Fahrer nur einmal je Raum)
-   und drückt **Leertaste = ✋ Bereit**. Der Host stellt **Strecke, Welt, Runden, Computer-Gegner, Stärke, Tempo, Jahreszeit, Wetter,
+   und drückt **Leertaste = ✋ Bereit**. Der Host stellt **Strecke, Welt, Hindernisse (Normal/Viele/Sehr viele), Runden, Computer-Gegner, Stärke, Tempo, Jahreszeit, Wetter,
    Tageszeit** ein und startet mit **Enter**, sobald alle bereit sind. Höchstens **6 Spieler**, dazu Computer-Gegner (zusammen bis 12 Autos).
 5. Im Rennen fährt jeder mit seiner eigenen Ansicht (Pfeile **oder** WASD, Leertaste/E = Item, R = zurück auf die Strecke,
    C = Kamera). Oben links zeigt **🌐 … ms** die Verbindung (unter 100 ms ist gut).

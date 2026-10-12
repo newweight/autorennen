@@ -3,7 +3,7 @@
 // Bake hält auf), untergrundAn liefert die Fleck-Untergründe.
 const { ladeModule } = require('./lade');
 const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/track/spline.js',
-  'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/physics/collisions.js', 'src/cars/carCatalog.js']);
+  'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/physics/collisions.js', 'src/cars/carCatalog.js', 'src/world/muenzen.js']);
 let fehler = 0;
 function pruefe(name, ok, info) { console.log((ok ? 'OK   ' : 'FEHL ') + name + (info ? '  (' + info + ')' : '')); if (!ok) fehler++; }
 
@@ -276,6 +276,219 @@ for (const daten of R.trackCatalog) {
   k.weg = true;
   const b = new R.Vehicle(AUTO); b.setzen(a.x, a.z, a.heading); b.vLaengs = 30;
   pruefe('Krater weg → kein Treffer mehr', R.Kollisionen.hindernisse([b], st, { dt: DT, zeit: 0 }).length === 0 && b.vLaengs === 30);
+}
+
+// ---------- v15: Öl schleudert beim Einfahren, Sand bremst deutlich ----------
+{
+  const SC = R.config.physik.schleudern, GRAD = 180 / Math.PI;
+  pruefe('config.physik.schleudern (oel/sand) vorhanden, Sandfleck deckelt auf ≤ 50 % vMax', !!(SC && SC.oel && SC.sand) && U.sandFleck.vMaxFaktor <= 0.5);
+  /** Auf Straße gerade fahren, dann in Öl einfahren (einmal), 'sek' s im Öl; steuer(t, auto) liefert die Lenkung. */
+  function oelFahrt(kmh, steuer, hilfe, x0, sek) {
+    const a = new R.Vehicle(AUTO); a.setzen(x0 || 0, 0, 0); a.vLaengs = kmh / 3.6; a.untergrund = 'strasse';
+    for (let k = 0; k < 10; k++) a.schritt(DT, { gas: 0.5, bremse: 0, lenkung: 0 }, hilfe);
+    let maxH = 0, t = 0;
+    for (; t < (sek || 2.5); t += DT) {
+      a.untergrund = 'oel';
+      a.schritt(DT, { gas: 0.5, bremse: 0, lenkung: steuer ? steuer(t, a) : 0 }, hilfe);
+      maxH = Math.max(maxH, Math.abs(a.heading));
+    }
+    return { a, maxGrad: maxH * GRAD, endGrad: a.heading * GRAD };
+  }
+  const r100 = oelFahrt(100, null), r100b = oelFahrt(100, null), r20 = oelFahrt(20, null), r50 = oelFahrt(50, null), r250 = oelFahrt(250, null);
+  pruefe('Öl 100 km/h gerade: Einfahrt dreht 30–60°', r100.maxGrad >= 30 && r100.maxGrad <= 60, r100.maxGrad.toFixed(0) + '°');
+  pruefe('Öl: deterministisch (gleiche Eingabe → exakt gleiches Ergebnis)', r100.a.heading === r100b.a.heading && r100.a.x === r100b.a.x && r100.a.vQuer === r100b.a.vQuer);
+  pruefe('Öl 20 km/h: kaum Drehung (< 5°)', r20.maxGrad < 5, r20.maxGrad.toFixed(1) + '°');
+  pruefe('Öl 50 km/h: weniger als bei 100 km/h', r50.maxGrad > 0 && r50.maxGrad < r100.maxGrad, r50.maxGrad.toFixed(0) + '° < ' + r100.maxGrad.toFixed(0) + '°');
+  pruefe('Öl 250 km/h: gedeckelt (< 75°, kein Kreiseln/Überschlag)', r250.maxGrad < 75, r250.maxGrad.toFixed(0) + '°');
+  // Richtung: Lenkung rechts (> 0) → dreht nach rechts (heading sinkt); links → heading steigt; geradeaus: Positions-Hash (andere Stelle ↔ andere Richtung möglich)
+  const rr = oelFahrt(100, () => 0.3), rl = oelFahrt(100, () => -0.3);
+  pruefe('Öl: Drehrichtung folgt der Lenkung (rechts → heading < 0, links → > 0)', rr.a.heading < 0 && rl.a.heading > 0, rr.endGrad.toFixed(0) + '° / ' + rl.endGrad.toFixed(0) + '°');
+  const richtungen = new Set(); for (let x = 0; x < 40; x += 1.3) richtungen.add(Math.sign(oelFahrt(100, null, null, x, 0.5).a.heading));
+  pruefe('Öl geradeaus: Richtung aus Position, beide Richtungen kommen vor', richtungen.size === 2, [...richtungen].join(','));
+  // Einmalig je Einfahrt: längeres Bleiben im Öl dreht nicht erneut (Drehung klingt ab, Gierwinkel bleibt < Deckel)
+  const lang = oelFahrt(100, null, null, 0, 6);
+  pruefe('Öl: nur einmal je Einfahrt (6 s im Fleck: Drehung bleibt ≤ 60°)', lang.maxGrad <= 60, lang.maxGrad.toFixed(0) + '°');
+  // Gegenlenken fängt ab: einfacher Fahrer (0,25 s Reaktion) lenkt gegen den Gierwinkel
+  const gegen = oelFahrt(100, (t, a) => t < 0.25 ? 0 : Math.max(-1, Math.min(1, a.heading * 3)), null, 0, 3);
+  pruefe('Öl: Gegenlenken fängt ab (nach 3 s |Gierwinkel| < 10°, Tempo > 0)', Math.abs(gegen.endGrad) < 10 && gegen.a.vLaengs > 5,
+    gegen.endGrad.toFixed(1) + '°, ' + (gegen.a.vLaengs * 3.6).toFixed(0) + ' km/h (ohne: ' + r100.endGrad.toFixed(0) + '°)');
+  // Fahrhilfe „viel" dämpft
+  const hv = { lenkhilfe: R.config.fahrhilfen.viel.lenkhilfe, bremshilfe: 0, tangente: { tx: 0, tz: -1 }, seitenabstand: 0, zieltempo: 100 };
+  const rh = oelFahrt(100, null, hv);
+  pruefe('Öl: Fahrhilfe „viel" dämpft die Drehung', rh.maxGrad < r100.maxGrad * 0.8, rh.maxGrad.toFixed(0) + '° < ' + r100.maxGrad.toFixed(0) + '°');
+
+  /** Sandfleck (Länge laenge m) durchfahren, gas = Gas, Tempo davor/danach in km/h, Zeit im Fleck. */
+  function sandFahrt(daten, kmh, laenge, gas, klasse) {
+    const a = new R.Vehicle(daten, klasse ? { tempoKlasse: klasse } : undefined); a.setzen(0, 0, 0); a.vLaengs = kmh / 3.6; a.untergrund = 'strasse';
+    a.schritt(DT, { gas, bremse: 0, lenkung: 0 });
+    const vor = a.vLaengs * 3.6, z0 = a.z; let t = 0;
+    while (z0 - a.z < laenge && t < 30) { a.untergrund = 'sandFleck'; a.schritt(DT, { gas, bremse: 0, lenkung: 0 }); t += DT; }
+    return { vor, nach: a.vLaengs * 3.6, t };
+  }
+  const L = C.sand.laenge;
+  const s100 = sandFahrt(AUTO, 100, L, 1), s100g = sandFahrt(AUTO, 100, L, 0), s60 = sandFahrt(AUTO, 60, L, 1);
+  pruefe('Sand 100 km/h Vollgas: Tempo danach ≥ 15 % niedriger, aber > 0', s100.nach < s100.vor * 0.85 && s100.nach > 20, s100.vor.toFixed(0) + ' → ' + s100.nach.toFixed(0) + ' km/h');
+  pruefe('Sand 100 km/h Gas weg: Tempo danach ≥ 30 % niedriger', s100g.nach < s100g.vor * 0.7 && s100g.nach > 20, s100g.vor.toFixed(0) + ' → ' + s100g.nach.toFixed(0) + ' km/h');
+  pruefe('Sand 60 km/h: deutlich langsamer (≥ 20 %), noch in Fahrt', s60.nach < s60.vor * 0.8 && s60.nach > 10, s60.vor.toFixed(0) + ' → ' + s60.nach.toFixed(0) + ' km/h');
+  const sNeu = sandFahrt(AUTO, 100, L, 1);
+  pruefe('Sand: wiederholbar (gleiche Eingabe → gleiches Tempo)', Math.abs(sNeu.nach - s100.nach) < 1e-9);
+  // Steckenbleiben: das schwächste Auto (Normal-Klasse) aus Schritttempo und aus dem Stand mit Vollgas
+  const schwach = (R.carCatalog.slice().sort((p, q) => p.fahrwerte.beschleunigung - q.fahrwerte.beschleunigung)[0] || {}).fahrwerte || AUTO;
+  const st0 = sandFahrt(schwach, 0, L, 1, 'normal'), st5 = sandFahrt(schwach, 5, L, 1, 'normal');
+  pruefe('Sand: kein Steckenbleiben (schwächstes Auto, Normal-Klasse, aus 0/5 km/h in < 12 s durch)', st0.t < 12 && st5.t < 12 && st0.nach > 5, st0.t.toFixed(1) + ' s / ' + st5.t.toFixed(1) + ' s, danach ' + st0.nach.toFixed(0) + ' km/h');
+  const sn = sandFahrt(schwach, 150, L, 1, 'normal');
+  pruefe('Sand: Deckel greift (Normal-Klasse 150 km/h → ≤ 0,5·vMax ≈ ' + (schwach.vMax * 0.7 * 0.5 * 3.6).toFixed(0) + ' km/h)', sn.nach < schwach.vMax * 0.7 * 3.6 * 0.6, sn.vor.toFixed(0) + ' → ' + sn.nach.toFixed(0) + ' km/h');
+}
+
+
+// ============================================================ 12.10. Hindernis-Menge (normal / viele / sehrViele)
+//   normal = bitgleich wie vor der Funktion; viele ≈ ×3 (mind. 1 je 150 m), sehrViele ≈ ×5 (mind. 1 je 80 m) (Öl, Sand, Baustelle, Ast, Wrack, Strohballen);
+//   deterministisch (zweimal bauen = gleich); Sperrzonen, Mindestabstände, immer eine freie Spur; Münzen nicht in Hindernissen.
+{
+  const MC = R.config.hindernisMenge, MENGEN = ['normal', 'viele', 'sehrViele'];
+  const fnv = (t) => { let h = 0x811c9dc5; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16); };
+  const bau = (d, welt, menge, variante) => { const st = new R.Strecke(d, { welt, hindernisMenge: menge, variante: variante || '' }); return st; };
+  const mitWracks = (st) => { const n = st.hindernisse.length; R.Kollisionen.wracksEinbauen(st); return n; };
+
+  // --- normal bitgleich: Fingerabdruck über alle Strecken × Welten × Varianten, gemessen am Stand VOR der Funktion
+  {
+    let alles = '', n = 0, gleichOpt = true;
+    for (const d of R.trackCatalog) for (const welt of Object.keys(d.welten)) for (const v of [''].concat(Object.keys(d.varianten || {}))) {
+      const st = new R.Strecke(d, { welt, variante: v }); mitWracks(st);
+      alles += JSON.stringify([st.hindernisse, st.wracks, st.strohballen, st.daten.hindernisse]); n++;
+      const s2 = new R.Strecke(d, { welt, variante: v, hindernisMenge: 'normal' }); mitWracks(s2);
+      const s3 = new R.Strecke(d, { welt, variante: v, hindernisMenge: 'Quatsch' }); mitWracks(s3);
+      if (JSON.stringify([s2.hindernisse, s2.wracks, s2.strohballen]) !== JSON.stringify([st.hindernisse, st.wracks, st.strohballen]) ||
+          JSON.stringify([s3.hindernisse, s3.wracks, s3.strohballen]) !== JSON.stringify([st.hindernisse, st.wracks, st.strohballen])) gleichOpt = false;
+    }
+    pruefe('Menge normal: bitgleich zum Stand vor der Funktion (' + n + ' Strecken × Welten × Varianten, Fingerabdruck)', fnv(alles) === '90c5e661', fnv(alles));
+    pruefe('Menge: ohne Option = „normal“ = unbekannter Wert (→ Standard)', gleichOpt);
+    pruefe('Menge: Gültigkeit (unbekannt, Zahl, null, Objekt → normal; die drei Namen bleiben)', R.Strecke.hindernisMengeGueltig('viele') === 'viele' && R.Strecke.hindernisMengeGueltig('sehrViele') === 'sehrViele' &&
+      R.Strecke.hindernisMengeGueltig('normal') === 'normal' && [undefined, null, 5, {}, ['viele'], 'constructor', '__proto__', ''].every(x => R.Strecke.hindernisMengeGueltig(x) === 'normal'));
+  }
+
+  for (const d of R.trackCatalog) {
+    const wH = Object.keys(d.welten).find(w => d.welten[w].hindernisse);
+    const katalogVorher = JSON.stringify([d.hindernisse, d.wracks, d.strohballen]);
+    const zaehl = (st) => ({ h: st.hindernisse.filter(x => x.typ !== 'wrack' && x.typ !== 'brand' && x.typ !== 'lava' && x.typ !== 'krater').length, w: st.wracks.length, s: st.strohballen.length });
+    const gesamt = (z) => z.h + z.w + z.s;
+    const N = {};
+    MENGEN.forEach((m) => { N[m] = zaehl(bau(d, wH, m)); });
+    const f = (m) => MC.stufen[m].faktor;
+    // Soll-Zahl laut Regel: max(Katalog × faktor, Länge / meterPro); erreicht werden mindestens 70 % (Rest fällt wegen Sperrzonen weg)
+    const b = gesamt(N.normal);
+    const Lw = bau(d, wH, 'normal').spline.laenge;
+    const sollV = Math.max(b * f('viele'), Math.ceil(Lw / MC.stufen.viele.meterPro)), sollS = Math.max(b * f('sehrViele'), Math.ceil(Lw / MC.stufen.sehrViele.meterPro));
+    const rv = gesamt(N.viele) / b, rs = gesamt(N.sehrViele) / b;
+    pruefe(`[${d.id}/${wH}] Anzahl normal ${b} → viele ${gesamt(N.viele)} (×${rv.toFixed(2)}, soll ${sollV}), sehrViele ${gesamt(N.sehrViele)} (×${rs.toFixed(2)}, soll ${sollS}): ≈ ×3 / ×5, mind. 1 je 150 / 80 m`,
+      gesamt(N.viele) >= 0.7 * sollV && gesamt(N.sehrViele) >= 0.7 * sollS && gesamt(N.sehrViele) > gesamt(N.viele) && gesamt(N.viele) > b &&
+      gesamt(N.viele) >= 0.7 * Lw / 150 && gesamt(N.sehrViele) >= 0.7 * Lw / 80 && N.viele.w - N.normal.w <= MC.wrackMax && N.sehrViele.w - N.normal.w <= MC.wrackMax,
+      `Öl/Sand/Baustelle/Ast ${N.normal.h}/${N.viele.h}/${N.sehrViele.h}, Wracks ${N.normal.w}/${N.viele.w}/${N.sehrViele.w}, Strohballen ${N.normal.s}/${N.viele.s}/${N.sehrViele.s}, Länge ${Lw.toFixed(0)} m`);
+    pruefe(`[${d.id}] Katalog bleibt unverändert (kein Mutieren der Listen)`, JSON.stringify([d.hindernisse, d.wracks, d.strohballen]) === katalogVorher);
+
+    // Welt Klassisch (falls vorhanden): keine zusätzlichen Hindernisse
+    const wK = Object.keys(d.welten).find(w => !d.welten[w].hindernisse && !d.welten[w].wracks && !d.welten[w].strohballen);
+    if (wK) {
+      const st = bau(d, wK, 'sehrViele');
+      pruefe(`[${d.id}/${wK}] Welt ohne Hindernis-Schichten: Menge wirkt nicht (alles leer, Zusatz 0)`, st.hindernisse.length === 0 && st.wracks.length === 0 && st.strohballen.length === 0 &&
+        st.hindernisZusatz.hindernisse + st.hindernisZusatz.wracks + st.hindernisZusatz.strohballen === 0 && R.Strecke.weltHatHindernisse(d, wK) === false);
+    }
+    pruefe(`[${d.id}/${wH}] weltHatHindernisse`, R.Strecke.weltHatHindernisse(d, wH) === true);
+
+    // Alle Welten × Mengen × Varianten: deterministisch, Sperrzonen, Abstände, freie Spur, Münzen
+    for (const welt of Object.keys(d.welten)) for (const v of [''].concat(Object.keys(d.varianten || {}))) for (const menge of ['viele', 'sehrViele']) {
+      if (!(d.welten[welt].hindernisse || d.welten[welt].wracks || d.welten[welt].strohballen)) continue;
+      const name = `[${d.id}/${welt}${v ? ' ' + v : ''}/${menge}]`;
+      const a = bau(d, welt, menge, v), a2 = bau(d, welt, menge, v), n0 = bau(d, welt, 'normal', v);
+      const wA = mitWracks(a); mitWracks(a2); const w0 = mitWracks(n0);
+      const sig = (st) => JSON.stringify([st.hindernisse, st.wracks, st.strohballen]);
+      pruefe(name + ' deterministisch: zweimal bauen = gleiche Hindernisse (Pylonen, Wracks, Strohballen)', sig(a) === sig(a2));
+      const sp = a.spline, L = sp.laenge, dF = (x, y) => sp.differenzS(x, y);
+      // Zusatz-Einträge = die Listen-Enden hinter den Katalogeinträgen der Welt
+      const extH = a.hindernisse.slice(w0, wA);
+      const wrackAnzahl0 = n0.wracks.length;
+      const extW = a.hindernisse.slice(wA + wrackAnzahl0);
+      const extS = a.strohballen.slice(n0.strohballen.length);
+      const ext = extH.concat(extW);
+      const zus = a.hindernisZusatz;
+      pruefe(name + ' Zusatz-Zähler stimmen (' + extH.length + ' Öl/Sand/Baustelle/Ast, ' + extW.length + ' Wracks, ' + extS.length + ' Strohballen, ' + zus.weggelassen + ' weggelassen)',
+        zus.hindernisse === extH.length && zus.wracks === extW.length && zus.strohballen === extS.length && zus.gewollt + zus.slalom === extH.length + extW.length + extS.length + zus.weggelassen &&
+        w0 + extH.length === wA);
+
+      // Sperrzonen (alle mit Zugabe): Start/Ziel, Tunnel, Brücke, Überführung, Kreuzung, Looping, Schanze (Anlauf + Landung), Spuren
+      const lage = [];     // Verstöße
+      const sch = (a.schanzen || []);
+      const alleExt = ext.map(h => ({ art: h.typ, s0: h.s0, s1: h.s1, s: h.s })).concat(extS.map(e => ({ art: 'stroh', s0: e.s - 2, s1: e.s + 2, s: e.s })));
+      alleExt.forEach((h) => {
+        const pkt = [h.s0, h.s, h.s1];
+        const s0n = sp.wrapS(h.s0), s1n = sp.wrapS(h.s1);
+        if (sp.wrapS(h.s) < MC.startFrei - 1 || sp.wrapS(h.s) > L - MC.zielFrei + 1) lage.push(h.art + ' Start/Ziel @' + h.s.toFixed(0));
+        if (pkt.some(x => a.imTunnel(x, 20))) lage.push(h.art + ' Tunnel @' + h.s.toFixed(0));
+        if (pkt.some(x => a.brueckeBei(x, 20))) lage.push(h.art + ' Brücke @' + h.s.toFixed(0));
+        if (pkt.some(x => a.ueberfuehrungNah(x, 20))) lage.push(h.art + ' Überführung @' + h.s.toFixed(0));
+        if (pkt.some(x => a.kreuzungNah(x, 20))) lage.push(h.art + ' Kreuzung @' + h.s.toFixed(0));
+        if (pkt.some(x => a.loopingBei(x, 20))) lage.push(h.art + ' Looping @' + h.s.toFixed(0));
+        sch.forEach((c) => { if (dF(h.s, c.s) > -60 && dF(h.s, c.s) < (c.laenge || 10) + 60) lage.push(h.art + ' Schanze @' + h.s.toFixed(0)); });
+        (a.spuren || []).forEach((sr) => { if (pkt.some(x => a._inBereich(sr, x, 20))) lage.push(h.art + ' Spur-Abschnitt @' + h.s.toFixed(0)); });
+        void s0n; void s1n;
+      });
+      pruefe(name + ' Zusatz-Hindernisse nicht in Sperrzonen (Start/Ziel, Tunnel, Brücke, Überführung, Kreuzung, Looping, Schanze, Spur)', lage.length === 0, lage.slice(0, 3).join('; '));
+
+      // Mindestabstand: alle Hindernisse/Wracks/Strohballen zusammen – Rand zu Rand ≥ abstandFleck, Sperr-Hindernisse ≥ abstandSperr
+      const alle = a.hindernisse.filter(h => h.typ !== 'krater').map(h => ({ s: h.s, a: Math.abs(dF(h.s0, h.s)), b: Math.abs(dF(h.s1, h.s)), sperr: !h.untergrund, name: h.typ + '@' + h.s.toFixed(0) }))
+        .concat(a.strohballen.map(e => ({ s: e.s, a: 2, b: 2, sperr: false, name: 'stroh@' + e.s.toFixed(0) })));
+      let enge = [];
+      for (let i = 0; i < alle.length; i++) for (let j = i + 1; j < alle.length; j++) {
+        const p = alle[i], q = alle[j], dd = Math.abs(dF(p.s, q.s));
+        // nur Zusatz-Paare prüfen? Nein: alle Paare (Katalog-Paare, die schon eng waren, melden wir getrennt)
+        const rand = dd - (dF(q.s, p.s) > 0 ? p.b + q.a : p.a + q.b);
+        const soll = p.sperr && q.sperr ? MC.abstandSperr : MC.abstandFleck;
+        if (rand < soll - 1e-6) enge.push(p.name + '↔' + q.name + ' ' + rand.toFixed(0) + ' m');
+      }
+      // Katalog-Paare ausnehmen, die schon bei „normal“ so eng liegen
+      const eng0 = new Set();
+      {
+        const al0 = n0.hindernisse.filter(h => h.typ !== 'krater').map(h => h.typ + '@' + h.s.toFixed(0)).concat(n0.strohballen.map(e => 'stroh@' + e.s.toFixed(0)));
+        enge = enge.filter(t => { const [x, y] = t.split(' ')[0].split('↔'); return !(al0.includes(x) && al0.includes(y)); });
+        void eng0;
+      }
+      pruefe(name + ' Mindestabstand zwischen neuen und allen Hindernissen (Sperr-Hindernisse ≥ ' + MC.abstandSperr + ' m Lücke, sonst ≥ ' + MC.abstandFleck + ' m)', enge.length === 0, enge.slice(0, 3).join('; '));
+
+      // Immer eine freie Spur: an jedem s (2-m-Raster) bleibt quer mindestens freiSpur m am Stück frei (Baustelle, Ast, Wrack sperren)
+      let minFrei = Infinity, minS = 0;
+      const sperrer = a.hindernisse.filter(h => h.typ === 'baustelle' || h.typ === 'ast' || h.typ === 'wrack' || h.typ === 'brand' || h.typ === 'lava');
+      for (let s = 0; s < L; s += 2) {
+        const hb = (a.breiteBei ? a.breiteBei(s) : a.breite) / 2;
+        const bl = [];
+        sperrer.forEach((h) => {
+          if (Math.abs(dF(s, h.s)) > (h.laenge || 4) / 2 + 1) return;
+          bl.push([Math.max(-hb, h.seitenabstand - h.halbbreite), Math.min(hb, h.seitenabstand + h.halbbreite)]);
+        });
+        bl.sort((p, q) => p[0] - q[0]);
+        let x = -hb, best = 0;
+        bl.forEach(([lo, hi]) => { best = Math.max(best, lo - x); x = Math.max(x, hi); });
+        best = Math.max(best, hb - x);
+        if (best < minFrei) { minFrei = best; minS = s; }
+      }
+      pruefe(name + ' immer eine freie Spur (≥ ' + MC.freiSpur + ' m am Stück frei, auch bei Baustelle/Ast/Wrack)', minFrei >= MC.freiSpur, 'min ' + minFrei.toFixed(1) + ' m bei s=' + minS);
+
+      // Wracks: auf der Straße, Auto aus dem Katalog; Strohballen: Seite ±1, Tempo/Intervall > 0
+      pruefe(name + ' Wracks/Strohballen gültig (Seite ±1, autoId, auf der Fahrbahn)', extW.every(h => h.autoId && Math.abs(h.seitenabstand) < a.breite / 2 - 1) &&
+        extS.every(e => (e.von === 1 || e.von === -1) && e.intervall > 0 && e.tempo > 0));
+
+      // Münzen: keine in Hindernissen (Radius 0,5 m)
+      const m = new R.Muenzen(a), sp2 = a.spline;
+      const drin = m.liste.filter(c => a.hindernisse.some(h => h.typ !== 'krater' && h.laenge && Math.abs(sp2.differenzS(c.s, h.s)) < h.laenge / 2 + 0.5 && Math.abs(c.q - h.seitenabstand) < h.halbbreite + 0.5));
+      pruefe(name + ' Münzen liegen nicht in Hindernissen (' + m.liste.length + ' Münzen)', drin.length === 0 && m.liste.length >= 20, drin.length ? drin.length + ' drin' : '');
+    }
+  }
+  // Server und Client rechnen mit denselben Zahlen: Reihenfolge unabhängig vom Zeitpunkt (kein Math.random)
+  {
+    const orig = Math.random; let aufrufe = 0;
+    Math.random = () => { aufrufe++; return orig(); };
+    try { R.trackCatalog.forEach((d) => { const w = Object.keys(d.welten).find(x => d.welten[x].hindernisse); bau(d, w, 'sehrViele'); }); } finally { Math.random = orig; }
+    pruefe('Menge: erzeugt ohne Math.random (fester Seed)', aufrufe === 0, aufrufe + ' Aufrufe');
+  }
 }
 
 console.log(fehler ? `\n${fehler} FEHLER` : '\nALLE TESTS OK');

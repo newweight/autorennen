@@ -21,6 +21,8 @@ Bilder: 01_start, 02_fahrt, 03_links_abseits, 04_reset, 05_cockpit, 06_weit, 07_
         27_festgeklebt (HUD), 27b_festgeklebt_nah (Fäden/Blasen)
         Runde 4 (Wiese/Wald/Wüste, Welt „Stunt"): 23_spur_eng (1 Spur + Leitplanke), 23b_spur_eng_oben, 24_spur_breit (3 Spuren)
         – main.js kennt die Welt-Wahl noch nicht: der Test setzt vorher trackCatalog[...].weltStandard = 'stunt'.
+12.10. Hindernis-Menge (menge_lauf): je Strecke normal/viele/sehrViele in Welt „Hindernisse“ (Anzahl, Draw-Calls), Bilder Wiese/Wüste:
+        M1_sehrViele_fahrersicht, M2_sehrViele_uebersicht, M3_sehrViele_schraeg, M4_sehrViele_autopilot.
 Prüft: keine JS-Fehler, Deko ≥ breite/2 + 6 m von der Mitte, Draw-Calls Strecke+Deko+Hindernisse ≤ 40, Minimap sichtbar,
        Tunnel innen dunkel (Helligkeit < 45 % von draußen) mit hellem Lichtkegel, höchstens 3 Punkt- + 2 Spotlichter,
        Senke unter der Brücke ≥ 3 m tief, Pylone fällt beim Anfahren um und kommt nach der Runde zurück."""
@@ -1070,6 +1072,76 @@ def spur_lauf(browser, sid, out):
     return info, zeilen
 
 
+def menge_lauf(browser, sid, out, bilder=True):
+    """12.10. Hindernis-Menge: Welt „Hindernisse“ mit normal / viele / sehrViele im echten Spiel.
+    Misst je Menge die Draw-Calls (Blick von 14 Stellen entlang der Runde) und die Anzahl; bei bilder=True außerdem Bilder
+    mit 'sehrViele' (Fahrersicht in der dichtesten Stelle, Übersicht von oben, schräg, Autopilot; dichteste Stelle = meiste Hindernisse in 300 m). Prüft: keine JS-Fehler,
+    Draw-Calls bei 'sehrViele' höchstens +40 gegenüber 'normal' (Gesamtmaximum < 160), Anzahl wächst normal < viele < sehrViele."""
+    os.makedirs(out, exist_ok=True)
+    zeilen, erg = [], {}
+    fehler = []
+
+    def pruefe(name, ok, info_=''):
+        zeilen.append(('OK   ' if ok else 'FEHL ') + '[' + sid + '/hindernisse] ' + name + (' – ' + str(info_) if info_ != '' else ''))
+    for menge in ('normal', 'viele', 'sehrViele'):
+        page = browser.new_page(viewport={'width': 1280, 'height': 800})
+        page.on('pageerror', lambda e: fehler.append(str(e)))
+        page.on('console', lambda m: fehler.append('console.' + m.type + ': ' + m.text) if m.type in ('error',) else None)
+        page.goto(url)
+        page.wait_for_timeout(1500)
+        page.evaluate("([id, m]) => Rennspiel.spiel.rennenStarten({ modus: 'solo', streckeId: id, welt: 'hindernisse', hindernisMenge: m, autoIds: ['troc-cabrio', 'multivan'], runden: 3, gegner: 3, schwierigkeit: 'mittel', fahrhilfe: ['wenig', 'wenig'] })", [sid, menge])
+        page.wait_for_timeout(1200)
+        info = page.evaluate('''(() => { const st = Rennspiel.spiel.strecke, o = Rennspiel.spiel.einstellungen;
+          return { menge: st.hindernisMenge, einst: o.hindernisMenge, L: st.laenge,
+            hindernisse: st.hindernisse.filter(h => h.typ !== 'wrack' && h.typ !== 'brand').length, wracks: st.hindernisse.filter(h => h.typ === 'wrack' || h.typ === 'brand').length,
+            stroh: st.strohballen.length, zusatz: st.hindernisZusatz }; })()''')
+        calls = []
+        for k in range(14):
+            page.evaluate('''(s) => { const sp = Rennspiel.spiel.strecke.spline, q = sp.punktBei(s), f = Rennspiel.spiel.fahrzeuge[0];
+              f.vehicle.setzen(q.x, q.z, Rennspiel.headingAus(q.tx, q.tz)); f.index = -1; Rennspiel.spiel.kameras[0]._erstesMal = true; }''', info['L'] * (k + 0.5) / 14)
+            page.wait_for_timeout(450)
+            calls.append(page.evaluate('Rennspiel.spiel.renderer.info.render.calls'))
+        erg[menge] = dict(info, callsMax=max(calls), callsMittel=round(sum(calls) / len(calls), 1))
+        if menge == 'sehrViele' and bilder:
+            # dichteste Stelle: die meisten Hindernisse in 110 m voraus (Fahrersicht soll mehrere zeigen)
+            dicht = page.evaluate('''(() => { const st = Rennspiel.spiel.strecke, sp = st.spline;
+              const liste = st.hindernisse.filter(h => h.typ !== 'krater').map(h => h.s); let best = null;
+              liste.forEach(s => { const n = liste.filter(t => { const d = sp.differenzS(t, s - 25); return d >= 0 && d <= 110; }).length;
+                let k = 0; for (let x = -25; x <= 110; x += 15) k = Math.max(k, Math.abs(sp.punktBei(s + x).kruemmung || 0));   // möglichst gerade (Sicht)
+                if (k < 1 / 60 && (!best || n > best.n)) best = { s, n }; });
+              return best; })()''')
+            erg['dicht'] = dicht
+            s0 = dicht['s'] - 25 - 25 + 25
+            page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=60000)
+            page.wait_for_function('Rennspiel.spiel.rennen.zeit > 1.4', timeout=60000)      # „LOS!“ ist weg (Renn-Zeit, nicht Wanduhr)
+            page.evaluate(AUTO_NACH_S, s0); page.wait_for_timeout(1500)
+            page.screenshot(path=os.path.join(out, 'M1_sehrViele_fahrersicht.png'))
+            blick = page.evaluate(KAMERA_BEI_S, [s0 + 5, 12, 14, 100])
+            page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(900)
+            page.screenshot(path=os.path.join(out, 'M2_sehrViele_uebersicht.png'))
+            blick = page.evaluate(KAMERA_BEI_S, [s0 + 80, 18, 8, 80])
+            page.evaluate(KAMERA_FREI, blick); page.wait_for_timeout(900)
+            page.screenshot(path=os.path.join(out, 'M3_sehrViele_schraeg.png'))
+            page.evaluate('(() => { const s = Rennspiel.spiel, k = s.kameras[0]; delete k.update; k._erstesMal = true; })()')
+            # Autopilot fährt die dichte Stelle
+            page.evaluate(AUTO_NACH_S, s0 - 40)
+            page.evaluate('Rennspiel.spiel.autopilot(0, true)')
+            page.wait_for_timeout(4500)
+            page.screenshot(path=os.path.join(out, 'M4_sehrViele_autopilot.png'))
+            page.evaluate('Rennspiel.spiel.autopilot(0, false)')
+        page.close()
+    n, v, s = erg['normal'], erg['viele'], erg['sehrViele']
+    ges = lambda e: e['hindernisse'] + e['wracks'] + e['stroh']
+    pruefe('Menge im Spiel angekommen (normal/viele/sehrViele)', n['menge'] == 'normal' and v['menge'] == 'viele' and s['menge'] == 'sehrViele' and s['einst'] == 'sehrViele')
+    pruefe('Anzahl wächst: ' + '/'.join(str(ges(e)) for e in (n, v, s)) + ' (Hindernisse+Wracks+Strohballen)', ges(n) < ges(v) < ges(s) and ges(v) >= 0.7 * n['L'] / 150 and ges(s) >= 0.7 * n['L'] / 80 and s['wracks'] - n['wracks'] <= 2,
+           'Zusatz sehrViele: ' + json.dumps(s['zusatz']))
+    pruefe('Fahrersicht sehrViele: mindestens 3 Hindernisse in 110 m voraus (' + str(erg.get('dicht')) + ')', bool(erg.get('dicht')) and erg['dicht']['n'] >= 3 or not bilder)
+    pruefe('Draw-Calls: sehrViele höchstens +40 gegenüber normal (max ' + str(s['callsMax']) + ' / ' + str(n['callsMax']) + ', Mittel ' + str(s['callsMittel']) + ' / ' + str(n['callsMittel']) + ')',
+           s['callsMax'] <= n['callsMax'] + 40 and s['callsMax'] < 160, 'viele max ' + str(v['callsMax']))
+    pruefe('keine JS-Fehler', not fehler, fehler[:3])
+    return erg, zeilen
+
+
 ids = ['wiese', 'wald', 'wueste', 'fantasie', 'dino', 'alpen'] if wahl == 'alle' else [wahl]
 with sync_playwright() as p:
     browser = p.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
@@ -1082,6 +1154,10 @@ with sync_playwright() as p:
         if sid in ('wiese', 'wald', 'wueste', 'dino', 'alpen'):
             info, pruef = spur_lauf(browser, sid, out)
             print(json.dumps({'stunt': info}, ensure_ascii=False))
+            alle += pruef
+        if sid in ('wiese', 'wald', 'wueste', 'dino', 'alpen'):      # 12.10. Hindernis-Menge (Bilder nur für Wiese + Wüste, Messung für alle)
+            erg, pruef = menge_lauf(browser, sid, out, bilder=sid in ('wiese', 'wueste'))
+            print(json.dumps({'hindernisMenge': erg}, ensure_ascii=False))
             alle += pruef
     browser.close()
     print('\n'.join(alle))

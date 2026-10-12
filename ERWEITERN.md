@@ -63,6 +63,8 @@ Optionale Felder (Position immer als Bogenlänge `s` in m; nicht auf Start/Ziel,
 - `bruecken`: `[{ s0, s1, art: 'holz'|'stein'|'stahl', tiefe }]` – Boden darunter wird um `tiefe` abgesenkt.
 - `tunnel`: `[{ s0, s1, art: 'fels'|'sandstein' }]` – Röhre mit Lampen, Scheinwerfer nur im Tunnel.
 - `hindernisse`: `[{ typ: 'oel'|'sand'|'baustelle'|'ast', s, seite (-1..1), breite? }]` – Werte je Typ in `config.hindernisse`.
+  Hindernis-Menge (12.10., Einstellung `hindernisMenge` normal | viele | sehrViele): `trackBuilder.js` `zusatzErzeugen` ergänzt bis Gesamtzahl max(Katalog × faktor, Länge / meterPro) (Wracks gedeckelt, Rest Öl/Sand/Ast/Baustelle/Strohballen)
+  (`config.hindernisMenge`), deterministisch; neue Streckenelemente mit eigener Sperrzone dort in der Liste „belegt“ eintragen.
 - `loopings`: `[{ s, radius }]` (Fantasie, Radius 12 m; Mindesttempo/Versatz in `config.fantasie.looping`).
 - `baelle`: `[{ s, von (-1 links/1 rechts), abRunde ('letzte' oder Zahl), intervall, tempo, radius, farbe }]`.
 - `wasserstrahlen`: `[{ s, seitenabstand, intervall, dauer, vorwarnung }]` (Zeiten in s).

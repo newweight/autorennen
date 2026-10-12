@@ -15,7 +15,15 @@
 //   schaden.bei(fn)        Ereignisse fn({ art, i, stufe, prozent }):
 //                            'treffer' (Ton), 'stufe' (neue Stufe), 'liegengeblieben' (Meldung + Ton),
 //                            'abschleppwagen' (Hälfte der Wartezeit: zweite Meldung + Hupe),
-//                            'abschleppen' (main.js: zuruecksetzen(i) – das Auto hat dann resetProzent)
+//                            'abschleppen' (main.js: zuruecksetzen(i); mit Reparatur beginnt sie jetzt: Auto steht bei 0 %,
+//                              e.reparatur = true; ohne Reparatur (reparaturJe10 = 0) hat es sofort resetProzent),
+//                            'reparatur' (alle 10 % – Pling), 'reparaturEnde' (e.grund: 'voll' | 'losgefahren' | 'ki')
+//   Abschlepp-Reparatur (Runde 7, config.schaden.reparaturJe10 > 0): nach dem Abschleppen steigt der Wert von 0 % in
+//   10er-Sprüngen, je 10 % reparaturJe10 s. Das Auto steht (Tempo 0, Treffer zählen nicht). Mensch: ab losfahrenAb (30 %) beendet
+//   Gas die Reparatur sofort (Wert bleibt), darunter ist Gas gesperrt; bis 100 % endet sie von selbst. Computer-Auto (kein
+//   istSpieler oder Autopilot): wartet bis kiLosfahrenAb (60 %), dann frei.
+//   schaden.reparatur(i)   true = Mensch repariert gerade → main.js reicht seine Eingabe durch reparaturSteuerung(i, s)
+//   schaden.reparaturSteuerung(i, s)  → s (Gas ab Schwelle: beendet die Reparatur) oder { gas 0, bremse 1, lenkung 0 }
 //   schaden.zerstoeren()   Rauch entfernen, Fahrwerte zurück auf die Basis
 // Stufen: je volle 20 % Verlust +1 → vMax × (1 − 0,04·Stufe), Beschleunigung × (1 − 0,06·Stufe), Grip × (1 − 0,03·Stufe).
 // vehicle.js bleibt unverändert: vehicle.datenBasis = Kopie der Original-Fahrwerte, vehicle.daten wird als neue
@@ -119,7 +127,7 @@
       const o = opt || {};
       this.an = o.an !== undefined ? !!o.an : !!cfg().standardAn;
       this.fahrzeuge = fahrzeuge || [];
-      this.z = this.fahrzeuge.map(() => ({ punkte: 100, stufe: 0, abkling: 0, liegen: 0, liegengeblieben: false }));
+      this.z = this.fahrzeuge.map(() => ({ punkte: 100, stufe: 0, abkling: 0, liegen: 0, liegengeblieben: false, rep: false, repZeit: 0, gasVersuch: 0 }));
       this._hoerer = [];
       this._effekte = [];
       this._uhr = 0;
@@ -136,8 +144,8 @@
 
     /** Ereignis-Hörer: fn({ art, i, stufe, prozent }). */
     bei(fn) { if (typeof fn === 'function') this._hoerer.push(fn); }
-    _melden(art, i) {
-      const z = this.z[i], e = { art, i, stufe: z.stufe, prozent: z.punkte };
+    _melden(art, i, extra) {
+      const z = this.z[i], e = Object.assign({ art, i, stufe: z.stufe, prozent: z.punkte }, extra);
       for (const fn of this._hoerer) { try { fn(e); } catch (err) { if (typeof console !== 'undefined') console.error(err); } }
     }
 
@@ -189,7 +197,7 @@
     zaehlt(i, art, staerke) {
       if (!this.an) return false;
       const z = this.z[i];
-      if (!z || z.liegengeblieben || z.abkling > 0 || z.punkte <= 0) return false;
+      if (!z || z.liegengeblieben || z.rep || z.abkling > 0 || z.punkte <= 0) return false;   // Reparatur: Auto steht, keine Treffer
       const min = (cfg().mindest || {})[art];
       return (staerke || 0) >= wert(min, 0);
     }
@@ -244,15 +252,59 @@
           if (vorher > halb && z.liegen <= halb) this._melden('abschleppwagen', i);
           if (z.liegen <= 1e-9) {
             z.liegen = 0; z.liegengeblieben = false; z.abkling = wert(cfg().abklingZeit, 0.7);
-            this._punkteSetzen(i, wert(cfg().resetProzent, 60));
-            this._melden('abschleppen', i);
+            if (wert(cfg().reparaturJe10, 0) > 0) { z.rep = true; z.repZeit = 0; z.gasVersuch = 0; }   // Reparatur beginnt bei 0 %
+            else this._punkteSetzen(i, wert(cfg().resetProzent, 60));                                    // alt: sofort resetProzent
+            this._melden('abschleppen', i, { reparatur: z.rep });
           }
-        }
+        } else if (z.rep) this._reparaturSchritt(i, dt);
       }
     }
 
-    /** true = Fahrzeug i ist liegengeblieben (Steuerung ignorieren, nicht bewegen). */
-    gesperrt(i) { const z = this.z[i]; return !!(this.an && z && z.liegengeblieben); }
+    /** Mensch (Spieler ohne Autopilot) oder Computer-Auto? Entscheidet über die Losfahr-Schwelle. */
+    _mensch(i) { const f = this.fahrzeuge[i]; return !!(f && f.istSpieler && !f.autopilot); }
+    /** Ab wie viel Prozent darf Fahrzeug i losfahren (Mensch losfahrenAb, Computer kiLosfahrenAb)? */
+    losfahrenAb(i) { return this._mensch(i) ? wert(cfg().losfahrenAb, 30) : wert(cfg().kiLosfahrenAb, 60); }
+
+    /** Reparatur-Uhr (Physikschritt): je reparaturJe10 s +10 %, Ende bei 100 % bzw. (Computer) ab kiLosfahrenAb. */
+    _reparaturSchritt(i, dt) {
+      const z = this.z[i], v = this._v(i), je = wert(cfg().reparaturJe10, 1);
+      if (v) { v.vLaengs = 0; v.vQuer = 0; }                       // steht (auch gegen Schieben)
+      z.gasVersuch = Math.max(0, z.gasVersuch - dt);
+      z.repZeit += dt;
+      while (z.rep && z.repZeit >= je - 1e-9) {
+        z.repZeit = Math.max(0, z.repZeit - je);
+        this._punkteSetzen(i, z.punkte + 10);
+        this._melden('reparatur', i);
+        if (z.punkte >= 100) this._reparaturBeenden(i, 'voll');
+        else if (!this._mensch(i) && z.punkte >= this.losfahrenAb(i)) this._reparaturBeenden(i, 'ki');
+      }
+    }
+    _reparaturBeenden(i, grund) {
+      const z = this.z[i];
+      if (!z.rep) return;
+      z.rep = false; z.repZeit = 0; z.gasVersuch = 0; z.abkling = wert(cfg().abklingZeit, 0.7);
+      this._melden('reparaturEnde', i, { grund });
+    }
+
+    /** true = Mensch repariert gerade (main.js: Eingabe durch reparaturSteuerung schicken). */
+    reparatur(i) { const z = this.z[i]; return !!(this.an && z && z.rep && this._mensch(i)); }
+
+    /**
+     * Eingabe s ({gas, bremse, lenkung}) eines reparierenden Menschen: Gas ab losfahrenAb beendet die Reparatur
+     * (Wert bleibt, s unverändert); sonst steht das Auto (Bremse) – ein Gasversuch darunter merkt sich der HUD-Hinweis.
+     */
+    reparaturSteuerung(i, s) {
+      const z = this.z[i];
+      if (!this.an || !z || !z.rep || !this._mensch(i)) return s;
+      if ((s.gas || 0) > 0.05) {
+        if (z.punkte >= this.losfahrenAb(i)) { this._reparaturBeenden(i, 'losgefahren'); return s; }
+        z.gasVersuch = 0.9;
+      }
+      return { gas: 0, bremse: 1, lenkung: 0 };
+    }
+
+    /** true = Fahrzeug i darf nicht fahren: liegengeblieben, oder Computer-Auto in der Reparatur (Mensch: reparatur()). */
+    gesperrt(i) { const z = this.z[i]; return !!(this.an && z && (z.liegengeblieben || (z.rep && !this._mensch(i)))); }
 
     /** Zustand für HUD/Tests: { prozent, stufe, liegengeblieben, rest (s bis Abschleppen), rauch 0..1, qualm }. */
     zustand(i) {
@@ -263,6 +315,9 @@
         prozent: p, stufe: this.an ? z.stufe : 0, liegengeblieben: this.an && z.liegengeblieben, rest: z.liegen,
         rauch: p < rauchUnter ? Math.min(1, (rauchUnter - p) / rauchUnter + 0.25) : 0,
         qualm: p < qualmUnter, warnblinker: this.an && (p < qualmUnter || z.liegengeblieben),
+        // Reparatur (Runde 7): läuft, ab wann man losfahren darf, darf man schon, Gasversuch unter der Schwelle (kurz true)
+        reparatur: !!(this.an && z.rep), losfahrenAb: this.losfahrenAb(i), kannLosfahren: !!(this.an && z.rep) && p >= this.losfahrenAb(i),
+        gasVersuch: !!(this.an && z.rep && z.gasVersuch > 0),
       };
     }
 

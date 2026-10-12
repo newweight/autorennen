@@ -8,6 +8,9 @@
 //
 // Runde 4: Welten + Spuren.
 //   new R.Strecke(daten, { welt })   welt = Name aus daten.welten (sonst daten.weltStandard)
+//   12.10. optionen.hindernisMenge: 'normal' (Standard, Katalog unverändert) | 'viele' (≈ ×3, mind. 1 je 150 m) | 'sehrViele' (≈ ×5, mind. 1 je 80 m): zusätzliche Öl-/Sand-/
+//   Baustellen-/Ast-/Wrack-/Strohballen-Einträge, deterministisch (Seed je Strecke + Variante + Menge), nur in Welten mit diesen
+//   Schichten; strecke.hindernisMenge, strecke.hindernisZusatz { hindernisse, wracks, strohballen, gewollt, weggelassen, slalom }.
 //   strecke.welt (Name), strecke.weltDaten / strecke.aktiveSchichten ({ hindernisse, wracks, … : bool })
 //   strecke.daten = Katalogeintrag, aber nur mit den Listen aktiver Schichten (dynamik.js liest baelle/
 //   wasserstrahlen von hier); strecke.katalog = unveränderter Katalogeintrag.
@@ -101,6 +104,188 @@
     const w = name && daten.welten ? daten.welten[name] : null;
     SCHICHTEN.forEach((k) => { erg[k] = w ? !!w[k] : true; });   // ohne Welten: alles wie bisher
     if (!w) erg.spuren = !!(daten.spuren && daten.spuren.length);
+    return erg;
+  }
+
+  // ---------- 12.10. Hindernis-Menge: zusätzliche Hindernisse, deterministisch (ohne Math.random) ----------
+  /** Gültige Menge ('normal' | 'viele' | 'sehrViele'); unbekannt → Standard ('normal'). */
+  function mengeGueltig(m) {
+    const C = R.config.hindernisMenge || {};
+    return typeof m === 'string' && C.stufen && Object.prototype.hasOwnProperty.call(C.stufen, m) ? m : (C.standard || 'normal');
+  }
+  /** Hat die gewählte Welt (Name oder leer = Standard) mindestens eine Hindernis-Schicht (Hindernisse, Wracks, Strohballen)? */
+  function weltHatHindernisse(daten, wunsch) {
+    const s = weltSchichten(daten, weltName(daten, wunsch));
+    return !!(s.hindernisse || s.wracks || s.strohballen);
+  }
+  /** FNV-1a (32 Bit) über einen Text → Seed. */
+  function textSeed(text) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return h >>> 0;
+  }
+  /** mulberry32: reiner Ganzzahl-Zufall (auf Server und in jedem Browser gleich). */
+  function zufallsFolge(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /**
+   * Zusätzliche Hindernisse für 'viele' / 'sehrViele': je Art (Öl, Sand, Baustelle, Ast, Wrack, Strohballen) faktor − 1 neue
+   * Einträge je Katalogeintrag. Position = Zufall mit festem Seed (Strecke + Variante + Menge), gleichmäßig über die Runde verteilt
+   * (ein Abschnitt je Hindernis), nie in den Sperrzonen (Start/Ziel, Tunnel, Brücke, Überführung, Kreuzung, Looping, Schanze samt
+   * Anlauf/Landung, Spur-Abschnitte, Boost/Schild/Bälle/Fontänen/Dinos/Kleber), nie in/dicht an engen Kurven, mit Mindestabstand
+   * zu allem anderen (config.hindernisMenge) – so bleibt immer eine freie Spur. Rein: ändert nichts am Katalog.
+   * @returns {{ hindernisse: object[], wracks: object[], strohballen: object[], gewollt: number, weggelassen: number }}
+   */
+  function zusatzErzeugen(st, daten, sicht, basis, menge, an) {
+    const C = R.config.hindernisMenge, stufe = C.stufen[menge], sp = st.spline, L = sp.laenge;
+    const erg = { hindernisse: [], wracks: [], strohballen: [], gewollt: 0, weggelassen: 0, slalom: 0 };
+    const faktor = stufe.faktor || 1;
+    if (!(faktor > 1)) return erg;
+    const rng = zufallsFolge(textSeed([daten.id, daten.variante || '', menge].join('|')));
+    const rund = (x) => Math.round(x * 100) / 100;
+    const diff = (a, b) => sp.differenzS(a, b);
+
+    // --- Was soll dazukommen? Ziel-Gesamtzahl = max(Katalog × Faktor, Streckenlänge / meterPro) (config.hindernisMenge);
+    // Wracks (≈ 12 Draw-Calls je Stück) werden gedeckelt (wrackMax), den Rest füllen die billigen, instanzierten Arten
+    // (Öl, Sand, Baustelle, Ast; Strohballen nur in Welten mit Strohballen) – Mischung ≈ Katalog + Grundgewicht je Art.
+    const wunsch = [];
+    const artZahl = {};
+    if (an('hindernisse')) (sicht.hindernisse || []).forEach((h) => { if (['oel', 'sand', 'baustelle', 'ast'].includes(h.typ)) artZahl[h.typ] = (artZahl[h.typ] || 0) + 1; });
+    const nWr = an('wracks') ? (sicht.wracks || []).length : 0;
+    const nSt = an('strohballen') ? (sicht.strohballen || []).length : 0;
+    const basisSumme = Object.keys(artZahl).reduce((x, k) => x + artZahl[k], 0) + nWr + nSt;
+    const ziel = Math.max(Math.round(basisSumme * faktor), Math.ceil(L / (stufe.meterPro || 1e9)));
+    let rest = Math.max(0, ziel - basisSumme);
+    const wr = Math.min(C.wrackMax == null ? 2 : C.wrackMax, nWr * (faktor - 1), rest);
+    for (let k = 0; k < wr; k++) wunsch.push('wrack');
+    const st2 = Math.min(nSt * (faktor - 1), rest - wr);
+    for (let k = 0; k < st2; k++) wunsch.push('stroh');
+    rest -= wr + st2;
+    if (an('hindernisse') && rest > 0) {
+      const arten = ['oel', 'sand', 'ast', 'baustelle'], gew = arten.map((t) => t === 'baustelle' ? 0.25 + (artZahl[t] || 0) * 0.25 : (artZahl[t] || 0) + 1);   // Baustellen sind lang (≈ 50 m) → nur wenige
+      const summe = gew.reduce((x, y) => x + y, 0);
+      for (let k = 0; k < rest; k++) {
+        let r = rng() * summe, i = 0;
+        while (i < arten.length - 1 && r >= gew[i]) { r -= gew[i]; i++; }
+        wunsch.push(arten[i]);
+      }
+    }
+    erg.gewollt = wunsch.length;
+    if (!wunsch.length) return erg;
+    for (let i = wunsch.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = wunsch[i]; wunsch[i] = wunsch[j]; wunsch[j] = t; }
+
+    // --- Ausdehnung je Art entlang s: [vor, nach] um s (m) und Klasse für den Mindestabstand
+    const CH = R.config.hindernisse || {};
+    const ausdehnung = {
+      oel: [((CH.oel && CH.oel.laenge) || 9) / 2, ((CH.oel && CH.oel.laenge) || 9) / 2, 'fleck'],
+      sand: [((CH.sand && CH.sand.laenge) || 14) / 2, ((CH.sand && CH.sand.laenge) || 14) / 2, 'fleck'],
+      baustelle: [((CH.baustelle && CH.baustelle.vorlauf) || 9) + 12, ((CH.baustelle && CH.baustelle.laenge) || 30) + 1, 'sperr'],   // + Schild davor
+      ast: [2, 2, 'sperr'],
+      wrack: [((CH.wrack && CH.wrack.dreieckAbstand) || 9) + 3, 4, 'sperr'],
+      stroh: [2, 2, 'stroh'],
+    };
+    const gapVon = (a, b) => (a === 'sperr' && b === 'sperr' ? C.abstandSperr : (a === 'stroh' || b === 'stroh') ? C.abstandStroh : C.abstandFleck);
+
+    // --- Belegt: Liste { c (Mitte), h (halbe Länge), klasse } – feste Sperrzonen mit klasse null (Lücke 0)
+    const belegt = [];
+    const zone = (s0, s1, vor, nach, klasse) => {
+      const len = sp.wrapS(s1 - s0);
+      belegt.push({ c: s0 + (len + nach - vor) / 2, h: (len + vor + nach) / 2, klasse: klasse || null });
+    };
+    const punkt = (s, vor, nach, klasse) => belegt.push({ c: s + (nach - vor) / 2, h: (vor + nach) / 2, klasse: klasse || null });
+    punkt(0, 0, C.startFrei);                        // Start: Anfahren
+    punkt(0, C.zielFrei, 0);                         // vor der Ziellinie: Startaufstellung steht dahinter
+    (st.tunnel || []).forEach((t) => zone(t.s0, t.s1, 30, 30));
+    (st.bruecken || []).forEach((b) => zone(b.s0, b.s1, 30, 30));
+    (st.ueberfuehrungen || []).forEach((u) => { zone(u.s0, u.s1, 30, 30); if (u.unten) zone(u.unten.s0, u.unten.s1, 30, 30); });
+    (st.kreuzungen || []).forEach((k) => { zone(k.a.s0, k.a.s1, 30, 30); zone(k.b.s0, k.b.s1, 30, 30); });
+    (st.loopings || []).forEach((l) => zone(l.s0, l.s1, 90, 30));   // davor: Anlauf (volle Fahrt nötig)
+    (st.spuren || []).forEach((e) => zone(e.s0, e.s1, 45, 45));
+    (sicht.schanzen || []).forEach((e) => zone(e.s, e.s + (e.laenge || 10), (e.anlauf || 0) + 70, 80));
+    (sicht.boostFelder || []).forEach((e) => zone(e.s, e.s + (e.laenge || 12), 12, 12));
+    (sicht.schilde || []).forEach((e) => punkt(e.s, 12, 12));
+    (sicht.baelle || []).forEach((e) => punkt(e.s, 16, 16));
+    (sicht.wasserstrahlen || []).forEach((e) => punkt(e.s, 12, 12));
+    (sicht.dinos || []).forEach((e) => punkt(e.s, 25, 25));
+    (sicht.kleber || []).forEach((e) => zone(e.s0, e.s1, 15, 15));
+    // bestehende Hindernisse (Katalog) mit ihren Klassen
+    basis.forEach((h) => {
+      const klasse = h.typ === 'oel' || h.typ === 'sand' ? 'fleck' : 'sperr';
+      const pad = h.typ === 'lava' || h.typ === 'krater' ? 55 : 0;   // Lava/Krater: Platz zum Ausweichen, keine Slalom-Falle daneben
+      punkt(h.s, Math.abs(diff(h.s0, h.s)) + (h.typ === 'baustelle' ? 12 : 0) + pad, Math.abs(diff(h.s1, h.s)) + pad, klasse);   // Baustelle: + Schild davor
+    });
+    (sicht.wracks || []).forEach((e) => punkt(e.s, ausdehnung.wrack[0], ausdehnung.wrack[1], 'sperr'));
+    (sicht.strohballen || []).forEach((e) => punkt(e.s, 2, 2, 'stroh'));
+
+    // --- Kurven: größte Krümmung entlang [a, b] und enge Kurve (Haarnadel) davor
+    const kMax = (a, b) => {
+      let k = 0;
+      for (let s = a; s <= b + 1e-6; s += 4) k = Math.max(k, Math.abs(sp.punktBei(s).kruemmung || 0));
+      return k;
+    };
+    const kHaar = 1 / C.haarnadelRadius;
+
+    const passt = (art, s) => {
+      const [vor, nach, klasse] = ausdehnung[art];
+      for (const b of belegt) {
+        const gap = b.klasse ? gapVon(klasse, b.klasse) : 0;
+        if (Math.abs(diff(s + (nach - vor) / 2, b.c)) < (vor + nach) / 2 + b.h + gap) return false;
+      }
+      if (kMax(s - vor, s + nach) > (C.kurveMax[art] || 1 / 60)) return false;
+      if (kMax(s + nach, s + nach + C.haarnadelVor) > kHaar) return false;
+      return true;
+    };
+
+    // --- Platzieren: ein Abschnitt je Hindernis (gleichmäßig über die Runde), notfalls irgendwo
+    const von = C.startFrei, bis = L - C.zielFrei, laenge = bis - von, n = wunsch.length;
+    const wo = [];
+    wunsch.forEach((art, i) => {
+      const a = von + laenge * i / n, b = von + laenge * (i + 1) / n;
+      let s = null;
+      for (let v = 0; v < C.maxVersuche * 2 && s === null; v++) {
+        const kand = Math.round((v < C.maxVersuche ? a + rng() * (b - a) : von + rng() * laenge) * 2) / 2;   // auf 0,5 m
+        if (passt(art, kand)) s = kand;
+      }
+      if (s === null) { erg.weggelassen++; return; }
+      const [vor, nach, klasse] = ausdehnung[art];
+      punkt(s, vor, nach, klasse);
+      const vz = rng() < 0.5 ? -1 : 1, q = rund((rng() * 2 - 1) * 0.65);
+      wo.push({ art, s, vz, q });
+      // Slalom: ab und zu ein zweiter Ast/Ölfleck kurz dahinter auf der anderen Seite (zählt zusätzlich)
+      if ((art === 'ast' || art === 'oel') && rng() < (C.slalomChance == null ? 0.3 : C.slalomChance)) {
+        const s2 = Math.round((s + (C.slalomAbstand || 22)) * 2) / 2;
+        if (s2 < bis && passt(art, s2)) { punkt(s2, vor, nach, klasse); erg.slalom++; wo.push({ art, s: s2, vz: -vz, q: rund(q > 0 ? -0.3 - rng() * 0.35 : 0.3 + rng() * 0.35) }); }
+      }
+    });
+    wo.sort((x, y) => x.s - y.s);
+
+    // --- Einträge bauen (Seiten per Zufall; Wracks reihum aus den Autos der Strecke)
+    const autos = (sicht.wracks || []).map(e => e.autoId);
+    const haelfte = st.breite / 2;
+    let nWrack = 0, nStroh = 0;
+    wo.forEach(({ art, s, vz, q: quer }) => {
+      if (art === 'oel' || art === 'sand') {
+        erg.hindernisse.push({ typ: art, s: rund(s), seite: quer });
+      } else if (art === 'baustelle' || art === 'ast') {
+        erg.hindernisse.push({ typ: art, s: rund(s), seite: vz });
+      } else if (art === 'wrack') {
+        const qw = Math.min(4, haelfte - 2.2);
+        erg.wracks.push({ s: rund(s), seitenabstand: rund(vz * qw), brennt: false, autoId: autos.length ? autos[nWrack % autos.length] : 'multivan' });
+        nWrack++;
+      } else {
+        const vorlage = (sicht.strohballen || [])[nStroh % Math.max(1, (sicht.strohballen || []).length)] || {};
+        erg.strohballen.push({ s: rund(s), von: vz, intervall: vorlage.intervall || 10, tempo: vorlage.tempo || 4 });
+        nStroh++;
+      }
+    });
     return erg;
   }
 
@@ -214,6 +399,20 @@
       this._flachQ = this.breite / 2 + this.randBreite + FLACH_ZUGABE;
       this._engstellen = this.bruecken.concat(this.tunnel, this.ueberfuehrungen);
       this.hindernisse = this._hindernisseBerechnen(sicht.hindernisse || []);
+      // 12.10. Hindernis-Menge ('viele' / 'sehrViele'): zusätzliche Einträge deterministisch erzeugen (Seed je Strecke + Menge).
+      // 'normal' (Standard) und Welten ohne Hindernis-Schichten: nichts davon läuft – alles bitgleich wie bisher.
+      this.hindernisMenge = mengeGueltig(opt.hindernisMenge);
+      this.hindernisZusatz = { hindernisse: 0, wracks: 0, strohballen: 0, gewollt: 0, weggelassen: 0, slalom: 0 };
+      if (this.hindernisMenge !== 'normal' && (an('hindernisse') || an('wracks') || an('strohballen'))) {
+        this.loopings = this._loopingsBerechnen(sicht.loopings || []);   // für die Sperrzonen (unten genauso noch einmal)
+        const z = zusatzErzeugen(this, daten, sicht, this.hindernisse, this.hindernisMenge, an);
+        this.hindernisZusatz = { hindernisse: z.hindernisse.length, wracks: z.wracks.length, strohballen: z.strohballen.length,
+          gewollt: z.gewollt, weggelassen: z.weggelassen, slalom: z.slalom };
+        // sicht.* sind neue Listen (der Katalog bleibt unverändert)
+        if (z.hindernisse.length) { sicht.hindernisse = (sicht.hindernisse || []).concat(z.hindernisse); this.hindernisse = this._hindernisseBerechnen(sicht.hindernisse); }
+        if (z.wracks.length) sicht.wracks = (sicht.wracks || []).concat(z.wracks);
+        if (z.strohballen.length) sicht.strohballen = (sicht.strohballen || []).concat(z.strohballen);
+      }
       this._flecken = this.hindernisse.filter(h => h.untergrund);
       // Loopings (Fantasie): Datenstruktur hier, Fahrlogik + Grafik in track/looping.js
       this.loopings = this._loopingsBerechnen(sicht.loopings || []);
@@ -2282,6 +2481,8 @@
   Strecke.headingAus = headingAus;
   Strecke.varianteAnwenden = varianteAnwenden;   // (daten, varianteId) → skalierte Kopie
   Strecke.weltName = weltName;            // (daten, wunsch) → gültiger Weltname
+  Strecke.hindernisMengeGueltig = mengeGueltig;       // 12.10. (menge) → 'normal' | 'viele' | 'sehrViele' (unbekannt → Standard)
+  Strecke.weltHatHindernisse = weltHatHindernisse;    // 12.10. (daten, weltWunsch) → hat die Welt Hindernis-Schichten (Menge wirkt)?
   Strecke.weltSchichten = weltSchichten;  // (daten, name) → { schicht: bool }
   Strecke.SCHICHTEN = SCHICHTEN;
   Strecke.SPUR_BREITE = SPUR_BREITE;

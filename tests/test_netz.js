@@ -31,7 +31,7 @@ const C = kontextLaden(['vendor/three.min.js', 'src/config.js', 'src/physics/veh
 /** Strecke wie im Browser (main.js streckeSzeneBauen, Physik-Teile) aus den Start-Einstellungen. */
 function clientStrecke(e) {
   const daten = C.trackCatalog.find(t => t.id === e.streckeId);
-  const st = new C.Strecke(daten, { welt: C.Strecke.weltName(daten, e.welt), variante: e.variante });
+  const st = new C.Strecke(daten, { welt: C.Strecke.weltName(daten, e.welt), variante: e.variante, hindernisMenge: e.hindernisMenge });
   const w = new C.Wetter(null, { jahreszeit: e.jahreszeit, wetter: e.wetter, wind: { staerke: e.windStaerke, richtung: e.windRichtung },
     thema: daten.thema, seed: 1, strecke: st, tageszeit: e.tageszeit });
   C.Kollisionen.pflanzenSammeln(st, C.themes.dekoBauen(daten.thema, st, w.jahreszeit));
@@ -109,6 +109,55 @@ function autopilot(st, v, idx) {
   pruefe('B Stufe 2 vorbereitet: Raum-Schalter kollisionen: true trennt sie (Auto↔Auto an)', k > 1.5, k.toFixed(2) + ' m');
 }
 
+
+// ------------------------------------------------------------------ L) Hindernis-Menge (12.10.): Server-Strecke == Client-Strecke
+//   Der Server prüft den Wert; Server (Simulation) und Browser (clientStrecke aus den Start-Einstellungen) bauen
+//   bei 'viele' / 'sehrViele' dieselben Hindernisse, Wracks und Strohballen (deterministischer Seed, kein Math.random).
+{
+  const w = (x) => einstellungenPruefen({ hindernisMenge: x }, 2).hindernisMenge;
+  pruefe('L Server: hindernisMenge nur normal/viele/sehrViele; alles andere (undefined, null, 5, {}, [], „Viele“, „constructor“) → normal',
+    w('normal') === 'normal' && w('viele') === 'viele' && w('sehrViele') === 'sehrViele' &&
+    [undefined, null, 5, {}, ['viele'], 'Viele', 'constructor', '__proto__', ''].every(x => w(x) === 'normal'));
+  const faelle = [['wiese', 'hindernisse', ''], ['wald', 'stunt', ''], ['wueste', 'verrueckt', 'xl'], ['dino', 'alles', ''], ['alpen', 'hindernisse', ''], ['fantasie', 'alles', 'xl']];
+  for (const menge of ['viele', 'sehrViele']) for (const [id, welt, variante] of faelle) {
+    const sim = new Simulation({ einstellungen: { streckeId: id, welt, variante, hindernisMenge: menge, gegner: 1, runden: 1 },
+      spieler: [{ fahrer: 'Jonas', auto: 'passat', hilfe: 'aus' }], seed: 99 });
+    const e = sim.startInfo().einstellungen, { st: client } = clientStrecke(e), server = sim.sim.strecke;
+    const normal = clientStrecke(Object.assign({}, e, { hindernisMenge: 'normal' })).st;
+    const sig = (st) => JSON.stringify([st.hindernisse, st.wracks, st.strohballen]);
+    const mehr = server.hindernisse.length + server.strohballen.length > normal.hindernisse.length + normal.strohballen.length;
+    pruefe(`L ${id}/${welt}${variante ? ' ' + variante : ''}/${menge}: Server-Strecke == Client-Strecke (${server.hindernisse.length} Hindernisse inkl. ${server.wracks.length} Wracks, ${server.strohballen.length} Strohballen; normal ${normal.hindernisse.length}/${normal.strohballen.length})`,
+      e.hindernisMenge === menge && sig(server) === sig(client) && mehr && server.hindernisMenge === menge);
+  }
+  // Vorhersage = Server auch mit 'sehrViele' (Wiese, Welt Hindernisse): Autopilot fährt 30 s
+  {
+    const sim = new Simulation({ einstellungen: { streckeId: 'wiese', welt: 'hindernisse', runden: 2, gegner: 1, hindernisMenge: 'sehrViele' },
+      spieler: [{ fahrer: 'Jonas', auto: 'porsche-911', hilfe: 'wenig' }], seed: 1234 });
+    const info = sim.startInfo(), e = info.einstellungen, { st, w: wet } = clientStrecke(e);
+    const auto = C.carCatalog.waehlbare().find(a => a.id === 'porsche-911');
+    const V = new C.NetzVorhersage({ strecke: st, auto, tempoKlasse: e.tempoKlasse, fahrhilfe: 'wenig', umwelt: () => wet.umwelt() });
+    const p = st.startpositionen(info.teilnehmer.length)[0];
+    V.vp.setzen(p.x, p.z, p.heading); V.vp.y = st.hoeheAn(p.x, p.z);
+    const pv = new C.Vehicle(auto.fahrwerte, { tempoKlasse: e.tempoKlasse });
+    let maxD = 0, idx = -1, gleich = 0, schritte = 0;
+    for (let n = 1; n <= 60 * 40; n++) {
+      C.Netz.fahrzeugSchreiben(pv, sim.ich(0).v);
+      const a = autopilot(st, pv, idx); idx = a.idx;
+      const s = C.Netz.eingabeDekodieren(C.Netz.eingabeKodieren(a.s));
+      const cd = sim.sim.rennen.zustand === 'countdown', ziel = sim.sim.rennen.teilnehmer[0].imZiel;
+      sim.eingabeSetzen(0, s); sim.schritt();
+      V.schritt(n, s, { countdown: cd, imZiel: ziel });
+      if (n % 3 === 0) {
+        const ich = sim.ich(0); ich.ack = n;
+        const d = Math.hypot(V.vp.x - ich.v[0], V.vp.z - ich.v[1]);
+        if (!ich.so && !V.sonder && n >= 60 * 6) { maxD = Math.max(maxD, d); schritte++; if (d < 1e-3) gleich++; }
+        V.abgleich(ich, null);
+      }
+    }
+    pruefe('L wiese/hindernisse/sehrViele: Vorhersage = Server (≥ 95 % der Vergleiche < 1 mm, max < 3 m)', gleich / Math.max(1, schritte) >= 0.95 && maxD < 3 && schritte > 100,
+      `${(100 * gleich / Math.max(1, schritte)).toFixed(1)} % gleich, max ${maxD.toFixed(3)} m, ${schritte} Vergleiche`);
+  }
+}
 
 // ------------------------------------------------------------------ K) Rempeln online (W5 Stufe 2): Vorhersage mit Stellvertretern
 //   Server mit kollisionen: true, zwei Menschen (ich = Spieler 2). Die Server-Zustände kommen mit 100 ms Verzug beim
@@ -358,6 +407,17 @@ function autopilot(st, v, idx) {
   host.senden({ t: 'einstellungen', einstellungen: { kollisionen: false } }); const lk3 = await host.auf('lobby');
   pruefe('E Rempeln-Schalter: Host an/aus, „ja“ → Geister, Gast bekommt nurHost', lk1 && lk1.einstellungen.kollisionen === true && lk2 && lk2.einstellungen.kollisionen === false &&
     lkg && lkg.grund === 'nurHost' && lk3 && lk3.einstellungen.kollisionen === false);
+  // 12.10. Hindernis-Menge-Schalter: Host stellt normal/viele/sehrViele, Unsinn → normal, Gast bekommt nurHost
+  host.senden({ t: 'einstellungen', einstellungen: { hindernisMenge: 'viele' } }); const lh1 = await host.auf('lobby');
+  host.senden({ t: 'einstellungen', einstellungen: { hindernisMenge: 'sehrViele' } }); const lh2 = await host.auf('lobby');
+  host.senden({ t: 'einstellungen', einstellungen: { hindernisMenge: 'tausend' } }); const lh3 = await host.auf('lobby');
+  host.senden({ t: 'einstellungen', einstellungen: { hindernisMenge: 'viele' } }); await host.auf('lobby');
+  host.senden({ t: 'einstellungen', einstellungen: { hindernisMenge: { toString: 'x' } } }); const lh4 = await host.auf('lobby');
+  gast.senden({ t: 'einstellungen', einstellungen: { hindernisMenge: 'sehrViele' } }); const lhg = await gast.auf('fehler');
+  pruefe('E Hindernis-Menge: Host viele/sehrViele, Unsinn → normal (auch Objekt), Gast bekommt nurHost',
+    lh1 && lh1.einstellungen.hindernisMenge === 'viele' && lh2 && lh2.einstellungen.hindernisMenge === 'sehrViele' && lh3 && lh3.einstellungen.hindernisMenge === 'normal' &&
+    lh4 && lh4.einstellungen.hindernisMenge === 'normal' && lhg && lhg.grund === 'nurHost',
+    [lh1, lh2, lh3, lh4].map(l => l && l.einstellungen.hindernisMenge).join(' '));
   host.senden({ t: 'start' }); const fb = await host.auf('fehler');
   pruefe('E Start ohne „bereit“ des Gastes → Fehler', fb && fb.grund === 'nichtBereit');
   gast.senden({ t: 'bereit', an: true }); await host.auf('lobby', (m) => m.spieler[1].bereit);

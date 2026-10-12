@@ -22,6 +22,11 @@
 // drehImpuls (rad/s, > 0 = heading wächst = nach links): Rempler „echt" (collisions.js) dreht das Auto; die
 // Welt-Geschwindigkeit bleibt dabei erhalten (das Auto rutscht quer), klingt exponentiell in ~1 s ab, Lenkung
 // währenddessen nur config.kollision.rempeln.drehLenkung (30 %) wirksam. 0 = keinerlei Wirkung.
+//
+// v15 (Öl/Sand): Beim EINFAHREN in einen Fleck (Wechsel this.untergrund → 'oel' bzw. 'sandFleck', erkannt über _ugAlt) wirkt
+// einmal untergrundEinfahrt(): Öl gibt einen tempo-skalierten Drehimpuls (drehImpuls, Richtung: Lenkung → Querbewegung →
+// Positions-Hash, KEIN Math.random – Server und Vorhersage rechnen gleich; Fahrhilfe dämpft), Sand nimmt einmalig Tempo.
+// Werte: config.physik.schleudern. Die Schleuder-Drehung nutzt eigene Lenk-/Abkling-Werte (drehLenk/drehAb, sonst Rempler-Werte).
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -70,6 +75,10 @@
       this.letzteSteuerung = { gas: 0, bremse: 0, lenkung: 0 };
       this.streckeFortschritt = 0; // wird vom Rennmanager gesetzt
       this.drehImpuls = 0;       // Runde 6: Drehung nach einem Rempler (rad/s), siehe Kopf
+      this.drehLenk = undefined; // v15: Lenkanteil während der Schleuder-Drehung (undefined = Rempler-Wert)
+      this.drehErhalt = undefined; // v15: Anteil der Welt-Bewegung, der bei der Schleuder-Drehung erhalten bleibt (undefined = 1)
+      this.drehAb = undefined;   // v15: Abklingrate der Schleuder-Drehung 1/s (undefined = Rempler-Wert)
+      this._ugAlt = undefined;   // v15: Untergrund des vorigen Schritts (Erkennung „Einfahrt")
       this.untergrundMisch = undefined;   // Runde 6: 0 = noch Rand, 1 = ganz Gras/Sand (main.js setzt es abseits)
     }
 
@@ -152,6 +161,10 @@
      */
     schritt(dt, s, hilfe, umwelt) {
       const d = this.daten;
+      // v15: Einfahrt in Öl/Sand-Fleck (einmal je Wechsel des Untergrunds)
+      const ugAlt = this._ugAlt;
+      this._ugAlt = this.untergrund;
+      if (ugAlt !== undefined && ugAlt !== this.untergrund) this._untergrundEinfahrt(this.untergrund, s, hilfe);
       let ug = R.config.physik.untergrund[this.untergrund] || R.config.physik.untergrund.strasse;
       // Runde 6: weicher Übergang Rand → Gras/Sand (nur wenn main.js einen Mischfaktor < 1 gesetzt hat)
       const misch = this.untergrundMisch;
@@ -212,7 +225,7 @@
       // Runde 6: abseits (Gras/Sand mit Deckel) greift der volle Rollwiderstand erst ab abseitsAnfahren m/s – darunter
       // gemischt mit dem Randstreifen, damit man aus dem Gras/Sand (auch rückwärts, z. B. vom Zaun weg) wieder anfährt
       const ugRoh = R.config.physik.untergrund[this.untergrund];
-      if (ugRoh && ugRoh.vMaxAbs !== undefined && P.abseitsAnfahren) {
+      if (ugRoh && (ugRoh.vMaxAbs !== undefined || ugRoh.anfahrenRampe) && P.abseitsAnfahren) {   // v15: auch Sandfleck (anfahrenRampe)
         const rr = R.config.physik.untergrund.rand.rollwiderstand, t = Math.min(1, Math.abs(this.vLaengs) / P.abseitsAnfahren);
         if (rw > rr) rw = rr + (rw - rr) * t;
       }
@@ -246,7 +259,7 @@
         const drehrateMax = this.drehrateMax();
         const richtungVz = this.vLaengs >= 0 ? 1 : -1;      // rückwärts lenkt spiegelverkehrt
         let drehrate = this.lenkung * drehrateMax * richtungVz;   // > 0 = Rechtskurve
-        if (this.drehImpuls) drehrate *= (R.config.kollision && R.config.kollision.rempeln.drehLenkung) || 0.3;   // Runde 6
+        if (this.drehImpuls) drehrate *= this.drehLenk !== undefined ? this.drehLenk : ((R.config.kollision && R.config.kollision.rempeln.drehLenkung) || 0.3);   // Runde 6
         this.heading -= drehrate * dt;
         this._querBeschl = drehrate * this.vLaengs;
         // Fliehkraft: das Auto rutscht zur Kurvenaußenseite – proportional zur Querbeschleunigung,
@@ -274,10 +287,15 @@
       if (this.drehImpuls) {
         const vw = this.weltGeschwindigkeit();
         this.heading += this.drehImpuls * dt;
-        this.weltGeschwindigkeitSetzen(vw.x, vw.z);
+        if (this.drehErhalt !== undefined) {
+          // v15 Schleudern: nur der Anteil drehErhalt der Welt-Bewegung bleibt (sonst rutscht das Auto bei 140 km/h Dutzende Meter quer)
+          const l0 = this.vLaengs, q0 = this.vQuer, e = this.drehErhalt;
+          this.weltGeschwindigkeitSetzen(vw.x, vw.z);
+          this.vLaengs = l0 + (this.vLaengs - l0) * e; this.vQuer = q0 + (this.vQuer - q0) * e;
+        } else this.weltGeschwindigkeitSetzen(vw.x, vw.z);
         const K = (R.config.kollision && R.config.kollision.rempeln) || {};
-        this.drehImpuls *= Math.exp(-(K.drehAbklingen || 3) * dt);
-        if (Math.abs(this.drehImpuls) < 0.05) this.drehImpuls = 0;
+        this.drehImpuls *= Math.exp(-(this.drehAb !== undefined ? this.drehAb : (K.drehAbklingen || 3)) * dt);
+        if (Math.abs(this.drehImpuls) < 0.05) { this.drehImpuls = 0; this.drehLenk = undefined; this.drehAb = undefined; this.drehErhalt = undefined; }
       }
       // Grip baut Drift ab
       const dampf = Math.exp(-(2.5 + 9 * grip) * dt);
@@ -297,6 +315,36 @@
       // > 0 = Bug hoch (Anfahren), < 0 = Bug runter (Bremsen); um die Querachse (rotation.x)
       const zielNicken = Math.max(-0.045, Math.min(0.03, laengsBeschl * 0.0035));
       this.nicken += (zielNicken - this.nicken) * Math.min(1, 6 * dt);
+    }
+
+    /**
+     * v15: Einmalwirkung beim Einfahren in einen Fleck (siehe Kopf). s = Steuerbefehle des Schritts (roh), hilfe = Fahrhilfe.
+     * Öl: drehImpuls = Vorzeichen × impuls × Tempo-Faktor (0 unter vMin, 1 bei vRef, höchstens faktorMax); Fahrhilfe dämpft.
+     * Sand: Tempo × tempoFaktor (nur vorwärts, ab vMin).
+     */
+    _untergrundEinfahrt(neu, s, hilfe) {
+      const SC = R.config.physik.schleudern;
+      if (!SC) return;
+      if (neu === 'oel' && SC.oel) {
+        const O = SC.oel, v = this.vLaengs;
+        if (v <= O.vMin) return;
+        let f = Math.min(O.faktorMax, (v - O.vMin) / (O.vRef - O.vMin));
+        if (hilfe && hilfe.lenkhilfe > 0) f *= 1 - O.hilfeDaempfung * Math.min(1, hilfe.lenkhilfe / O.hilfeVoll);
+        // Richtung (heading wächst = links): in Lenkrichtung eindrehen (Lenkung rechts > 0 → Drehimpuls negativ);
+        // sonst Querbewegung; sonst deterministisch aus der Position (Fleck-Einfahrt)
+        const lenk = (s && s.lenkung) || this.lenkung || 0;
+        let vz;
+        if (Math.abs(lenk) > O.lenkSchwelle) vz = -Math.sign(lenk);
+        else if (Math.abs(this.vQuer) > O.querSchwelle) vz = -Math.sign(this.vQuer);
+        else vz = (Math.floor(this.x * O.hashX + this.z * O.hashZ) & 1) ? 1 : -1;
+        const neuImp = vz * O.impuls * f;
+        // schon vorhandene (größere) Drehung nicht abschwächen
+        if (Math.abs(neuImp) > Math.abs(this.drehImpuls)) {
+          this.drehImpuls = neuImp; this.drehLenk = O.lenkung; this.drehAb = O.abklingen; this.drehErhalt = O.weltErhalt;
+        }
+      } else if (neu === 'sandFleck' && SC.sand) {
+        if (this.vLaengs > SC.sand.vMin) this.vLaengs *= SC.sand.tempoFaktor;
+      }
     }
 
     /** Haftung gesamt (Auto × Untergrund × Bonus), 0..1. */
@@ -351,7 +399,7 @@
     setzen(x, z, heading) {
       this.x = x; this.z = z; this.heading = heading;
       this.vLaengs = 0; this.vQuer = 0; this.lenkung = 0; this.neigung = 0; this.nicken = 0; this._querBeschl = 0;
-      this.drehImpuls = 0; this._kollAlt = null;   // Runde 6: keine Drehung/kein Sweep über einen Reset hinweg
+      this.drehImpuls = 0; this.drehLenk = undefined; this.drehAb = undefined; this.drehErhalt = undefined; this._ugAlt = undefined; this._kollAlt = null;   // Runde 6: keine Drehung/kein Sweep über einen Reset hinweg
     }
   }
 

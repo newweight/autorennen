@@ -191,13 +191,21 @@ kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1
 .m-aktionen { display: flex; align-items: center; justify-content: center; gap: .8em; }
 .m-aktionen .start-knopf { margin-top: 0; min-width: 11em; }
 /* Welt-Zeile im Strecken-Schritt */
-.m-welt, .m-variante { margin-top: .7em; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .3em .8em;
+.m-welt, .m-variante, .m-hindernisse { margin-top: .7em; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .3em .8em;
   background: var(--tafel); border: .18em solid rgba(255,255,255,.3); border-radius: 1em; padding: .35em .9em; max-width: 56em; }
-.m-welt .z-wert, .m-variante .z-wert { flex-wrap: wrap; gap: .35em; }
+.m-welt .z-wert, .m-variante .z-wert, .m-hindernisse .z-wert { flex-wrap: wrap; gap: .35em; }
 .m-welt .pille small { font-size: .6em; opacity: .85; margin-left: .2em; text-transform: uppercase; letter-spacing: .03em; }
 .m-variante .z-label small { font-size: .65em; opacity: .8; }
 .m-variante { margin-top: .3em; padding: .1em .9em; font-size: .92em; max-width: 56em; }
 .m-variante .welt-text { flex-basis: auto; text-align: left; font-size: .78em; font-weight: 700; line-height: 1.2; }
+/* 12.10. Hindernis-Menge: wie die Variante-Zeile; ausgegraut, wenn die Welt keine Hindernisse hat */
+.m-hindernisse { margin-top: .25em; padding: .1em .9em; font-size: .92em; max-width: 56em; }
+.m-hindernisse .z-label small { font-size: .65em; opacity: .8; }
+.m-hindernisse .welt-text { flex-basis: auto; text-align: left; font-size: .78em; font-weight: 700; line-height: 1.2; }
+.m-hindernisse.aus .pille { opacity: .45; cursor: default; }
+.m-hindernisse.aus .pille:hover { background: rgba(255,255,255,.18); }
+.m-hindernisse.aus .pille.aktiv { background: rgba(255,255,255,.25); border-color: rgba(255,255,255,.5); }
+.on-label small { font-size: .7em; opacity: .8; font-weight: 700; }
 .m-welt .welt-text { flex-basis: 100%; text-align: center; font-size: .82em; font-weight: 700; line-height: 1.25; }
 .zeile { display: flex; align-items: center; justify-content: space-between; gap: .8em; background: var(--tafel);
   border: .18em solid rgba(255,255,255,.3); border-radius: 1em; padding: .28em .8em; cursor: pointer; }
@@ -338,7 +346,7 @@ canvas.buehne { display: block; width: 100%; height: auto; aspect-ratio: 1.6; }
 .karte.strecke { width: 7.95em; padding: .4em; }
 .karte.strecke .karten-name { font-size: 1.05em; }
 .karte.strecke .karten-sub { font-size: .68em; }
-.karte.strecke .strecken-bild { height: 5.2em; }
+.karte.strecke .strecken-bild { height: 3.9em; }
 .karte.strecke.t-alpen { border-color: #bfe3ff; background: rgba(40, 78, 120, .8); }
 .karte.strecke.t-alpen.gewaehlt { background: rgba(52, 104, 160, .92); }
 /* Kartenbild Alpen: Schneegipfel über der Almwiese (SVG, überschreibt den Standard-Verlauf aus menu.js) */

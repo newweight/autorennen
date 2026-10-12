@@ -71,10 +71,11 @@
 .online .on-sp .on-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .online .on-sp .on-auto { font-size: .75em; opacity: .85; white-space: nowrap; }
 .online .on-sp .on-auto i { display: inline-block; width: .8em; height: .8em; border-radius: 50%; border: .1em solid #fff; margin-right: .3em; vertical-align: -.1em; }
-.online .on-zeile { border-radius: .6em; padding: .12em .3em; border: .1em solid transparent; }
+.online .on-zeile { border-radius: .6em; padding: .06em .3em; border: .1em solid transparent; }
 .online .on-zeile.fokus { border-color: var(--gelb); background: rgba(255,210,58,.12); }
 .online .on-zeile .on-label { font-size: .62em; opacity: .9; margin-bottom: .1em; }
 .online .on-zeile .on-werte { display: flex; flex-wrap: wrap; gap: .2em; }
+.online .on-einst { gap: .2em; }
 .online .on-zeile .pille { font-size: .6em; padding: .1em .45em; }
 .online .on-zeile .pille.aus { opacity: .35; cursor: default; }
 .online .on-zeile .pille.emoji { font-size: .85em; padding: .02em .25em; }
@@ -208,7 +209,7 @@
         const e = this.spiel.einstellungen;
         v.senden(Object.assign({ t: 'raumErstellen', einstellungen: { streckeId: e.streckeId, welt: e.welt, variante: e.variante, runden: e.runden,
           gegner: e.gegner, schwierigkeit: e.schwierigkeit, tempoKlasse: e.tempoKlasse, jahreszeit: e.jahreszeit, wetter: e.wetter,
-          tageszeit: e.tageszeit, kollisionen: e.kollisionen === true } }, this.meineWahl()));   // Stufe 2: zuletzt gewählt (Standard Geister)
+          tageszeit: e.tageszeit, kollisionen: e.kollisionen === true, hindernisMenge: e.hindernisMenge } }, this.meineWahl()));   // Stufe 2: zuletzt gewählt (Standard Geister)
       } catch (err) { this.ansicht = 'start'; this.hinweis = 'Keine Verbindung zum Server 😕'; this.zeichnen(); }
     }
 
@@ -357,6 +358,7 @@
       if (this.istHost) {
         z.push('strecke', 'welt');
         if (this.variantenListe().length) z.push('variante');
+        z.push('hindernisMenge');      // 12.10.: Viele / Sehr viele Hindernisse (nur wirksam in Welten mit Hindernissen)
         z.push('runden', 'gegner', 'schwierigkeit', 'tempoKlasse', 'jahreszeit', 'wetter', 'tageszeit', 'kollisionen');
       }
       return z;
@@ -364,6 +366,11 @@
     streckeDaten() {
       const id = this.lobby ? this.lobby.einstellungen.streckeId : this.spiel.einstellungen.streckeId;
       return R.trackCatalog.find(t => t.id === id) || R.trackCatalog[0];
+    }
+    /** 12.10.: Hat die gewählte Welt Hindernis-Schichten (sonst wirkt „Hindernisse: Viele" nicht)? */
+    hindernisMengeAktiv() {
+      const e = this.lobby ? this.lobby.einstellungen : {};
+      return !R.Strecke || !R.Strecke.weltHatHindernisse || R.Strecke.weltHatHindernisse(this.streckeDaten(), e.welt);
     }
     variantenListe() {
       const v = this.streckeDaten().varianten || {};
@@ -385,6 +392,10 @@
         return { wert: e.welt || d.weltStandard, liste: Object.keys(d.welten || {}).map(k => ({ k, text: ((info[k] && info[k].emoji) || '🌍') + ' ' + ((info[k] && info[k].name) || k) })) };
       }
       if (zeile === 'variante') return { wert: e.variante || '', liste: this.variantenListe() };
+      if (zeile === 'hindernisMenge') {
+        const S = (c.hindernisMenge && c.hindernisMenge.stufen) || {}, an = this.hindernisMengeAktiv();
+        return { wert: e.hindernisMenge || 'normal', liste: Object.keys(S).map(k => ({ k, text: S[k].name, aus: !an })) };
+      }
       if (zeile === 'runden') {
         const l = [];
         for (let r = c.rennen.rundenMin; r <= c.rennen.rundenMax; r++) l.push({ k: String(r), text: String(r) });
@@ -421,7 +432,7 @@
     }
     zeileWert(zeile, dx) {
       const w = this.werte(zeile), l = w.liste;
-      if (!l.length) return;
+      if (!l.length || l.every(x => x.aus)) return;      // 12.10.: Zeile ausgegraut (z. B. Hindernisse in Welt ohne Hindernisse)
       let i = l.findIndex(x => x.k === w.wert);
       for (let k = 0; k < l.length; k++) {
         i = (i + dx + l.length) % l.length;
@@ -438,6 +449,13 @@
       else if (zeile === 'welt') e.welt = k === this.streckeDaten().weltStandard ? '' : k;
       else if (zeile === 'runden' || zeile === 'gegner') e[zeile] = +k;
       else if (zeile === 'jahreszeit') { e.jahreszeit = k; e.wetter = 'klar'; }
+      else if (zeile === 'hindernisMenge') {
+        e.hindernisMenge = k;
+        // zuletzt gewählten Wert merken (wie bei Rempeln)
+        const lok = this.basis || this.spiel.einstellungen;
+        lok.hindernisMenge = k;
+        if (!this.basis) this.spiel.einstellungenSpeichern();
+      }
       else if (zeile === 'kollisionen') {
         e.kollisionen = k === 'an';
         // zuletzt gewählten Wert merken (nächster „Raum erstellen“ startet damit)
@@ -514,7 +532,8 @@
       const daten = this.streckeDaten();
       if (this.istHost) {
         rechts = `<h3>⚙️ Rennen (du bist der Host)</h3>` + zeile('strecke', '🗺️ Strecke') + zeile('welt', '🌍 Welt') +
-          (this.variantenListe().length ? zeile('variante', '📏 Variante') : '') + zeile('runden', '🔁 Runden') +
+          (this.variantenListe().length ? zeile('variante', '📏 Variante') : '') +
+          zeile('hindernisMenge', this.hindernisMengeAktiv() ? '🚧 Hindernisse' : '🚧 Hindernisse <small>(erst ab Welt „Hindernisse“)</small>') + zeile('runden', '🔁 Runden') +
           zeile('gegner', '🤖 Computer-Gegner') + zeile('schwierigkeit', '🎚️ Computer-Stärke') + zeile('tempoKlasse', '🏎️ Tempo') +
           zeile('jahreszeit', '🍂 Jahreszeit') + zeile('wetter', '🌦️ Wetter') + zeile('tageszeit', '🌗 Tageszeit') +
           `<div class="on-fest">💥 Schaden: aus (online) · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister: Autos fahren durcheinander durch'}</div>`;
@@ -525,6 +544,7 @@
         rechts = `<h3>⚙️ Rennen (stellt der Host ein)</h3><div class="on-zusammen">` +
           `🗺️ ${esc(daten.name)} · ${wi.emoji || '🌍'} ${esc(wi.name || e.welt || '')}${e.variante ? ' · 📏 XL' : ''}<br>` +
           `🔁 ${e.runden} Runden · 🤖 ${e.gegner} Computer (${esc(S.name || e.schwierigkeit)})<br>` +
+          (e.hindernisMenge && e.hindernisMenge !== 'normal' && this.hindernisMengeAktiv() ? `🚧 Hindernisse: ${esc(((c.hindernisMenge.stufen[e.hindernisMenge]) || {}).name || e.hindernisMenge)}<br>` : '') +
           `🏎️ ${e.tempoKlasse === 'schnell' ? 'Schnell' : 'Normal'} · ${J ? J.emoji + ' ' + J.name : '🎲'} · ${W ? (W.emoji || '☀️') + ' ' + W.name : '🎲'} · ${T[e.tageszeit] || ''}<br>` +
           `💥 Schaden: aus (online) · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister'}</div>`;
       }
@@ -558,7 +578,7 @@
       if (!this.basis) this.basis = spiel.einstellungen;
       spiel.einstellungen = Object.assign({}, this.basis, {
         streckeId: e.streckeId, welt: e.welt, variante: e.variante, jahreszeit: e.jahreszeit, wetter: e.wetter, windStaerke: e.windStaerke,
-        windRichtung: e.windRichtung, tageszeit: e.tageszeit, tempoKlasse: e.tempoKlasse, runden: e.runden, gegner: e.gegner,
+        windRichtung: e.windRichtung, tageszeit: e.tageszeit, hindernisMenge: e.hindernisMenge, tempoKlasse: e.tempoKlasse, runden: e.runden, gegner: e.gegner,
         schaden: false, polizei: false, rempeln: 'sanft', modus: 'solo', spielart: 'rennen',
       });
       if (spiel.menue) spiel.menue.verstecken();

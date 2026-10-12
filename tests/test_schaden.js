@@ -105,7 +105,9 @@ pruefe('config.schaden: Standard aus', C && C.standardAn === false);
   pruefe('stoesseAuswerten: Hindernis-typ brand → −10 %', s5.zustand(0).prozent === 90);
 }
 
-// ---------- Liegengeblieben: 5 s gesperrt, dann Abschleppen mit 60 % ----------
+// ---------- Liegengeblieben: 5 s gesperrt, dann Abschleppen mit 60 % (altes Verhalten: Reparatur AUS, reparaturJe10 = 0) ----------
+const REP_STD = C.reparaturJe10;
+C.reparaturJe10 = 0;
 {
   const { autos, s } = neu(2, true), v = autos[0].vehicle, b = Object.assign({}, v.datenBasis);
   const ereignisse = [];
@@ -136,6 +138,128 @@ pruefe('config.schaden: Standard aus', C && C.standardAn === false);
   // zerstoeren: Fahrwerte zurück
   s.zerstoeren();
   pruefe('zerstoeren: Fahrwerte wieder Basis, datenBasis entfernt', nah(v.daten.vMax, b.vMax) && v.datenBasis === undefined);
+}
+
+C.reparaturJe10 = REP_STD;
+
+// ---------- Runde 7: Abschlepp-Reparatur (0 → 100 % in 10er-Schritten, je 10 % 1 s) ----------
+{
+  pruefe('config: reparaturJe10 1 s, losfahrenAb 30, kiLosfahrenAb 60', C.reparaturJe10 === 1 && C.losfahrenAb === 30 && C.kiLosfahrenAb === 60);
+  /** Spieler i (Mensch) oder KI; liegengeblieben + abgeschleppt (Reparatur beginnt). */
+  const aufbau = (mensch, aus) => {
+    const autos = [{ vehicle: new R.Vehicle(AUTO), istSpieler: mensch }, { vehicle: new R.Vehicle(AUTO), istSpieler: true }];
+    const s = new R.Schaden(autos, { an: aus !== false }), ev = [];
+    s.bei((e) => ev.push(e));
+    for (let k = 0; k < 20; k++) { s.treffer(0, 'hindernis', 5); warte(s, 0.72); }
+    let t = 0; while (s.zustand(0).liegengeblieben && t < 10) { s.schritt(DT); t += DT; }
+    return { autos, s, ev, v: autos[0].vehicle };
+  };
+  const vor = (s, sek) => { for (let t = 0; t < sek - 1e-9; t += DT) s.schritt(DT); };
+  const GAS = { gas: 1, bremse: 0, lenkung: 0.3 };
+
+  // --- Ablauf Mensch: 0 → 10 → 20 → 30, je genau 1 s ---
+  {
+    const { s, ev } = aufbau(true), z0 = s.zustand(0);
+    pruefe('Abschleppen: Reparatur beginnt bei 0 % (nicht resetProzent), Ereignis abschleppen mit reparatur', z0.reparatur && z0.prozent === 0 && !z0.liegengeblieben &&
+      ev.filter(e => e.art === 'abschleppen').length === 1 && ev.find(e => e.art === 'abschleppen').reparatur === true, z0.prozent + ' %');
+    pruefe('Mensch in Reparatur: reparatur(0) true, gesperrt(0) false (main.js reicht Eingabe durch)', s.reparatur(0) && !s.gesperrt(0));
+    const werte = [];
+    for (let k = 0; k < 3; k++) {
+      let n = 0; while (s.zustand(0).prozent === k * 10 && n < 200) { s.schritt(DT); n++; }
+      werte.push([s.zustand(0).prozent, n * DT]);
+    }
+    pruefe('Ablauf 0 → 10 → 20 → 30 %: je Schritt genau 1,0 s', werte.every(([p, t], k) => p === (k + 1) * 10 && Math.abs(t - 1) < DT * 1.5),
+      werte.map(([p, t]) => p + ' % nach ' + t.toFixed(2) + ' s').join(', '));
+    pruefe('Zwischen den Sprüngen konstant (kein stetiges Kriechen): nach 0,9 s noch 30 %', (vor(s, 0.9), s.zustand(0).prozent === 30));
+    pruefe('Ereignis reparatur je 10 % (3×), Stufen laufen mit (Stufe 4 bei 30 %: 70 % Verlust → 3)', ev.filter(e => e.art === 'reparatur').length === 3 && s.zustand(0).stufe === 3,
+      'Stufe ' + s.zustand(0).stufe);
+  }
+  // --- Gas bei 20 % wirkungslos; Gas bei 30 % → fährt, bleibt 30 % ---
+  {
+    const { s, v } = aufbau(true);
+    vor(s, 2.05);
+    const z = s.zustand(0);
+    pruefe('20 %: kannLosfahren false, losfahrenAb 30', z.prozent === 20 && !z.kannLosfahren && z.losfahrenAb === 30);
+    const o = s.reparaturSteuerung(0, GAS);
+    pruefe('Gas bei 20 % wirkungslos: Eingabe → gas 0, bremse 1, lenkung 0; Reparatur läuft weiter', o.gas === 0 && o.bremse === 1 && o.lenkung === 0 && s.reparatur(0));
+    pruefe('Gasversuch unter 30 % merkt der HUD-Hinweis (gasVersuch), danach wieder aus', s.zustand(0).gasVersuch && (vor(s, 0.95), !s.zustand(0).gasVersuch));
+    v.vLaengs = 4; s.schritt(DT);
+    pruefe('Auto steht in der Reparatur (Tempo 0, auch gegen Schieben)', v.vLaengs === 0);
+    pruefe('Treffer zählen in der Reparatur nicht', s.treffer(0, 'brand', 9) === 0);
+    vor(s, 0.55);                                                    // jetzt 30 %
+    pruefe('30 %: kannLosfahren true', s.zustand(0).prozent === 30 && s.zustand(0).kannLosfahren);
+    const o2 = s.reparaturSteuerung(0, GAS);
+    pruefe('Gas bei 30 %: Eingabe unverändert durchgereicht, Reparatur beendet', o2 === GAS && !s.reparatur(0) && !s.zustand(0).reparatur);
+    vor(s, 3);
+    pruefe('nach dem Losfahren bleibt der Wert (30 %, kein weiteres Reparieren)', s.zustand(0).prozent === 30);
+    pruefe('danach normal: Treffer zählen wieder (nach Abklingzeit −5 %)', s.treffer(0, 'hindernis', 5) === 5 && s.zustand(0).prozent === 25);
+  }
+  // --- Gas bei 50 %: behält 50 % ---
+  {
+    const { s } = aufbau(true);
+    vor(s, 5.05);
+    const o = s.reparaturSteuerung(0, GAS);
+    pruefe('Gas bei 50 % → fährt, behält 50 %', o === GAS && (vor(s, 2), s.zustand(0).prozent === 50));
+  }
+  // --- Warten bis 100 % ---
+  {
+    const { s, ev } = aufbau(true);
+    vor(s, 9.9);
+    const z9 = s.zustand(0).prozent, noch = s.reparatur(0);
+    vor(s, 0.2);
+    const z = s.zustand(0), ende = ev.filter(e => e.art === 'reparaturEnde');
+    pruefe('ohne Gas: 90 % nach 9,9 s, 100 % nach 10 s, Reparatur endet von selbst', z9 === 90 && noch && z.prozent === 100 && !z.reparatur && !s.reparatur(0), z9 + ' → ' + z.prozent + ' %');
+    pruefe('Ereignis reparaturEnde grund „voll“ genau einmal; Stufe 0 (volle Leistung)', ende.length === 1 && ende[0].grund === 'voll' && z.stufe === 0);
+    pruefe('bei 100 % wieder frei: Treffer zählen (nach Abklingzeit)', (vor(s, 1), s.treffer(0, 'hindernis', 5) === 5));
+  }
+  // --- KI: wartet bis 60 %, fährt dann los ---
+  {
+    const { s, ev } = aufbau(false);
+    pruefe('KI in Reparatur: gesperrt(0) true (wird nicht gefragt), reparatur(0) false (kein Mensch)', s.gesperrt(0) && !s.reparatur(0));
+    vor(s, 5.9);
+    const zv = s.zustand(0).prozent, gv = s.gesperrt(0);
+    vor(s, 0.2);
+    const z = s.zustand(0), ende = ev.filter(e => e.art === 'reparaturEnde');
+    pruefe('KI: 50 % nach 5,9 s noch gesperrt, bei 60 % (nach 6 s) frei und behält 60 %', zv === 50 && gv && z.prozent === 60 && !s.gesperrt(0) && !z.reparatur, zv + ' → ' + z.prozent + ' %');
+    pruefe('KI: reparaturEnde grund „ki“, Stufe 2 wie früher bei 60 %', ende.length === 1 && ende[0].grund === 'ki' && z.stufe === 2);
+    pruefe('anderer Spieler (Index 1) währenddessen unberührt', s.zustand(1).prozent === 100 && !s.reparatur(1));
+  }
+  // --- Split-Screen: beide Spieler gleichzeitig in der Reparatur, unabhängig ---
+  {
+    const autos = [{ vehicle: new R.Vehicle(AUTO), istSpieler: true }, { vehicle: new R.Vehicle(AUTO), istSpieler: true }];
+    const s = new R.Schaden(autos, { an: true });
+    for (let k = 0; k < 20; k++) { s.treffer(0, 'hindernis', 5); s.treffer(1, 'hindernis', 5); warte(s, 0.72); }
+    let n = 0; while (s.zustand(0).liegengeblieben && n < 900) { s.schritt(DT); n++; }     // beide zugleich abgeschleppt
+    vor(s, 1.05); s.z[1].punkte = 0; s.z[1].repZeit = 0;            // Auto 1 beginnt 1 s später erneut bei 0 % (gleiche Uhr, versetzter Start)
+    vor(s, 2);                                                       // Auto 0: 30 %, Auto 1: 20 %
+    pruefe('2 Spieler: beide in der Reparatur, eigene Prozente (Auto 0 weiter als Auto 1)', s.reparatur(0) && s.reparatur(1) && s.zustand(0).prozent > s.zustand(1).prozent,
+      s.zustand(0).prozent + ' / ' + s.zustand(1).prozent + ' %');
+    pruefe('2 Spieler: Gas von Spieler 0 (≥ 30 %) beendet nur dessen Reparatur', (s.reparaturSteuerung(0, GAS), !s.reparatur(0) && s.reparatur(1)));
+  }
+  // --- Autopilot zählt wie Computer-Auto ---
+  {
+    const autos = [{ vehicle: new R.Vehicle(AUTO), istSpieler: true, autopilot: {} }];
+    const s = new R.Schaden(autos, { an: true });
+    for (let k = 0; k < 20; k++) { s.treffer(0, 'hindernis', 5); warte(s, 0.72); }
+    vor(s, 5.5);
+    pruefe('Autopilot-Spieler: wie KI (gesperrt bis 60 %)', s.gesperrt(0) && !s.reparatur(0) && s.losfahrenAb(0) === 60);
+  }
+  // --- Schaden aus: kein Unterschied zu v14 ---
+  {
+    const { autos, s } = neu(1, false);
+    for (let k = 0; k < 40; k++) { s.treffer(0, 'hindernis', 10); s.schritt(DT * 30); }
+    const o = s.reparaturSteuerung(0, GAS);
+    pruefe('Schaden aus: nie Reparatur, reparaturSteuerung reicht Eingabe durch, 100 %', o === GAS && !s.reparatur(0) && !s.gesperrt(0) && s.zustand(0).prozent === 100 && !s.zustand(0).reparatur);
+  }
+  // --- Reparatur aus (reparaturJe10 = 0): altes Verhalten ---
+  {
+    C.reparaturJe10 = 0;
+    const { s, ev } = aufbau(true);
+    const z = s.zustand(0);
+    pruefe('reparaturJe10 = 0: sofort 60 %, keine Reparatur, kein Ereignis reparatur', z.prozent === 60 && !z.reparatur && !ev.some(e => e.art === 'reparatur') &&
+      ev.find(e => e.art === 'abschleppen').reparatur === false);
+    C.reparaturJe10 = REP_STD;
+  }
 }
 
 // ---------- KI-Fahrzeug fährt mit Schaden langsamer (Physik nutzt vehicle.daten) ----------

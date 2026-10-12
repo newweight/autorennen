@@ -1,6 +1,6 @@
 // Node-Test Polizei (Runde 5b, src/world/polizei.js – Logik ohne Three.js): node tests/test_polizei.js
 // a) Zielwahl: nächster Spieler vor ihm; KI nur, wenn kein Spieler in 300 m voraus; Schonfrist/angehaltene nicht.
-// b) Nähe ≥ 1,5 s (Kapsel ≤ 6 m, neben/hinter) → Anhalten 10 s → Freigabe ('weiter'), vorher keine Freigabe.
+// b) Nähe ≥ 1,5 s (Kapsel ≤ 6 m, neben/hinter) → Anhalten 4 s (v15, vorher 10 s) → Freigabe ('weiter'), vorher keine Freigabe.
 // c) Schonfrist 30 s, max. 1 Anhaltung je Auto pro Runde. d) Schild blockt (Schild-Ereignis statt Stopp).
 // e) Kein Stopp: Streifenwagen vor dem Ziel, Ziel im Looping/Flug (frei = false), zu weit weg, Kontakt-Unterbrechung.
 // f) Kapsel-Abstand, Anzahl (2 ab 6 Gegnern), Park-Steuerung bringt den Wagen neben ein stehendes Auto.
@@ -23,8 +23,8 @@ function laufen(lg, autos, st, sek, fn) {
 
 // ---------- a) Zielwahl ----------
 {
-  pruefe('Config: Standard aus, 6 m / 1,5 s / 10 s / 30 s / 300 m', C.standardAn === false && C.naheAbstand === 6 && C.naheZeit === 1.5 &&
-    C.stoppDauer === 10 && C.schonfrist === 30 && C.kiRadius === 300);
+  pruefe('Config: Standard aus, 6 m / 1,5 s / 4 s / 30 s / 300 m', C.standardAn === false && C.naheAbstand === 6 && C.naheZeit === 1.5 &&
+    C.stoppDauer === 4 && C.schonfrist === 30 && C.kiRadius === 300);
   const lg = new P.Logik(), p = streife(100);
   pruefe('Zielwahl: Spieler 100 m voraus vor KI 20 m voraus', lg.waehlen(0, [auto(120), auto(200, 0, { istSpieler: true })], p, L) === 1);
   pruefe('Zielwahl: Spieler 450 m voraus, KI 50 m → KI (kein Spieler in 300 m)', lg.waehlen(0, [auto(150), auto(550, 0, { istSpieler: true })], p, L) === 0);
@@ -42,7 +42,7 @@ function laufen(lg, autos, st, sek, fn) {
   pruefe('Zwei Streifenwagen: verschiedene Ziele', lg2.zielVon(0) === 0 && lg2.zielVon(1) === 1, lg2.zielVon(0) + '/' + lg2.zielVon(1));
 }
 
-// ---------- b) Nähe 1,5 s → Anhalten 10 s → Freigabe ----------
+// ---------- b) Nähe 1,5 s → Anhalten 4 s (v15, vorher 10 s) → Freigabe ----------
 {
   const lg = new P.Logik(), sp = auto(500, 0, { istSpieler: true }), autos = [sp], st = [streife(493)];   // 7 m Mitte, ~2,4 m Karosserie
   pruefe('Kapsel-Abstand hintereinander 7 m Mitte ≈ 2,4 m', Math.abs(P.kapselAbstand(st[0], sp) - (7 - (4.7 / 2 - 0.915) - (2.25 - 0.9) - 0.915 - 0.9)) < 1e-6,
@@ -53,13 +53,13 @@ function laufen(lg, autos, st, sek, fn) {
   const an = ev.find(e => e.art === 'anhalten');
   pruefe('≥ 1,5 s nah: Anhalten (Spieler, Streifenwagen 0)', !!an && an.nr === 0 && an.k === 0 && lg.gesperrt(0), an && an.t);
   pruefe('Anhalten nach 1,5 s (± 1 Schritt)', an && Math.abs(an.t - 1.5) <= dt + 1e-6, an && an.t);
-  pruefe('Streifenwagen-Phase halt, Restzeit 10 s ab dem Anhalten', lg.streifen[0].phase === 'halt' && Math.abs(lg.rest(0) - (10 - (lg.zeit - an.t))) < 1e-6, lg.rest(0).toFixed(3));
-  ev = laufen(lg, autos, st, 9.9);
-  pruefe('nach 9,9 s noch gesperrt, Rest ≈ 0,1 s, keine Freigabe', lg.gesperrt(0) && !ev.some(e => e.art === 'weiter'), lg.rest(0).toFixed(3));
+  pruefe('Streifenwagen-Phase halt, Restzeit 4 s ab dem Anhalten', lg.streifen[0].phase === 'halt' && Math.abs(lg.rest(0) - (4 - (lg.zeit - an.t))) < 1e-6, lg.rest(0).toFixed(3));
+  ev = laufen(lg, autos, st, 3.9);
+  pruefe('nach 3,9 s noch gesperrt, Rest ≈ 0,1 s, keine Freigabe', lg.gesperrt(0) && !ev.some(e => e.art === 'weiter'), lg.rest(0).toFixed(3));
   ev = laufen(lg, autos, st, 0.12);
   const w = ev.find(e => e.art === 'weiter');
-  pruefe('nach 10 s: Freigabe (weiter), nicht mehr gesperrt, Streifenwagen jagt wieder', !!w && !lg.gesperrt(0) && lg.streifen[0].phase === 'jagd', w && w.t);
-  pruefe('Freigabe nach 11,5 s (1,5 + 10)', w && Math.abs(w.t - 11.5) <= dt + 1e-6, w && w.t);
+  pruefe('nach 4 s: Freigabe (weiter), nicht mehr gesperrt, Streifenwagen jagt wieder', !!w && !lg.gesperrt(0) && lg.streifen[0].phase === 'jagd', w && w.t);
+  pruefe('Freigabe nach 5,5 s (1,5 + 4)', w && Math.abs(w.t - 5.5) <= dt + 1e-6, w && w.t);
 
   // ---------- c) Schonfrist + max. 1 je Runde ----------
   ev = laufen(lg, autos, st, 29);

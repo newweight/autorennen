@@ -411,6 +411,34 @@ with sync_playwright() as p:
     page.click('[data-a="strecke:wald"]'); page.wait_for_timeout(200)
     pruefe('Wald: keine Varianten-Zeile', len(va()) == 0)
     page.click('[data-a="strecke:wiese"]'); page.click('[data-a="welt:stunt"]')
+    # 12.10. Hindernis-Menge: Zeile „🚧 Hindernisse“ (Normal / Viele / Sehr viele), Taste O, ausgegraut in Welt Klassisch
+    page.wait_for_timeout(500)
+    hp = texte('.m-hindernisse .pille')
+    pruefe('Hindernisse-Zeile unter der Welt: Normal · Viele · Sehr viele, Standard Normal aktiv', len(hp) == 3 and 'Normal' in hp[0] and 'Viele' in hp[1] and 'Sehr viele' in hp[2]
+           and 'Normal' in texte('.m-hindernisse .pille.aktiv')[0] and E()['hindernisMenge'] == 'normal', hp)
+    n_normal = page.evaluate('Rennspiel.spiel.strecke.hindernisse.length + Rennspiel.spiel.strecke.strohballen.length')
+    page.click('[data-a="hindernisse:viele"]'); page.wait_for_timeout(700)
+    n_viele = page.evaluate('Rennspiel.spiel.strecke.hindernisse.length + Rennspiel.spiel.strecke.strohballen.length')
+    pruefe('Pille „Viele“: Einstellung viele, Menü-Hintergrund neu gebaut mit mehr Hindernissen', E()['hindernisMenge'] == 'viele' and page.evaluate('Rennspiel.spiel.strecke.hindernisMenge') == 'viele' and n_viele > n_normal, [n_normal, n_viele])
+    taste('KeyO'); page.wait_for_timeout(700)
+    pruefe('Taste O: Viele → Sehr viele (mehr als Viele)', E()['hindernisMenge'] == 'sehrViele' and page.evaluate('Rennspiel.spiel.strecke.hindernisMenge') == 'sehrViele'
+           and page.evaluate('Rennspiel.spiel.strecke.hindernisse.length + Rennspiel.spiel.strecke.strohballen.length') > n_viele , E()['hindernisMenge'])
+    pruefe('Gespeichert (localStorage) und nach Neuaufbau gültig', page.evaluate("JSON.parse(localStorage.getItem(Rennspiel.config.ui.speicherSchluessel)).hindernisMenge") == 'sehrViele')
+    snap('menu_2c_hindernisse_sehrViele.png')
+    page.click('[data-a="welt:klassisch"]'); page.wait_for_timeout(700)
+    hk = page.evaluate("(() => { const z = document.querySelector('.m-hindernisse'); return { aus: z.classList.contains('aus'), klickbar: z.querySelectorAll('.pille[data-a]').length, text: z.querySelector('.welt-text').textContent }; })()")
+    pruefe('Welt Klassisch: Hindernisse-Zeile ausgegraut (keine klickbaren Pillen), Hinweis „Erst ab Welt Hindernisse“', hk['aus'] and hk['klickbar'] == 0 and 'Erst ab Welt' in hk['text'], hk)
+    taste('KeyO'); page.wait_for_timeout(300)
+    pruefe('Welt Klassisch: Taste O ändert nichts; Strecke ohne Hindernisse', E()['hindernisMenge'] == 'sehrViele' and page.evaluate('Rennspiel.spiel.strecke.hindernisse.length + Rennspiel.spiel.strecke.strohballen.length') == 0)
+    snap('menu_2d_hindernisse_klassisch_grau.png')
+    page.click('[data-a="welt:hindernisse"]'); page.wait_for_timeout(700)
+    pruefe('Zurück in Welt Hindernisse: Wahl „Sehr viele“ bleibt, Zeile wieder aktiv', E()['hindernisMenge'] == 'sehrViele' and page.evaluate("!document.querySelector('.m-hindernisse').classList.contains('aus')"))
+    ueb = page.evaluate("""(() => { const m = document.querySelector('.m-inhalt'), f = document.querySelector('.m-fuss'), z = document.querySelector('.m-hindernisse').getBoundingClientRect();
+      return { scroll: m.scrollHeight <= m.clientHeight + 1, zeileSichtbar: z.bottom <= f.getBoundingClientRect().top + 2 && z.top > 0 }; })()""")
+    pruefe('Strecken-Schritt: Hindernisse-Zeile sichtbar, kein Überlauf im 1280×800-Fenster', ueb['scroll'] and ueb['zeileSichtbar'], ueb)
+    page.evaluate("(() => { const m = Rennspiel.spiel.menue; m.e.hindernisMenge = 'bloedsinn'; m.weltFix(); })()")
+    pruefe('Ungültiger Wert → Normal (weltFix)', E()['hindernisMenge'] == 'normal')
+    page.click('[data-a="hindernisse:normal"]'); page.click('[data-a="welt:stunt"]'); page.wait_for_timeout(300)
     # Fahrer-Emojis
     page.click('[data-a="weiter"]'); page.wait_for_timeout(200)
     em = page.evaluate("""(() => { const f = (n) => document.querySelector('[data-a="fahrer:0:' + n + '"] .avatar').textContent;

@@ -142,7 +142,7 @@ def main():
                   (tag + ' Schaden-Fahrwerte = Basis × Stufe (Turbo exakt zurückgeschrieben)', z['vMaxRest'], '')]
             if welt == 'verrueckt': pr.append((tag + ' mindestens ein Turbo-Ereignis', turbos >= 1, 'Turbos %d' % turbos))
             if welt == 'stunt': pr.append((tag + ' mindestens ein Flug', fluege >= 1, 'Flüge %d' % fluege))
-            # Liegenbleiben → Abschleppen (KI-Auto 3): 5 s Stillstand, dann Reset am Checkpoint mit 60 %, KI fährt weiter
+            # Liegenbleiben → Abschleppen (KI-Auto 3): 5 s Stillstand, Reset am Checkpoint, Reparatur 0 → 60 % (6 s, Runde 7), KI fährt weiter
             # Abschleppen setzt das Auto am LETZTEN CHECKPOINT zurück (bis ~110 m hinter die Liegestelle). Je nach Lage liegt dort/dahinter ein Wrack, Kleber, Looping,
             # eine Kreuzung, Düse, ein Ball oder ein anderes Auto: die KI kriecht (gemessen 2–7 m/s statt 20 m/s), wartet oder scheitert aus dem Stand am Looping
             # (Fantasie: Reset am Checkpoint 118 m, Looping bei 170 m → zu langsam, bleibt hängen, Driver setzt nochmal zurück). Früher: Fortschritt nach genau
@@ -161,14 +161,18 @@ def main():
               sc.z[i].abkling = 0; sc._punkteSetzen(i, 5); sc.treffer(i, 'hindernis', 5);
               const r = { gesperrt: sc.gesperrt(i), x0: f.vehicle.x, z0: f.vehicle.z, gewartet: warte * 0.5 };
               s.schnellvorlauf(2.5); r.tempoLiegen = f.vehicle.tempo; r.nochGesperrt = sc.gesperrt(i);
-              const fo = t.fortschritt; s.schnellvorlauf(3); r.danach = sc.zustand(i).prozent; r.gesperrtDanach = sc.gesperrt(i);
+              // Runde 7 (Abschlepp-Reparatur): bei 5,0 s abgeschleppt, bei 5,5 s repariert das Auto (0 %, steht, KI gesperrt); die KI fährt erst ab 60 % (nach
+              // 1 s je 10 % = 6 s) los → bei 11,1 s (6,1 s nach dem Abschleppen): 60 %, frei. (Vor Runde 7: sofort 60 % nach dem Abschleppen.)
+              s.schnellvorlauf(3); r.repProzent = sc.zustand(i).prozent; r.repLaeuft = sc.zustand(i).reparatur; r.repGesperrt = sc.gesperrt(i); r.repTempo = f.vehicle.tempo;
+              s.schnellvorlauf(5.6); r.danach = sc.zustand(i).prozent; r.gesperrtDanach = sc.gesperrt(i);
               r.versetzt = Math.hypot(f.vehicle.x - r.x0, f.vehicle.z - r.z0) > 0.5; r.brauchtReset = f.driver.brauchtReset;
               const fo2 = t.fortschritt; r.weiter = 0; r.vMax = 0; r.nachS = null;
               for (let k = 1; k <= 40 && !(r.weiter >= 10 && r.vMax > 5); k++) { s.schnellvorlauf(0.5);
                 r.weiter = Math.max(r.weiter, Math.round(t.fortschritt - fo2)); r.vMax = Math.max(r.vMax, Math.round(f.vehicle.tempo * 10) / 10); if (r.weiter >= 10 && r.nachS === null) r.nachS = k * 0.5; }
               r.zaehl = s._zaehl; return r; }''')
-            pr.append((tag + ' KI liegengeblieben → 5 s still → abgeschleppt (60 %) → fährt weiter',
+            pr.append((tag + ' KI liegengeblieben → 5 s still → abgeschleppt → Reparatur 0 % (steht) → ab 60 % frei → fährt weiter',
                        ab['gesperrt'] and ab['nochGesperrt'] and ab['tempoLiegen'] < 0.01 and not ab['gesperrtDanach'] and ab['danach'] == 60
+                       and ab['repLaeuft'] and ab['repGesperrt'] and ab['repProzent'] == 0 and ab['repTempo'] < 0.01
                        and ab['versetzt'] and not ab['brauchtReset'] and ab['weiter'] >= 10 and ab['vMax'] > 5 and ab['zaehl']['kiAbgeschleppt'] >= 1, ab))
             # Bild
             st = page.evaluate("() => { const s = Rennspiel.spiel, L = s.strecke; const sch = Rennspiel.Schanzen ? Rennspiel.Schanzen.liste(L) : [];"

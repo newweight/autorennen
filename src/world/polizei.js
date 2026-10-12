@@ -10,7 +10,7 @@
 //   Ziel = nächster Spieler vor ihm (Bogenlänge); ist kein Spieler in kiRadius (300 m) voraus, nimmt er die nächste KI
 //   (damit es fair wirkt). Nicht wählbar: im Ziel, angehalten, in der Schonfrist, in dieser Runde schon angehalten.
 //   Ist er ≥ naheZeit (1,5 s) am Stück mit Karosserie-Abstand ≤ naheAbstand (6 m, Kapsel zu Kapsel) neben/hinter dem
-//   Ziel, wird es angehalten: stoppDauer (10 s) gesperrt (Steuerung = Bremse), der Streifenwagen stellt sich daneben.
+//   Ziel, wird es angehalten: stoppDauer (4 s, bis v14: 10 s) gesperrt (Steuerung = Bremse), der Streifenwagen stellt sich daneben.
 //   Danach „Weiterfahren!", schonfrist (30 s) für dieses Auto, neues Ziel. Hat das Ziel einen Schild, platzt nur der
 //   Schild (kein Stopp). Je Auto höchstens 1 Anhaltung pro Runde. Im Looping/Flug/liegengeblieben/festgeklebt: kein Stopp.
 //
@@ -30,7 +30,7 @@
   const R = window.Rennspiel;
 
   const STANDARD = {
-    anzahl: 1, anzahlViele: 2, vieleAb: 6, startHinter: 60, naheAbstand: 6, naheZeit: 1.5, vorZiel: 1, stoppDauer: 10,
+    anzahl: 1, anzahlViele: 2, vieleAb: 6, startHinter: 60, naheAbstand: 6, naheZeit: 1.5, vorZiel: 1, stoppDauer: 4,
     schonfrist: 30, kiRadius: 300, zielWahl: 1, folgeAbstand: 8, nebenAbstand: 3.8, blinkHz: 4, lichtAbstand: 40,
     lichtStaerke: 30, lichtReichweite: 14, sireneHoerweite: 120, schwierigkeit: 'meister', autoId: 'polizei',
   };

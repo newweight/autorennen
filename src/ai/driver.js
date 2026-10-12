@@ -104,6 +104,7 @@
 
   // --- Festfahren / falsch herum ---
   const FEST_TEMPO = 1;            // m/s
+  const FEST_KRIECHEN = 2.5;       // v15: m/s – falsch herum UND so langsam zählt auch als festgefahren (Kriechen an der Bande/im Sand, z. B. nach Abdrängen)
   const FEST_ZEIT = 2.5;           // s
   const RUECK_ZEIT = 1.2;          // s
   const FEST_VERSUCHE = 3;
@@ -314,7 +315,7 @@
         if (this.rueckRest <= 0) this.festZeit = 0;
         return { gas: 0, bremse: 1, lenkung: this.rueckLenkung };
       }
-      if (Math.abs(tempo) < FEST_TEMPO) {
+      if (Math.abs(tempo) < FEST_TEMPO || (this.falschHerum && Math.abs(tempo) < FEST_KRIECHEN)) {
         this.festZeit += dt;
         this.freiZeit = 0;
       } else {

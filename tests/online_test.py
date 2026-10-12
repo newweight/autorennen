@@ -131,6 +131,28 @@ try:
         pruefe('Rempeln-Schalter: Standard Geister (Host-Zeile 👻 aktiv, Gast sieht „Geister“, kein Schalter beim Gast)',
                host.evaluate("(() => { const a = document.querySelector('[data-a=\"wert:kollisionen:aus\"]'); return !!a && a.classList.contains('aktiv'); })()")
                and 'Geister' in gz and gast.evaluate("!document.querySelector('[data-a^=\"wert:kollisionen\"]')"), gz[-40:])
+        # ---------- b2) 12.10. Hindernis-Menge in der Lobby: grau in Welt ohne Hindernisse, Host stellt ein, Gast sieht es ----------
+        hm0 = host.evaluate("""(() => { const z = Array.from(document.querySelectorAll('.on-zeile')).find(e => e.querySelector('.on-label').textContent.includes('Hindernisse'));
+          return z ? { pillen: Array.from(z.querySelectorAll('.pille')).map(p => p.textContent.trim()), aus: z.querySelectorAll('.pille.aus').length, klickbar: z.querySelectorAll('.pille[data-a]').length,
+            label: z.querySelector('.on-label').textContent } : null; })()""")
+        pruefe('Lobby (Host): Zeile 🚧 Hindernisse mit Normal/Viele/Sehr viele; in Welt Klassisch ausgegraut (nicht klickbar) mit Hinweis',
+               hm0 and hm0['pillen'] == ['Normal', 'Viele', 'Sehr viele'] and hm0['aus'] == 3 and hm0['klickbar'] == 0 and 'erst ab Welt' in hm0['label'], hm0)
+        host.click('[data-a="wert:welt:hindernisse"]'); host.wait_for_timeout(400)
+        host.click('[data-a="wert:hindernisMenge:viele"]')
+        for pg in (host, gast):
+            pg.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.einstellungen.hindernisMenge === 'viele'", timeout=10000, polling=200)
+        host.wait_for_timeout(300)
+        gz2 = gast.evaluate("document.querySelector('.on-zusammen').textContent")
+        hl = host.evaluate("""(() => { const m = document.querySelector('#online .m-inhalt'); const fuss = document.querySelector('#online .m-fuss').getBoundingClientRect().top;
+          const z = Array.from(document.querySelectorAll('.on-zeile')).find(e => e.querySelector('.on-label').textContent.includes('Hindernisse'));
+          return { aktiv: z.querySelector('.pille.aktiv').textContent.trim(), klickbar: z.querySelectorAll('.pille[data-a]').length, scroll: m.scrollHeight <= m.clientHeight + 1,
+            innen: Array.from(document.querySelectorAll('#online .on-spalte')).every(e => e.getBoundingClientRect().bottom <= fuss + 2) }; })()""")
+        pruefe('Host wählt Welt Hindernisse + „Viele“: Server übernimmt, Zeile aktiv, Gast sieht „Hindernisse: Viele“, Lobby passt in 1280×800',
+               hl['aktiv'] == 'Viele' and hl['klickbar'] == 3 and hl['scroll'] and hl['innen'] and 'Hindernisse: Viele' in gz2, [hl, gz2[:90]])
+        host.screenshot(path=os.path.join(out, 'online_4b_lobby_hindernisse_viele.png'))
+        gast.screenshot(path=os.path.join(out, 'online_4c_lobby_gast_hindernisse.png'))
+        host.click('[data-a="wert:hindernisMenge:sehrViele"]')
+        host.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.einstellungen.hindernisMenge === 'sehrViele'", timeout=10000, polling=200)
         # ---------- c) Host stellt ein und startet ----------
         for a in ['wert:strecke:fantasie', 'wert:runden:1', 'wert:gegner:1', 'wert:schwierigkeit:leicht']:
             host.click('[data-a="%s"]' % a); host.wait_for_timeout(350)
@@ -141,6 +163,10 @@ try:
         for pg in (host, gast):
             pg.wait_for_function("Rennspiel.spiel.zustand === 'online' && Rennspiel.spiel.online && Rennspiel.spiel.online.empfangen", timeout=30000, polling=200)
         pruefe('Beide im Zustand „online“ (Szene gebaut, Server-Zustände kommen)', True)
+        SIG = "(() => { const st = Rennspiel.spiel.strecke; return { menge: st.hindernisMenge, einst: Rennspiel.spiel.einstellungen.hindernisMenge, n: st.hindernisse.length + st.strohballen.length, sig: JSON.stringify([st.hindernisse.map(h => [h.typ, h.s, h.seitenabstand]), st.wracks, st.strohballen]) }; })()"
+        sh_, sg_ = host.evaluate(SIG), gast.evaluate(SIG)
+        pruefe('12.10. Online mit „Sehr viele“ (Fantasie): Host und Gast bauen dieselbe Strecke (gleiche Hindernisse, Wracks, Strohballen), mehr als normal (2 Hindernisse + 0 Strohballen)',
+               sh_['menge'] == 'sehrViele' and sg_['menge'] == 'sehrViele' and sh_['sig'] == sg_['sig'] and sh_['n'] > 4, [sh_['n'], sg_['n'], sh_['menge'], sg_['einst']])
         # ---------- d) Countdown: Geister, HUD ----------
         gast.wait_for_timeout(700)
         geist = gast.evaluate("""(() => { const s = Rennspiel.spiel, o = s.online, erg = [];
@@ -220,6 +246,8 @@ try:
         except Exception as ex:
             pruefe('Host: „Zur Lobby“ → beide wieder in der Lobby (Szene abgebaut)', False, [pg.evaluate("[Rennspiel.spiel.zustand, Rennspiel.spiel.online && Rennspiel.spiel.online.phase]") for pg in (host, gast)])
         # ---------- g) W5 Stufe 2: Rempeln online ----------
+        host.click('[data-a="wert:hindernisMenge:normal"]')
+        host.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.einstellungen.hindernisMenge === 'normal'", timeout=10000, polling=200)
         gast.keyboard.press('Space')
         host.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.spieler[1].bereit === true", timeout=10000, polling=200)
         host.click('[data-a="wert:kollisionen:an"]')

@@ -6,20 +6,24 @@
 // Fahrzeugschritt wie main.js (ohne Fahrhilfe): Looping → Looping.schritt, Flug → Schanzen.flugSchritt,
 // sonst vehicle.schritt + Schanzen.nachSchritt + Looping-Einfahrt.
 // Ohne TEMPO_KLASSE: beide Klassen (normal, schnell) als eigene Prozesse.
+// 12.10. Hindernis-Menge: zusätzlich läuft alles mit HINDERNIS_MENGE=sehrViele (nur Welten mit Hindernis-Schichten, sonst identisch zu normal).
 if (!process.env.TEMPO_KLASSE) {
   const { spawnSync } = require('child_process');
   let rc = 0;
-  for (const k of ['normal', 'schnell']) {
-    console.log('\n##### Tempo-Klasse ' + k + ' #####');
+  const mengen = process.env.HINDERNIS_MENGE ? [process.env.HINDERNIS_MENGE] : ['normal', 'sehrViele'];
+  for (const m of mengen) for (const k of ['normal', 'schnell']) {
+    console.log('\n##### Tempo-Klasse ' + k + ' · Hindernis-Menge ' + m + ' #####');
     const r = spawnSync(process.execPath, [__filename].concat(process.argv.slice(2)),
-      { stdio: 'inherit', env: Object.assign({}, process.env, { TEMPO_KLASSE: k }) });
+      { stdio: 'inherit', env: Object.assign({}, process.env, { TEMPO_KLASSE: k, HINDERNIS_MENGE: m }) });
     rc = rc || r.status;
   }
-  console.log(rc ? '\nFEHLER in mindestens einer Tempo-Klasse' : '\nBEIDE TEMPO-KLASSEN OK');
+  console.log(rc ? '\nFEHLER in mindestens einer Tempo-Klasse' : '\nALLE TEMPO-KLASSEN UND HINDERNIS-MENGEN OK');
   process.exit(rc);
   return;
 }
 const KLASSE = process.env.TEMPO_KLASSE;
+const MENGE = process.env.HINDERNIS_MENGE || 'normal';
+const ABSEITS_MAX = MENGE === 'normal' ? 0.03 : 0.1;   // mit vielen Hindernissen weicht die KI öfter auf den Rand aus
 const { ladeModule } = require('./lade');
 const fs = require('fs'), path = require('path');
 const dateien = ['src/config.js', 'src/physics/vehicle.js', 'src/track/spline.js', 'src/track/trackCatalog.js',
@@ -92,20 +96,21 @@ console.log('Tempo-Klasse ' + KLASSE + ': Standard-Auto vMax ' + (new R.Vehicle(
 for (const daten of R.trackCatalog) {
   if (nurId && daten.id !== nurId) continue;
   for (const welt of Object.keys(daten.welten || { klassisch: 1 })) {
-    const st = new R.Strecke(daten, { welt });
+    if (MENGE !== 'normal' && !R.Strecke.weltHatHindernisse(daten, welt)) continue;   // Menge wirkt nur in Welten mit Hindernissen
+    const st = new R.Strecke(daten, { welt, hindernisMenge: MENGE });
     const nSch = S.liste(st).length, nLoop = st.loopings.length;
     const zeilen = [];
     let allesOk = true, sprungMinAlle = Infinity, startMinAlle = Infinity;
     for (const stufe of STUFEN) {
       const e = kiFahrt(st, stufe);
       sprungMinAlle = Math.min(sprungMinAlle, e.sprungMin); startMinAlle = Math.min(startMinAlle, e.startSprung);
-      const ok = e.imZiel && !e.reset && e.anteil < 0.03 && e.maxDy <= 1 &&
+      const ok = e.imZiel && !e.reset && e.anteil < ABSEITS_MAX && e.maxDy <= 1 &&
         (!nSch || (e.spruenge >= 2 * nSch && e.sprungMin >= SPRUNG_MIN && e.startSprung >= START_MIN)) &&
         (!nLoop || (e.loop.geschafft === 2 * nLoop && e.loop.gefallen === 0 && e.loop.zuLangsam === 0));
       if (!ok) { allesOk = false; zeilen.push(stufe + ': ' + JSON.stringify(e)); }
       else zeilen.push(stufe + ' ' + (e.r2 ? e.r2.toFixed(1) + ' s' : '-') + (st.ueberfuehrungen.length ? ' Δy≤' + e.maxDy.toFixed(2) : ''));
     }
-    pruefe(`[${daten.id}/${welt}] 7 Stufen × 2 Runden: im Ziel, kein Reset, abseits < 3 %, Höhe ohne Sprung (≤ 1 m/Schritt)` +
+    pruefe(`[${daten.id}/${welt}${MENGE !== 'normal' ? ' ' + MENGE : ''}] 7 Stufen × 2 Runden: im Ziel, kein Reset, abseits < ${Math.round(ABSEITS_MAX * 100)} %, Höhe ohne Sprung (≤ 1 m/Schritt)` +
       (nSch ? `, ${nSch} Schanzen je Runde mit ≥ 90 km/h` : '') + (nLoop ? `, ${nLoop} Loopings ohne Sturz` : ''),
       allesOk, (nSch ? 'Absprung min ' + (sprungMinAlle * 3.6).toFixed(0) + ' km/h' +
         (startMinAlle < Infinity ? ', Start-Schanze (Runde 1) ' + (startMinAlle * 3.6).toFixed(0) + ' km/h' : '') + ' | ' : '') + zeilen.join(', '));
@@ -115,20 +120,20 @@ for (const daten of R.trackCatalog) {
 for (const daten of R.trackCatalog) {
   if (!daten.varianten || (nurId && daten.id !== nurId)) continue;
   for (const vid of Object.keys(daten.varianten)) {
-    const st = new R.Strecke(daten, { welt: 'alles', variante: vid });
+    const st = new R.Strecke(daten, { welt: 'alles', variante: vid, hindernisMenge: MENGE });
     const nSch = S.liste(st).length, nLoop = st.loopings.length;
     const zeilen = [];
     let allesOk = true, sprungMinAlle = Infinity, startMinAlle = Infinity;
     for (const stufe of STUFEN) {
       const e = kiFahrt(st, stufe);
       sprungMinAlle = Math.min(sprungMinAlle, e.sprungMin); startMinAlle = Math.min(startMinAlle, e.startSprung);
-      const ok = e.imZiel && !e.reset && e.anteil < 0.03 &&
+      const ok = e.imZiel && !e.reset && e.anteil < ABSEITS_MAX &&
         (!nSch || (e.spruenge >= 2 * nSch && e.sprungMin >= SPRUNG_MIN && e.startSprung >= START_MIN)) &&
         (!nLoop || (e.loop.geschafft === 2 * nLoop && e.loop.gefallen === 0 && e.loop.zuLangsam === 0));
       if (!ok) { allesOk = false; zeilen.push(stufe + ': ' + JSON.stringify(e)); }
       else zeilen.push(stufe + ' ' + (e.r2 ? e.r2.toFixed(1) + ' s' : '-'));
     }
-    pruefe(`[${daten.id}/alles ${vid}] 7 Stufen × 2 Runden: im Ziel, kein Reset, abseits < 3 %` +
+    pruefe(`[${daten.id}/alles ${vid}${MENGE !== 'normal' ? ' ' + MENGE : ''}] 7 Stufen × 2 Runden: im Ziel, kein Reset, abseits < ${Math.round(ABSEITS_MAX * 100)} %` +
       (nSch ? `, ${nSch} Schanzen je Runde mit ≥ 90 km/h` : '') + (nLoop ? `, ${nLoop} Loopings ohne Sturz` : ''), allesOk, zeilen.join(', '));
   }
 }
@@ -145,7 +150,8 @@ if (!process.env.OHNE_REMPELN) {
     if (nurId && daten.id !== nurId) continue;
     const deko = R3.themes.dekoBauen(daten.thema, new R3.Strecke(daten));   // Deko hängt nur von der Strecke ab
     for (const welt of Object.keys(daten.welten || { klassisch: 1 })) {
-      const st = new R3.Strecke(daten, { welt });
+      if (MENGE !== 'normal' && !R3.Strecke.weltHatHindernisse(daten, welt)) continue;
+      const st = new R3.Strecke(daten, { welt, hindernisMenge: MENGE });
       K3.pflanzenSammeln(st, deko);
       if (K3.wracksEinbauen) K3.wracksEinbauen(st);
       const starts = st.startpositionen(STUFEN.length);
@@ -163,7 +169,7 @@ if (!process.env.OHNE_REMPELN) {
         fz.forEach((f, i) => {
           if (tn[i].imZiel) { f.vehicle.vLaengs *= 0.98; return; }
           umf.eigenerFortschritt = tn[i].fortschritt;
-          const s = f.driver.steuerung(dt, umf);
+          const s = f.driver.steuerung(dt, umf); let s2 = null;
           if (f.driver.brauchtReset) {
             const n = st.spline.naechster(f.vehicle.x, f.vehicle.z), p = st.spline.punktBei(n.s);
             if (process.env.RESET_LOG) console.log('  Reset', f.driver.name, 's=' + n.s.toFixed(0), 'q=' + n.seitenabstand.toFixed(1), 't=' + (schritte * dt).toFixed(1),
@@ -173,12 +179,21 @@ if (!process.env.OHNE_REMPELN) {
             f.looping = LP3.zustand(); f.flug = S3.zustand(); f.vehicle.imLooping = false; f.vehicle.imFlug = false;
             return;
           }
+          // wie main.js: KI nimmt Anlauf (Vollgas in der Anlauf-Zone) und stellt sich nach kiWarten s Stillstand vor Looping/Schanze
+          // selbst auf die Anlaufposition (sonst bleibt sie nach einem Rempler dicht vor dem Looping mit Tempo 0 hängen)
+          const AN = R3.Anlauf, az = AN ? (f.anlauf || (f.anlauf = AN.zustand())) : null;
+          const nah = az ? st.spline.naechster(f.vehicle.x, f.vehicle.z) : null, xAlt = f.vehicle.x, zAlt = f.vehicle.z;
+          if (az) s2 = AN.kiHilfe(az, f.vehicle, st, nah, s);
           let r;
           if (f.looping.aktiv || f.looping.fallen || !(st.loopings && st.loopings.length)) {
-            r = (f.looping.aktiv || f.looping.fallen) ? LP3.fahrzeugSchritt(f.looping, f.vehicle, st, s, dt, f.index)
-              : S3.fahrzeugSchritt(f.flug, f.vehicle, st, s, dt, f.index);
-          } else r = LP3.fahrzeugSchritt(f.looping, f.vehicle, st, s, dt, f.index);
+            r = (f.looping.aktiv || f.looping.fallen) ? LP3.fahrzeugSchritt(f.looping, f.vehicle, st, s2 || s, dt, f.index)
+              : S3.fahrzeugSchritt(f.flug, f.vehicle, st, s2 || s, dt, f.index);
+          } else r = LP3.fahrzeugSchritt(f.looping, f.vehicle, st, s2 || s, dt, f.index);
           f.index = r.index;
+          if (az && nah) {
+            AN.nachSchritt(az, f.vehicle, st, nah, xAlt, zAlt, s2 || s, dt);
+            if (AN.aktiv(az) && az.stehZeit > ((R3.config.anlauf && R3.config.anlauf.kiWarten) || 2)) { AN.zurAnlaufposition(az, f.vehicle, st, fz); f.index = -1; f.anlaufHilfen = (f.anlaufHilfen || 0) + 1; }
+          }
           if (r.ereignis === 'gefallen') rennen.verfolgungSetzen(i, f.vehicle.x, f.vehicle.z);
         });
         fz.forEach(f => K3.bande(f.vehicle, st));
@@ -196,10 +211,11 @@ if (!process.env.OHNE_REMPELN) {
       rempler = fz.reduce((a, f) => a + (f.driver.rempler || 0), 0);
       const resets = fz.reduce((a, f) => a + f.resets, 0);
       const ok = tn.every(t => t.imZiel) && resets <= 1 && !nan;
-      pruefe(`[${daten.id}/${welt}] 7 Stufen gemeinsam, rempeln echt, 2 Runden: alle im Ziel, Resets ≤ 1, keine NaN`, ok,
+      pruefe(`[${daten.id}/${welt}${MENGE !== 'normal' ? ' ' + MENGE : ''}] 7 Stufen gemeinsam, rempeln echt, 2 Runden: alle im Ziel, Resets ≤ 1, keine NaN`, ok,
         'Zeit ' + (schritte * dt).toFixed(0) + ' s, im Ziel ' + tn.filter(t => t.imZiel).length + '/7, Resets ' + resets +
         ' (' + fz.filter(f => f.resets).map(f => f.driver.name + ' ' + f.resets).join(', ') + '), Stöße ' + stoesse + ', Dreher ' + dreher +
-        ', KI-Rempler ' + rempler + ', Baum-Treffer ' + baeume);
+        ', KI-Rempler ' + rempler + ', Baum-Treffer ' + baeume + (fz.some(f => f.anlaufHilfen) ? ', Anlauf-Neustarts ' + fz.reduce((a, f) => a + (f.anlaufHilfen || 0), 0) : '') +
+        (tn.every(t => t.imZiel) ? '' : ' | nicht im Ziel: ' + fz.filter((f, i) => !tn[i].imZiel).map((f) => { const n = st.spline.naechster(f.vehicle.x, f.vehicle.z); return f.driver.name + ' s=' + n.s.toFixed(0) + ' q=' + n.seitenabstand.toFixed(1) + ' v=' + (f.vehicle.vLaengs * 3.6).toFixed(0) + (f.vehicle.imLooping ? ' (im Looping)' : '') + ' loop=' + JSON.stringify(f.looping) + ' fest=' + (f.driver.festZeit || 0).toFixed(1) + ' versuche=' + f.driver.fehlversuche; }).join(', ')));
     }
   }
 }
@@ -210,7 +226,7 @@ if (!process.env.OHNE_REMPELN) {
 // b) Ein Auto steht MITTEN auf der Kreuzung (Spieler parkt): die KI auf A und auf B fahren vorbei (≤ 25 s), kein Reset.
 // c) Alle 7 Stufen gemeinsam, 3 Runden (Fantasie alle Welten + XL), rempeln echt: alle im Ziel, 0 Resets, keine NaN,
 //    Kreuzungs-Begegnungen gezählt (Autos auf A und B gleichzeitig in der Kreuzung ± 25 m).
-if (!process.env.OHNE_KREUZUNG && (!nurId || nurId === 'fantasie')) {
+if (!process.env.OHNE_KREUZUNG && MENGE === 'normal' && (!nurId || nurId === 'fantasie')) {   // Kreuzung hängt nicht an der Hindernis-Menge
   const R5 = ladeModule(dateien);
   R5.Vehicle.klasseStandard = KLASSE;
   const K5 = R5.Kollisionen, LP5 = R5.Looping, S5 = R5.Schanzen;
@@ -319,10 +335,11 @@ if (!process.env.OHNE_DYNAMIK) {
     if (!['dino', 'wald'].includes(daten.id) || (nurId && daten.id !== nurId)) continue;
     const welten = Object.keys(daten.welten);    // W2-C2: auch Wald in allen Welten (Tiere ab Hindernisse)
     for (const welt of welten) {
+      if (MENGE !== 'normal' && !R4.Strecke.weltHatHindernisse(daten, welt)) continue;
       const zeilen = [];
       let allesOk = true;
       for (const stufe of STUFEN) {
-        const st = new R4.Strecke(daten, { welt });
+        const st = new R4.Strecke(daten, { welt, hindernisMenge: MENGE });
         const start = st.startpositionen(1)[0], v = new R4.Vehicle({});
         v.setzen(start.x, start.z, start.heading); v.y = st.hoeheAn(v.x, v.z);
         const rennen = new R4.RaceManager(st, [{ vehicle: v, name: 'KI', istSpieler: false }], { runden: 2, countdown: 0 });
@@ -355,7 +372,7 @@ if (!process.env.OHNE_DYNAMIK) {
           ' [Treffer ' + dynTreffer + ', Krater ' + krater + '/' + Math.ceil(kraterNeu / 2) + ', Ereignisse ' + ereig + ']');
         kraterSumme[stufe] = (kraterSumme[stufe] || 0) + krater; kraterAnzahl[stufe] = (kraterAnzahl[stufe] || 0) + Math.ceil(kraterNeu / 2);
       }
-      pruefe(`[${daten.id}/${welt}] W2-C mit Dynamik: 7 Stufen × 2 Runden im Ziel, 0 Resets, Lava gemieden`, allesOk, zeilen.join(', '));
+      pruefe(`[${daten.id}/${welt}${MENGE !== "normal" ? " " + MENGE : ""}] W2-C mit Dynamik: 7 Stufen × 2 Runden im Ziel, 0 Resets, Lava gemieden`, allesOk, zeilen.join(', '));
     }
   }
 }
@@ -364,7 +381,7 @@ if (!process.env.OHNE_DYNAMIK) {
 if (!process.env.OHNE_DYNAMIK && (!nurId || nurId === 'dino')) {
   const profiPlus = ['profi', 'meister', 'legende', 'unschlagbar'];
   const tr = profiPlus.reduce((a, k) => a + (kraterSumme[k] || 0), 0), an = profiPlus.reduce((a, k) => a + (kraterAnzahl[k] || 0), 0);
-  pruefe('[dino] W2-C1: KI profi+ weicht Kratern aus (Treffer ≤ 25 % der Krater auf der Fahrbahn)', an > 0 && tr <= an * 0.25,
+  pruefe('[dino] W2-C1: KI profi+ weicht Kratern aus (Treffer ≤ 25 % der Krater auf der Fahrbahn)', an > 0 && tr <= an * (MENGE === 'normal' ? 0.25 : 0.4),   // mit vielen Hindernissen bleibt weniger Platz zum Ausweichen
     'Treffer ' + tr + ' bei ' + an + ' Kratern; je Stufe ' + JSON.stringify(kraterSumme));
 }
 

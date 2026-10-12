@@ -38,10 +38,15 @@ Host trennt/verlässt → Raum zu (alle Gäste: raumZu). Gast trennt im Rennen �
 | `zurLobby` | – | nur Host, im Zustand `ergebnis` |
 
 `einstellungen`: `streckeId`, `welt`, `variante`, `runden`, `gegner` (Computer, 0 … 12 − Menschen), `schwierigkeit`,
-`tempoKlasse`, `jahreszeit` (auch `zufall`), `wetter` (auch `zufall`), `windStaerke`, `tageszeit`,
+`tempoKlasse`, `jahreszeit` (auch `zufall`), `wetter` (auch `zufall`), `windStaerke`, `tageszeit`, `hindernisMenge`,
 `kollisionen` (**Stufe 2**, Menü-Schalter „👻 Geister / 💥 Rempeln“ in der Lobby, nur Host; nur ein echtes `true` schaltet Rempeln
 an, alles andere – auch `"true"`, `1`, `null` – bleibt/wird `false` = Geister). `raumErstellen` darf den zuletzt gewählten Wert gleich mitschicken.
 `schaden` ist online immer `false`.
+`hindernisMenge` (12.10., Lobby-Zeile „🚧 Hindernisse“, nur Host): `"normal"` (Standard) | `"viele"` (≈ ×3, mind. 1 je 150 m) | `"sehrViele"` (≈ ×5, mind. 1 je 80 m). Der Server lässt nur
+diese drei Strings durch (alles andere – auch Zahl, `null`, Objekt, Groß-/Kleinschreibung falsch – wird `"normal"`), gibt den Wert in `lobby`/`start` zurück und
+baut damit seine Strecke; die Browser bauen aus `start.einstellungen` dieselbe Strecke: die zusätzlichen Öl-/Sand-/Baustellen-/Ast-/Wrack-/Strohballen-Einträge
+werden **deterministisch** erzeugt (Seed aus Strecke + Variante + Menge, ohne `Math.random`, `trackBuilder.js` `zusatzErzeugen`) – es wird nichts übertragen.
+Wirkt nur in Welten mit Hindernis-Schichten (in „Klassisch“ ignoriert). `raumErstellen` darf den zuletzt gewählten Wert mitschicken.
 
 Eingaben sind ganze Zahlen (`Netz.eingabeKodieren`), damit Server und Vorhersage im Browser **genau** mit
 denselben Werten rechnen (`wert / 100`). Der Server verarbeitet je Tick (1/60 s) eine Eingabe je Spieler aus einer

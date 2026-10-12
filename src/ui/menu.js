@@ -169,6 +169,34 @@
       this.varianteSetzen(l[(i + 1) % l.length].k);
     }
 
+    // ---------- 12.10. Hindernis-Menge (Normal / Viele / Sehr viele), Taste O (H = Debug-Anzeige) ----------
+    /** Stufen aus config.hindernisMenge: [{ k, name, emoji, beschreibung }] in Reihenfolge Normal → Viele → Sehr viele. */
+    hindernisListe() {
+      const S = (R.config.hindernisMenge && R.config.hindernisMenge.stufen) || {};
+      return Object.keys(S).map((k) => Object.assign({ k }, S[k]));
+    }
+    /** Hat die gewählte Welt (Strecke + Welt) Hindernis-Schichten? Sonst ist die Zeile ausgegraut. */
+    hindernisAktiv() {
+      return !R.Strecke || !R.Strecke.weltHatHindernisse || R.Strecke.weltHatHindernisse(this.streckeDaten(), this.e.welt);
+    }
+    hindernisGueltig() {
+      const l = this.hindernisListe(), k = this.e.hindernisMenge;
+      return l.some((x) => x.k === k) ? k : ((R.config.hindernisMenge && R.config.hindernisMenge.standard) || 'normal');
+    }
+    hindernisSetzen(k) {
+      if (!this.hindernisAktiv()) return;
+      this.e.hindernisMenge = k;
+      this.e.hindernisMenge = this.hindernisGueltig();
+      this.hintergrundNeu();
+    }
+    /** Eine Stufe weiter (Taste O): Normal → Viele → Sehr viele → Normal. */
+    hindernisBewegen() {
+      const l = this.hindernisListe();
+      if (!l.length || !this.hindernisAktiv()) return;
+      const i = Math.max(0, l.findIndex((x) => x.k === this.hindernisGueltig()));
+      this.hindernisSetzen(l[(i + 1) % l.length].k);
+    }
+
     /** Jahreszeit-Pillen für das Thema der Strecke (Wüste: Winter = Sandsturm-Zeit). */
     jahreszeitListe() {
       const thema = this.streckeDaten().thema, J = R.config.jahreszeiten || {};
@@ -194,6 +222,7 @@
       const e = this.e;
       e.welt = this.weltGueltig();
       e.variante = this.varianteGueltig();
+      e.hindernisMenge = this.hindernisGueltig();
       if (!this.jahreszeitListe().some((x) => x.k === e.jahreszeit)) e.jahreszeit = 'sommer';
       if (!this.wetterListe().some((x) => x.k === e.wetter)) e.wetter = 'klar';
     }
@@ -251,6 +280,11 @@
       }
       if (id === 'strecke' && code === 'KeyV' && this.varianteListe().length) {   // Runde 6: Variante Normal/XL
         this.varianteBewegen();
+        this.aenderung();
+        return true;
+      }
+      if (id === 'strecke' && code === 'KeyO' && this.hindernisListe().length) {   // 12.10.: Hindernisse Normal/Viele/Sehr viele
+        this.hindernisBewegen();
         this.aenderung();
         return true;
       }
@@ -415,6 +449,7 @@
       else if (art === 'strecke') this.streckeWaehlen(p1);     // bleibt im Schritt: darunter die Welt wählen, dann „Weiter“
       else if (art === 'welt') this.weltSetzen(p1);
       else if (art === 'variante') this.varianteSetzen(p1);
+      else if (art === 'hindernisse') this.hindernisSetzen(p1);
       else if (art === 'tafel') this.tafelOffen = !this.tafelOffen;
       else if (art === 'auto') e.autoIds[+p1] = p2;
       else if (art === 'fahrer') {
@@ -565,7 +600,7 @@
           `<div class="strecken-bild" style="background:linear-gradient(180deg,${himmel} 0%,${himmel} 35%,${f[0]} 35%,${f[1]} 100%)">` +
           `<div class="strasse"></div>${pille}</div>` +
           `<div class="karten-name">${s.name}</div><div class="karten-sub">${s.beschreibung}</div>${hinweis}</div>`;
-      }).join('') + `</div>` + this.htmlWelt() + this.htmlVariante();
+      }).join('') + `</div>` + this.htmlWelt() + this.htmlVariante() + this.htmlHindernisse();
     }
 
     /** Runde 4: Zeile „Welt“ unter den Strecken-Karten (Pillen je Strecke, eine Zeile Erklärung). */
@@ -590,6 +625,20 @@
         `${x.k ? '📏 ' : ''}${x.name}</span>`).join('');
       return `<div class="m-variante"><div class="z-label">📏 Variante <small>(Taste V)</small></div><div class="z-wert">${pillen}</div>` +
         `<div class="welt-text"><b>${a.name}:</b> ${a.beschreibung}</div></div>`;
+    }
+
+    /** 12.10.: Zeile „Hindernisse“ unter Welt/Variante – Normal · Viele · Sehr viele; ausgegraut, wenn die Welt keine Hindernisse hat. */
+    htmlHindernisse() {
+      const liste = this.hindernisListe();
+      if (!liste.length) return '';
+      const an = this.hindernisAktiv(), akt = this.hindernisGueltig(), a = liste.find((x) => x.k === akt) || liste[0];
+      const pillen = liste.map((x) =>
+        `<span class="pille hindernisse${x.k === a.k ? ' aktiv' : ''}${an ? '' : ' aus'}"${an ? ` data-a="hindernisse:${x.k}"` : ''} title="${x.beschreibung}">` +
+        `${x.emoji} ${x.name}</span>`).join('');
+      const text = an ? `<b>${a.emoji} ${a.name}:</b> ${a.beschreibung}`
+        : `<b>Erst ab Welt 🚧 Hindernisse.</b>`;
+      return `<div class="m-hindernisse${an ? '' : ' aus'}"><div class="z-label">🚧 Hindernisse <small>(Taste O)</small></div><div class="z-wert">${pillen}</div>` +
+        `<div class="welt-text">${text}</div></div>`;
     }
 
     htmlFahrer() {
@@ -704,7 +753,7 @@
         pillenL('wetter', '🌦️', 'Wetter', this.wetterListe(), e.wetter) +
         wind +
         pillenL('schaden', '💥', 'Schaden', [{ k: 'aus', text: 'Aus' }, { k: 'an', text: 'An' }], e.schaden ? 'an' : 'aus',
-          'Treffer kosten Energie, bei 0 % kommt der Abschleppwagen') +
+          'Treffer kosten Energie, bei 0 % kommt der Abschleppwagen und repariert (ab 30 % darfst du losfahren)') +
         // Runde 5: Tempo-Klasse (Spieler und Computer gleich)
         pillenL('tempo', '🏎️', 'Tempo', [{ k: 'normal', text: 'Normal' }, { k: 'schnell', text: 'Schnell (220–270 km/h)' }],
           e.tempoKlasse === 'schnell' ? 'schnell' : 'normal', 'Normal ≈ 155–190 km/h, leichter zu fahren – Schnell = volle Leistung') +

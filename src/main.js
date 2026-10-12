@@ -31,6 +31,8 @@
       tageszeit: c.tageszeit && c.tageszeit[c.tageszeitStandard] ? c.tageszeitStandard : 'tag',
       // W5 Stufe 2: Online-Raum mit Rempeln (Auto↔Auto) statt Geister – nur die zuletzt gewählte Host-Einstellung, Standard Geister
       kollisionen: false,
+      // 12.10. Hindernis-Menge: 'normal' (Standard = wie bisher) | 'viele' (≈ ×3, mind. 1 je 150 m) | 'sehrViele' (≈ ×5, mind. 1 je 80 m); wirkt nur in Welten mit Hindernissen
+      hindernisMenge: (c.hindernisMenge && c.hindernisMenge.standard) || 'normal',
       // Runde 6 (W3-F): Spielart 'rennen' (Einzelrennen, wie bisher) | 'pokal' (D1) | 'elimination' (D7); Pokal-Größe 3/4/5
       spielart: 'rennen', pokalGroesse: (c.pokal && c.pokal.groesseStandard) || 3,
       // Runde 6 (W3-G): Garage-Upgrades im Rennen anwenden (aus = Faktoren 1, Lackfarben bleiben)
@@ -68,6 +70,8 @@
       rempeln: r.rempeln === 'echt' || r.rempeln === 'sanft' ? r.rempeln : std.rempeln,
       tageszeit: c.tageszeit && c.tageszeit[r.tageszeit] ? r.tageszeit : std.tageszeit,
       kollisionen: r.kollisionen === true,                // W5 Stufe 2 (nur online genutzt)
+      hindernisMenge: c.hindernisMenge && c.hindernisMenge.stufen && typeof r.hindernisMenge === 'string' && Object.prototype.hasOwnProperty.call(c.hindernisMenge.stufen, r.hindernisMenge)
+        ? r.hindernisMenge : std.hindernisMenge,          // 12.10.
       spielart: r.spielart === 'pokal' || r.spielart === 'elimination' ? r.spielart : 'rennen',     // W3-F
       pokalGroesse: ((c.pokal && c.pokal.groessen) || [3, 4, 5]).includes(+r.pokalGroesse) ? +r.pokalGroesse : std.pokalGroesse,
       upgradesZaehlen: r.upgradesZaehlen !== false,      // W3-G
@@ -295,7 +299,7 @@
       const e = this.einstellungen || {};
       const welt = R.Strecke.weltName ? R.Strecke.weltName(daten, e.welt) : (daten.weltStandard || undefined);
       const variante = e.variante && daten.varianten && daten.varianten[e.variante] ? e.variante : '';   // Runde 6: ungültig → Normal
-      const strecke = new R.Strecke(daten, { welt, variante });
+      const strecke = new R.Strecke(daten, { welt, variante, hindernisMenge: e.hindernisMenge });
       this.strecke = strecke;
       // Runde 4: Wetter/Jahreszeit/Wind (Standard Sommer/klar/0 = wie bisher)
       this.wetter = null;
@@ -698,7 +702,12 @@
         this.zuruecksetzen(e.i);
         if (f.driver) f.driver.zurueckgesetzt();
         if (f.autopilot && f.autopilot.zurueckgesetzt) f.autopilot.zurueckgesetzt();
-        this._meldung(e.i, 'Weiter geht\'s! 🔧 ' + e.prozent + ' %', 1600);
+        if (e.reparatur) this._meldung(e.i, 'Abgeschleppt! 🔧', 1200);       // Runde 7: danach zeigt der HUD die Reparatur (hud.js)
+        else this._meldung(e.i, 'Weiter geht\'s! 🔧 ' + e.prozent + ' %', 1600);
+      } else if (e.art === 'reparatur') {
+        if (A && spieler && A.reparaturTon && (R.config.schaden || {}).reparaturTon !== false) A.reparaturTon(e.prozent, this.schaden.losfahrenAb(e.i));
+      } else if (e.art === 'reparaturEnde') {
+        if (spieler && e.grund === 'voll') this._meldung(e.i, 'Voll repariert! 💯', 1400);
       }
     }
 
@@ -1140,6 +1149,8 @@
           s = fahrer.steuerung(dt, umgebung);
           if (fahrer.brauchtReset) { this.zuruecksetzen(i); fahrer.zurueckgesetzt(f.index); return; }   // W4-I: Index aus dem Reset
         }
+        // --- Runde 7: Abschlepp-Reparatur: Mensch steht, Gas erst ab losfahrenAb (30 %) – beendet dann die Reparatur ---
+        if (schaden && schaden.reparatur(i)) s = schaden.reparaturSteuerung(i, s);
         // --- Runde 6 (D3): Start-Boost bewerten (Gas-Eingabe VOR der Countdown-Sperre), „Zu früh" sperrt das Gas 1 s ---
         const sb = this.startBoost;
         if (sb && !f.polizei && !f.autopilot && sb.offen(i)) {

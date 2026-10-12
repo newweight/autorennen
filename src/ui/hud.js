@@ -375,6 +375,33 @@
       }
       setzeText(this.eGZahl, p + '%');
       this.eGesund.classList.toggle('kaputt', !!z.liegengeblieben);
+      this._reparaturAnzeigen(z);
+    }
+
+    /**
+     * Runde 7: Abschlepp-Reparatur – dauerhafte Meldung unter der Mitte (eigenes Element, stört die Kurzmeldungen oben nicht).
+     * < losfahrenAb: orange „Reparatur 20 % – ab 30 % kannst du losfahren" (Gasversuch: rot, „Noch nicht!");
+     * ab losfahrenAb: grün „Reparatur 40 % – Gas = losfahren". Computer-Autos haben keine HUD-Anzeige (nur der eigene Balken).
+     */
+    _reparaturAnzeigen(z) {
+      let e = this.eRep;
+      if (!z.reparatur) { if (e && e._an) { e.style.display = 'none'; e._an = false; e._t = ''; } return; }
+      if (!e) {
+        e = this.eRep = document.createElement('div'); e.className = 'hud-reparatur';
+        Object.assign(e.style, { position: 'absolute', left: '50%', top: '31%', transform: 'translateX(-50%)', width: '90%', boxSizing: 'border-box',
+          textAlign: 'center', whiteSpace: 'pre-line', fontWeight: '900', lineHeight: '1.25', color: '#fff', padding: '.3em .8em', borderRadius: '1em',
+          border: '.08em solid #fff', pointerEvents: 'none', textShadow: '0 .06em .12em rgba(0,0,0,.5)', display: 'none' });
+        this.el.appendChild(e);
+      }
+      const ab = z.losfahrenAb, p = z.prozent;
+      const text = z.kannLosfahren ? '🔧 Reparatur ' + p + ' % – Gas = losfahren' + (p < 100 ? '\noder warten bis 100 %' : '')
+        : '🔧 Reparatur ' + p + ' %' + (z.gasVersuch ? '\nNoch nicht! Ab ' + ab + ' % kannst du losfahren' : '\nab ' + ab + ' % kannst du losfahren');
+      const farbe = z.kannLosfahren ? 'linear-gradient(90deg, rgba(40,170,80,.92), rgba(90,200,110,.92))'
+        : z.gasVersuch ? 'linear-gradient(90deg, rgba(220,50,40,.92), rgba(240,100,60,.92))' : 'linear-gradient(90deg, rgba(235,140,20,.92), rgba(250,190,40,.92))';
+      if (e._t !== text) { e._t = text; e.textContent = text; }
+      if (e._f !== farbe) { e._f = farbe; e.style.background = farbe; }
+      if (!e._an) { e._an = true; e.style.display = 'block'; }
+      e.style.fontSize = this.el.clientWidth < 700 ? '1.4em' : '1.9em';      // Split-Screen (halbe Breite): kleiner, damit es zweizeilig bleibt
     }
 
     /** Windpfeil drehen: Pfeil zeigt, wohin der Wind weht (oben = Rückenwind, rechts = drückt nach rechts). */

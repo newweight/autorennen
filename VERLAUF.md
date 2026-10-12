@@ -792,3 +792,72 @@
   Straße. Ein Zaun quer über die Mündung würde die Fahrbahn des anderen Abschnitts (KI, Spieler geradeaus) optisch versperren, obwohl für sie keine Bande gilt. Wer abbiegt, sieht jetzt
   also Zaun links und rechts der Querstraße, stößt aber in der Lücke weiter an. Echte Lösung wäre Physik (Bande an der Kreuzung für beide Abschnitte, Abschnittswechsel erlauben) – bewusst nicht angefasst.
   An den Zwickel-Ecken kreuzen sich die Zäune beider Abschnitte wie ein X (entspricht der Physik: jede Bande gilt nur für ihren Abschnitt).
+
+## 12.10. Agent Öl/Sand (v15, Sonnet)
+Wunsch des Vaters: „durch Öl fahren → ein wenig schleudern, Sand → abbremsen“.
+- **Öl**: `vehicle.schritt` erkennt den Wechsel `untergrund → 'oel'` (`_ugAlt`) und ruft einmal `_untergrundEinfahrt()`: Drehimpuls über den vorhandenen `drehImpuls`-Mechanismus (Rempler), aber mit eigenen Werten
+  (`drehLenk` 0,8 = Gegenlenken wirkt gut, `drehAb` 3,2/s, `drehErhalt` 0,35 = nur 35 % der Welt-Bewegung bleiben → Auto rutscht nicht Dutzende Meter quer). Richtung: Lenkung (rechts → dreht rechts ein) →
+  Querbewegung → sonst deterministisch aus der Position (`floor(x·3+z·5) & 1`), KEIN Math.random. Stärke linear im Tempo (0 unter 22 km/h, 1 bei 100 km/h, Deckel ×1,2), Fahrhilfe „viel“ halbiert sie.
+  Gilt für Hindernis-Ölflecken UND Item-Ölflecken (beide setzen `untergrund = 'oel'`), für Spieler und KI.
+- **Sand** (`sandFleck`): vMaxFaktor 0,75 → 0,5, Rollwiderstand 6 → 8 mit `anfahrenRampe` (unter 8 m/s anteiliger Widerstand wie beim Abseits → kein Steckenbleiben), einmalig −20 % Tempo beim Einfahren.
+- **Config**: `physik.untergrund.sandFleck`, neu `physik.schleudern.{oel,sand}` (alles kommentiert), `hindernisse.oel.gefahr` 0,7 → 0,8, `hindernisse.sand.gefahr` 0,4 → 0,6.
+- **KI** (`ai/driver.js`): neu `FEST_KRIECHEN` – falsch herum UND < 2,5 m/s zählt als festgefahren (rückwärts frei, nach 3 Versuchen Reset). Grund: In test_welten_ki (wueste/hindernisse, schnell) wurde ein
+  KI-Auto nach Rempler/Abdrängen an die Bande im Sand gedrängt und kroch mit 1,3 m/s dauerhaft (nie „fest“, 600 s Zeitlimit). Altes Latent-Problem, nur durch geänderte Zeitpunkte sichtbar geworden.
+- **Online**: Die Vorhersage nutzt `strecke.abfrage().untergrund` (kennt Hindernis-Flecken), rechnet also dieselbe Einfahrt in `vehicle.schritt` mit; Item-Ölflecken (pickups) kennt sie weiter nicht (Server korrigiert).
+  `drehImpuls` wird synchronisiert, `drehLenk/drehAb/drehErhalt/_ugAlt` nicht (Protokoll unverändert).
+- **Messwerte** (Passat-Werte, Gas 0,5, 2,5 s im Öl, Gerade): 20 km/h 0°, 40 km/h 8°, 60 km/h 17°, 100 km/h 36°, 150–250 km/h 43° (Deckel); Fahrhilfe „viel“ bei 100 km/h 11°; Gegenlenken (P-Regler, 0,25 s Reaktion)
+  fängt auf −0,8° ab, Tempo 98 km/h. Sand (14 m): 100 km/h Vollgas → 77 km/h, Gas weg → 67; 60 → 43; Normal-Klasse 150 → 79 km/h (Deckel); schwächstes Auto (Multivan, Normal) aus 0/5 km/h in 5,1/4,5 s durch.
+- **Tests**: tests/test_hindernisse.js +17 Prüfungen (84 → 101). Vorher/nachher: physik 58/58, pickups 63/63, kollisionen 53/53, netz 59/59 (siehe Ergebnis unten), Rundenzeiten: Wald „Perfekte Fahrt“ 98,3/92,9 → 98,8/93,5 s (Sand/Öl auf Straße), Toleranzen unverändert.
+- **Schwächen**: (1) Die Schleuder-Konstanten sind nach Gefühl gewählt, nicht im echten Spiel gefahren (nur Node-Messung + oel_test.py). (2) Vorhersage: bei Item-Öl und nach Abgleich-Replay (drehLenk/drehAb fehlen im
+  Server-Zustand) kann die Drehung kurz anders ausklingen → weiche Korrektur. (3) KI weicht Öl/Sand nur über `gefahr` aus, kann aber bei 140+ km/h trotzdem in den Fleck geraten und schleudert dann wie ein Mensch (Gegenlenken macht sie nicht gezielt, die Streckenführung fängt sie meist ab).
+  (4) Sand: 8,0 Rollwiderstand ist mit dem Anfahr-Ramp-Trick gerade so fahrbar; ein langsames Auto mit Gas weg bleibt im Sand stehen (gewollt, Gas geben hilft).
+- 12.10. Agent Abschlepp-Reparatur (v15, Sonnet) – fertig. Arbeitsordner v15 (Sicherung v14_fertig unberührt). Wunsch des Vaters: „Abschleppwagen Reparatur alle 10 Prozent 1 Sekunde,
+  man kann ab 30 Prozent wieder losfahren oder warten bis 40 50 60 usw bis 100 Prozent.“
+  Entscheidung 10er-SPRÜNGE statt stetigem Hochlaufen: Für ein Kind ist „jede Sekunde ein Schritt: 10, 20, 30 …“ zählbar und deckt sich mit dem Wunsch; die Zahl, bei der man losfährt,
+  steht dann fest (30, 40 …) und sieht im HUD genau so aus wie der Wert, den das Auto behält. Stetiges 10 %/s hätte krumme Zahlen (34 %) erzeugt.
+  Ablauf (nur Schaden an, nur Abschleppen nach Liegenbleiben): liegengeblieben (5 s) → Ereignis 'abschleppen' (main.js setzt am Checkpoint zurück) → REPARATUR beginnt bei 0 %: Auto steht,
+  Treffer zählen nicht, alle reparaturJe10 (1 s) +10 % (Ereignis 'reparatur' → leises Pling je 10 %, steigende Tonhöhe, ab 30 % mit zweitem hellem Ton; Stufe/Fahrwerte laufen mit).
+  Mensch: unter losfahrenAb (30 %) ist Gas gesperrt (Eingabe → Bremse; HUD „Noch nicht! Ab 30 % kannst du losfahren“, rot), ab 30 % beendet Gas die Reparatur sofort (Wert bleibt),
+  ohne Gas läuft sie bis 100 % und endet (Meldung „Voll repariert! 💯“). Computer-Auto (kein Spieler oder Autopilot): wird nicht gefragt/gehalten, frei ab kiLosfahrenAb (60 %).
+  Dateien: src/physics/schaden.js (Zustand rep/repZeit/gasVersuch, _reparaturSchritt, reparatur(i), reparaturSteuerung(i, s), losfahrenAb(i), gesperrt(i) nur noch Liegen + KI-Reparatur, zaehlt() false in
+  der Reparatur, zustand() um reparatur/losfahrenAb/kannLosfahren/gasVersuch erweitert), src/config.js (NUR Abschnitt schaden: reparaturJe10 1, losfahrenAb 30, kiLosfahrenAb 60, reparaturTon true;
+  resetProzent 60 bleibt als Fallback, wirkt nur bei reparaturJe10 = 0), src/main.js (ein Hook vor dem Start-Boost: Mensch in Reparatur → reparaturSteuerung; _schadenEreignis: 'abgeschleppt' + Ton + „Voll repariert“),
+  src/ui/hud.js (eigenes Element .hud-reparatur, orange/rot/grün, im Split-Screen kleiner), src/audio/engine.js (reparaturTon), src/ui/menu.js (Tooltip Schaden), ANLEITUNG.md (Abschnitt Schaden),
+  tests/test_schaden.js (+28), tests/welten_test.py (Abschlepp-Prüfung angepasst), neu tests/reparatur_screenshot.py. vehicle.js/collisions.js nicht angefasst.
+  Tests vorher → nachher: test_schaden 42 → 70 OK (neu: Ablauf 0→10→20→30 je 1,0 s, Gas bei 20 % wirkungslos, Gas bei 30 % fährt + bleibt 30 %, Gas bei 50 % bleibt 50 %, ohne Gas 90 % nach 9,9 s / 100 % nach 10 s,
+  KI frei bei 60 % nach 6 s, Split-Screen unabhängig, Autopilot = KI, Schaden aus unverändert, reparaturJe10 = 0 = altes Verhalten; der alte Block „60 % nach Abschleppen“ läuft mit reparaturJe10 = 0);
+  test_ki 260 → 260; test_pokal 48 → 48; test_polizei 40 → 40; test_kollisionen 53 → 53 (test_ki unter Last einmal „Laufzeit < 60 s“ rot, allein 36 s → OK);
+  welten_test 188 → 188 OK, 0 FEHL (die 28 Abschlepp-Prüfungen angepasst: 5 s still → 0 % Reparatur, steht, KI gesperrt → nach 6,1 s 60 % frei, fährt weiter; Begründung: die KI hat nach dem Abschleppen
+  nicht mehr sofort 60 %, sondern erst nach der Reparatur; Erfolg „fährt weiter“ meist nach 2–3,5 s, einmal 8 s); menu_test 175 → 175 OK; schaden_screenshot vorher/nachher ALLE PRÜFUNGEN OK;
+  neu reparatur_screenshot.py 17/17 (echtes Spiel: Reparatur, Gasversuch, Losfahren bei 30 %, 100 % nach 10 s, KI, Split-Screen). Bilder: tests/out/reparatur/ (01 orange 20 %, 02 rot „Noch nicht!“,
+  03 grün 40 % „Gas = losfahren“, 04 Split-Screen 30 % / 20 %).
+  Schwächen: (1) Die KI steht jetzt 5 s + 6 s = 11 s statt 5 s (Wunsch „warten bis 60 %“) – Abschleppen wird für Computer-Autos teurer; falls zu hart: kiLosfahrenAb senken (z. B. 40). (2) Während der Reparatur
+  steht das Auto am Checkpoint auf der Strecke; fahren andere durch, kollidieren sie physisch (ohne Schaden für das Reparaturauto). (3) Die kurze „Abgeschleppt! 🔧“-Meldung und der Reparatur-Kasten stehen übereinander
+  (Meldung oben, Kasten darunter, getrennte Elemente). (4) Pling-Ton nur per Hörtest nicht geprüft (Audio-Kontext headless nicht abhörbar). (5) Garage-Rest (min. 30 %) zählt den aktuellen Wert, auch mitten in der Reparatur.
+
+## 12.10. Agent Hindernis-Menge (v15, Sonnet)
+Wunsch des Vaters: „viele oder sehr viele Hindernisse“.
+- **Einstellung** `hindernisMenge`: `'normal'` (Standard, bitgleich wie vorher – dann läuft gar kein Zusatz-Code) | `'viele'` (≈ ×2) | `'sehrViele'` (≈ ×3). Stufen/Abstände in `config.hindernisMenge`.
+  Menü: Zeile „🚧 Hindernisse: Normal / Viele / Sehr viele“ unter Welt/Variante, **Taste O** (H ist Debug-Anzeige), in Welt „Klassisch“ ausgegraut („Erst ab Welt Hindernisse“). Online: Host-Zeile in der Lobby, Gast sieht den Wert; Server prüft (`einstellungenPruefen`: nur die 3 Strings, sonst `'normal'`).
+- **Erzeugung** (`trackBuilder.js`, `zusatzErzeugen`): deterministisch (Seed = FNV-1a über `id|variante|menge` → mulberry32, kein `Math.random`), Server und alle Browser bauen dieselbe Strecke. Je Katalog-Eintrag (faktor−1)× neue Hindernisse gleichen Typs
+  (Öl, Sand, Baustelle, Ast, Wrack – nie brennend –, Strohballen), gleichmäßig über die Runde verteilt (je 1 Abschnitt, 40 Versuche, dann 40 über die ganze Runde). Katalog selbst bleibt unverändert, Extras stehen in Kopien (`hindernisZusatz` zählt gewollt/gesetzt/weggelassen).
+  Sperrzonen: Start/Ziel (120/70 m), Tunnel, Brücke, Überführung, Kreuzung, Looping, Schanze (+80 m), Spuren, Boost/Schilde/Bälle/Wasser/Dinos/Kleber; Mindestabstände 60 (Sperr) / 30 (Fleck) / 40 m (Stroh); Krümmungsgrenzen je Typ, keine Extras 70 m vor Haarnadeln (R < 32 m); immer ≥ 4,5 m freie Fahrbahn.
+- **Münzen** (`muenzen.js`): `hindernisFrei()` verschiebt Münzen aus Hindernissen auf eine freie Querposition oder lässt sie weg (gilt auch für normal – dort war vorher vereinzelt eine Münze im Hindernis).
+- **Anzahl** (Welt Hindernisse, normal | viele | sehrViele; Gesamt = Hindernisse + Wracks + Strohballen): wiese 7 | 14 | 21, wald 8 | 15 | 21, wueste 6 | 12 | 18, fantasie 2 | 4 | 6, dino 8 | 15 | 23 (+2 Lava), alpen 8 | 16 | 24.
+  Welt „Alles“: wiese 7|14|19, wald 8|14|15, wueste 6|12|17, fantasie 4|7|9, dino 8|12|13, alpen 8|14|18.
+- **Draw-Calls**: nicht vervielfacht (Hindernisse gemerged/instanziert); sehrViele auf der Wiese höchstens +4 (max 79 gegen 75). Ein Extra-Wrack kostet im Bild ca. 12 Meshes (frustum-culled).
+- **Tests**: `test_hindernisse.js` (Fingerprint normal bitgleich, ×2/×3, Determinismus, Zonen/Abstände/freie Spur, Münzen), `test_netz.js` (Block L: Server == Client mit sehrViele, Lobby), `test_welten_ki.js` (normal + sehrViele × beide Tempo-Klassen, 268 OK, 0 FEHL),
+  `menu_test.py`, `online_test.py` (Lobby-Zeile, Host/Gast bauen dieselbe Strecke), `screenshot_test.py` (menge_lauf M1–M4, Draw-Calls). Vorher/Nachher: alle `tests/test_*.js` grün, menu 0 Fehler, online 32/32 (vorher 28/29, Rempel-Flake unter Last), welten_test grün, touch 76/76, leistung OK.
+- **Schwächen**: (1) Absolute Zahlen bleiben mäßig (×3 eines kleinen Katalogs; Fantasie nur 2→6) – Faktor in `config.hindernisMenge.stufen` anhebbar. (2) In Stunt/Verrückt/Alles auf Wald/Dino/Alpen fallen viele Extras wegen der Sperrzonen weg (z. B. dino verrueckt sehrViele 7 von 16 gesetzt).
+  (3) Extra-Wracks brennen nie (Draw-Calls). (4) KI hatte bei wald/verrueckt und wueste/hindernisse vereinzelt 1 Reset (erlaubt ≤ 1). (5) Taste O statt H. (6) `.strecken-bild` im Menü von 5,2 auf 3,9 em verkleinert, damit 3 Zeilen unter den Karten passen; Lobby-Zeilenabstände leicht verengt.
+  (7) `test_netz`/`online_test`/`welten_test` flackern selten unter hoher CPU-Last (Zeitfenster), einzeln auf ruhiger Maschine grün.
+- **Nachbesserung (Hauptmodell-Prüfung: „zu wenig“)**: `viele` ≈ ×3, `sehrViele` ≈ ×5 und absolute Untergrenze. Ziel-Gesamtzahl = max(Katalog × Faktor, Streckenlänge / `meterPro`) mit `meterPro` 150 (viele) / 80 (sehrViele); Faktor, meterPro, `wrackMax`, Slalom in `config.hindernisMenge`.
+  Abstände verkleinert (Sperr 60 → 24 m, Fleck 30 → 10, Stroh 40 → 24); Zonen enger (Bälle ±16, Fontänen ±12, Haarnadel-Vorlauf 70 → 45), dafür vor Loopings 90 m Anlauf-Zone frei, Lava/Krater ± 55 m frei, Baustellen/Wracks nur auf fast geraden Stücken (1/150).
+  **Wracks gedeckelt** (höchstens +2, kosten ≈ 12 Draw-Calls), Rest billige Arten (Öl, Sand, Ast, wenige Baustellen, Strohballen nur in Welten mit Strohballen). **Slalom**: 30 % der Äste/Ölflecken bekommen 30 m dahinter einen Partner auf der Gegenseite (`hindernisZusatz.slalom`). Immer ≥ 4,5 m freie Spur (Test).
+- **Anzahl** Welt Hindernisse (normal | viele | sehrViele): wiese 7 | 21 | 41, wald 8 | 25 | 40, wueste 6 | 24 | 48, fantasie 2 | 9 | 13, dino 8 | 25 | 35 (+2 Lava), alpen 8 | 24 | 39.
+  Welt Alles: wiese 7|21|38, wald 8|21|27, wueste 6|23|40, fantasie 4|10|12, dino 8|18|22, alpen 8|24|32.
+- **Draw-Calls Wiese** (normal → sehrViele): max 77 → 87 (+10), Mittel 49,7 → 54,2. Menü: Hinweis „Erst ab Welt 🚧 Hindernisse.“ passt bei 1280×800 ohne Abschneiden/Scrollen (menu_test grün).
+- **Tests**: `test_welten_ki.js` 268 OK / 0 FEHL (normal + sehrViele × beide Tempo-Klassen); Resets höchstens 1 je Rennen. Anpassungen: abseits-Grenze bei Menge ≠ normal 10 % statt 3 % (KI weicht aus, XL bis 7,6 %), Krater-Ausweichen 40 % statt 25 %,
+  und das Gruppenrennen nutzt jetzt wie main.js die Anlauf-Hilfe (`R.Anlauf.kiHilfe/nachSchritt`, Neustart nach 2 s Stillstand vor dem Looping) – vorher blieb eine KI nach einem Rempler mit Tempo 0 vor dem Looping hängen (nur im Test, nicht im Spiel).
+  screenshot_test: Fahrersicht-Prüfung (≥ 3 Hindernisse in 110 m), `Rennspiel.spiel.rennen.zeit > 1,4` statt fester Wartezeit („LOS!“ weg). Alle `test_*.js`, menu 0 Fehler, online 32/32, welten_test, touch 76/76, screenshot, leistung grün.
+- **Schwächen neu**: Auf der Wiese (3000 m) ist 1 Hindernis je ≈ 75 m im Fahrerbild trotzdem nur 2–3 sichtbar (kleine Objekte, Nebel); Fantasie/Dino/Alles bleiben wegen Sperrzonen unter dem Wunsch (Fantasie 13 statt 18). Baustellen sind selten, weil sie ≈ 50 m belegen.

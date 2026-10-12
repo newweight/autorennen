@@ -496,6 +496,14 @@
       this._ton(70, 95, 0.9, 'sawtooth', 0.12, 0.7);
     }
 
+    /** Runde 7: leises Pling je 10 % Reparatur (steigende Tonhöhe); ab der Losfahr-Schwelle heller (zwei Töne). */
+    reparaturTon(prozent, ab) {
+      if (!this._bereit()) return;
+      const f = 440 * Math.pow(2, klemme(+prozent || 0, 0, 100) / 100);   // 440 → 880 Hz
+      this._ton(f, f, 0.12, 'triangle', 0.12, 0);
+      if (prozent >= ab) this._ton(f * 1.5, f * 1.5, 0.16, 'triangle', 0.08, 0.06);
+    }
+
     menueKlick() {
       if (!this._bereit()) return;
       this._ton(660, 990, 0.07, 'triangle', 0.3, 0);

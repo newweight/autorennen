@@ -96,6 +96,9 @@ function einstellungenPruefen(roh, spielerAnzahl) {
     tageszeit: c.tageszeit && c.tageszeit[r.tageszeit] ? r.tageszeit : 'tag',
     schaden: false,                       // Stufe 1: online immer aus
     kollisionen: r.kollisionen === true,  // Stufe 2 (nicht im Menü): Auto↔Auto an
+    // 12.10. Hindernis-Menge: nur 'normal' | 'viele' | 'sehrViele' (unbekannt, Zahl, null … → 'normal'); alle Browser bauen dieselbe Strecke
+    hindernisMenge: c.hindernisMenge && c.hindernisMenge.stufen && typeof r.hindernisMenge === 'string' &&
+      Object.prototype.hasOwnProperty.call(c.hindernisMenge.stufen, r.hindernisMenge) ? r.hindernisMenge : ((c.hindernisMenge && c.hindernisMenge.standard) || 'normal'),
   };
 }
 
@@ -114,7 +117,7 @@ class Simulation {
     const seed = (opt.seed >>> 0) || 1;
     const daten = R.trackCatalog.find(t => t.id === e.streckeId) || R.trackCatalog[0];
     const welt = R.Strecke.weltName ? R.Strecke.weltName(daten, e.welt) : (daten.weltStandard || undefined);
-    const strecke = new R.Strecke(daten, { welt, variante: e.variante });
+    const strecke = new R.Strecke(daten, { welt, variante: e.variante, hindernisMenge: e.hindernisMenge });
     // Wetter auflösen (Zufall nur hier, mit Seed) → konkrete Werte gehen an alle Browser (gleiche Umwelt-Physik)
     const wa = R.Wetter.aufloesen({ jahreszeit: e.jahreszeit, wetter: e.wetter, wind: { staerke: e.windStaerke, richtung: 'zufall' },
       thema: daten.thema, seed });

@@ -157,7 +157,29 @@ Rennspiel.config = {
       sand:    { grip: 0.5,  rollwiderstand: 5.5, vMaxFaktor: 0.45, vMaxAbs: 50 / 3.6 },   // max 50 km/h
       // Hindernisse auf der Fahrbahn (Runde 3, von trackBuilder/collisions zu setzen):
       oel:     { grip: 0.25, rollwiderstand: 1.0, vMaxFaktor: 1.0 },        // rutschig (schlingern), kein Tempodeckel
-      sandFleck: { grip: 0.55, rollwiderstand: 6.0, vMaxFaktor: 0.75 },   // Sand auf der Straße (bremst spürbar)
+      // v15: Sand auf der Straße bremst deutlich (vorher 6,0 / 0,75): Rollwiderstand ↑, Deckel 50 % von vMax (Normal-Klasse ≈ 84 km/h)
+      sandFleck: { grip: 0.55, rollwiderstand: 8.0, vMaxFaktor: 0.5, anfahrenRampe: true },   // anfahrenRampe: unter abseitsAnfahren m/s anteiliger Rollwiderstand (kein Steckenbleiben)
+    },
+    // v15 – Einfahrt in Öl/Sand-Fleck (vehicle._untergrundEinfahrt, einmal je Wechsel des Untergrunds; deterministisch, kein Zufall)
+    schleudern: {
+      oel: {
+        impuls: 2.0,           // rad/s Drehimpuls bei vRef (klingt mit `abklingen` ab → Drehung ≈ impuls/abklingen rad, bei 100 km/h ≈ 35°)
+        vMin: 6,               // m/s (≈ 22 km/h) – darunter keine Drehung („bei Schritttempo kaum")
+        vRef: 100 / 3.6,       // m/s – Bezugstempo für `impuls`; Faktor linear von vMin (0) bis vRef (1)
+        faktorMax: 1.2,        // Deckel des Tempo-Faktors (kein Überschlag, kein Kreiseln bei 250 km/h)
+        abklingen: 3.2,        // 1/s – Drehung klingt exponentiell ab
+        weltErhalt: 0.35,      // Anteil der Welt-Bewegung, der bei der Drehung erhalten bleibt (1 = wie Rempler: rutscht voll quer; kleiner = Auto folgt der Nase)
+        lenkung: 0.8,          // Anteil der Lenkung, der während der Drehung wirkt (Gegenlenken fängt ab)
+        hilfeDaempfung: 0.5,   // Fahrhilfe `viel` (lenkhilfe ≥ hilfeVoll) halbiert den Impuls
+        hilfeVoll: 0.7,        // lenkhilfe-Wert, ab dem die volle Dämpfung gilt (config.fahrhilfen.viel)
+        lenkSchwelle: 0.15,    // Lenkausschlag, ab dem die Lenkrichtung die Drehrichtung bestimmt
+        querSchwelle: 0.3,     // m/s – sonst bestimmt die Querbewegung die Richtung
+        hashX: 3, hashZ: 5,    // sonst Positions-Hash floor(x·hashX + z·hashZ) & 1 (deterministisch)
+      },
+      sand: {
+        tempoFaktor: 0.8,      // einmalig −20 % Tempo beim Einfahren in einen Sandfleck
+        vMin: 3,               // m/s – im Schritttempo kein Abzug
+      },
     },
   },
 
@@ -165,8 +187,8 @@ Rennspiel.config = {
   // laenge/breite in m. gefahr 0..1 = wie dringend die KI ausweicht.
   // untergrund = Schlüssel in physik.untergrund (Werte für Grip/Rollwiderstand stehen dort).
   hindernisse: {
-    oel:       { name: 'Ölfleck', untergrund: 'oel', laenge: 9, breite: 5, gefahr: 0.7 },
-    sand:      { name: 'Sand', untergrund: 'sandFleck', laenge: 14, breite: 7, gefahr: 0.4 },
+    oel:       { name: 'Ölfleck', untergrund: 'oel', laenge: 9, breite: 5, gefahr: 0.8 },
+    sand:      { name: 'Sand', untergrund: 'sandFleck', laenge: 14, breite: 7, gefahr: 0.6 },
     baustelle: { name: 'Baustelle', laenge: 30, vorlauf: 9, pylonenAbstand: 3, pylonRadius: 0.35,
                  pylonTempo: 0.88,       // Tempo × 0,88 beim Umfahren einer Pylone
                  blinkZeit: 0.3,         // s rot blinken, dann weg bis zur nächsten Runde des Verursachers
@@ -179,6 +201,30 @@ Rennspiel.config = {
     // brennendes Wrack: wie wrack + Flammen/Rauch; Treffer kostet bei Schaden „an“ −10 % (config.schaden.brandVerlust)
     brand:     { name: 'Brennendes Auto', schraeg: 0.28, blinkTakt: 0.5, dreieckAbstand: 12, gefahr: 1.0,
                  flammen: 3, rauchTeilchen: 70, rauchHoehe: 11 },
+  },
+  // 12.10. Hindernis-Menge (Einstellung hindernisMenge): 'normal' = Katalog unverändert (bitgleich wie bisher),
+  // 'viele' / 'sehrViele' = Gesamtzahl max(Katalog × faktor, Streckenlänge / meterPro); Wracks gedeckelt (wrackMax), Rest billige Arten,
+  // deterministisch erzeugt (trackBuilder.js, fester Seed je Strecke + Menge + Variante). Nur Welten mit Hindernis-Schichten.
+  hindernisMenge: {
+    standard: 'normal',
+    stufen: {
+      normal:    { name: 'Normal',    emoji: '🚧', faktor: 1, beschreibung: 'So viele wie immer.' },
+      viele:     { name: 'Viele',     emoji: '🚧🚧', faktor: 3, meterPro: 150, beschreibung: 'Dreimal so viele.' },
+      sehrViele: { name: 'Sehr viele', emoji: '🚧🚧🚧', faktor: 5, meterPro: 80, beschreibung: 'Fünfmal so viele – Slalom!' },
+    },
+    startFrei: 120,        // m ab der Startlinie ohne zusätzliche Hindernisse (Startaufstellung + Anfahren)
+    zielFrei: 70,          // m vor der Ziellinie ohne zusätzliche Hindernisse (Startaufstellung steht dahinter)
+    abstandSperr: 24,      // m Lücke (Rand zu Rand) zu/zwischen Sperr-Hindernissen (Baustelle, Ast, Wrack) – Zeit zum Ausweichen
+    abstandFleck: 10,      // m Lücke zwischen Flecken (Öl, Sand) und allem anderen
+    abstandStroh: 24,      // m Lücke bei Strohballen-Bahnen (rollen quer über die ganze Straße)
+    wrackMax: 2,           // höchstens so viele zusätzliche Wracks (je ≈ 12 Draw-Calls im Bild)
+    slalomChance: 0.3,     // Chance, dass hinter einem Ast/Ölfleck kurz danach ein zweiter auf der anderen Seite folgt
+    slalomAbstand: 30,     // m dazwischen (Mitte zu Mitte)
+    freiSpur: 4.5,         // m: mindestens so breit bleibt quer immer eine freie Spur (Auto 1,9 m + Luft)
+    kurveMax: { baustelle: 1 / 150, ast: 1 / 45, wrack: 1 / 150, oel: 1 / 40, sand: 1 / 40, stroh: 1 / 60 },   // größte Krümmung (1/Radius) dort
+    haarnadelVor: 45,      // m vor einer engen Kurve (Radius < haarnadelRadius) keine zusätzlichen Hindernisse
+    haarnadelRadius: 32,
+    maxVersuche: 40,       // Zufallsversuche je Hindernis (Abschnitt, dann ganze Strecke); danach wird es weggelassen
   },
   // Runde 4: Strohballen (Dynamik, Katalog strohballen [{ s, von, intervall, tempo }], nur Welt mit strohballen)
   strohballen: {
@@ -253,7 +299,16 @@ Rennspiel.config = {
     stufeJe: 20,
     vMaxJeStufe: 0.04, beschleunigungJeStufe: 0.06, gripJeStufe: 0.03,
     rauchUnter: 40, qualmUnter: 20,
-    liegenZeit: 5, resetProzent: 60,
+    liegenZeit: 5,
+    // Runde 7 (Abschlepp-Reparatur): Nach dem Abschleppen steht das Auto am Checkpoint und wird REPARIERT: Anzeige springt
+    // von 0 % in 10er-Schritten, je 10 % genau reparaturJe10 Sekunden (Sprünge statt stetig: für Kinder klar zählbar „1 Sekunde = 10 %“).
+    // Spieler: ab losfahrenAb (30 %) beendet Gas die Reparatur sofort, das Auto behält den erreichten Wert; darunter ist Gas
+    // gesperrt (Hinweis im HUD). Wer wartet, bekommt bis 100 % (Reparatur endet dann von selbst).
+    // Computer-Autos warten bis kiLosfahrenAb (60 %) und fahren dann los (Balance wie bisher: früher 60 % nach 5 s).
+    // reparaturJe10 = 0 → Reparatur AUS: altes Verhalten (sofort resetProzent). Gilt nur fürs Abschleppen nach Liegenbleiben.
+    reparaturJe10: 1, losfahrenAb: 30, kiLosfahrenAb: 60,
+    reparaturTon: true,        // leises Pling je 10 % (nur Spieler)
+    resetProzent: 60,          // nur noch Fallback/Doku: wirkt NUR bei reparaturJe10 = 0 (Reparatur aus)
     blinkTakt: 0.5,
     rauchTeilchen: 36,
   },
@@ -513,7 +568,7 @@ Rennspiel.config = {
     naheAbstand: 6,              // m Karosserie-Abstand (Kapsel zu Kapsel)
     naheZeit: 1.5,               // s am Stück nah dran
     vorZiel: 1,                  // m: Streifenwagen-Mitte darf höchstens so weit vor der Front des Ziels sein („neben/hinter")
-    stoppDauer: 10,              // s angehalten
+    stoppDauer: 4,               // s angehalten (v15: vorher 10 s – Wunsch Sebastian)
     schonfrist: 30,              // s danach lässt er dieses Auto in Ruhe
     kiRadius: 300,               // m: kein Spieler so nah → auch KI-Autos anhalten
     zielWahl: 1,                 // s: so oft wird das Ziel neu gewählt

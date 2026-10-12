@@ -100,13 +100,32 @@
     return liste.map((m) => ({ s: sp.wrapS(m.s), q: m.q, reihe: m.reihe }));
   }
 
+  /**
+   * 12.10.: Münzen dürfen nicht in Hindernissen liegen (Öl, Sand, Baustelle samt Sperrhälfte, Ast, Wrack, Lava …).
+   * Liegt eine Münze (Radius 0,6 m) in einem Hindernis, wird sie auf eine freie Querlage derselben Stelle geschoben
+   * (gespiegelt, ±½, ±¼ der halben Breite); gibt es keine, entfällt sie. Ohne Hindernis im Weg bleibt alles unverändert.
+   */
+  function hindernisFrei(strecke, liste) {
+    const hs = (strecke.hindernisse || []).filter((h) => h.typ !== 'krater' && h.laenge && h.halbbreite !== undefined && h.seitenabstand !== undefined);
+    if (!hs.length) return liste;
+    const sp = strecke.spline, r = 0.6, halb = (strecke.breite || 12) / 2;
+    const drin = (s, q) => hs.some((h) => Math.abs(sp.differenzS(s, h.s)) < h.laenge / 2 + r && Math.abs(q - h.seitenabstand) < h.halbbreite + r);
+    const erg = [];
+    for (const m of liste) {
+      if (!drin(m.s, m.q)) { erg.push(m); continue; }
+      const q = [-m.q, 0.5 * halb, -0.5 * halb, 0.25 * halb, -0.25 * halb].find((x) => !drin(m.s, x));
+      if (q !== undefined) erg.push({ s: m.s, q, reihe: m.reihe });
+    }
+    return erg;
+  }
+
   class Muenzen {
     /** @param {Strecke} strecke */
     constructor(strecke) {
       const c = C(), sp = strecke.spline, h = wert(c.hoehe, 0.95);
       this.strecke = strecke;
       this.radius = wert(c.radius, 1.9);
-      this.liste = platzieren(strecke).map((m, k) => {
+      this.liste = hindernisFrei(strecke, platzieren(strecke)).map((m, k) => {
         const p = sp.punktBei(m.s), x = p.x + p.nx * m.q, z = p.z + p.nz * m.q;
         // W4-I: Höhe aus dem eigenen s (Höhenmodell 'gelaende': identisch mit hoeheAn(x, z))
         const y = typeof strecke.hoeheBeiS === 'function' ? strecke.hoeheBeiS(m.s, m.q) + h : typeof strecke.hoeheAn === 'function' ? strecke.hoeheAn(x, z) + h : (p.y || 0) + h;
