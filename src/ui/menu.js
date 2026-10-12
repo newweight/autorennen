@@ -229,6 +229,7 @@
     // ---------- Eingabe ----------
     /** Taste im Menü. Gibt true zurück, wenn sie verwendet wurde. */
     taste(code) {
+      if (this.onlineUi && this.onlineUi.sichtbar) return this.onlineUi.taste(code);   // W5: Online-Bildschirm offen
       if (this.garageUi && this.garageUi.sichtbar) return this.garageUi.taste(code);   // Runde 6 (W3-G): Garage offen
       const T = R.config.tasten;
       const P1 = T.spieler[0], P2 = T.spieler[1];
@@ -262,10 +263,12 @@
         // ↑↓ schaltet bei Pokal/„Letzter fliegt raus" allein ↔ zu zweit
         const e = this.e, sa = e.spielart || 'rennen';
         if (dx) {
-          const karten = ['solo', 'zwei', 'pokal', 'elimination'];
-          const i = sa === 'rennen' ? (e.modus === 'zwei' ? 1 : 0) : karten.indexOf(sa);
-          this.modusKarte(karten[(i + dx + 4) % 4]);
-        } else if (sa !== 'rennen') e.modus = e.modus === 'solo' ? 'zwei' : 'solo';
+          // W5: 5. Karte „🌐 Online" (unter den vier, neben der Garage) – nur ein Cursor, ändert keine Einstellungen
+          const karten = ['solo', 'zwei', 'pokal', 'elimination', 'online'];
+          const i = this.onlineGewaehlt ? 4 : sa === 'rennen' ? (e.modus === 'zwei' ? 1 : 0) : karten.indexOf(sa);
+          this.modusKarte(karten[(i + dx + 5) % 5]);
+        } else if (this.onlineGewaehlt) { /* ↑↓ ohne Wirkung auf der Online-Karte */ }
+        else if (sa !== 'rennen') e.modus = e.modus === 'solo' ? 'zwei' : 'solo';
         else e.modus = e.modus === 'solo' ? 'zwei' : 'solo';
         this.einstellungenFix();
         this.aenderung();
@@ -371,6 +374,7 @@
     }
 
     weiter() {
+      if (SCHRITTE[this.schritt].id === 'modus' && this.onlineGewaehlt) { this.onlineOeffnen(); return; }   // W5
       if (this.schritt < SCHRITTE.length - 1) { this.schritt++; this.fokus = 0; this.zeichnen(); return; }
       const z = this.zeilen();
       if (z[this.fokus] === 'start') this.starten();
@@ -387,6 +391,8 @@
     /** Runde 6 (W3-F): Modus-Karte wählen: 'solo'/'zwei' = Einzelrennen, 'pokal'/'elimination' = Spielart (Spielerzahl bleibt). */
     modusKarte(k) {
       const e = this.e;
+      this.onlineGewaehlt = k === 'online';     // W5: Online-Karte gewählt (Enter öffnet den Online-Bildschirm)
+      if (k === 'online') return;
       if (k === 'solo' || k === 'zwei') { e.modus = k; e.spielart = 'rennen'; }
       else if (k === 'pokal' || k === 'elimination') {
         e.spielart = k;
@@ -399,6 +405,7 @@
       const [art, p1, p2] = a.split(':');
       const e = this.e;
       if (art === 'garage') return this.garageOeffnen();      // Runde 6 (W3-G)
+      if (art === 'online') { this.onlineGewaehlt = true; return this.onlineOeffnen(); }   // W5
       if (art === 'schritt') { this.schritt = +p1; this.fokus = 0; }
       else if (art === 'weiter') return this.weiter();
       else if (art === 'zurueck') return this.zurueck();
@@ -482,9 +489,30 @@
     // ---------- Runde 6 (W3-G): Garage ----------
     /** Karte „🔧 Garage" unter den Modus-Karten (öffnet R.Garage.Bildschirm). */
     htmlGarageKarte() {
-      if (!R.Garage) return '';
+      if (!R.Garage) return R.Online ? `<div class="reihe garage-reihe">${this.htmlOnlineKarte()}</div>` : '';
       return `<div class="reihe garage-reihe"><div class="karte garage-karte" data-a="garage">` +
-        `<div class="emoji">🔧</div><div><div class="karten-name">Garage</div><div class="karten-sub">Münzen ausgeben: Farben, Motor, Reifen, Bremsen <kbd>G</kbd></div></div></div></div>`;
+        `<div class="emoji">🔧</div><div><div class="karten-name">Garage</div><div class="karten-sub">Münzen ausgeben: Farben, Motor, Reifen, Bremsen <kbd>G</kbd></div></div></div>` +
+        this.htmlOnlineKarte() + `</div>`;
+    }
+    /** W5: Karte „🌐 Online" (neben der Garage). Von der Festplatte (file://) ausgegraut mit Hinweis. */
+    htmlOnlineKarte() {
+      if (!R.Online) return '';
+      const geht = R.Online.verfuegbar();
+      const sub = geht ? 'Mit Freunden übers Internet: Raum + Code' : 'Online geht nur über ‚Mehrspieler starten‘ (Server)';
+      return `<div class="karte online-karte${geht ? '' : ' aus'}${this.onlineGewaehlt ? ' gewaehlt' : ''}" data-a="online" title="${sub}">` +
+        `<div class="emoji">🌐</div><div><div class="karten-name">Online</div><div class="karten-sub">${sub}</div></div></div>`;
+    }
+    /** W5: Online-Bildschirm öffnen (src/net/online.js); opt.code = Raumcode aus dem Link ?raum=. */
+    onlineOeffnen(opt) {
+      if (!R.Online || !R.Online.verfuegbar()) return;
+      if (!this.onlineUi) this.onlineUi = new R.Online.Bildschirm(this.spiel, this.wurzel.parentNode, () => {
+        this.onlineGewaehlt = false;
+        this.zeigen(0);
+      });
+      if (R.Audio && R.Audio.menueKlick) R.Audio.menueKlick();
+      this.sichtbar = false; this.wurzel.style.display = 'none';
+      if (R.AutoVorschau) R.AutoVorschau.stoppen();
+      this.onlineUi.oeffnen(opt);
     }
     /** Garage-Bildschirm öffnen; beim Schließen kommt das Menü (Modus-Schritt) zurück. */
     garageOeffnen() {
@@ -501,7 +529,7 @@
     htmlModus() {
       // Runde 6 (W3-F): 4 Karten – Einzelrennen allein / zu zweit, Pokal, „Letzter fliegt raus" (Pillen: allein/zu zweit, Pokal-Größe)
       const e = this.e, sa = e.spielart || 'rennen';
-      const gew = (id) => (id === 'solo' || id === 'zwei' ? sa === 'rennen' && e.modus === id : sa === id);
+      const gew = (id) => !this.onlineGewaehlt && (id === 'solo' || id === 'zwei' ? sa === 'rennen' && e.modus === id : sa === id);
       const k = (id, emoji, text, sub, extra) =>
         `<div class="karte gross modus-karte m-${id}${gew(id) ? ' gewaehlt' : ''}" data-a="modus:${id}">` +
         `<div class="emoji">${emoji}</div><div class="karten-name">${text}</div><div class="karten-sub">${sub}</div>${extra || ''}</div>`;

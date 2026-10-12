@@ -1,0 +1,95 @@
+# Mehrspieler-Protokoll (W5, Version 1)
+
+WebSocket unter **`/ws`** (gleiche Adresse wie das Spiel; `wss:` hinter HTTPS/Tailscale Funnel, `ws:` lokal).
+Jede Nachricht ist **ein JSON-Objekt** mit dem Typ in `t`. Gemeinsame Konstanten/Helfer: `src/net/protokoll.js`
+(`Rennspiel.Netz`, wird von Browser **und** Server geladen).
+
+Grenzen (Server): Nachricht ≤ 4 KB (sonst Trennung) · > 400 Nachrichten/s werden ignoriert, > 2000/s → Trennung ·
+höchstens 80 Verbindungen, 30 Räume, **6 Menschen je Raum**, 12 Autos (Menschen + Computer) ·
+Herzschlag: WebSocket-Ping alle 5 s, wer bis zum nächsten Ping nicht antwortet, wird getrennt.
+Kinder-Sicherheit: es gibt **keine** Freitext-Felder – Fahrer nur aus `config.fahrer`, Autos nur aus dem Katalog,
+Raumcode nur aus `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (ohne 0/O/1/I). Kein Chat. Der Server protokolliert nur
+Raumcodes und Zahlen (keine Namen, Adressen, Eingaben).
+
+## Raum-Zustände
+
+```
+lobby ──start (Host, alle bereit)──▶ laden ──alle „geladen“ (spät. 20 s)──▶ rennen ──alle Menschen im Ziel
+  ▲                                                                          │      (spät. 60 s nach dem 1.)
+  └──────────────── zurLobby (Host) ◀──────────── ergebnis ◀────────────────┘
+Host trennt/verlässt → Raum zu (alle Gäste: raumZu). Gast trennt im Rennen → sein Auto fährt als Computer weiter.
+```
+
+## Browser → Server
+
+| t | Felder | Wann / Wirkung |
+|---|---|---|
+| `hallo` | `v` | nach dem Verbinden; Antwort `hallo` |
+| `ping` | `z` (beliebige Zahl, kommt zurück) | 1×/s; Antwort `pong` → Ping-Anzeige 🌐 im HUD |
+| `raumErstellen` | `fahrer`, `auto`, `hilfe`, `einstellungen` | neuer Raum, Absender = Host (ist immer „bereit“) |
+| `raumBeitreten` | `code` (Groß/klein egal), `fahrer`, `auto`, `hilfe` | Fehler `unbekannt` / `voll` / `laeuft`; vergebener Fahrer → nächster freie |
+| `verlassen` | – | Raum verlassen (Host → Raum zu); Antwort `verlassen` |
+| `wahl` | `fahrer?`, `auto?`, `hilfe?` | nur Lobby/Ergebnis; Fahrer muss frei sein (`fahrerVergeben`) |
+| `bereit` | `an` (bool) | Gast bereit/nicht bereit |
+| `einstellungen` | `einstellungen` (Teilmenge, s. u.) | nur Host; Server prüft jeden Wert (unbekannt → Standard) |
+| `start` | – | nur Host, alle Gäste bereit (`nichtBereit`) → `start` an alle |
+| `geladen` | – | Browser hat die Szene gebaut; wenn alle da sind, läuft das Rennen (Countdown) |
+| `eingabe` | `n` (Folge-Nr, +1 je Schritt), `g` 0..100, `b` 0..100, `l` −100..100, `i:1` Item, `r:1` Reset | 60×/s im Rennen; ältere/doppelte `n` werden verworfen |
+| `zurLobby` | – | nur Host, im Zustand `ergebnis` |
+
+`einstellungen`: `streckeId`, `welt`, `variante`, `runden`, `gegner` (Computer, 0 … 12 − Menschen), `schwierigkeit`,
+`tempoKlasse`, `jahreszeit` (auch `zufall`), `wetter` (auch `zufall`), `windStaerke`, `tageszeit`,
+`kollisionen` (**Stufe 2**, bool, im Menü nicht angeboten; Standard `false` = Geister). `schaden` ist online immer `false`.
+
+Eingaben sind ganze Zahlen (`Netz.eingabeKodieren`), damit Server und Vorhersage im Browser **genau** mit
+denselben Werten rechnen (`wert / 100`). Der Server verarbeitet je Tick (1/60 s) eine Eingabe je Spieler aus einer
+Warteschlange (> 20 gepuffert → die ältesten werden verworfen, Item/Reset-Flanken bleiben erhalten); kommt
+300 ms nichts (Tab im Hintergrund), rollt das Auto ohne Gas.
+
+## Server → Browser
+
+| t | Felder |
+|---|---|
+| `hallo` | `v` (Protokoll-Version), `id` (zufällige Verbindungs-ID) |
+| `pong` | `z` (zurück), `k` (aktueller Tick) |
+| `raum` | `code`, `du` (eigene ID), `host` (bool) |
+| `lobby` | `code`, `zustand`, `du`, `spieler: [{ id, nr, fahrer, auto, hilfe, bereit, istHost }]`, `einstellungen`, `max` (6), `hinweis?`, `oeffentlich?` (Funnel-Adresse für Link/QR, wenn das Startskript sie kennt) |
+| `raumZu` | `grund` (`host`, `fehler`) – zurück ins Online-Menü mit Hinweis |
+| `start` | `du` (eigene Auto-Nummer), `einstellungen` (konkret: Wetter/Jahreszeit/Wind aufgelöst), `wetterSeed`, `teilnehmer: [{ nr, name, autoId, mensch, hilfe }]`, `countdown` (s) |
+| `zustand` | 20×/s, s. u. |
+| `ereignis` | `k` (Tick), `art`: `start` · `runde` (`nr`, `runde`, `zeit`) · `ziel` (`nr`, `platz`, `zeit`) · `meldung` (`text`, nur an den Betroffenen: Item, Anlauf, Falsch-herum …) · `reset` (`nr`) · `weg` (`nr`, `text`: Spieler hat das Rennen verlassen, Computer fährt weiter) |
+| `ergebnis` | `runden`, `zeilen: [{ platz, nr, name, mensch, weg, autoId, zeit (null = unterwegs), beste, runden }]` |
+| `fehler` | `grund` (`json`, `unbekannt`, `keinRaum`, `voll`, `laeuft`, `nurHost`, `nichtBereit`, `fahrerVergeben`, `ungueltig`, `intern`), `text` (für Kinder lesbar) |
+| `verlassen` | Bestätigung |
+
+### `zustand`
+
+```
+{ t:'zustand', k: Tick, rz: 'countdown'|'laeuft'|'fertig', cd: Countdown-Rest s, zt: Rennzeit s,
+  a: [ je Auto: [x, z, y, richtung, tempo, lenkung, flags, nicken, neigung, runde, platz, naechsterCheckpoint,
+                 fortschritt m, resetZaehler, (looping: [index, winkel, qEin])?] ],
+  pu?: { k: '1010' Turbo-Kugeln da, f: '11' Ölfässer da, o: [[x, z, richtung, alter, besitzer]] Ölflecken,
+         v: [je Auto [turbo s, vFaktor, bFaktor] | 0] },
+  ich?: { nr, v: [x, z, y, heading, vLaengs, vQuer, lenkung, drehImpuls, neigung, nicken, _querBeschl, _ueberBeschl],
+          ack: letzte verarbeitete Folge-Nr, idx, bi, bs (Bande-/Busch-Index), fk: [vMax-Faktor, Beschl.-Faktor],
+          gs: Gas-Sperre (Fehlstart), so: Sonderzustand (Looping/Flug/Rampe/Anlauf/Kleber → keine Vorhersage),
+          rh/fh: Reset-Hinweis/Falsch-herum, rs, rzn, bz, zz, zp: Rundenstart/-zeiten/Bestzeit/Zielzeit/-platz } }
+```
+`flags`: 1 bremst · 2 Turbo · 4 Schild · 8 hat Item · 16 im Ziel · 32 fliegt · 64 Schild platzt · 128 Mensch.
+`ich` bekommt jeder nur für sein eigenes Auto (vollständiger Fahrzeugzustand für den Neuabgleich).
+Schaden ist online aus, darum steht er nicht im Zustand.
+
+## Netzcode im Browser (src/net/)
+
+- **Eigener Wagen** (`vorhersage.js`): jeder Schritt wird lokal mit `vehicle.js` vorausgerechnet (Untergrund,
+  Fahrhilfe, Turbo-/Boost-Faktoren vom Server, Wetter, Bande, Pflanzen, Höhe). Kommt `ich`, wird der Server-Zustand
+  übernommen und alle Eingaben mit `n > ack` neu gerechnet; die Abweichung zur Anzeige klingt weich ab (~0,12 s),
+  > 3 m → harter Sprung. Sonderzustände (`so`) rechnet nur der Server, die Anzeige folgt ihm (50 ms Verzug).
+- **Andere Autos**: Interpolation 100 ms hinter der geschätzten Server-Zeit (`client.js` Uhr aus den Ticks),
+  nie über einen Reset hinweg (`resetZaehler`).
+- **Stufe 1 (Geister)**: Auto↔Auto-Kollisionen sind im Server aus (`Kollisionen.autoAuto` liefert nichts, solange
+  `sim.kollisionen` false ist); fremde Autos werden halbtransparent (0,6) gezeichnet.
+- **Stufe 2**: Raum-Einstellung `kollisionen: true` (nur per Nachricht, z. B. Konsole:
+  `Rennspiel.spiel.menue.onlineUi.verb.senden({t:'einstellungen', einstellungen:{kollisionen:true}})`).
+  Dann schiebt der Server die Autos auseinander; die Vorhersage kennt die anderen Autos nicht → Stöße kommen
+  beim eigenen Wagen erst mit dem nächsten Zustand an (Korrektur). Sinnvoll erst bei Ping < 100 ms.

@@ -98,7 +98,7 @@ E4 Online-Kollisionen: Start als „Geister" (durchfahren), Stufe 2 mit Kollisio
 W1 A1–A5 (Fahrgefühl/Kollisionen) + B4 (Welt Alles) + D3 (Start-Boost/Sterne)      → Version v7
 W2 C1–C6 (Dino) + B3 (Tag/Dämmerung/Nacht) + B2 (XL-Varianten)                       → v8
 W3 D1 Pokal + D2 Garage/Münzen (+ D5 Ölfalle, D7 Elimination)                        → v9
-W4 B1 Alpen mit Kreuzung                                                              → v10
+W4 B1 Alpen mit Kreuzung                                                              → v10 ✓ (12.10.)
 W5 E Mehrspieler (nach Vorab-Test)                                                    → v11
 
 ## Fragen zur Diskussion
@@ -124,3 +124,18 @@ Q7 Reihenfolge ok? Mehrspieler zuletzt, weil größter Umbau und Vorab-Test nöt
   überschreibbar (Cloud-Platzhalter) → neue Versionen immer in neue Ordner; Spiele/Autorennen bleibt v6-Stand,
   bis Sebastian den Ordner lokal lädt oder wir den Starter auf die neueste Version zeigen lassen.
 ## Zeitplan (Arbeitszeit): W1 ~3 h · W2 ~4–5 h · W3 ~3 h · W4 ~4 h · W5 ~8–10 h (2–3 Sitzungen)
+
+## W5 Mehrspieler – Feinplan (12.10.)
+W5-1 (Opus) Server: `server/server.js` (Node, nur `ws` als Abhängigkeit, lokal in server/node_modules mitgeliefert), liefert
+      den Spielordner per HTTP + WebSocket `/ws`; Räume mit 4-stelligem Code (Buchstaben ohne 0/O/1/I), max. 6, Host startet.
+      Rennen autoritativ im Server: dieselben Module (config, vehicle, collisions, spline, trackCatalog, trackBuilder-Höhen,
+      raceManager, driver) über tests/lade.js-ähnlichen Lader ohne DOM/Three. Tick 60 Hz, Zustand 20 Hz an alle (Position,
+      Richtung, Tempo, Runde, Rang, Schaden), Eingaben 60 Hz vom Browser (gas/bremse/lenkung/item als Bitmaske + Folge-Nr).
+W5-2 (Opus) Browser: neuer Modus „🌐 Online" im Menü (Host: Raum erstellen → Code + Link + QR; Gast: Code eingeben oder Link),
+      `src/net/client.js` (WebSocket, Vorhersage eigener Wagen, Interpolation andere, Geister-Modus Stufe 1), Rennen-Start/Ende
+      vom Server; alles Bestehende (lokal, Split-Screen) unverändert = Standard.
+W5-3 (Sonnet) Touch: `src/ui/touch.js` – Bildschirm-Tasten (Gas/Bremse rechts, Lenk-Hälften links, Item), nur bei Touch-Geräten
+      sichtbar, Querformat-Hinweis, Mobil-Qualität (pixelRatio 1, weniger Deko).
+W5-4 Tunnel + Handgriffe: `Mehrspieler starten.command` (startet Server auf Port 8443 + `tailscale funnel 8443`), Doku,
+      Test mit echtem Handy über Mobilfunk; Fallback `cloudflared tunnel --url http://localhost:8443`.
+Vorab-Test K (Sebastian auf dem Mac mini, 5 Minuten): siehe Handgriffe in VERLAUF/Chat – prüft Funnel + WebSocket, bevor W5-4 gebaut wird.

@@ -114,6 +114,28 @@ with sync_playwright() as p:
         pruefe(f'W3-F: 4 Modus-Karten {vw}×{vh} im Bild, ohne Überlappung', m4['ids'] == ['modus:solo', 'modus:zwei', 'modus:pokal', 'modus:elimination']
                and m4['innen'] and m4['frei'] and not m4['textUeber'], m4)
     page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
+    # W5: 5. Karte „🌐 Online“ – von der Festplatte (file://) ausgegraut mit Hinweis, Pfeiltasten wandern darüber, Enter tut nichts
+    ON = """(() => { const k = document.querySelector('.karte.online-karte'); if (!k) return null; const r = k.getBoundingClientRect(), m = document.querySelector('.m-inhalt');
+      return { aus: k.classList.contains('aus'), text: k.textContent, gew: k.classList.contains('gewaehlt'), scroll: m.scrollHeight <= m.clientHeight + 1,
+        innen: r.left >= 0 && r.right <= innerWidth && r.bottom <= document.querySelector('.m-fuss').getBoundingClientRect().top + 2 }; })()"""
+    for vw, vh in ((1280, 800), (1440, 900)):
+        page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(300)
+        o = page.evaluate(ON)
+        pruefe(f'W5: Online-Karte {vw}×{vh} von file:// ausgegraut mit Hinweis „Mehrspieler starten“, Modus-Schritt ohne Scrollen',
+               o is not None and o['aus'] and 'Mehrspieler starten' in o['text'] and o['scroll'] and o['innen'], o)
+    page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
+    taste('ArrowRight', 4)
+    o = page.evaluate(ON)
+    pruefe('W5: Pfeiltasten → nach „Letzter fliegt raus“ die Online-Karte (gewählt, nur ein Cursor)', o['gew'] and page.evaluate('Rennspiel.spiel.menue.onlineGewaehlt')
+           and page.evaluate("document.querySelectorAll('.karte.gewaehlt').length") == 1, o)
+    snap('menu_1c_modus_online_aus.png')
+    taste('Enter'); page.wait_for_timeout(200)
+    pruefe('W5: Enter auf der ausgegrauten Online-Karte bleibt im Modus-Schritt (kein Online-Bildschirm)',
+           page.evaluate('Rennspiel.spiel.menue.schritt') == 0 and page.is_visible('#menue') and not page.is_visible('#online'))
+    taste('ArrowRight')
+    pruefe('W5: → von der Online-Karte springt zurück auf „Allein“ (Modus solo, Spielart Rennen)', not page.evaluate('Rennspiel.spiel.menue.onlineGewaehlt') and
+           page.evaluate("document.querySelector('[data-a=\"modus:solo\"]').classList.contains('gewaehlt')") and
+           page.evaluate("[Rennspiel.spiel.einstellungen.modus, Rennspiel.spiel.einstellungen.spielart].join()") == 'solo,rennen')
     # b) Tastatur: Modus zu zweit
     taste('ArrowRight'); snap('menu_1b_modus_zwei.png')
     pruefe('Modus zu zweit', page.evaluate('Rennspiel.spiel.einstellungen.modus') == 'zwei')

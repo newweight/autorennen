@@ -115,7 +115,8 @@
       this.kameras = [];
       this.huds = [];
       this.laeuft = false;
-      this.zustand = 'menue';  // 'menue' | 'rennen' | 'ergebnis' | 'pokal' (W3-F: Zwischenstand/Siegerehrung)  (Pause = this.pausiert im Zustand 'rennen')
+      this.zustand = 'menue';  // 'menue' | 'rennen' | 'ergebnis' | 'pokal' (W3-F: Zwischenstand/Siegerehrung) | 'online' (W5)  (Pause = this.pausiert im Zustand 'rennen')
+      this.online = null;      // W5: laufendes Online-Rennen (R.Online.Bildschirm) – nur im Zustand 'online'
       this.pokal = null;       // Runde 6 (W3-F): laufende Pokal-Serie (R.Pokal.Serie) oder null
       this.puffs = [];         // Runde 6 (W3-F): „Puff"-Wolken ausgeschiedener Autos
       this.pausiert = false;
@@ -153,6 +154,7 @@
       if (code === T.debug) { if (!wiederholt) this.debugEl.classList.toggle('an'); return; }
       if (code === T.ton) { if (!wiederholt && R.Audio) { R.Audio.schalten(); if (this.zustand === 'menue') this.menue.zeichnen(); } return; }
       if (this.zustand === 'menue') { this.menue.taste(code); return; }
+      if (this.zustand === 'online') { if (this.online) this.online.rennTaste(code, wiederholt); return; }   // W5: Online-Rennen (src/net/online.js)
       if (wiederholt) return;
       if (this.pokalAnzeige && this.pokalAnzeige.offen()) { this.pokalAnzeige.taste(code); return; }   // W3-F: Rückfrage/Zwischenstand
       if (this.zustand === 'ergebnis') { this.ergebnisAnzeige.taste(code); return; }
@@ -168,6 +170,7 @@
 
     /** Runde 6 (W3-H): Item des Spielers nr einsetzen (Öl 8 m hinter das Auto legen). */
     itemEinsetzen(nr) {
+      if (this.zustand === 'online') { if (this.online) this.online.item(); return; }   // W5: online setzt der Server das Item ein
       const i = this.fahrzeuge.findIndex(f => f.istSpieler && f.spielerNr === nr);
       if (i < 0 || !this.pickups || !this.rennen || !this.rennen.gasErlaubt) return;
       if (this.pickups.oelLegen(i)) { this._meldung(i, 'Öl gelegt! 🛢️', 1000); this.pickups.ton('oelLegen'); }
@@ -230,7 +233,7 @@
      */
     _qualitaetAnpassen(dt) {
       const g = R.config.grafik, q = this.qualitaet;
-      if (!g.adaptiv || this.zustand !== 'rennen' || this.pausiert || !(dt > 0) || dt > 0.25) { q.unten = q.oben = 0; return; }
+      if (!g.adaptiv || (this.zustand !== 'rennen' && this.zustand !== 'online') || this.pausiert || !(dt > 0) || dt > 0.25) { q.unten = q.oben = 0; return; }
       q.fpsGlatt += (1 / dt - q.fpsGlatt) * Math.min(1, dt * 4);     // ≈ 0,25 s Glättung
       const maxStufe = Math.max(0, g.qualitaetsStufen.length - 1 - this._startStufe()) + 1;   // + eine reine Nebel-Stufe
       if (q.fpsGlatt < g.fpsUnten) { q.unten += dt; q.oben = 0; }
@@ -885,7 +888,8 @@
     /** Motorgeräusche, Countdown-Pieptöne, Bremsquietschen, Bande – jeden Frame. */
     tonAktualisieren(dt) {
       const A = R.Audio, r = this.rennen, d = this._tonD || (this._tonD = {});
-      const stumm = this.zustand !== 'rennen' || this.pausiert;
+      // W5: online nur während des Rennens hörbar (Ergebnis-Tafel: still)
+      const stumm = !(this.zustand === 'rennen' || (this.zustand === 'online' && this.online && this.online.phase === 'rennen')) || this.pausiert;
       if (stumm !== this._tonStumm) { this._tonStumm = stumm; A.motorStumm(stumm); }
       if (this.polizei) this.polizei.ton(stumm);   // Runde 5b: Sirene (Pause/Menü: aus)
       if (!r || stumm) return;
@@ -1093,6 +1097,8 @@
      *  11. Höhe, Feststecken, Rennen.schritt (Runden, Checkpoints, Plätze).
      */
     physikSchritt(dt) {
+      // W5: Online-Rennen – Server rechnet, hier nur Eingabe senden, eigenen Wagen vorhersagen, andere interpolieren
+      if (this.zustand === 'online' && this.online) { this.online.physikSchritt(dt); return; }
       const strecke = this.strecke, rennen = this.rennen;
       const countdown = !!rennen && !rennen.gasErlaubt;
       const schaden = this.schaden && this.schaden.an ? this.schaden : null;
@@ -1490,6 +1496,7 @@
 
     /** Reset-Taste von Spieler nr (0 = R, 1 = T). */
     spielerZuruecksetzen(nr) {
+      if (this.zustand === 'online') { if (this.online) this.online.reset(); return; }   // W5: online setzt der Server zurück
       const i = this.fahrzeuge.findIndex(f => f.istSpieler && f.spielerNr === nr);
       if (i >= 0 && this.schaden && this.schaden.gesperrt(i)) return;   // liegengeblieben: der Abschleppwagen kommt gleich
       if (i >= 0 && this.fahrzeuge[i].kleber && R.Kleber.gesperrt(this.fahrzeuge[i].kleber)) return;   // Runde 5: festgeklebt

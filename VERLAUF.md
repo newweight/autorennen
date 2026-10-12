@@ -645,3 +645,65 @@
   → Version v10 (Alpen + Kreuzung). Sicherungen: Autorennen-Sicherung/w4j_vorher|nachher.
   Offen für später: Fantasie-Acht als Variante „klassisch (ohne Kreuzung)" falls gewünscht; Minimap-Kreuz unter dem eigenen Auto;
   unsichtbare Bande 23 m hinter der Kreuzung beim Abbiegen.
+- 12.10. Agent W5-1/2 (Opus) – Mehrspieler Server + Online-Modus (Geister) – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w5_vorher,
+  nachher: …/w5a_nachher. (Zweiter Anlauf: der erste Lauf hatte Server, Simulation, Netzcode, Menü und Tests schon gebaut, aber ohne
+  Doku/Startskripte/Node – geprüft, weitergeführt, Fehler behoben.)
+  Neue Dateien: server/server.js (HTTP nur Autorennen.html + src/ + vendor/, kein Listing/`..`/Dotfiles, nur GET/HEAD; WebSocket /ws, Räume
+  mit 4-Zeichen-Code ohne 0/O/1/I, max. 6 Menschen/30 Räume, lobby → laden → rennen → ergebnis, Herzschlag 5 s, 4-KB-Grenze, Nachrichten-
+  bremse; Spielschleife 60 Hz mit Zeitakkumulator, Zustand 20 Hz; Eingabe-Warteschlange je Spieler mit Folge-Nr/ack, überzählige Eingaben
+  werden nach 1 s Stau verworfen, > 45 sofort; `--oeffentlich` = Funnel-Adresse für Link/QR), server/simulation.js (vm-Lader wie tests/lade.js
+  + three.min.js + document-Stub, lädt auch src/main.js und rechnet mit Spiel.prototype.physikSchritt auf einem kopflosen Spiel → online
+  dieselben Regeln wie lokal inkl. Loopings, Schanzen, Anlauf, Kleber, Dynamik, Turbo/Schild/Ölfalle, Start-Boost, KI aus driver.js;
+  Geister = Kollisionen.autoAuto/loopingAbstand aus, solange kollisionen false; Schaden/Polizei/Münzen online aus; Gast weg → KI, Host weg →
+  Raum zu; Tasten-Hinweise für Spieler 2 (T/E) werden online zu R/Leertaste), server/PROTOKOLL.md, server/README.md, server/package.json +
+  node_modules/ws, server/bin/node-macos-arm64 (Node v24.21.0 LTS, 122 MB, offizielle signierte Binärdatei „Developer ID Application:
+  Node.js Foundation (HX7739G8FX)“ aus dem npm-Paket node-bin-darwin-arm64 – nodejs.org selbst war aus dem Container gesperrt; SHA-256
+  e4b5a3af…e79b, Lizenz NODE-LICENSE.txt), src/net/protokoll.js (R.Netz), client.js (Verbindung, Ping, Server-Uhr), vorhersage.js
+  (Vorhersage + Neuabgleich mit Replay ab ack, weich τ 0,12 s, > 3 m hart; Interpolationspuffer), qr.js (eigener QR-Encoder nach Nayuki,
+  MIT), online.js (Start/Code/Lobby/Ergebnis, Online-Rennen mit den bestehenden Szene/Auto/Kamera/HUD-Teilen; Stile per <style>, styles.css
+  unverändert), `Mehrspieler starten.command`, `Mehrspieler im Internet starten.command` (+ Funnel, beim Beenden `funnel --https=8443 off`).
+  Geändert: main.js (Zustand 'online': taste/item/reset/physikSchritt/Ton/adaptive Qualität leiten an spiel.online weiter, sonst bitgleich),
+  menu.js (5. Karte „🌐 Online“, von file:// ausgegraut), Autorennen.html (5 Script-Tags vor main.js), tests/menu_test.py (+5 Prüfungen).
+  Entscheidungen: Server rechnet mit dem echten main.js-Physikschritt (kein Nachbau → keine Abweichungen); Eingaben als ganze Zahlen
+  (0..100) → Vorhersage rechnet bitgleich; Link/QR nehmen die öffentliche Adresse, wenn der Host über localhost spielt; Stufe 2
+  (`kollisionen: true`) nur per Nachricht, Browser zeichnet dann deckend.
+  Tests: test_netz 44/44 (A Vorhersage = Server auf 6 Strecken/Welten/Wettern: 96,8–100 % der Abgleiche < 1 mm, Abweichungen nur an
+  Hindernissen/Dinos; B Geister/Stufe 2; C HTTP-Sperren 18 böse Pfade → 404; D kaputte Nachrichten; E 2 Clients Raum/Lobby/Start/20 Hz/ack/
+  Checkpoints/Ziel/Ergebnis; F Gast trennt → KI; G Host trennt, max. 6; H Ping localhost 0,03 ms; J Echtzeit mit 20–80 ms Zittern 15 s:
+  0 harte Korrekturen, Mittel 3 cm, max 0,95 m; I öffentliche Adresse), online_test 23/23 (2 Browser, QR per OpenCV gelesen = Link,
+  ?raum=, Code-Eingabe, Geister 0,6, 🌐-Ping, 20 s fahren, Positionen nach dem Anhalten 0,000/0,000 m gleich, Runde/Ziel, Ergebnis, Lobby,
+  Host geht; Bilder tests/out/online/ angesehen), menu_test 175/175 (170 + 5 W5), alle 22 tests/test_*.js nacheinander grün
+  (test_ki 72 s, test_welten_ki 707 s), rennen_test wiese OK (3 KI × 3 Runden im Ziel, keine JS-Fehler). Latenz lokal: Ping im Browser 1–6 ms (unter Last bis 25 ms).
+  Schwächen: im headless-Test (2 Software-WebGL-Seiten, 4–8 fps) 15–21 harte Korrekturen in 20 s (Eingaben kommen in Schüben; bei echten
+  30–60 fps nicht zu erwarten, siehe J); Sonderzustände (Looping, Rampe, Anlauf, Kleber) sind nicht vorhergesagt → eigener Wagen folgt
+  dort 50 ms hinter dem Server, beim Verlassen kurzer weicher Ruck; Hindernis-/Dino-Stöße beim eigenen Wagen erst mit der Korrektur;
+  online keine Pause; Wer stehen bleibt, ohne Gas zu geben, blockiert niemanden (Geister), aber das Rennen endet erst 60 s nach dem
+  ersten Menschen im Ziel. Die 122-MB-Node-Datei vergrößert den Spielordner (iCloud).
+  Offen: echter Handy-Test über Mobilfunk (W5-4, mit Touch aus W5-3), Stufe 2 (Kollisionen: andere Autos in der Vorhersage,
+  Menü-Schalter), Ping-abhängige Hinweise.
+- 12.10. Agent W5-3 (Sonnet) – Touch-Steuerung – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w5t_vorher, nachher: w5t_nachher.
+  Neu: src/ui/touch.js (Add-on, tut ohne Touch nichts: kein DOM, kein Haken; `?touch=0/1` überschreibt), tests/touch_test.py.
+  Geändert: Autorennen.html (Script-Tag nach input.js, viewport-Meta mit user-scalable=no + viewport-fit=cover, Web-App-Metas), ANLEITUNG.md
+  (Abschnitt „Auf Handy/Tablet spielen“), ERWEITERN.md (touch.js). input.js, main.js, menu.js, online.js, styles.css UNVERÄNDERT.
+  Umsetzung: Input.prototype.steuerung(0) eingehüllt (Maximum Tastatur/Touch; Spieler 1 bleibt Tastatur) → client/online lesen es unverändert;
+  Einzeltasten als echte KeyboardEvents mit den codes aus config.tasten (lokal main.taste, online rennTaste); Pointer Events mit
+  pointerId-Map, Wischen ◀→▶ schaltet um; Tasten ≥ 64 px (--tb = clamp(64px, 24vh, 124px)), HUD wird auf Touch verschoben (Karte rechts, Tacho links
+  über den Daumen); Neigung (📱, iOS-requestPermission per Click) optional; Menü: 2. Tippen auf gewählte Karte = weiter (nur allein), große
+  Zurück/Weiter-Leiste (vorhandene .m-nav per CSS) + „🏁 Los!“ im letzten Schritt, scrollbarer Inhalt, kleinere Schrift; Raumcode über die
+  vorhandenen Bildschirm-Tasten (größer); _startStufe +1 (pixelRatio 1,25); Hochformat-Overlay; ⛶ nur mit Fullscreen-API; Wake Lock im Rennen.
+  Abweichung von der Aufgabe: online zeigt die Pause-Taste als 🚪 (öffnet „Rennen verlassen?“) statt sie auszublenden, sonst käme ein Gast nicht aus dem Rennen.
+  Tests: touch_test 76/76 (Desktop ohne Touch: nichts im DOM, Steuerung/Startstufe unverändert; iPhone 13 + iPad quer: Menü nur per Tippen bis ins
+  Rennen, Tasten ≥ 64 px und ohne HUD-Überlappung, Multi-Touch Gas+Links = {gas:1, lenkung:-1} per CDP-Touch, Wischen, Loslassen, Gas fährt,
+  Item/Reset/Kamera → wurdeGedrueckt, Pause, Neigungs-Mathe, Hochformat-Hinweis; Bilder tests/out/touch/ angesehen und Layout nachgebessert),
+  menu_test ok, online_test 23/23, test_netz 44/44, rennen_test wiese ok, test_physik, test_ki ok.
+  Schwächen: nur Chromium-Emulation, kein echtes Gerät (iOS-Safari: Neigungs-Erlaubnis, Vollbild, Wake Lock, Safe-Area ungetestet; Neigung ohne Kalibrierung,
+  Vorzeichen nur rechnerisch geprüft); Modus-Karte springt beim ersten Tippen sofort weiter (vorhandenes Maus-Verhalten); Menü auf dem Handy
+  nur scrollbar statt neu gestaltet (Garage/Pokal/Online-Lobby nicht einzeln auf Touch-Größe geprüft); Item-Taste online immer blass (⭐), Wirkung entscheidet der
+  Server; Zu-zweit-Modus am Tablet: Touch steuert nur Spieler 1; Raumcode ohne native Tastatur (Bildschirm-Tasten des Spiels, kein <input>).
+- 12.10. W5 Stufe 1 abgeschlossen (Fable-Prüfung): Vorab-Test Funnel auf dem Mac mini bestanden (Port 443 durch NWES-serve belegt →
+  `Tailscale funnel --https=8443 8443`, öffentlich https://mac-mini-von-sebastian.tail39c1c2.ts.net:8443/; Tailscale-CLI nur unter
+  /Applications/Tailscale.app/Contents/MacOS/Tailscale; node auf dem mini nicht installiert → server/bin/node-macos-arm64 mitgeliefert).
+  Server + Online-Modus (Geister) W5-1/2, Touch W5-3. Geprüft: test_netz 44/44, online_test 23/23, menu_test 175 OK, touch_test 76/76
+  (Agent), test_strecke/test_kollisionen grün, Bilder Lobby/QR + iPhone-Rennen angesehen. → Version v11 (Online + Touch).
+  Offen W5-4: echter Handy-Test über Funnel (wss auf 8443), Stufe 2 Kollisionen online, iOS-Besonderheiten (Neigung, Vollbild).
+- 12.10. Übergabe geschrieben: UEBERGABE_2026-10-12.md (offenes Problem: Server auf dem mini startet nicht, localhost:8443 abgelehnt).

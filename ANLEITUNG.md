@@ -103,6 +103,40 @@ Der Modus-Schritt hat vier Karten: Allein, Zu zweit, **🏆 Pokal** und **🚪 L
 ### Ölfalle (Welt Verrückt und Alles)
 **Ölfässer** (schwarz mit gelben Ringen) stehen auf der Gegenseite hinter den Schutzschild-Kugeln und kommen nach 10 s wieder. Einsammeln gibt ein Item (🛢️ im HUD). Mit **Space** (Spieler 1) bzw. **E** (Spieler 2) legst du 8 m hinter dem Auto einen **Ölfleck** (20 s, höchstens 6 gleichzeitig). Wer hineinfährt, schlingert wie auf Öl („Öl!“). Das eigene Auto ist 1 s immun, ein Schutzschild fängt den Fleck ab. Die Computer-Gegner sammeln Fässer und legen auch selbst Öl, weichen den Flecken aber nicht aus.
 
+## 🌐 Online spielen (mit Freunden übers Internet)
+Online geht nur über den **Mehrspieler-Server** auf dem Mac mini – von der Festplatte (Doppelklick auf Autorennen.html)
+ist die Karte „🌐 Online“ grau („Online geht nur über ‚Mehrspieler starten‘“), alles andere läuft wie immer.
+1. **Host (Papa) startet den Server:** Doppelklick auf **`Mehrspieler im Internet starten.command`** (Server + öffentlicher
+   Zugang über Tailscale Funnel). Nur im Heimnetz/zum Ausprobieren: **`Mehrspieler starten.command`**. Das Spiel öffnet sich in Chrome.
+2. Menü → Modus-Schritt → Karte **🌐 Online** (mit → hinter „Letzter fliegt raus“) → **🏠 Raum erstellen**.
+3. Die **Lobby** zeigt den **Raumcode** (4 Zeichen, groß), den **Link** und einen **QR-Code**. Gäste
+   - scannen den QR-Code mit dem Handy, **oder** öffnen den Link (z. B. per Nachricht geschickt), **oder**
+   - öffnen die Adresse **https://mac-mini-von-sebastian.tail39c1c2.ts.net:8443/**, wählen 🌐 Online → **🔑 Raum beitreten** und tippen den Code ein
+     (nur Buchstaben/Ziffern, es gibt kein 0, O, 1 oder I).
+4. In der Lobby wählt jeder **Fahrer, Auto und Fahrhilfe** (↑↓ Zeile, ←→ ändern oder anklicken; ein Fahrer nur einmal je Raum)
+   und drückt **Leertaste = ✋ Bereit**. Der Host stellt **Strecke, Welt, Runden, Computer-Gegner, Stärke, Tempo, Jahreszeit, Wetter,
+   Tageszeit** ein und startet mit **Enter**, sobald alle bereit sind. Höchstens **6 Spieler**, dazu Computer-Gegner (zusammen bis 12 Autos).
+5. Im Rennen fährt jeder mit seiner eigenen Ansicht (Pfeile **oder** WASD, Leertaste/E = Item, R = zurück auf die Strecke,
+   C = Kamera). Oben links zeigt **🌐 … ms** die Verbindung (unter 100 ms ist gut).
+- **Geister:** Online fahren die Autos **durcheinander durch** (keine Zusammenstöße), die anderen Autos sind halb durchsichtig.
+  Bande, Bäume, Hindernisse, Turbo, Schild und Ölfalle gelten wie immer. **Schaden ist online aus**, Polizei und Münzen auch.
+- **Esc** im Rennen fragt „Rennen verlassen?“ – online gibt es **keine Pause**, das Rennen läuft weiter. Wer geht, dessen Auto
+  fährt als Computer zu Ende. Geht der **Host**, ist der Raum zu und alle kommen mit einem Hinweis zurück ins Online-Menü.
+- Nach dem Ziel kommt die **Ergebnistafel** für alle (spätestens 60 s nach dem ersten Menschen im Ziel); der Host geht mit **Enter**
+  zurück in die Lobby für das nächste Rennen.
+- **Sicher für Kinder:** kein Chat, keine Namen eintippen (nur die Fahrerliste), der Raum verschwindet mit dem Host, der Server
+  merkt sich nichts. **Ende:** im Terminal-Fenster Ctrl+C oder Fenster schließen – damit ist auch der Internet-Zugang wieder zu.
+- Technik und Probleme: `server/README.md`.
+
+## 📱 Auf Handy/Tablet spielen
+Gäste öffnen den Einladungs-Link (oder den QR-Code aus der Online-Lobby) im Browser – am besten **quer** halten (im Hochformat steht „Bitte Handy quer halten 🔄“).
+- **Rennen:** links ◀ ▶ lenken (gedrückt halten), rechts ▲ Gas und ▼ Bremse/Rückwärts. Mehrere Finger gehen gleichzeitig (Gas + Lenken); mit dem Finger von ◀ nach ▶ wischen schaltet um.
+  Unten in der Mitte: ⭐/🛢️ Item einsetzen, ↺ zurück auf die Strecke, 📷 Kamera. Oben: ⏸ Pause (online 🚪 „Rennen verlassen?“; online gibt es keine Pause) und 📱 **Neigen** (Handy wie ein Lenkrad drehen; nur wenn du es antippst, auf dem iPhone kommt eine Rückfrage).
+- **Menü:** Karte antippen = wählen, **dieselbe Karte nochmal antippen = weiter** (allein). Unten stehen große Tasten „◀ Zurück“ / „Weiter ▶“, im letzten Schritt „🏁 Los!“. Der Raumcode wird mit den Tasten auf dem Bildschirm eingegeben.
+- **⛶ Vollbild** oben rechts im Menü (auf dem iPhone gibt es das nicht – dort hilft „Zum Home-Bildschirm“, dann läuft die Seite ohne Leiste).
+- Auf dem Handy ist die Grafik eine Stufe niedriger (flüssiger, Akku schont). Der Bildschirm bleibt im Rennen an.
+- Tastatur und Maus funktionieren weiter (auch am Touch-Laptop). `?touch=0` an die Adresse hängen schaltet die Bildschirm-Tasten ab, `?touch=1` erzwingt sie.
+
 ## Tempo
 Neu: Schritt 5 hat die **Tempo-Klasse**. **Normal** (Standard) ist gemütlich: ca. **154–196 km/h** Höchsttempo (Formel-Renner 196), mit weniger Beschleunigung und Bremse. **Schnell** nutzt die vollen Katalogwerte unten.
 In **Schnell** fahren die Autos **220 bis 270 km/h** (Multivan 220 … Porsche 270, Formel-Renner 280). Runden dauern auf den langen Strecken ca. 2 Minuten (Fantasie kürzer). Bergauf bremst, bergab beschleunigt das Auto.

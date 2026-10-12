@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8">
 <title>Jonas Hot Steering Wheel</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0e183a">
 <link rel="stylesheet" href="src/ui/styles.css">
 </head>
 <body>
@@ -20,6 +23,8 @@
 <script src="src/config.js"></script>
 <script src="src/audio/engine.js"></script>
 <script src="src/input.js"></script>
+<!-- W5-3: Touch-Steuerung (tut auf Geräten ohne Touch nichts) -->
+<script src="src/ui/touch.js"></script>
 <script src="src/physics/vehicle.js"></script>
 <script src="src/physics/collisions.js"></script>
 <script src="src/physics/schaden.js"></script>
@@ -48,6 +53,12 @@
 <script src="src/ui/autoVorschau.js"></script>
 <script src="src/ui/garage.js"></script>
 <script src="src/ui/menu.js"></script>
+<!-- W5 Mehrspieler (online nur über server/server.js; von der Festplatte bleibt alles wie bisher) -->
+<script src="src/net/protokoll.js"></script>
+<script src="src/net/qr.js"></script>
+<script src="src/net/client.js"></script>
+<script src="src/net/vorhersage.js"></script>
+<script src="src/net/online.js"></script>
 <script src="src/main.js"></script>
 </body>
 </html>

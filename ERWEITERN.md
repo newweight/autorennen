@@ -33,6 +33,13 @@ src/race/raceManager.js  Countdown, Checkpoints, Runden, Platzierung
 src/render/cameras.js    Verfolger-/Cockpit-/Weitkamera, Split-Screen in main.js
 src/ui/menu.js, hud.js, styles.css   Menü, HUD, Minimap, Ergebnis, Pause
 src/main.js              Spielzustände, Schleife, Szenenaufbau
+src/ui/touch.js          W5-3: Touch-Steuerung Handy/Tablet (R.Touch), siehe „W5-3: Touch“ unten
+src/net/protokoll.js     W5: gemeinsame Netz-Konstanten/Helfer (R.Netz) für Browser UND Server (Raumcode, Eingabe-Kodierung, Fahrzeugfelder)
+src/net/client.js        W5: WebSocket-Verbindung /ws, Ping, Server-Uhr (R.NetzVerbindung)
+src/net/vorhersage.js    W5: Vorhersage eigener Wagen + Neuabgleich (R.NetzVorhersage), Interpolationspuffer (R.NetzPuffer)
+src/net/qr.js            W5: eigener QR-Encoder (Byte-Modus, ECC M, SVG) ohne Abhängigkeit (R.QR)
+src/net/online.js        W5: Online-Bildschirme (Start/Code/Lobby/Ergebnis) + Online-Rennen im Zustand 'online' (R.Online)
+server/                  W5: Mehrspieler-Server (Node ≥ 18, nur `ws`): server.js, simulation.js, PROTOKOLL.md, README.md, bin/node-macos-arm64
 tests/                   node tests/test_*.js | zaun_test.js | python3 tests/*_test.py (Liste siehe „Testdateien“ unten)
 ```
 
@@ -168,9 +175,65 @@ Die Fantasie-Strecke ist seit W4-J eine **Acht** (Bauplan `tests/bauplan/fantasi
 - Neue Kreuzung woanders: Strecke als Acht (Gesamtdrehung 0°, `G?` schließt die Lage) im Bauplan, `kreuzungen` eintragen, Listen ≥ 35 m
   weg; `node tests/test_strecke.js <id>` prüft Winkel 70–110°, |Δy| < 1 m, 40-m-Ausnahme nur an der Kreuzung, Index-Kontinuität, Masten.
 
+## W5: Mehrspieler online (Server, Netzcode, Zustand 'online')
+**Start**: `Mehrspieler starten.command` / `Mehrspieler im Internet starten.command` (+ Tailscale Funnel) → `server/server.js --port 8443
+--oeffentlich <https-Adresse>`. Node aus dem PATH (≥ 18), sonst `server/bin/node-macos-arm64` (Node 24 LTS). Handgriffe: `server/README.md`,
+Nachrichten: **`server/PROTOKOLL.md`**.
+- **server/server.js**: HTTP nur für `Autorennen.html`, `src/`, `vendor/` (kein Listing, kein `..`/`\`/Dotfiles, nur GET/HEAD, MIME-Liste),
+  WebSocket nur unter `/ws` (`maxPayload` 4 KB, Nachrichtenbremse, Herzschlag 5 s). Räume (`raeume` Map, Code `Netz.CODE_ZEICHEN` ohne 0/O/1/I,
+  max. 6 Menschen, 30 Räume), Zustände `lobby → laden → rennen → ergebnis`. Spielschleife: ein `setInterval(4 ms)` für alle Räume mit
+  Zeitakkumulator, fester Schritt 1/60 s (höchstens 6 Schritte nachholen), je Tick pro Spieler eine Eingabe aus der Warteschlange
+  (`ack` = letzte verarbeitete Folge-Nr), Zustand alle 3 Ticks (20 Hz; gemeinsamer Teil einmal serialisiert + `ich` je Empfänger).
+  `starten({ port, host, leise, tempo, ladenMaxMs, oeffentlich })` ist für Tests exportiert (`tempo` = Zeitraffer nur für Tests).
+- **server/simulation.js**: lädt die Spiel-Dateien wie `tests/lade.js` in einen vm-Kontext (dazu `three.min.js` für die Deko-Kollider und ein
+  `document`-Stub für Canvas-Texturen; kein WebGL) – **inkl. `src/main.js`**: Der Server rechnet mit `Spiel.prototype.physikSchritt` auf einem
+  kopflosen Spiel-Objekt (keine Meshes/Kameras/Ton) – also exakt dieselben Regeln wie lokal: vehicle, collisions (Bande, Pflanzen,
+  Hindernisse, Wracks, Laternen nachts), Loopings, Schanzen, Anlauf, Kleber, Dynamik (Bälle/Dinos/Stroh), Pickups (Turbo/Schild/Ölfalle),
+  Start-Boost, raceManager, driver.js (KI). Online aus: Schaden, Polizei, Münzen, Garage-Upgrades. `hud.meldung` wird zu `ereignis`-Meldungen.
+  Wetter/Wind-Zufall wird im Server mit Seed aufgelöst und konkret an alle geschickt. Gast weg → `zuKI(nr)` (neuer `R.Driver`);
+  keine Menschen mehr → Rennende; 60 s nach dem ersten Menschen im Ziel → Ergebnis.
+- **Geister / Stufe 2**: `laden()` hüllt `Kollisionen.autoAuto` und `loopingAbstand` ein – solange die laufende Simulation `kollisionen: false`
+  hat, liefern sie nichts. **Stufe 2 einschalten**: Raum-Einstellung `kollisionen: true` (Host schickt `{t:'einstellungen', einstellungen:
+  {kollisionen:true}}`; `einstellungenPruefen` lässt nur `true` durch). Der Browser zeichnet dann die anderen Autos deckend und die Lobby zeigt
+  „💥 Rempeln an“. Für ein Menü-Angebot: Zeile in `online.js zeilen()/werte()` ergänzen (bisher bewusst nicht angeboten). Offen für Stufe 2:
+  Die Vorhersage kennt die anderen Autos nicht (Stoß kommt erst mit der Korrektur), sinnvoll ab Ping < 100 ms.
+- **Browser** (`src/net/online.js`): `menu.js` hat eine 5. Modus-Karte `online` (`onlineGewaehlt`, `htmlOnlineKarte`, `onlineOeffnen`; von
+  `file://` ausgegraut via `R.Online.verfuegbar()`). `R.Online.Bildschirm` zeigt Start/Code-Eingabe (fängt Buchstaben vor den Spieltasten ab)/
+  Lobby (Code, Link + QR aus `einladungsBasis`: bei localhost/Heimnetz-IP die `oeffentlich`-Adresse des Servers)/Ergebnis. `?raum=ABCD` öffnet
+  beim Laden direkt die Code-Eingabe. Beim `start` baut `rennenAufbauen` die Szene mit den **bestehenden** main.js-Teilen
+  (`streckeSzeneBauen`, `fahrzeugHinzufuegen`, `kameraHinzufuegen`, `R.Hud`), eine Puppen-Rennleitung (`R.RaceManager`, Werte vom Server)
+  und setzt **`spiel.zustand = 'online'`**, `spiel.online = Bildschirm`.
+- **main.js-Haken** (alle fragen `zustand === 'online'`, der lokale Weg bleibt bitgleich): `taste` → `online.rennTaste` (Esc = „Verlassen?“,
+  keine Pause), Item-Taste → `online.item()`, `zuruecksetzen` → `online.reset()` (Server setzt zurück), `physikSchritt` → `online.physikSchritt(dt)`
+  (statt Rennleitung: Eingabe aus `input.steuerung(0)`+`(1)` – Tastatur und Touch – quantisieren, 60 Hz mit Folge-Nr senden, eigenen Wagen
+  vorhersagen, andere 100 ms hinter der Server-Zeit interpolieren, Bälle/Dinos/Pylonen nur als Optik nachrechnen), Ton/adaptive Qualität
+  auch im Zustand 'online'.
+- **Vorhersage** (`vorhersage.js`): Schritt = Spielerauto-Teil von `physikSchritt` (Untergrund + Abseits-Mischung, Fahrhilfe, Turbo-/Boost-
+  Faktoren `ich.fk`, Wetter-Umwelt, Bande, Pflanzen, Höhe). Neuabgleich: Server-Zustand (`Netz.FAHRZEUG_FELDER`) übernehmen, Eingaben mit
+  `n > ack` neu rechnen, Abweichung weich ausblenden (τ 0,12 s), > 3 m hart. Sonderzustände (`ich.so`: Looping, Flug/Rampe, Anlauf-Bremse,
+  Kleber) rechnet nur der Server. Wer an `vehicle.js`/`collisions.bande`/`pflanzen` etwas ändert, muss `test_netz.js` A laufen lassen (Vorhersage
+  = Server auf allen Strecken).
+- **Neue Nachricht**: in `server.js nachricht()` (Raum-Nachrichten zusätzlich in `RAUM_NACHRICHTEN`), Browser `verbindung()` → `v.bei('typ', …)`,
+  in `PROTOKOLL.md` eintragen; Werte immer auf erlaubte Listen prüfen (keine Freitexte!).
+- **Tests**: `node tests/test_netz.js` (Vorhersage = Server auf 6 Strecken, Geister/Stufe 2, HTTP-Sperren, kaputte Nachrichten, Raum/Lobby/
+  Start/Eingaben/ack/Checkpoints/Runde/Ergebnis mit 2 Clients im Zeitraffer, Gast/Host trennt, max. 6, Ping, öffentliche Adresse) und
+  `python3 tests/online_test.py` (Server als Unterprozess, 2 Browser: Lobby + QR (OpenCV liest ihn), Link `?raum=`, Code-Eingabe, Geister,
+  20 s fahren, Positionen beider Sichten < 3 m, Runde, Ergebnis, Host geht). Bilder: `tests/out/online/`.
+
+## W5-3: Touch-Steuerung (src/ui/touch.js)
+Reines Add-on, Script-Tag direkt nach `src/input.js`; auf Geräten ohne Touch (`'ontouchstart' in window || navigator.maxTouchPoints > 0`, `?touch=0/1` überschreibt) endet die Datei sofort (`R.Touch = { aktiv: false }`, kein DOM) – Desktop bleibt bitgleich.
+- **Eingabe**: `Input.prototype.steuerung` wird eingehüllt: Spieler 0 = Maximum aus Tastatur und `R.Touch.werte()` (gas/bremse 0|1, lenkung −1..1; Lenkung = der betragsmäßig größere Wert). `input.js` selbst ist unverändert; `client`/`online.js` lesen weiter `input.steuerung(0)+(1)`.
+- **Einzeltasten** (Item/Reset/Kamera/Pause): echte `KeyboardEvent`s mit den `event.code`s aus `R.config.tasten` (`R.Touch.tasteSenden(code)`), also derselbe Weg wie die Tastatur – lokal (`main.taste`) und online (`online.rennTaste`). Online zeigt die Pause-Taste 🚪 (öffnet „Rennen verlassen?“).
+- **Zeiger**: `pointerdown` auf `#touch [data-t]`, `pointerId → Taste` (Map `zeiger`), `pointermove` schaltet beim Wischen auf eine andere Halte-Taste, `pointerup/cancel/blur/visibilitychange` lassen los. Halte-Tasten: links, rechts, gas, bremse; Tipp-Tasten: item, reset, kamera, pause, neigen (Click-Weg, weil iOS `requestPermission` aus einer Berührung verlangt).
+- **Neigung**: `deviceorientation` → `T.neigungZuLenkung(beta, gamma, winkel)` (Totzone 3°, Anschlag ±28°, Vorzeichen je nach `screen.orientation.angle`); an/aus nur über die 📱-Taste.
+- **Sichtbarkeit**: `setInterval(100 ms)` prüft `R.spiel.zustand` (`rennen` ohne Pause / `online` mit `online.phase === 'rennen'` und ohne Dialog) → `html.t-rennen`. Layout und HUD-Verschiebung (Karte rechts, Tacho links über den Daumen) stehen im `STIL`-String der Datei (nicht in styles.css); Größen über `--tb` (Tastengröße, `clamp(64px, 24vh, 124px)`), `--rand`, `--hf` (HUD-Schriftgröße für den Abstand zur Pause-Taste). Safe-Area per `env(safe-area-inset-*)`.
+- **Menü**: `html.touch-an`-Regeln (kleinere Schrift, scrollbarer Inhalt, größere `.m-nav`-Tasten, Hinweiszeile weg); `MutationObserver` hängt im letzten Schritt „🏁 Los!“ in die Leiste; Capture-Click: 2. Tippen auf `.karte.gewaehlt` (strecke/fahrer/auto, nur allein) → `menue.weiter()`. Raumcode: vorhandene Bildschirm-Tasten (`.on-tasten`), per CSS größer.
+- **Qualität**: `Spiel.prototype._startStufe` wird eingehüllt (+1 Stufe → pixelRatio ≤ 1,25; adaptiv wie gehabt). Hochformat: `#t-quer` (CSS `@media (orientation: portrait)`). Vollbild `#t-voll` nur mit `requestFullscreen`/`webkitRequestFullscreen`. Bildschirm bleibt per Wake Lock an (wenn vorhanden).
+- **Test**: `python3 tests/touch_test.py` (76 Prüfungen, Bilder `tests/out/touch/`). Multi-Touch im Test über CDP `Input.dispatchTouchEvent` (bei `touchEnd` sind die genannten Punkte die losgelassenen).
+
 ## Testdateien (`tests/`)
-Node (`node tests/<datei>`): `lade.js` lädt die Script-Dateien ohne Three.js für die Tests · `test_autos.js` Auto-Katalog, Werte, Rad-Dreiecke, Multivan bronze · `test_dynamik.js` Bälle + Wasserstrahl · `test_fahrer.js` Fahrerliste/Computer-Namen · `test_hindernisse.js` Öl, Sand, Ast, Baustelle · `test_ki.js` KI-Fahrer (Mathe, beide Tempo-Klassen) · `test_kleber.js` Kleberstreifen · `test_garage.js` Münzen + Garage (Konto, Preise, Upgrades) · `test_pokal.js` Pokal-Punkte, Stärke, Serie, Elimination · `test_kollisionen.js` Bande, Auto-Auto (OBB, kein Verschmelzen), Rempeln, Looping-Abstand · `test_looping.js` Looping · `test_physik.js` Fahrphysik inkl. Gras/Sand-Deckel · `test_pickups.js` Turbo + Schild · `test_polizei.js` Polizei-Logik · `test_rundenzeit.js` KI-Rundenzeiten aller Strecken, auch XL · `test_schaden.js` Schaden-System · `test_schanze.js` Schanzen · `test_startboost.js` Start-Boost + Sterne · `test_strecke.js` Strecken, Welten, Varianten, Regeln (W4-J: Kreuzung) · `test_welten_ki.js` KI in allen Strecken × Welten × 7 Stufen (auch Rempeln, XL; W4-J: Kreuzungs-Begegnungen, Auto parkt auf der Kreuzung, 7 Stufen × 3 Runden) · `test_wetter.js` Jahreszeit/Wetter/Wind/Tageszeit · `zaun_test.js` Zaun dicht, Pflanzen-Kollider.
-Python/Playwright (`python3 tests/<datei>`): `audio_test.py` Ton · `autos_screenshot.py` Auto-Vorschaubilder · `fahrbarkeit_test.py` Fahrbarkeit mit echter Tastatur · `interpolation_test.py` Ruckeln des Auto-Meshes · `leistung_test.py` fps/Draw-Calls · `cockpit_test.py` Cockpit-Kamera ohne Roll in 8 Richtungen + Bilder · `garage_test.py` Garage im Browser · `menu_test.py` Menü und Modi (inkl. Ergebnis-Spalte Preisgeld) · `oel_test.py` Ölfalle + Flugsaurier · `pokal_test.py` Pokal im Browser · `polizei_test.py` Polizei im Browser · `rempeln_test.py` Rempeln „echt“ im Rennen · `rennen_test.py` ganzes Rennen im Schnellvorlauf · `schaden_screenshot.py` Wracks/Brand/Schaden-Bilder · `screenshot_test.py <strecke>` Strecke starten + Bild (Fantasie: 50–56 Kreuzung) · `startboost_test.py` Start-Boost im echten Spiel · `stunt_screenshot.py` Schanzen/Turbo/Schild-Bilder · `tageszeit_screenshot.py` Tag/Dämmerung/Nacht (Referenz `tageszeit_tag_referenz.json`) · `welten_test.py` alle Strecken × Welten mit Schaden/Regen/Wind · `wetter_screenshot.py` Wetter-Bilder · `xl_screenshot.py` XL-Varianten. Hilfsdaten: `tests/bauplan/`, `tests/out/` (Ausgaben), `leistung_vorher.json`, `autos_vorschau.html`.
+Node (`node tests/<datei>`): `lade.js` lädt die Script-Dateien ohne Three.js für die Tests · `test_autos.js` Auto-Katalog, Werte, Rad-Dreiecke, Multivan bronze · `test_dynamik.js` Bälle + Wasserstrahl · `test_fahrer.js` Fahrerliste/Computer-Namen · `test_hindernisse.js` Öl, Sand, Ast, Baustelle · `test_ki.js` KI-Fahrer (Mathe, beide Tempo-Klassen) · `test_kleber.js` Kleberstreifen · `test_garage.js` Münzen + Garage (Konto, Preise, Upgrades) · `test_pokal.js` Pokal-Punkte, Stärke, Serie, Elimination · `test_kollisionen.js` Bande, Auto-Auto (OBB, kein Verschmelzen), Rempeln, Looping-Abstand · `test_looping.js` Looping · `test_physik.js` Fahrphysik inkl. Gras/Sand-Deckel · `test_pickups.js` Turbo + Schild · `test_polizei.js` Polizei-Logik · `test_rundenzeit.js` KI-Rundenzeiten aller Strecken, auch XL · `test_schaden.js` Schaden-System · `test_schanze.js` Schanzen · `test_startboost.js` Start-Boost + Sterne · `test_strecke.js` Strecken, Welten, Varianten, Regeln (W4-J: Kreuzung) · `test_welten_ki.js` KI in allen Strecken × Welten × 7 Stufen (auch Rempeln, XL; W4-J: Kreuzungs-Begegnungen, Auto parkt auf der Kreuzung, 7 Stufen × 3 Runden) · `test_wetter.js` Jahreszeit/Wetter/Wind/Tageszeit · `test_netz.js` W5 Mehrspieler-Server + Netzcode · `zaun_test.js` Zaun dicht, Pflanzen-Kollider.
+Python/Playwright (`python3 tests/<datei>`): `audio_test.py` Ton · `autos_screenshot.py` Auto-Vorschaubilder · `fahrbarkeit_test.py` Fahrbarkeit mit echter Tastatur · `interpolation_test.py` Ruckeln des Auto-Meshes · `leistung_test.py` fps/Draw-Calls · `cockpit_test.py` Cockpit-Kamera ohne Roll in 8 Richtungen + Bilder · `garage_test.py` Garage im Browser · `menu_test.py` Menü und Modi (inkl. Ergebnis-Spalte Preisgeld) · `oel_test.py` Ölfalle + Flugsaurier · `online_test.py` W5 Online mit 2 Browsern · `pokal_test.py` Pokal im Browser · `polizei_test.py` Polizei im Browser · `rempeln_test.py` Rempeln „echt“ im Rennen · `rennen_test.py` ganzes Rennen im Schnellvorlauf · `schaden_screenshot.py` Wracks/Brand/Schaden-Bilder · `screenshot_test.py <strecke>` Strecke starten + Bild (Fantasie: 50–56 Kreuzung) · `touch_test.py` W5-3 Touch-Steuerung (iPhone/iPad quer, Desktop) · `startboost_test.py` Start-Boost im echten Spiel · `stunt_screenshot.py` Schanzen/Turbo/Schild-Bilder · `tageszeit_screenshot.py` Tag/Dämmerung/Nacht (Referenz `tageszeit_tag_referenz.json`) · `welten_test.py` alle Strecken × Welten mit Schaden/Regen/Wind · `wetter_screenshot.py` Wetter-Bilder · `xl_screenshot.py` XL-Varianten. Hilfsdaten: `tests/bauplan/`, `tests/out/` (Ausgaben), `leistung_vorher.json`, `autos_vorschau.html`.
 
 ## Versionen
 Nach jeder Welle wird der Stand gesichert UND spielbar abgelegt: `Spiele/Autorennen-Versionen/vN_…/` (jeder Ordner mit eigener `Autorennen.html`). Neue Versionen immer in neue Ordner (iCloud-Platzhalter lassen sich vom Container aus nicht überschreiben). Zwischenstände während der Arbeit: `versionen_r6/` und `Autorennen-Sicherung/`.
