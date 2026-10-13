@@ -58,10 +58,11 @@ const sollKmh = { 'multivan': 220, 'troc-cabrio': 230, 'mini-cooper': 235, 'pass
   'porsche-911': 270, 'formel': 280, 'polizei': 62 * 3.6 };
 pruefe('vMax je Auto wie vorgegeben (Straße 220 … 270 km/h, Streifenwagen 223, Formel 280)', katalog.every((a) => Math.abs(a.fahrwerte.vMax * 3.6 - sollKmh[a.id]) < 0.01),
   vmaxe.map((x) => (x * 3.6).toFixed(0)).join('/'));
-pruefe('Alle erlaubten Typen Pflicht: cabrio/van/limousine/sportwagen/coupe/kombi/kleinwagen vorhanden',
-  ['cabrio', 'van', 'limousine', 'sportwagen', 'coupe', 'kombi', 'kleinwagen'].every((t) => katalog.some((a) => a.karosserie === t)));
+// 13.10. Passat ist jetzt ein Kombi (Variant) -> kein Katalogauto mehr mit Typ 'limousine'; der Typ bleibt im carBuilder (TYP_STANDARD) nutzbar
+pruefe('Alle erlaubten Typen Pflicht: cabrio/van/sportwagen/coupe/kombi/kleinwagen vorhanden (limousine nur noch als Builder-Typ)',
+  ['cabrio', 'van', 'sportwagen', 'coupe', 'kombi', 'kleinwagen'].every((t) => katalog.some((a) => a.karosserie === t)));
 pruefe('KAROSSERIEN-Liste im Katalog stimmt', JSON.stringify(katalog.KAROSSERIEN) === JSON.stringify(erlaubt));
-pruefe('finde() liefert Auto', katalog.finde('passat') && katalog.finde('passat').karosserie === 'limousine');
+pruefe('finde() liefert Auto', katalog.finde('passat') && katalog.finde('passat').karosserie === 'kombi');
 pruefe('Formel-Renner ist das schnellste Auto (vMax)', Math.max(...vmaxe) === katalog.finde('formel').fahrwerte.vMax);
 pruefe('Formel-Renner: Haftung am höchsten, leichtestes Auto', katalog.every((a) => a.id === 'formel'
   || (a.fahrwerte.grip < katalog.finde('formel').fahrwerte.grip && a.fahrwerte.masse > katalog.finde('formel').fahrwerte.masse)));
@@ -113,6 +114,7 @@ pruefe('Formel-Renner beschleunigt am schnellsten von allen', zeitVon('formel') 
 console.log('\nAuto               Dreiecke  Meshes  L/B/H (m) Modell vs. Katalog');
 const warn = console.warn; console.warn = () => {};           // Hinweis "three.min.js deprecated" unterdrücken
 const R3 = ladeModule(['vendor/three.min.js', 'src/config.js', 'src/cars/carCatalog.js', 'src/cars/carBuilder.js']);
+pruefe('carBuilder kennt den Typ limousine weiterhin (TYP_STANDARD)', !!R3.carBuilder.TYP_STANDARD.limousine);
 console.warn = warn;
 for (const a of R3.carCatalog) {
   const ab = a.abmessungen;

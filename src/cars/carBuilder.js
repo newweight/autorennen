@@ -562,6 +562,15 @@
     const zz = seite === 'vorn' ? a.z + (tiefe - vor) : a.z - (tiefe - vor);
     S.geo(setze(g, a.x, a.y, zz, a.rx + (kipp || 0) * (seite === 'vorn' ? 1 : -1), a.ry, 0), farbe);
   }
+  /** Einseitiges flaches Teil (nur Vorderfläche, 2 Dreiecke je Viereck) auf Front/Heck – für Emblem und Schrift. */
+  function anbauFlach(S, K, farbe, seite, x, y, punkte, vor) {
+    const a = anbau(K, seite, x, y);
+    if (!a) return;
+    const vorn = seite === 'vorn';
+    const g = new THREE.ShapeGeometry(umriss(vorn ? punkte.map(([px, py]) => [-px, py]) : punkte));
+    if (vorn) g.rotateY(Math.PI);                  // Vorderseite nach -z (Fahrtrichtung), x-Spiegelung vorher ausgeglichen
+    S.geo(setze(g, a.x, a.y, vorn ? a.z - vor : a.z + vor, a.rx, a.ry, 0), farbe);
+  }
   /** Leiste aus Segmenten, die der gewölbten Front/Heck folgt (x0 < x1). */
   function anbauLeiste(S, K, farbe, seite, x0, x1, y, h, vor, n) {
     // Bogenlänge abschätzen: an gerundeten Ecken braucht es mehr, kürzere Segmente
@@ -572,7 +581,7 @@
       else if (i > 0) bogen += Math.abs(x1 - x0) / 16;
       zp = z;
     }
-    n = Math.min(12, Math.max(n || 1, Math.ceil(bogen / 0.09)));
+    n = Math.min(12, Math.max(n || 1, Math.ceil(bogen / (K.M.f.leistenSeg || 0.09))));   // leistenSeg: optional gröbere Segmente (weniger Dreiecke)
     for (let i = 0; i < n; i++) {
       const xa = lerp(x0, x1, i / n), xb = lerp(x0, x1, (i + 1) / n);
       const za = flaecheZ(K, seite, xa, y), zb = flaecheZ(K, seite, xb, y);
@@ -683,6 +692,7 @@
         if (zm > letzteFenster) return M.saeuleC;
         return M.saeuleB;
       }
+      if (f.fensterRahmen === 'chrom' && k === 2 && zm > M.zWS + 0.02 && zm < ersteFenster + 0.02 + (letzteFenster - ersteFenster)) return FARBE.CHROM;   // Chrom-Rahmen oberhalb der Seitenfenster
       if (k <= 3) return zone === 'vorn' ? M.saeuleA : zone === 'dach' ? M.dach : (f.heckTyp === 'steil' ? M.dach : M.saeuleC);
       return zone === 'dach' ? M.dach : FARBE.GLAS;
     });
@@ -806,7 +816,7 @@
         anbauTeil(SW[si], K, 0, 'vorn', x - s * lb * 0.02, ly - lh * 0.05, rechteckRund(0.016, lh * 0.75, 0.004), 0.028, 0.06);
       } else if (f.tfl === 'leiste') {
         // durchgehende Lichtleiste über die Front (jede Hälfte gehört zu einem Scheinwerfer)
-        anbauLeiste(SW[si], K, 0, 'vorn', s < 0 ? -xInnen : 0.005, s < 0 ? -0.005 : xInnen, ly - lh * 0.15, 0.014, 0.022, 4);
+        anbauLeiste(SW[si], K, 0, 'vorn', s < 0 ? -xInnen : 0.005, s < 0 ? -0.005 : xInnen, ly - lh * 0.15 + (f.tflY || 0), 0.014, 0.022, 4);
       }
     });
 
@@ -819,11 +829,16 @@
       anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', 0, kY + 0.02, [[-0.42, -0.13], [0.42, -0.13], [0.52, 0.13], [-0.52, 0.13]], 0.008, 0.07);
       [-0.06, 0.06].forEach((o) => anbauTeil(S, K, FARBE.GITTER, 'vorn', 0, kY + 0.02 + o * 1.4, rechteckRund(0.9, 0.012, 0.004), 0.012, 0.07));
     } else if (g === 'quer' || g === 'van') {
-      const hG = g === 'van' ? 0.19 : 0.15, nB = g === 'van' ? 3 : 4;
-      anbauLeiste(S, K, FARBE.SCHWARZ, 'vorn', -xInnen - 0.01, xInnen + 0.01, ly - 0.005, hG, 0.008, 3);
+      const hG = f.grillHoehe || (g === 'van' ? 0.19 : 0.15), nB = f.grillLeisten || (g === 'van' ? 3 : 4);
+      const gy = f.grillY || 0;                      // optional: Grill gegenüber den Scheinwerfern verschieben
+      anbauLeiste(S, K, FARBE.SCHWARZ, 'vorn', -xInnen - 0.01, xInnen + 0.01, ly - 0.005 + gy, hG, 0.008, 3);
       for (let i = 0; i < nB; i++) {
-        const y = ly - hG / 2 + (hG * (i + 0.6)) / nB;
+        const y = ly - hG / 2 + (hG * (i + 0.6)) / nB + gy;
         anbauLeiste(S, K, FARBE.CHROM, 'vorn', -xInnen - (i === 0 ? 0.02 : 0), xInnen + (i === 0 ? 0.02 : 0), y, 0.013, 0.014, 3);
+      }
+      if (f.grillRahmen) {                           // Chromrahmen oben/unten um den Grill
+        anbauLeiste(S, K, FARBE.CHROM, 'vorn', -xInnen - 0.02, xInnen + 0.02, ly - 0.005 + gy + hG / 2 + 0.006, 0.013, 0.016, 3);
+        anbauLeiste(S, K, FARBE.CHROM, 'vorn', -xInnen - 0.02, xInnen + 0.02, ly - 0.005 + gy - hG / 2 - 0.004, 0.013, 0.016, 3);
       }
       const bU = g === 'van' ? 1.3 : 1.2, hU = g === 'van' ? 0.24 : 0.12;
       anbauLeiste(S, K, FARBE.SCHWARZ, 'vorn', -bU / 2, bU / 2, kY + (g === 'van' ? 0.02 : 0.0), hU, 0.008, 6);
@@ -857,6 +872,8 @@
       anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', 0, yG, sechs(0.6, 0.27), 0.013, 0.08);
       anbauTeil(S, K, FARBE.CHROM, 'vorn', 0, yG + 0.02, rechteckRund(0.56, 0.02, 0.006), 0.018, 0.08);
     }
+    // --- Markenzeichen vorn (optional, vereinfachtes rundes Emblem) ---
+    if (f.logo) bauLogo(S, K, 'vorn', 0, ly + (f.logo.y || 0), f.logo.r || 0.06);
     // --- Lufteinlässe unten ---
     const ex = 0.66 * hb, ey = Math.max(M.sill + 0.12, kY + 0.0);
     if (f.einlass === '911') {
@@ -868,6 +885,18 @@
         anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', s * ex, ey, [[-0.15, -0.09], [0.15, -0.09], [0.15 + s * 0.03, 0.09], [-0.12, 0.09]].map(([a, b]) => [a * s, b]), 0.008, 0.08);
         anbauTeil(S, K, FARBE.GITTER, 'vorn', s * ex, ey, rechteckRund(0.24, 0.012, 0.004), 0.012, 0.08);
       });
+    } else if (f.einlass === 'chromrahmen') {
+      // breiter dunkler Mitteleinlass hinter dem Kennzeichen, außen Einlässe mit Chromrahmen und L-förmiger LED-Linie,
+      // darunter eine durchgehende Chromspange am Stoßfänger
+      anbauLeiste(S, K, FARBE.SCHWARZ, 'vorn', -0.52, 0.52, kY + 0.005, 0.17, 0.008, 4);
+      [-1, 1].forEach((s, si) => {
+        const xo = s * 0.64 * hb, yo = ey + 0.0;
+        anbauTeil(S, K, FARBE.CHROM, 'vorn', xo, yo, rechteckRund(0.36, 0.17, 0.035), 0.008, 0.08);
+        anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', xo, yo, rechteckRund(0.32, 0.135, 0.03), 0.013, 0.08);
+        anbauLeiste(SW[si], K, 0, 'vorn', Math.min(xo - s * 0.13, xo + s * 0.13), Math.max(xo - s * 0.13, xo + s * 0.13), yo + 0.035, 0.014, 0.018, 1);
+        anbauTeil(SW[si], K, 0, 'vorn', xo - s * 0.13, yo + 0.0, rechteckRund(0.014, 0.07, 0.004), 0.018, 0.06);
+      });
+      anbauLeiste(S, K, FARBE.CHROM, 'vorn', -0.86 * hb, 0.86 * hb, M.sill + 0.075, 0.014, 0.016, 8);
     } else if (f.einlass === 'flach') {
       [-1, 1].forEach((s) => anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', s * ex, ey - 0.02, rechteckRund(0.22, 0.05, 0.02), 0.008, 0.08));
     }
@@ -881,6 +910,52 @@
     // --- Kennzeichen (leer, weiß) ---
     anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', 0, kY, rechteckRund(0.55, 0.14, 0.01), 0.016, 0.08);
     anbauTeil(S, K, FARBE.WEISS, 'vorn', 0, kY, rechteckRund(0.52, 0.11, 0.008), 0.022, 0.08);
+  }
+
+  // ------------------------------------------------------------
+  // Emblem und Schriftzug (vereinfacht, nur bei form.logo / form.logoHeck / form.schriftzug)
+  // ------------------------------------------------------------
+  /** Schräger Strich als Parallelogramm (Mittelpunkte der Enden, Strichbreite w). */
+  function strich(x0, y0, x1, y1, w) {
+    const dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1, nx = -dy / l * w / 2, ny = dx / l * w / 2;
+    return [[x0 + nx, y0 + ny], [x1 + nx, y1 + ny], [x1 - nx, y1 - ny], [x0 - nx, y0 - ny]];
+  }
+  /** Rundes Emblem: Chromring, dunkle Scheibe, stilisiertes „V“ über „W“ in Chrom. */
+  function bauLogo(S, K, seite, x, y, r) {
+    anbauFlach(S, K, FARBE.CHROM, seite, x, y, kreisPunkte(r, 14), 0.012);
+    anbauFlach(S, K, 0x2a4c8f, seite, x, y, kreisPunkte(r * 0.84, 14), 0.016);
+    const w = r * 0.2;
+    [[-0.5, 0.62, -0.02, -0.08], [0.5, 0.62, 0.02, -0.08],                                       // V
+      [-0.62, -0.1, -0.33, -0.6], [-0.33, -0.6, 0, -0.18], [0, -0.18, 0.33, -0.6], [0.33, -0.6, 0.62, -0.1]]   // W
+      .forEach(([a, b, c, d]) => anbauFlach(S, K, FARBE.CHROM, seite, x, y, strich(a * r * 0.8, b * r * 0.8, c * r * 0.8, d * r * 0.8, w), 0.02));
+  }
+  /** Blockschrift aus Rechtecken (3 × 5 Raster) – nur die benötigten Buchstaben. */
+  const GLYPHEN = {
+    A: [[0, 0, 0.7, 4.3], [2.3, 0, 3, 4.3], [0, 4.3, 3, 5], [0, 2.2, 3, 2.9]],
+    E: [[0, 0, 0.7, 5], [0, 4.3, 3, 5], [0, 2.15, 2.5, 2.85], [0, 0, 3, 0.7]],
+    H: [[0, 0, 0.7, 5], [2.3, 0, 3, 5], [0, 2.15, 3, 2.85]],
+    I: [[1.15, 0, 1.85, 5]],
+    L: [[0, 0, 0.7, 5], [0, 0, 3, 0.7]],
+    O: [[0, 0, 0.7, 5], [2.3, 0, 3, 5], [0, 4.3, 3, 5], [0, 0, 3, 0.7]],
+    P: [[0, 0, 0.7, 5], [0, 4.3, 3, 5], [0, 2.3, 3, 3], [2.3, 2.3, 3, 5]],
+    S: [[0, 4.3, 3, 5], [0, 2.15, 3, 2.85], [0, 0, 3, 0.7], [0, 2.15, 0.7, 5], [2.3, 0, 3, 2.85]],
+    T: [[0, 4.3, 3, 5], [1.15, 0, 1.85, 4.3]],
+    U: [[0, 0, 0.7, 5], [2.3, 0, 3, 5], [0, 0, 3, 0.7]],
+  };
+  function bauSchrift(S, K, text, x, y, h, breite) {
+    const n = text.length, zelle = h / 5;
+    const luecke = zelle * 1.2;
+    const soll = n * 3 * zelle + (n - 1) * luecke;
+    const sk = breite > 0 ? Math.min(1, breite / soll) : 1;       // zu breit -> schmaler
+    const c = zelle * sk, lk = luecke * sk, ges = n * 3 * c + (n - 1) * lk;
+    let x0 = x - ges / 2;
+    for (const ch of text) {
+      (GLYPHEN[ch] || []).forEach(([a, b, d, e]) => {
+        const w = (d - a) * c, hh = (e - b) * zelle;
+        anbauFlach(S, K, FARBE.CHROM, 'hinten', x0 + (a + d) / 2 * c, y - h / 2 + (b + e) / 2 * zelle, [[-w / 2, -hh / 2], [w / 2, -hh / 2], [w / 2, hh / 2], [-w / 2, hh / 2]], 0.01);
+      });
+      x0 += 3 * c + lk;
+    }
   }
 
   // ------------------------------------------------------------
@@ -898,6 +973,16 @@
         anbauLeiste(BL[si], K, 0, 'hinten', lo(Math.max(0.004, xa), xb), hi(Math.max(0.004, xa), xb), ry, rh, 0.02, 8);
         anbauLeiste(BL[si], K, 0, 'hinten', lo(xb - 0.22, xb - 0.01), hi(xb - 0.22, xb - 0.01), ry - 0.01, rh + 0.03, 0.024, 2);
         anbauLeiste(S, K, FARBE.SCHWARZ, 'hinten', lo(0, xb - 0.05), hi(0, xb - 0.05), ry - rh / 2 - 0.06, 0.1, 0.008, 6);
+      } else if (ru.form === 'geteilt') {
+        // zwei Teile je Seite: Kotflügel-Leuchte (außen, um die Ecke) + Heckklappen-Leuchte (innen, Keil) mit LED-Linie, Fuge dazwischen
+        const xm = ru.xm * hb, xf = ru.xf * hb;      // xm: Ende der Heckklappen-Leuchte, xf: Beginn der Kotflügel-Leuchte
+        anbauLeiste(S, K, FARBE.SCHWARZ, 'hinten', lo(xa - 0.01, xf - 0.015), hi(xa - 0.01, xf - 0.015), ry, rh + 0.03, 0.01, 4);
+        anbauLeiste(BL[si], K, 0, 'hinten', lo(xa, xm), hi(xa, xm), ry, rh, 0.018, 4);
+        anbauLeiste(BL[si], K, 0, 'hinten', lo(xa + 0.03, xm - 0.08), hi(xa + 0.03, xm - 0.08), ry + rh * 0.62, rh * 0.28, 0.022, 3);   // oberer Keil (Bremslicht-Linie)
+        anbauLeiste(S, K, FARBE.SCHWARZ, 'hinten', lo(xa + 0.03, xm - 0.02), hi(xa + 0.03, xm - 0.02), ry + rh * 0.12, rh * 0.14, 0.024, 3);   // dunkle LED-Trennlinie
+        anbauLeiste(S, K, FARBE.SCHWARZ, 'hinten', lo(xf - 0.015, xb + 0.015), hi(xf - 0.015, xb + 0.015), ry + 0.005, rh + 0.04, 0.01, 4);
+        anbauLeiste(BL[si], K, 0, 'hinten', lo(xf, xb), hi(xf, xb), ry + 0.005, rh + 0.01, 0.018, 4);
+        anbauLeiste(S, K, FARBE.SCHWARZ, 'hinten', lo(xf + 0.02, xb - 0.03), hi(xf + 0.02, xb - 0.03), ry + 0.01, rh * 0.16, 0.024, 2);
       } else if (ru.form === 'senkrecht' || ru.form === 'hoch') {
         const xm = s * (xa + xb) / 2, w = xb - xa;
         anbauTeil(S, K, ru.form === 'senkrecht' ? FARBE.CHROM : FARBE.SCHWARZ, 'hinten', xm, ry, rechteckRund(w + 0.03, rh + 0.03, 0.05), 0.01, 0.08);
@@ -916,11 +1001,16 @@
     anbauTeil(S, K, FARBE.SCHWARZ, 'hinten', 0, kY, rechteckRund(0.56, 0.15, 0.01), 0.006, 0.08);
     anbauTeil(S, K, FARBE.WEISS, 'hinten', 0, kY, rechteckRund(0.52, 0.11, 0.008), 0.014, 0.08);
 
+    // Markenzeichen und Schriftzug (optional)
+    if (f.logoHeck) bauLogo(S, K, 'hinten', 0, f.logoHeck.y * H, f.logoHeck.r || 0.05);
+    if (f.schriftzug) bauSchrift(S, K, f.schriftzug.text, 0, f.schriftzug.y * H, f.schriftzug.h || 0.04, f.schriftzug.b || 0.4);
+    // Chromleiste oben am hinteren Stoßfänger (optional)
+    if (f.heckLeiste) anbauLeiste(S, K, FARBE.CHROM, 'hinten', -f.heckLeiste.x * hb, f.heckLeiste.x * hb, f.heckLeiste.y * H, 0.016, 0.014, 8);
     // Diffusor / dunkler Stoßfänger unten
     const yD = M.sill + 0.07;
     if (f.diffusor) {
       anbauLeiste(S, K, FARBE.SCHWARZ, 'hinten', -0.72 * hb, 0.72 * hb, yD, 0.12, 0.01, 8);
-      [-0.3, -0.1, 0.1, 0.3].forEach((x) => anbauTeil(S, K, FARBE.KUNSTSTOFF, 'hinten', x, yD, rechteckRund(0.02, 0.11, 0.005), 0.05, 0.08));
+      if (f.diffusor !== 'glatt') [-0.3, -0.1, 0.1, 0.3].forEach((x) => anbauTeil(S, K, FARBE.KUNSTSTOFF, 'hinten', x, yD, rechteckRund(0.02, 0.11, 0.005), 0.05, 0.08));
     }
     // Endrohre
     const er = Object.assign({ n: 0, form: 'rund', x: 0.6, r: 0.045 }, f.endrohre);
@@ -953,6 +1043,7 @@
       const z = M.zDH, y = obenY(K, z, 0, true) - 0.005;
       const halb = K.kabHalb[K.kabZ.indexOf(M.zDH)] || K.kabHalb[K.kabHalb.length - 1];
       quader(S, M.dach, 0, y, z + 0.06, 2 * halb[3][0] + 0.02, 0.035, 0.2, 0.12);
+      if (f.dachBremsleuchte) quader(BL[0], 0, 0, y - 0.012, z + 0.158, 2 * halb[3][0] * 0.6, 0.012, 0.03, 0.12);   // dritte Bremsleuchte unter dem Spoiler
     }
   }
 
@@ -980,7 +1071,18 @@
       quader(S, FARBE.SCHWARZ, s * (xSp + 0.05), ySp + 0.03, zSp + 0.02, 0.12, 0.04, 0.09);
       quader(S, kappe, s * (xSp + 0.15 * gross), ySp + 0.09 * gross, zSp, 0.2 * gross, 0.12 * gross, 0.1, 0, s * 0.12);
       quader(S, FARBE.SCHWARZ, s * (xSp + 0.15 * gross), ySp + 0.09 * gross, zSp + 0.052, 0.17 * gross, 0.095 * gross, 0.01, 0, s * 0.12);
+      if (f.spiegelBlinker) quader(S, 0xff9a1a, s * (xSp + 0.215), ySp + 0.065, zSp - 0.045, 0.045, 0.014, 0.05, 0, s * 0.12);   // Blinker an der Spiegelkappe
     });
+    // Chrom-Zierleiste unten an den Türen (zwischen den Radhäusern)
+    if (f.schwellerLeiste) {
+      const z0 = M.zVA + M.archV + 0.06, z1 = M.zHA - M.archH - 0.06, y = M.sill + 0.075, n = 4;
+      [-1, 1].forEach((s) => {
+        for (let i = 0; i < n; i++) {
+          const za = lerp(z0, z1, i / n), zb = lerp(z0, z1, (i + 1) / n), z = (za + zb) / 2;
+          quader(S, FARBE.CHROM, s * (seitenX(K, z, y) + 0.004), y, z, 0.012, 0.018, zb - za + 0.004);
+        }
+      });
+    }
     // Türgriffe (hinten an jeder Tür)
     const griff = f.griffFarbe === 'chrom' ? FARBE.CHROM : M.lackDunkel;
     const yG = M.guertel - 0.11;
@@ -1038,7 +1140,9 @@
     }
     // Dachreling
     if (f.dachreling && !f.cabrio) {
-      const z0 = M.zDV + 0.15, z1 = M.zDH - 0.1, n = 5;
+      const rE = f.relingEnden || [0.15, -0.1];                  // optional: Reling über die ganze Dachlänge
+      const z0 = M.zDV + rE[0], z1 = M.zDH + rE[1], n = f.relingEnden ? 6 : 5;
+      const relingF = f.relingFarbe !== undefined ? f.relingFarbe : FARBE.SCHWARZ;   // optional: Alu statt schwarz
       [-1, 1].forEach((s) => {
         const xr = (z) => {
           const i = K.kabZ.findIndex((q) => q >= z);
@@ -1049,7 +1153,7 @@
           const za = lerp(z0, z1, i / n), zb = lerp(z0, z1, (i + 1) / n);
           const ya = obenY(K, za, xr(za), true) + 0.05, yb = obenY(K, zb, xr(zb), true) + 0.05;
           const lang = Math.hypot(zb - za, yb - ya);
-          quader(S, FARBE.SCHWARZ, xr((za + zb) / 2), (ya + yb) / 2, (za + zb) / 2, 0.035, 0.03, lang + 0.01, -Math.atan2(yb - ya, zb - za));
+          quader(S, relingF, xr((za + zb) / 2), (ya + yb) / 2, (za + zb) / 2, 0.035, 0.03, lang + 0.01, -Math.atan2(yb - ya, zb - za));
         }
         [z0, (z0 + z1) / 2, z1].forEach((z) => quader(S, FARBE.SCHWARZ, xr(z), obenY(K, z, xr(z), true) + 0.02, z, 0.04, 0.05, 0.07));
       });
@@ -1084,8 +1188,9 @@
     return g;
   }
 
-  function radGeometrie(r, w, zoll, felgeFarbe, slick) {
-    const key = [r, w, zoll, felgeFarbe, slick ? 's' : 'n'].join('_');
+  function radGeometrie(r, w, zoll, felgeFarbe, slick, speichen) {
+    const nSp = speichen || 5;                              // optional: andere Speichenzahl (Standard 5)
+    const key = [r, w, zoll, felgeFarbe, slick ? 's' : 'n'].join('_') + (nSp === 5 ? '' : '_sp' + nSp);
     if (cache.rad[key]) return cache.rad[key];
     const S = new Sammler();
     const rf = clamp(zoll * 0.0127, r * 0.55, r * 0.8);   // Felgenradius
@@ -1142,12 +1247,17 @@
     nabe.rotateZ(-Math.PI / 2);
     nabe.translate(x0 - 0.035, 0, 0);
     S.geo(nabe, felgeFarbe);
-    // 5 Speichen als Kranz
-    for (let i = 0; i < 5; i++) {
-      const wnk = (i * 2 * Math.PI) / 5;
+    // 5 Speichen als Kranz (optional mehr, dann schmaler)
+    for (let i = 0; i < nSp; i++) {
+      const wnk = (i * 2 * Math.PI) / nSp;
       const len = rf * 0.72;
-      const sp = blockOhneBoden(0.03, len, rf * 0.2, 1);   // Innenseite (-x) wird nie gesehen
-      sp.translate(x0 - 0.028, rf * 0.18 + len / 2, 0);
+      let sp;
+      if (nSp > 5) {                                       // viele Speichen: nur die sichtbare Außenfläche (spart Dreiecke)
+        sp = new THREE.PlaneGeometry(rf * 0.13, len); sp.rotateY(Math.PI / 2); sp.translate(x0 - 0.013, rf * 0.18 + len / 2, 0);
+      } else {
+        sp = blockOhneBoden(0.03, len, rf * 0.2, 1);       // Innenseite (-x) wird nie gesehen
+        sp.translate(x0 - 0.028, rf * 0.18 + len / 2, 0);
+      }
       sp.rotateX(wnk);
       S.geo(sp, felgeFarbe);
     }
@@ -1423,7 +1533,7 @@
     if (M.f.blaulicht && !M.f.cabrio) baueBlaulicht(S, BLAU, K);
     const raeder = achsen(M).map((a) => ({
       vorn: a.vorn, z: a.zc, r: a.r, w: a.w, x: halbBreite(M, a.zc, 1) - a.w / 2 - 0.005,   // Rad steht leicht nach außen
-      geo: radGeometrie(a.r, a.w, a.vorn ? M.zollV : M.zollH, M.f.felgeFarbe, false),
+      geo: radGeometrie(a.r, a.w, a.vorn ? M.zollV : M.zollH, M.f.felgeFarbe, false, M.f.felgeSpeichen),
     }));
     raeder.forEach((a) => bremssattel(S, a, M));
     return { geo: S.fertig(), sw: SW.map((s) => s.fertig()), bl: BL.map((s) => s.fertig()),
