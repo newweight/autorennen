@@ -58,3 +58,13 @@ Ergänzung 13.10. (Sebastian):
   echte Armaturen-Vorbilder vorher GOOGELN (Rundinstrumente/Digital, Farben, Skalen-Endwerte, Drehzahlbereich, rote Zone).
 - Motorsound je Auto passend zum echten Motor GOOGELN und nachbilden (Zylinderzahl, Diesel/Benzin, Leistung, Drehzahlbereich):
   z. B. 6-Zylinder-Boxer 911 ≠ 150-PS-Diesel im Multivan-Bus.
+
+Ergänzung 13.10. abends (Sebastian):
+27. [ ] Passat als KOMBI (Passat B8 Variant): carCatalog.js 'passat' ist Limousine → Karosserietyp 'kombi' (gibt es in carBuilder.js),
+        Maße der Variant googeln (Länge, Höhe, Dachreling).
+28. [ ] Aufbau ruckelt manchmal: Ursache noch unbekannt. Physik→Grafik wird bereits interpoliert (main.js ~781). Verdacht:
+        Längsneigung aus Höhenabtastung ±1,6 m (main.js ~799) springt an Streckenabschnitten / Wankneigung aus vQuer schwingt.
+        Erst reproduzieren (Strecke/Situation von Sebastian erfragen), Nicken/Neigung über Zeit loggen, dann glätten.
+29. [ ] Autos „fotorealistisch“ wie die Originale: geht nicht mit den gebauten Low-Poly-Formen → echte 3D-Modelle (glTF/GLB) je Auto
+        nötig (Sebastian: Lizenzen geklärt). Modelle besorgen (z. B. gekaufte/lizenzierte glTF-Dateien), mit GLTFLoader laden,
+        Detailstufen (nahe = Modell, fern/KI = vereinfacht) wegen Leistung auf Handy/iPad; altes Modell als Rückfall behalten.

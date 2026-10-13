@@ -82,3 +82,4 @@
   OFFEN: Punkt 20 Kreuzung ohne unsichtbare Wand (nicht begonnen); Abschlussprüfung v16 (online_test, welten_ki selbst laufen lassen).
 - 13.10. Sebastian spielt v15 auf dem M2 Max. Neue Wünsche (Rückspiegel, Cockpit mit Tacho/Drehzahl, Scheibenwischer, Kurvenschilder mit Tempo) in PLAN.md Punkte 23–26 notiert. Tag v16 auf GitHub gesetzt.
 - 13.10. Wunsch ergänzt: Rückspiegel mittig über Tacho, Positionen änderbar, Cockpits + Motorsounds markenspezifisch (vorher googeln).
+- 13.10. Wünsche: Passat Kombi, Ruckeln des Aufbaus untersuchen, fotorealistische Autos (echte 3D-Modelle) → PLAN 27–29.
