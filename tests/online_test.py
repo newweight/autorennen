@@ -76,7 +76,9 @@ SONDER_ANZEIGE = """async () => {
       sz: { l: [1, 0, 0, 0.3, 0.28, 30, 0, 0] } };
     V.abgleich(ich, null);
     const w0 = V.lp.winkel;
-    await new Promise(r => setTimeout(r, 500));                  // mehrere Bilder + feste Schritte laufen
+    // mehrere Bilder + feste Schritte laufen lassen: nicht nach fester Zeit, sondern bis Winkel gewachsen UND ein Bild die Anzeige
+    // nachgezogen hat (höchstens 6 s) – unter Last (Software-GL, zwei Seiten) kommen in 500 ms manchmal gar keine Bilder
+    for (let i = 0; i < 120 && !(V.lp.winkel > w0 + 0.3 && f.looping.aktiv && Math.abs(f.looping.winkel - V.lp.winkel) < 0.5); i++) await new Promise(r => setTimeout(r, 50));
     const aus = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), vor: new THREE.Vector3(), oben: new THREE.Vector3() };
     const pose = R.Looping.anzeigePose(st, f.looping, 0.5, aus);
     const kam = { pos: new THREE.Vector3(), blick: new THREE.Vector3(), oben: new THREE.Vector3() };
