@@ -221,6 +221,14 @@ pruefe('Multivan: Kupferbronze mit schwarzem Dach (farbe2)', ((mv.farbe >> 16) &
   && /bronze/i.test(mv.farbeName) && /bronze/i.test(mv.generischerName), mv.farbeName);
 pruefe('Multivan: T6.1-Maße 4,904 × 1,904 × 1,970 m, Radstand 3,0, Kollisionsbox ≈ Katalogmaß (±0,1 m)', mv.abmessungen.laenge === 4.904 && mv.abmessungen.breite === 1.904 && mv.abmessungen.hoehe === 1.97 && mv.abmessungen.radstand === 3
   && Math.abs(mv.fahrwerte.laenge - 4.904) < 0.1 && Math.abs(mv.fahrwerte.breite - 1.904) < 0.1, mv.fahrwerte.laenge + ' × ' + mv.fahrwerte.breite);
+// Porsche 911 Carrera (992.2) – 13.10. Umbau nach Fotos: Enzianblau, Datenblatt-Maße, Mischbereifung, Fahrwerte unverändert
+const p911 = R3.carCatalog.finde('porsche-911');
+pruefe('Porsche 911: Carrera 992.2 in Enzianblau (kräftiges Blau, kein Rot)', /carrera/i.test(p911.name) && /992\.2/.test(p911.modell) && /enzian/i.test(p911.farbeName)
+  && (p911.farbe & 255) > ((p911.farbe >> 16) & 255) + 60, p911.name + ' / ' + p911.modell + ' / ' + p911.farbeName);
+pruefe('Porsche 911: Maße 4,542 × 1,852 × 1,298 m, Radstand 2,45, Kollisionsbox ≈ Katalogmaß (±0,1 m)', p911.abmessungen.laenge === 4.542 && p911.abmessungen.breite === 1.852 && p911.abmessungen.hoehe === 1.298
+  && p911.abmessungen.radstand === 2.45 && Math.abs(p911.fahrwerte.laenge - 4.542) < 0.1 && Math.abs(p911.fahrwerte.breite - 1.852) < 0.1, p911.fahrwerte.laenge + ' × ' + p911.fahrwerte.breite);
+pruefe('Porsche 911: Mischbereifung (hinten größer und breiter), Fahrwerte unverändert (270 km/h, 7,4 m/s², Grip 0,88, 1450 kg)', p911.abmessungen.radRadiusHinten > p911.abmessungen.radRadius
+  && p911.abmessungen.radBreiteHinten > p911.abmessungen.radBreite && p911.fahrwerte.vMax === 270 / 3.6 && p911.fahrwerte.beschleunigung === 7.4 && p911.fahrwerte.grip === 0.88 && p911.fahrwerte.masse === 1450);
 pruefe('platzhalterAuto() liefert Group', !!R3.carBuilder.platzhalterAuto().isGroup);
 R3.carBuilder.cacheLeeren();
 pruefe('cacheLeeren() + Neubau klappt', R3.carBuilder.bauen(R3.carCatalog[0]).userData.raeder.length === 4);

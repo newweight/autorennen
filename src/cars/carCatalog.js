@@ -141,30 +141,41 @@ window.Rennspiel = window.Rennspiel || {};
     },
     {
       id: 'porsche-911',
-      name: 'Porsche 911',
-      marke: 'Porsche', modell: '911',
-      farbe: 0xe3202b, farbeName: 'Rot',
+      name: 'Porsche 911 Carrera',
+      marke: 'Porsche', modell: '911 Carrera (992.2)',
+      farbe: 0x4a66d6, farbeName: 'Enzianblau',
       karosserie: 'sportwagen', variante: 'heckmotor',
-      // Quelle Maße: Wikipedia Porsche 911 (992): 4519 × 1852 × 1300 mm, Radstand 2450; Räder 20 Zoll vorn / 21 Zoll hinten
-      abmessungen: { laenge: 4.519, breite: 1.852, hoehe: 1.300, radstand: 2.450, ueberhangVorn: 1.00,
-        radRadius: 0.340, radRadiusHinten: 0.358, radBreite: 0.245, radBreiteHinten: 0.305, felgeZoll: 20, felgeZollHinten: 21 },
-      // Merkmale: runde Scheinwerfer auf hohen Kotflügeln, flache Haube, Fließheck, breite Hüften, rote Lichtleiste, Heckspoiler
+      // Quelle Maße (Porsche-Datenblatt 992.2 Carrera Coupé, ab 2024): 4542 × 1852 (2033 mit Spiegeln) × 1298 mm, Radstand 2450, Spur 1591/1557;
+      // Mischbereifung 235/40 ZR19 vorn / 295/35 ZR20 hinten. Motor (nur Doku): 3,0-l-Boxer-Biturbo, 394 PS, 450 Nm, 294 km/h, 0–100 in 4,1 s.
+      abmessungen: { laenge: 4.542, breite: 1.852, hoehe: 1.298, radstand: 2.450, ueberhangVorn: 0.98,
+        radRadius: 0.335, radRadiusHinten: 0.357, radBreite: 0.235, radBreiteHinten: 0.295, felgeZoll: 19, felgeZollHinten: 20 },
+      // Merkmale: flache Haube zwischen hochstehenden Kotflügeln mit runden LED-Scheinwerfern, Fließheck, breite Hüften, durchgehendes
+      // rotes Leuchtband mit PORSCHE-Schriftzug, Lamellen-Motordeckel mit integriertem Spoiler, 2 trapezförmige Endrohre, 5 Doppelspeichen
       form: {
-        sill: 0.125, nase: 0.45, haubeH: 0.54, guertel: 0.62, deck: 0.71, heckH: 0.63,
-        scheibeUnten: 0.315, dachVorn: 0.445, dachHinten: 0.54, heckscheibeEnde: 0.77, heckTyp: 'fliess',
-        frontNeigung: 0.10, heckNeigung: 0.06, eckVorn: 0.50, eckHinten: 0.34, huefteV: 0.02, huefteH: 0.075,
-        kotfluegel: 0.09, schulterX: 0.82, tumble: 0.22, tueren: 2,
-        fenster: [[0.325, 0.53], [0.545, 0.665]], felgeFarbe: 0x3a3d42,
-        licht: { form: 'rund', x: 0.66, y: 0.54, b: 0.21 }, tfl: 'ring', grill: 'keiner', einlass: '911',
-        rueck: { form: 'leiste', y: 0.555, h: 0.045, x0: 0.0, x1: 0.93 }, motorgitter: true, spoiler: 'aktiv',
-        endrohre: { n: 2, form: 'oval', x: 0.60 }, kennzeichenY: 0.28, kennzeichenHY: 0.39,
+        sill: 0.14, nase: 0.385, haubeH: 0.70, guertel: 0.715, deck: 0.70, heckH: 0.64,
+        scheibeUnten: 0.335, dachVorn: 0.50, dachHinten: 0.62, heckscheibeEnde: 0.915, heckTyp: 'fliess', dachAbfall: 0.03,
+        frontNeigung: 0.10, heckNeigung: 0.06, eckVorn: 0.50, eckHinten: 0.34, huefteV: 0.03, huefteH: 0.095, huefteHBreite: 1.45,
+        kotfluegel: 0.14, kotfluegelH: 0.15, schulterX: 0.85, tumble: 0.24, heckVerjuengung: 0.25, haubenBuckel: -0.05, spiegelForm: 'sport', tueren: 2,
+        fenster: [[0.385, 0.625], [0.633, 0.73]], fensterRahmen: 'schwarz',
+        felgeFarbe: 0xc6cad1, felgeSpeichen: 'doppel',
+        licht: { form: 'rund', vier: true, x: 0.78, y: 0.54, b: 0.23, z: 0.5 }, tfl: 'ring', grill: 'keiner', einlass: '992',
+        lippeB: 0.6, radSpalt: 0.035, einlassY: 0.235, einlassX: 0.64, einlassB: 0.32, einlassH: 0.18, kennzeichenY: 0.235,
+        logo: { stil: 'porsche', y: -0.1, r: 0.036 }, haubenFugen: { z0: 0.9, x0: 0.42, x1: 0.58 },
+        seitenBlinker: { y: 0.48, z: 0.30, l: 0.18, h: 0.018, farbe: 0xe8ecf0, schild: false },
+        rueck: { form: 'band', y: 0.58, h: 0.075, x0: 0.34, x1: 0.85, rot: 0.02 },
+        schriftzug: { text: 'PORSCHE', y: 0.567, h: 0.03, b: 0.62, luecke: 12, vor: 0.022 },
+        schriftzug2: { text: '911', y: 0.43, h: 0.05, b: 0.2, luecke: 0.8 },
+        motorgitter: true, motorgitterB: 0.5, motorgitterN: 8, motorgitterBremse: true, motorgitterZ1: 0.2, spoiler: 'integriert',
+        diffusor: 'glatt', diffusorY: 0.205, diffusorH: 0.2, diffusorX: 0.68,
+        reflektoren: { x: 0.82, y: 0.275, b: 0.08, h: 0.025, farbe: 0xff8a1a },
+        endrohre: { n: 2, form: 'trapez', x: 0.50, r: 0.05 }, kennzeichenHY: 0.36,
       },
       fahrwerte: {
         vMax: 270 / 3.6, beschleunigung: 7.4, bremsen: 25, rueckwaertsMax: 9,
-        wendigkeit: 2.1, grip: 0.88, masse: 1450, laenge: 4.55, breite: 1.85,
+        wendigkeit: 2.1, grip: 0.88, masse: 1450, laenge: 4.54, breite: 1.85,
       },
       beschreibung: 'Das schnellste Auto von allen – aber in den Kurven rutscht es gern mal.',
-      generischerName: 'Roter Sportwagen',
+      generischerName: 'Blauer Sportwagen',
     },
     {
       id: 'bmw-m4',
