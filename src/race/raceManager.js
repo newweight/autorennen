@@ -15,12 +15,23 @@
 //   Runde k geschafft haben, scheidet dieses eine aus (t.ausgeschieden, Ereignis 'raus'); k = Zahl der Ausgeschiedenen + 1.
 //   Das letzte verbleibende Auto gewinnt (imZiel, Ereignis 'ziel'), dann 'fertig'. Sind alle Spieler raus, ist nach
 //   elimination.zuschauerSekunden Schluss. Platzierung: Sieger, noch Fahrende, dann Ausgeschiedene (später raus = besser).
+// - v16 (Kreuzung abbiegen, Fantasie): Wer (Mensch) auf der niveaugleichen Kreuzung abbiegt und eindeutig auf der Querstraße steht
+//   (strecke.kreuzungAbgebogen), bekommt von der Physik den anderen Abschnitt (keine Wand quer über der Straße). Für die
+//   Rennleitung ist er „falsch abgebogen" (t.abgebogen): keine Checkpoints, Fortschritt (t.s, t.index) eingefroren,
+//   Ereignis 'abgebogen'. Kehrt er nicht innerhalb ABBIEGE_FRIST s zur Kreuzung zurück (oder fährt weiter als ABBIEGE_WEIT m
+//   weg), setzt die Rennleitung t.abbiegeReset = true + Ereignis 'abbiegeReset' → main.js setzt ihn an den letzten
+//   Checkpoint zurück (zuruecksetzen). Nur Position + dt, deterministisch (Online-Server rechnet dasselbe).
+//   Nur für Menschen (t.istSpieler): Computerautos biegen nie ab; werden sie bei einem Zusammenstoß auf die Querstraße
+//   geschoben, läuft ihr Fortschritt wie bisher weiter (sonst bliebe die KI „abgebogen" hängen) – nur die Bande gilt dort normal.
 // ============================================================
 (function () {
   const R = window.Rennspiel;
 
   const MAX_SCHRITT_WEG = 20;   // m pro Physikschritt – mehr ist ein Sprung
   const MAX_SCHRITT_S = 30;     // m Bogenlänge pro Schritt für die s-Prüfung
+  const ABBIEGE_FRIST = 4;      // s (v16): so lange darf ein Auto auf der Querstraße (falsch abgebogen) bleiben, dann Reset (Kind braucht Zeit zum Wenden)
+  const ABBIEGE_WEIT = 60;      // m (v16): weiter als so weit von der Kreuzungsmitte → sofort Reset (fährt davon)
+  const ABBIEGE_HEIM = 25;      // m (v16): wieder so weit von der Kreuzungsmitte auf dem eigenen Abschnitt → Frist zurückgesetzt
 
   class RaceManager {
     /**
@@ -70,6 +81,9 @@
           bestzeit: null,
           imZiel: false,
           zielZeit: null,
+          abgebogen: null,         // v16: falsch auf die Querstraße abgebogen → { k, passHeim, sek }; sonst null
+          abbiegeSek: 0,           // v16: Zeit (s) auf der Querstraße seit dem letzten sicheren Heimweg
+          abbiegeReset: false,     // v16: Frist abgelaufen → main.js setzt zurück (Flag wird dort gelöscht)
           ausgeschieden: false,    // Runde 6 (W3-F): „Letzter fliegt raus"
           platz: i + 1,
           startPose: { x: v.x, z: v.z, heading: v.heading, s: n.s },   // W4-I: s = Index-Hinweis für den Reset
@@ -100,11 +114,11 @@
           this._melden('start');
         }
         // Positionen trotzdem mitführen (falls jemand rollt)
-        this.teilnehmer.forEach(t => this._verfolgen(t, false));
+        this.teilnehmer.forEach(t => this._verfolgen(t, false, dt));
         return;
       }
       this.zeit += dt;
-      this.teilnehmer.forEach(t => { if (!t.ausgeschieden) this._verfolgen(t, true); });
+      this.teilnehmer.forEach(t => { if (!t.ausgeschieden) this._verfolgen(t, true, dt); });
       this._fortschrittBerechnen();
       if (this.elimination && this.zustand === 'laeuft') this._eliminationPruefen(dt);
       this._platzierung();
@@ -122,10 +136,12 @@
     }
 
     /** Position eines Teilnehmers auf der Strecke nachführen und Checkpoints prüfen. */
-    _verfolgen(t, zaehlen) {
+    _verfolgen(t, zaehlen, dt) {
       const v = t.vehicle, sp = this.spline;
       // W4-J: an einer niveaugleichen Kreuzung mit Index-Kontinuität (sonst springt s evtl. auf den querenden Abschnitt)
       const n = this._kreuz ? this.strecke._naechsterKont(v.x, v.z, t.index) : sp.naechster(v.x, v.z, t.index);
+      // v16: Abbiegen auf der Kreuzung → falsch abgebogen (kein Fortschritt, Frist, Reset)
+      if (this._kreuz && zaehlen && !t.imZiel && t.istSpieler && this._abbiegen(t, n, dt || 0)) { t._x = v.x; t._z = v.z; return; }
       const weg = Math.hypot(v.x - t._x, v.z - t._z);
       const dsSchritt = sp.differenzS(n.s, t._s);
       t.index = n.index; t.s = n.s; t.seitenabstand = n.seitenabstand;
@@ -138,6 +154,48 @@
         }
       }
       t._x = v.x; t._z = v.z; t._s = n.s;
+    }
+
+    /**
+     * v16: „Falsch abgebogen" prüfen. n = Zuordnung zum Heimabschnitt (t.index). Liefert true, solange das Auto abgebogen
+     * ist (dann bleiben t.index/t.s/Fortschritt eingefroren und es zählt kein Checkpoint).
+     *  - Beginn: strecke.kreuzungAbgebogen (≥ 17 m auf der Querstraße, nicht mehr auf der eigenen Fahrbahn) → Ereignis 'abgebogen'.
+     *  - Ende: wieder < 15 m von der Kreuzungsmitte (zurück auf der Kreuzung) → t.index auf den Heimabschnitt an der Kreuzung.
+     *  - Frist: t.abbiegeSek zählt alle Zeit auf der Querstraße (auch nach kurzem Zurück über die Mitte auf die andere
+     *    Querstraße); auf 0 erst, wenn das Auto > 25 m von der Mitte wieder auf seinem Heimabschnitt fährt.
+     *  - Reset: Frist > ABBIEGE_FRIST s oder > ABBIEGE_WEIT m von der Mitte → t.abbiegeReset + Ereignis 'abbiegeReset'.
+     */
+    _abbiegen(t, n, dt) {
+      const v = t.vehicle, st = this.strecke;
+      let a = t.abgebogen;
+      if (a) {
+        const dm = Math.hypot(v.x - a.k.x, v.z - a.k.z);
+        if (dm < 15) {                              // zurück auf der Kreuzung: wieder auf den Heimabschnitt
+          t.abgebogen = null;
+          const sH = a.passHeim === 'a' ? a.k.sA : a.k.sB;
+          this.verfolgungSetzen(t, v.x, v.z, sH, true);
+          return true;                              // dieser Schritt zählt noch nicht (Index gerade gesetzt)
+        }
+        t.abbiegeSek += dt;
+        if (!t.abbiegeReset && (t.abbiegeSek > ABBIEGE_FRIST || dm > ABBIEGE_WEIT)) {
+          t.abbiegeReset = true;
+          this._melden('abbiegeReset', t);
+        }
+        return true;
+      }
+      const w = st.kreuzungAbgebogen(v.x, v.z, n);
+      if (w) {
+        t.abgebogen = { k: w.k, passHeim: w.passHeim };
+        this._melden('abgebogen', t);
+        return true;
+      }
+      // sicher zu Hause (auf dem eigenen Abschnitt, > 25 m von allen Kreuzungsmitten oder noch nie abgebogen): Frist frei
+      if (t.abbiegeSek > 0) {
+        let fern = true;
+        for (const k of st.kreuzungen) if (Math.hypot(v.x - k.x, v.z - k.z) < ABBIEGE_HEIM) fern = false;
+        if (fern) t.abbiegeSek = 0;
+      }
+      return false;
     }
 
     /**
@@ -292,8 +350,9 @@
      * Interne Verfolgung auf eine neue Position umsetzen (nach Reset/Versatz),
      * damit der Sprung keinen Checkpoint auslöst.
      */
-    verfolgungSetzen(t, x, z, s) {
+    verfolgungSetzen(t, x, z, s, abbiegenBleibt) {
       if (typeof t === 'number') t = this.teilnehmer[t];
+      if (!abbiegenBleibt) { t.abgebogen = null; t.abbiegeSek = 0; t.abbiegeReset = false; }   // v16: jeder Reset/Teleport beendet „falsch abgebogen"
       // W4-I: mit s (Checkpoint) lokal suchen – an einer Überführung liegen zwei Abschnitte übereinander
       const idx = s !== undefined && s !== null ? this.spline.indexBei(s) : undefined;
       const n = this._kreuz && idx !== undefined ? this.strecke._naechsterKont(x, z, idx) : this.spline.naechster(x, z, idx);   // W4-J

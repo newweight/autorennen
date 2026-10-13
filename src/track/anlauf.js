@@ -206,6 +206,46 @@
     return erg;
   }
 
+  /**
+   * 13.10. (v16) Reset-Pose mit genug Anlauf: Liegt die Reset-Stelle (Checkpoint bei Strecken-s `s`) näher als der Anlauf-Abstand VOR
+   * einem Looping/einer Schanze, würde das Auto aus dem Stand das Mindesttempo nicht mehr erreichen (Anlauf-Bremse, KI/Spieler müssten
+   * nochmal zurück). Dann wird die Pose auf die Anlaufposition (abstand m vor der Einfahrt) vorverlegt – höchstens
+   * config.anlauf.resetMaxZurueck (150 m) hinter die Reset-Stelle. Reicht das nicht ganz, bekommt das Auto Start-Schwung
+   * (tempo = sqrt(2·resetSchwungA·fehlenderWeg), höchstens Mindesttempo), so dass das Mindesttempo trotzdem sicher erreicht wird.
+   * Frei: kein anderes Auto in config.anlauf.frei, nicht mitten auf einer Kreuzung (je 10 m weiter zurück, höchstens 20×).
+   * @returns {{x,z,heading,s,tempo}|null} null = die Reset-Stelle liegt in keinem Anlaufbereich (Pose unverändert lassen)
+   */
+  function resetPosition(strecke, s, fahrzeuge, selbst) {
+    const l = stellen(strecke);
+    if (!l.length || s === undefined || s === null) return null;
+    const c = C(), sp = strecke.spline, frei = wert(c.frei, 8), maxZ = wert(c.resetMaxZurueck, 150), aSchwung = wert(c.resetSchwungA, 3);
+    const autos = (fahrzeuge || []).map(f => (f && f.vehicle) ? f.vehicle : f).filter(v => v && v !== selbst);
+    let sNeu = s, tempo = 0, geaendert = false;
+    for (let durchgang = 0; durchgang < 3; durchgang++) {   // nach dem Vorverlegen kann die Pose im Anlauf der VORHERIGEN Stelle liegen
+      let st = null, d = Infinity;
+      for (let i = 0; i < l.length; i++) {
+        const di = sp.differenzS(l[i].s, sNeu);
+        if (di > 0 && di < l[i].abstand && (!st || l[i].abstand - di > st.abstand - d)) { st = l[i]; d = di; }
+      }
+      if (!st) break;
+      const erlaubt = Math.max(0, maxZ - sp.differenzS(s, sNeu));        // noch zulässiger Weg zurück
+      const zurueck = Math.min(st.abstand - d, erlaubt), fehlt = st.abstand - d - zurueck;
+      sNeu = sp.wrapS(sNeu - zurueck);
+      if (fehlt > 0) tempo = Math.max(tempo, Math.min(st.vMin, Math.sqrt(2 * aSchwung * fehlt)));
+      geaendert = true;
+      if (zurueck <= 0) break;
+    }
+    if (!geaendert) return null;
+    let erg = null;
+    for (let k = 0; k <= 20; k++) {
+      const sk = sp.wrapS(sNeu - 10 * k), p = sp.punktBei(sk);
+      erg = { x: p.x, z: p.z, heading: R.headingAus(p.tx, p.tz), s: sk, tempo };
+      if (strecke.kreuzungNah && strecke.kreuzungNah(sk, 6)) continue;
+      if (autos.every(v => Math.hypot(v.x - p.x, v.z - p.z) >= frei)) break;
+    }
+    return erg;
+  }
+
   /** Auto auf die Anlaufposition setzen (Tempo 0), Zustand zurücksetzen. Liefert die Pose oder null. */
   function zurAnlaufposition(az, vehicle, strecke, fahrzeuge) {
     const st = az && az.stelle;
@@ -223,5 +263,5 @@
    */
   function aktiv(az) { return !!(az && az.stelle); }
 
-  R.Anlauf = { stellen, zustand, nachSchritt, position, zurAnlaufposition, aktiv, kiHilfe, mindestAnlauf, gasBeschleunigung };
+  R.Anlauf = { resetPosition, stellen, zustand, nachSchritt, position, zurAnlaufposition, aktiv, kiHilfe, mindestAnlauf, gasBeschleunigung };
 })();

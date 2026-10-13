@@ -209,11 +209,15 @@ Rennspiel.config = {
     standard: 'normal',
     stufen: {
       normal:    { name: 'Normal',    emoji: '🚧', faktor: 1, beschreibung: 'So viele wie immer.' },
-      viele:     { name: 'Viele',     emoji: '🚧🚧', faktor: 3, meterPro: 150, beschreibung: 'Dreimal so viele.' },
-      sehrViele: { name: 'Sehr viele', emoji: '🚧🚧🚧', faktor: 5, meterPro: 80, beschreibung: 'Fünfmal so viele – Slalom!' },
+      viele:     { name: 'Viele',     emoji: '🚧🚧', faktor: 3, meterPro: 150, minGesamt: 12, beschreibung: 'Dreimal so viele.' },
+      sehrViele: { name: 'Sehr viele', emoji: '🚧🚧🚧', faktor: 5, meterPro: 80, minGesamt: 26, beschreibung: 'Fünfmal so viele – Slalom!' },
     },
     startFrei: 120,        // m ab der Startlinie ohne zusätzliche Hindernisse (Startaufstellung + Anfahren)
     zielFrei: 70,          // m vor der Ziellinie ohne zusätzliche Hindernisse (Startaufstellung steht dahinter)
+    // 13.10. (v16) Rand-Abstände der Sperrzonen (m, zusätzlich zur Zone selbst) – vorher fest 30/90/16/12/45 …; kleiner = mehr Hindernisse
+    // auf Fantasie/Dino. Der Looping-Anlauf (loopingVor 90 m) und Schanzen-Anlauf/Landung bleiben frei.
+    zonen: { tunnel: 12, bruecke: 12, ueberf: 20, kreuzung: 12, loopingVor: 90, loopingNach: 14, spuren: 45, schanzeVor: 70, schanzeNach: 50,
+      boost: 8, schild: 8, ball: 11, wasser: 8, dino: 14, kleber: 5, lava: 28 },
     abstandSperr: 24,      // m Lücke (Rand zu Rand) zu/zwischen Sperr-Hindernissen (Baustelle, Ast, Wrack) – Zeit zum Ausweichen
     abstandFleck: 10,      // m Lücke zwischen Flecken (Öl, Sand) und allem anderen
     abstandStroh: 24,      // m Lücke bei Strohballen-Bahnen (rollen quer über die ganze Straße)
@@ -224,7 +228,8 @@ Rennspiel.config = {
     kurveMax: { baustelle: 1 / 150, ast: 1 / 45, wrack: 1 / 150, oel: 1 / 40, sand: 1 / 40, stroh: 1 / 60 },   // größte Krümmung (1/Radius) dort
     haarnadelVor: 45,      // m vor einer engen Kurve (Radius < haarnadelRadius) keine zusätzlichen Hindernisse
     haarnadelRadius: 32,
-    maxVersuche: 40,       // Zufallsversuche je Hindernis (Abschnitt, dann ganze Strecke); danach wird es weggelassen
+    maxVersuche: 40,       // Zufallsversuche je Hindernis im eigenen Abschnitt …
+    maxVersucheGlobal: 120, // … dann so viele über die ganze Strecke (13.10.: vorher 40); danach wird es weggelassen
   },
   // Runde 4: Strohballen (Dynamik, Katalog strohballen [{ s, von, intervall, tempo }], nur Welt mit strohballen)
   strohballen: {
@@ -543,6 +548,8 @@ Rennspiel.config = {
     frei: 8,                   // m Abstand zu anderen Autos an der Anlaufposition (sonst 10 m weiter zurück)
     kiWarten: 2,               // s: KI steht so lange an der Linie → setzt sich selbst auf die Anlaufposition
     loopingHilfe: 0.9,         // Looping oben: ab Tempo ≥ 0,9 · nötiges Tempo schiebt die Arcade-Hilfe (mit Gas) nach
+    resetMaxZurueck: 150,      // 13.10.: Reset (Abschleppen, R/T, KI festgefahren) im Anlaufbereich → Anlaufposition, höchstens so viele m hinter dem Checkpoint
+    resetSchwungA: 3,          // m/s²: fehlt dadurch Anlaufweg, bekommt das Auto Start-Schwung v = sqrt(2·a·fehlenderWeg) (höchstens Mindesttempo)
   },
   // --- Runde 5: Fantasie-Klebestreifen (Katalog kleber [{ s0, s1, seite }], Logik + Optik: src/world/kleber.js) ---
   // Untergrund 'kleber' auf dem Randstreifen; > sekunden am Stück darauf → dauer s festgeklebt (Steuerung aus,

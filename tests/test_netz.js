@@ -10,6 +10,9 @@
 //  F) Gast trennt mitten im Rennen → Auto fährt als Computer weiter, Host bekommt „weg“, Rennen endet mit Ergebnis
 //  G) Host trennt → Raum zu, Gast bekommt raumZu; max. 6 Spieler je Raum
 //  H) Ping auf localhost (gemessene Latenz)
+//  M) v16 Sonder-Vorhersage (Kleber, Anlauf-Bremse, Schanze/Flug, Looping, Looping-Absturz): Anzeige-Fehler und -Sprünge im Sonderzustand,
+//     v15 (opt.sonderVorhersage:false) gegen neu, Zustände 100/200 ms verzögert; M2: Ende-zu-Ende in Echtzeit mit Zittern (Fantasie-Looping).
+//     Kurztest nur der synchronen Blöcke: NETZ_NUR_SYNC=1 node tests/test_netz.js
 'use strict';
 const http = require('http');
 const path = require('path');
@@ -25,8 +28,8 @@ const DT = R.config.physik.schritt;
 
 // „Browser“ ohne DOM: dieselben Dateien, die Autorennen.html für Physik/Vorhersage lädt
 const C = kontextLaden(['vendor/three.min.js', 'src/config.js', 'src/physics/vehicle.js', 'src/physics/collisions.js', 'src/cars/carCatalog.js',
-  'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/looping.js', 'src/world/themes.js',
-  'src/world/wetter.js', 'src/net/protokoll.js', 'src/net/vorhersage.js']);
+  'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/looping.js', 'src/track/schanze.js', 'src/track/anlauf.js',
+  'src/world/themes.js', 'src/world/wetter.js', 'src/world/kleber.js', 'src/net/protokoll.js', 'src/net/vorhersage.js']);   // v16: + Schanze/Anlauf/Kleber (wie Autorennen.html)
 
 /** Strecke wie im Browser (main.js streckeSzeneBauen, Physik-Teile) aus den Start-Einstellungen. */
 function clientStrecke(e) {
@@ -292,6 +295,155 @@ function autopilot(st, v, idx) {
     pruefe(`K Rempeln (${sz}): Stoß der Stellvertreter fließt nicht in die Server-Zustände (= Anzeige der anderen Autos) zurück`, o.rueckfluss === 0 && o.V.stat.stoesse > 0, `${o.rueckfluss} Änderungen`);
   }
 }
+
+// ------------------------------------------------------------------ M) Sonder-Vorhersage (13.10., v16): Kleber, Anlauf-Bremse, Schanze/Flug, Looping
+//   Server (Simulation) und Vorhersage (NetzVorhersage) bekommen dieselben Eingaben; die Server-Zustände (ich inkl. ich.sz, wie über
+//   JSON) kommen 100 ms (lat 6 Ticks) verzögert an, 20 Hz. Gemessen wird die ANZEIGE des eigenen Wagens (3D-Position, im Looping auf dem
+//   Kreis) gegen die Server-Position desselben Ticks – im Sonderfenster (Server meldet so = 1, ± 0,5 s):
+//     Fehler (mittel/max) und Anzeige-Sprünge (Abweichung der Frame-zu-Frame-Bewegung von der echten Bewegung; > 0,5 m = „hart“).
+//   Vergleich: v15 (opt.sonderVorhersage:false → Anzeige folgt dem Server-Puffer 50 ms hinter der geschätzten Server-Zeit, wie online.js)
+//   gegen neu (nur die eine Art / alle Arten).
+const Msz = (() => {
+  const glatt = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  /** Fahrer: Pure Pursuit, Wunschtempo soll(s, v), Seitenversatz q(s). */
+  function fahre(st, v, idx, o) {
+    const n = st.abfrage(v.x, v.z, idx), sp = st.spline;
+    const vl = Math.max(3, v.vLaengs), L = Math.max(9, Math.min(50, 0.55 * vl + 8));
+    const ziel = sp.punktBei(n.s + L), q = o.q ? o.q(n.s) : 0;
+    const zx = ziel.x + ziel.nx * q, zz = ziel.z + ziel.nz * q;
+    let diff = C.headingAus(zx - v.x, zz - v.z) - v.heading;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+    const lenkung = Math.max(-1, Math.min(1, -(2 * vl * Math.sin(diff) / Math.hypot(zx - v.x, zz - v.z)) / v.drehrateMax(vl)));
+    const soll = o.soll(n.s, v.vLaengs);
+    return { s: { gas: v.vLaengs < soll ? 1 : 0, bremse: v.vLaengs > soll + 3 ? 0.5 : 0, lenkung }, idx: n.index, sNow: n.s };
+  }
+  /** Sichtbare 3D-Position (Looping: auf dem Kreis, Fall-Animation: wie Looping.anzeigePose). */
+  function pos3(st, lp, x, z, y) {
+    if (lp && lp.fallen) {
+      const c = C.config.fantasie.looping, t = glatt(0, 1, lp.fallZeit / (c.fallDauer === undefined ? 0.9 : c.fallDauer)), von = lp.fallVon;
+      const p = st.spline.punktBei(lp.looping.s - (c.zurueck === undefined ? 6 : c.zurueck)), zx = p.x + p.nx * lp.qEin, zz = p.z + p.nz * lp.qEin, zy = st.hoeheAn(zx, zz);
+      return [von.x + (zx - von.x) * t, von.y + (zy - von.y) * t + Math.sin(t * Math.PI) * 2.5, von.z + (zz - von.z) * t];
+    }
+    if (lp) { const w = Math.min(2 * Math.PI, lp.winkel), b = C.Looping.bahn(st, lp.looping, w, C.Looping.autoQ(lp.looping, lp, w)); return [b.x, b.y, b.z]; }
+    return [x, y, z];
+  }
+  const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+
+  const SZENARIEN = [
+    { name: 'Kleber', art: 'kleber', id: 'fantasie', welt: 'fantasie', s0: 360, q0: 8, v0: 18, ticks: 60 * 13,   // Randstreifen 385–440: >2 s darauf → klebt 5 s, dann Schonzeit
+      soll: () => 20, q: (s) => (s > 330 && s < 460 ? 8 : 0) },
+    { name: 'Anlauf-Bremse', art: 'anlauf', id: 'fantasie', welt: 'fantasie', s0: 40, v0: 10, ticks: 60 * 22, soll: () => 10,   // zu langsam auf den Looping: Bremse, Stopp, rückwärts (löst)
+      eingabe: (c, s) => {
+        const a = c.F.anlauf;
+        if (a && a.bremst && a.stehZeit > 1.0) c.rueck = (c.rueck || 0) + 1;
+        if (c.rueck && c.rueck < 60 * 4) return { gas: 0, bremse: 1, lenkung: 0 };
+        if (c.rueck >= 60 * 4) return { gas: 0, bremse: 0, lenkung: 0 };
+        return s;
+      } },
+    { name: 'Schanze/Flug', art: 'flug', id: 'wiese', welt: 'stunt', s0: 2560, v0: 28, ticks: 60 * 14, soll: () => 45,   // 12°-Rampe bei 2730 m, im Flug gelenkt (links, dann rechts)
+      eingabe: (c, s) => { const f = c.F.flug; return f && f.aktiv ? { gas: 1, bremse: 0, lenkung: f.t < 1.2 ? 0.7 : -0.5 } : s; } },
+    { name: 'Looping', art: 'looping', id: 'fantasie', welt: 'fantasie', s0: 20, v0: 22, ticks: 60 * 14, soll: () => 40 },
+    { name: 'Looping-Absturz', art: 'looping', id: 'fantasie', welt: 'fantasie', s0: 150, v0: 25.5, ticks: 60 * 12, soll: () => 40,   // im Looping voll bremsen → fällt zurück (Fall-Animation)
+      eingabe: (c, s) => { const l = c.F.looping; return l && l.aktiv ? { gas: 0, bremse: 1, lenkung: 0 } : s; } },
+  ];
+
+  /** Ein Lauf; sv = opt.sonderVorhersage der Vorhersage, lat = Verzögerung der Zustände in Ticks. */
+  function lauf(def, sv, lat) {
+    const sim = new Simulation({ einstellungen: { streckeId: def.id, welt: def.welt, runden: 5, gegner: 0, tageszeit: 'tag', jahreszeit: 'sommer', wetter: 'klar', windStaerke: 0 },
+      spieler: [{ fahrer: 'Jonas', auto: 'porsche-911', hilfe: 'aus' }], seed: 77 });
+    const e = sim.startInfo().einstellungen, { st, w } = clientStrecke(e);
+    const auto = C.carCatalog.waehlbare().find(a => a.id === 'porsche-911');
+    const V = new C.NetzVorhersage({ strecke: st, auto, tempoKlasse: e.tempoKlasse, fahrhilfe: 'aus', umwelt: () => w.umwelt(), sonderVorhersage: sv });
+    const F = sim.sim.fahrzeuge[0], sv0 = F.vehicle, sst = sim.sim.strecke, sp = sst.spline;
+    for (let k = 0; k < 60 * 12 && !sim.sim.rennen.gasErlaubt; k++) sim.schritt();
+    for (let k = 0; k < 60 * 4; k++) sim.schritt();                       // Start-Boost klingt ab
+    { const p = sp.punktBei(def.s0), q = def.q0 || 0;                      // Szenario-Startpunkt
+      sv0.setzen(p.x + p.nx * q, p.z + p.nz * q, C.headingAus(p.tx, p.tz)); sv0.vLaengs = def.v0; sv0.y = sst.hoeheAn(sv0.x, sv0.z); F.index = -1;
+      sim.sim.rennen.verfolgungSetzen(0, sv0.x, sv0.z, def.s0); }
+    const puffer = new C.NetzPuffer(), ankunft = [], k0 = sim.tick, N = def.ticks;
+    const ich0 = JSON.parse(JSON.stringify(sim.ich(0))); ich0.ack = 0;
+    V.abgleich(ich0, null); V._ersterAbgleich = false;
+    const truth = [], disp = [], soF = [], ctx = { sim, F };
+    let idx = -1, war = false, hart = 0, pd = { x: V.vp.x, z: V.vp.z, y: V.vp.y, heading: V.vp.heading };
+    const ziel = { x: 0, z: 0, y: 0, heading: 0, vLaengs: 0, lenkung: 0, nicken: 0, neigung: 0 };
+    for (let n = 1; n <= N; n++) {
+      const a = fahre(sst, sv0, idx, def); idx = a.idx;
+      let s = def.eingabe ? def.eingabe(ctx, a.s) : a.s;
+      s = C.Netz.eingabeDekodieren(C.Netz.eingabeKodieren(s));
+      sim.eingabeSetzen(0, s); sim.schritt();
+      const ich = JSON.parse(JSON.stringify(sim.ich(0))), fl = F.looping;
+      const lpT = fl && fl.aktiv ? { looping: fl.looping, winkel: fl.winkel, qEin: fl.qEin } : (fl && fl.fallen ? { fallen: true, looping: fl.looping, fallZeit: fl.fallZeit, fallVon: fl.fallVon, qEin: fl.qEin } : null);
+      truth.push(pos3(sst, lpT, sv0.x, sv0.z, sv0.y)); soF.push(ich.so);
+      if (n % 3 === 0) { ich.ack = n; ankunft.push({ an: n + lat, ich, z: JSON.parse(JSON.stringify(sim.zustand())) }); }
+      while (ankunft.length && ankunft[0].an <= n) {                       // Zustand kommt an (wie online.js zustandEmpfangen)
+        const m = ankunft.shift();
+        puffer.rein(m.z);
+        V.abgleich(m.ich, { x: pd.x, z: pd.z, y: pd.y, heading: pd.heading }, undefined, m.z.k);
+        if (V.hart) { hart++; V.hart = false; }
+      }
+      V.schritt(n, s, { countdown: false, imZiel: false });
+      let d, lpD = null;
+      if (!V.sonder) {                                                     // Anzeige = Vorhersage + Korrektur
+        war = false; V.abklingen(DT);
+        d = { x: V.vp.x + V.korr.x, z: V.vp.z + V.korr.z, y: V.vp.y + V.korr.y, heading: V.vp.heading + V.korr.h };
+        const lp = V.lp;
+        if (lp && lp.aktiv) lpD = { looping: lp.looping, winkel: lp.winkel + V.korr.w, qEin: lp.qEin };
+        else if (lp && lp.fallen) lpD = { fallen: true, looping: lp.looping, fallZeit: lp.fallZeit, fallVon: lp.fallVon, qEin: lp.qEin };
+      } else {                                                             // Server rechnet allein: Anzeige folgt dem Puffer (online.js, 50 ms hinter der geschätzten Server-Zeit)
+        const um = puffer.um(k0 + n - lat - 0.05 / DT);
+        if (um) {
+          const lp = C.NetzPuffer.interpolieren(um.a.a[0], um.b.a[0], um.t, ziel);
+          if (!war) { war = true; V.uebergang(pd, ziel); }
+          V.abklingen(DT);
+          d = { x: ziel.x + V.korr.x, z: ziel.z + V.korr.z, y: ziel.y + V.korr.y, heading: ziel.heading + V.korr.h };
+          const L = lp && sst.loopings[lp[0]];
+          if (L) lpD = { looping: L, winkel: lp[1], qEin: lp[2] };
+          if (V.hart) { hart++; V.hart = false; }
+        } else d = pd;
+      }
+      pd = d; disp.push(pos3(sst, lpD, d.x, d.z, d.y));
+    }
+    const imF = new Array(N).fill(false);
+    for (let i = 0; i < N; i++) if (soF[i]) for (let k = Math.max(0, i - 30); k <= Math.min(N - 1, i + 30); k++) imF[k] = true;
+    let nF = 0, sum = 0, mx = 0, jmax = 0, j05 = 0, so = 0;
+    for (let i = 1; i < N; i++) {
+      if (soF[i]) so++;
+      if (!imF[i]) continue;
+      const f = dist3(disp[i], truth[i]); sum += f; mx = Math.max(mx, f); nF++;
+      const j = Math.hypot(...disp[i].map((v, k) => (v - disp[i - 1][k]) - (truth[i][k] - truth[i - 1][k])));
+      jmax = Math.max(jmax, j); if (j > 0.5) j05++;
+    }
+    return { so, nF, mittel: sum / Math.max(1, nF), max: mx, jmax, j05, hart, sonderV: V.sonder };
+  }
+  return { SZENARIEN, lauf, fahre };
+})();
+{
+  const f = (r) => `Ø ${r.mittel.toFixed(3)} m, max ${r.max.toFixed(2)} m, Sprung max ${r.jmax.toFixed(2)} m, ${r.j05}× > 0,5 m, ${r.hart} hart`;
+  for (const def of Msz.SZENARIEN) {
+    const alt = Msz.lauf(def, false, 6);                       // v15: Server rechnet Sonderzustände allein, Anzeige folgt ihm
+    const art = Msz.lauf(def, { [def.art]: true }, 6);         // nur diese Art vorhergesagt
+    const alle = Msz.lauf(def, true, 6);                       // alle Arten (Standard)
+    const alt12 = Msz.lauf(def, false, 12), alle12 = Msz.lauf(def, true, 12);   // Zustände 200 ms verzögert
+    pruefe(`M ${def.name}: Server im Sonderzustand (≥ 1 s) – sonst misst der Test nichts`, alt.so >= 60, alt.so + ' Ticks');
+    pruefe(`M ${def.name} (100 ms): Vorhersage (nur „${def.art}“) deutlich genauer als v15 – Fehler < 25 %, Sprünge ≤ v15, keine harten Sprünge (> 0,5 m)`,
+      art.mittel < 0.25 * alt.mittel && art.max < 0.25 * alt.max && art.jmax <= alt.jmax && art.j05 === 0 && art.hart === 0,
+      `v15: ${f(alt)}  |  neu: ${f(art)}`);
+    pruefe(`M ${def.name} (100 ms): alle Arten zusammen genauso gut (Standard-Einstellung)`, alle.mittel < 0.25 * alt.mittel && alle.max < 0.25 * alt.max && alle.j05 === 0 && alle.hart === 0 && alle.mittel <= art.mittel + 0.02,
+      f(alle));
+    pruefe(`M ${def.name} (200 ms): bleibt deutlich besser als v15`, alle12.mittel < 0.25 * alt12.mittel && alle12.max < 0.25 * alt12.max && alle12.j05 === 0,
+      `v15: ${f(alt12)}  |  neu: ${f(alle12)}`);
+  }
+  // Ohne Sonderzustände auf der Strecke ändert sich nichts: gleiche Vorhersage mit und ohne den Schalter (Wiese ohne Looping/Schanze/Kleber)
+  {
+    const def = { name: 'ohne', id: 'wiese', welt: '', s0: 300, v0: 20, ticks: 60 * 12, soll: () => 30 };
+    const a = Msz.lauf(def, false, 6), b = Msz.lauf(def, true, 6);
+    pruefe('M Strecke ohne Sonderzustände (Wiese): Schalter ändert nichts (Anzeige-Fehler und -Sprünge identisch)', a.mittel === b.mittel && a.max === b.max && a.jmax === b.jmax && a.hart === b.hart,
+      `Ø ${a.mittel.toExponential(2)} / ${b.mittel.toExponential(2)}`);
+  }
+}
+
+if (process.env.NETZ_NUR_SYNC) { console.log(`\n${ok} OK, ${fehler} FEHL (nur die synchronen Blöcke A, B, L, K, M)`); process.exit(fehler ? 1 : 0); }
 
 (async () => {
   const srv = await starten({ port: 0, host: '127.0.0.1', leise: true, tempo: 6, ladenMaxMs: 5000 });
@@ -562,6 +714,81 @@ function autopilot(st, v, idx) {
     const S = V.stat, mittel = S.summeFehler / Math.max(1, S.abgleiche);
     pruefe('J Echtzeit mit 20–80 ms Zittern: Vorhersage hält (≤ 2 harte Korrekturen, mittlere Abweichung < 0,3 m, Auto fährt)', S.hart <= 2 && mittel < 0.3 && fort > 150,
       `${S.abgleiche} Abgleiche, ${S.weich} weich, ${S.hart} hart, max ${S.maxFehler.toFixed(2)} m, Mittel ${mittel.toFixed(3)} m, ${fort.toFixed(0)} m gefahren`);
+  }
+
+  // ---------------------------------------------------------------- M2) Sonder-Vorhersage Ende-zu-Ende (13.10., v16)
+  // Echter Server in Echtzeit, WebSocket mit 20–80 ms Zittern in beide Richtungen (wie J), Fantasie: das Auto wird nach dem Countdown 150 m vor den
+  // ersten Looping gesetzt und fährt mit Vollgas hinein (Anlauf-Zone, Einfahrt, Looping, Ausfahrt). ich.sz kommt wirklich per JSON; die Vorhersage rechnet
+  // den Looping mit (zum Vergleich auch v15: Server rechnet allein). Erwartung: der Server meldet so = 1, aber die Vorhersage bleibt in dieser Zeit selbst am Steuer (V.sonder nie wahr), keine harte Korrektur.
+  {
+    const m2 = async (sv) => {
+      const s4 = await starten({ port: 0, host: '127.0.0.1', leise: true });
+      const ws = new WebSocket('ws://127.0.0.1:' + s4.port + '/ws');
+      await new Promise((ok) => ws.on('open', ok));
+      let zufall = 777;
+      const rnd = () => { zufall = (zufall * 1103515245 + 12345) & 0x7fffffff; return zufall / 0x7fffffff; };
+      let ausZeit = 0, einZeit = 0;
+      const raus = (o) => { const t = Math.max(ausZeit, Date.now() + 20 + rnd() * 60); ausZeit = t; setTimeout(() => ws.readyState === 1 && ws.send(JSON.stringify(o)), t - Date.now()); };
+      const handler = {};
+      ws.on('message', (d) => { const m = JSON.parse(d); const t = Math.max(einZeit, Date.now() + 20 + rnd() * 60); einZeit = t; setTimeout(() => handler[m.t] && handler[m.t](m), t - Date.now()); });
+      const start = await new Promise((ok) => {
+        handler.lobby = () => raus({ t: 'start' });
+        handler.start = ok;
+        raus({ t: 'raumErstellen', fahrer: 'Jonas', auto: 'porsche-911', hilfe: 'aus', einstellungen: { streckeId: 'fantasie', welt: 'fantasie', runden: 2, gegner: 0 } });
+      });
+      handler.lobby = null;
+      const e = start.einstellungen, { st, w } = clientStrecke(e);
+      const auto = C.carCatalog.waehlbare().find(a => a.id === 'porsche-911');
+      const V = new C.NetzVorhersage({ strecke: st, auto, tempoKlasse: e.tempoKlasse, fahrhilfe: 'aus', umwelt: () => w.umwelt(), sonderVorhersage: sv });
+      const p0 = st.startpositionen(start.teilnehmer.length)[0];
+      V.vp.setzen(p0.x, p0.z, p0.heading); V.vp.y = st.hoeheAn(p0.x, p0.z);
+      const raum = [...s4.raeume.values()][0], simF = raum.sim.sim.fahrzeuge[0];
+      let rz = 'countdown', n = 0, idx = -1, teleport = 0, hart0 = null, sum0 = 0, ab0 = 0, soAbgl = 0, sonderAbgl = 0, gesehenLoop = 0, fort = 0;
+      handler.zustand = (z) => {
+        rz = z.rz;
+        if (!z.ich) return;
+        V.abgleich(z.ich, { x: V.vp.x + V.korr.x, z: V.vp.z + V.korr.z, y: V.vp.y + V.korr.y, heading: V.vp.heading + V.korr.h });
+        fort = z.a[z.ich.nr][12];
+        if (teleport && Date.now() > teleport + 1500) {                // erst nach dem Ankommen zählen
+          if (hart0 === null) { hart0 = V.stat.hart; sum0 = V.stat.summeFehler; ab0 = V.stat.abgleiche; V.stat.maxFehler = 0; }
+          if (z.ich.so) { soAbgl++; if (V.sonder) sonderAbgl++; }
+          if (z.ich.sz && z.ich.sz.l && z.ich.sz.l[0]) gesehenLoop++;
+        }
+      };
+      raus({ t: 'geladen' });
+      const t0 = Date.now() / 1000;
+      await new Promise((fertig) => {
+        const iv = setInterval(() => {
+          if (rz === 'laeuft' && !teleport) {                          // Server-Auto vor den Looping setzen (Szenario-Start)
+            const sv0 = simF.vehicle, sp = raum.sim.sim.strecke.spline, p = sp.punktBei(20);
+            sv0.setzen(p.x, p.z, C.headingAus(p.tx, p.tz)); sv0.vLaengs = 22; sv0.y = raum.sim.sim.strecke.hoeheAn(sv0.x, sv0.z); simF.index = -1;
+            raum.sim.sim.rennen.verfolgungSetzen(0, sv0.x, sv0.z, 20);
+            teleport = Date.now();
+          }
+          const soll = Math.floor((Date.now() / 1000 - t0) / DT);
+          while (n < soll) {
+            const a = Msz.fahre(st, V.vp, idx, { soll: () => 40 }); idx = a.idx;
+            const k = C.Netz.eingabeKodieren(rz === 'laeuft' && teleport ? a.s : { gas: 0, bremse: 0, lenkung: 0 }), s = C.Netz.eingabeDekodieren(k);
+            n++;
+            raus({ t: 'eingabe', n, g: k.g, b: k.b, l: k.l });
+            V.schritt(n, s, { countdown: rz === 'countdown', imZiel: false });
+            V.abklingen(DT);
+          }
+          if (teleport && Date.now() > teleport + 11000) { clearInterval(iv); fertig(); }
+        }, 8);
+      });
+      const geschafft = simF.looping ? simF.looping.geschafft : 0;
+      ws.terminate();
+      await s4.schliessen();
+      const S = V.stat, mittel = (S.summeFehler - sum0) / Math.max(1, S.abgleiche - ab0);
+      return { geschafft, soAbgl, sonderAbgl, gesehenLoop, hart: S.hart - hart0, weich: S.weich, max: S.maxFehler, mittel };
+
+    };
+    const alt = await m2(false), neu = await m2(undefined);
+    const f = (r) => `Looping ${r.geschafft}×, ${r.soAbgl} Abgleiche mit so = 1, davon ${r.sonderAbgl} ohne Vorhersage, ${r.hart} harte Korrekturen, ${r.weich} weich, max ${r.max.toFixed(2)} m, Ø ${r.mittel.toFixed(3)} m`;
+    pruefe('M2 Echtzeit mit Zittern, Fantasie-Looping: Auto fährt den Looping (Server: geschafft), Server meldet so = 1, Vorhersage bleibt am Steuer (nie sonder), ≤ 1 harte Korrektur nach dem Setzen, Ø-Abweichung < 0,3 m',
+      neu.geschafft >= 1 && neu.soAbgl >= 5 && neu.sonderAbgl === 0 && neu.gesehenLoop >= 3 && neu.hart <= 1 && neu.mittel < 0.3,
+      `neu: ${f(neu)}  |  v15: ${f(alt)}`);
   }
 
   // ---------------------------------------------------------------- I) öffentliche Adresse für Link/QR (Startskript --oeffentlich)

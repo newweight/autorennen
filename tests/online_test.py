@@ -14,6 +14,9 @@ W5 Stufe 2 (Rempeln online):
  g) Lobby: Gast sieht „Geister“ (nur Ansicht), Host schaltet per Klick auf „💥 Rempeln“ (Server übernimmt, Gast sieht den Wert,
     zuletzt gewählter Wert landet in den lokalen Einstellungen); Start mit Rempeln: alle Autos deckend, Vorhersage kennt die
     Stellvertreter; der Gast fährt in das stehende Host-Auto → Stoß in der Vorhersage, keine harte Korrektur, keine JS-Fehler
+v16 Sonder-Vorhersage (Browser-Teil, ohne Server-Eingriff): Der Gast bekommt im Stand einen künstlichen Server-Zustand `ich.sz` (Looping aktiv), der Server-Zustandsempfang
+    ruht 0,5 s: der eigene Wagen läuft im Looping (f.looping aktiv, Winkel wächst, imLooping, Kreis-Pose der Kamera/Anzeige), keine JS-Fehler, danach holt der echte
+    Server-Zustand das Auto zurück (Looping aus). Der Looping selbst in voller Länge: Block M/M2 in tests/test_netz.js und die Fahrt unter f).
 Bilder: tests/out/online/"""
 import sys, os, socket, subprocess, time, json
 from playwright.sync_api import sync_playwright
@@ -60,6 +63,32 @@ AUTOPILOT = """(art) => { const s = Rennspiel.spiel, o = s.online, R = Rennspiel
     return R.Anlauf ? R.Anlauf.kiHilfe({}, v, s.strecke, s.strecke.spline.naechster(v.x, v.z), st) : st;
   };
   return true; }"""
+
+# v16: künstlichen Server-Zustand `ich.sz` (Looping 0 aktiv, Winkel 0,3 rad, 30 m/s) in die Vorhersage geben, die Zustands-Verarbeitung 0,5 s ruhen lassen
+# (sonst überschreibt der nächste echte Zustand ihn nach 50 ms), mehrere Spiel-Bilder laufen lassen, Anzeige-Zustand des eigenen Wagens lesen.
+SONDER_ANZEIGE = """async () => {
+  const s = Rennspiel.spiel, o = s.online, V = o.vorhersage, R = Rennspiel, f = s.fahrzeuge[o.du], st = s.strecke;
+  if (!st.loopings.length || !V.lp) return { ok: false, grund: 'keine Looping-Vorhersage (Strecke/Skript)', lp: !!V.lp, loops: st.loopings.length };
+  const orig = o.zustandEmpfangen;
+  o.zustandEmpfangen = () => {};
+  try {
+    const ich = { nr: o.du, v: R.Netz.fahrzeugLesen(V.vp), idx: V.idx, bi: -1, bs: 0, fk: [1, 1], gs: 0, so: 1, ack: o.n,
+      sz: { l: [1, 0, 0, 0.3, 0.28, 30, 0, 0] } };
+    V.abgleich(ich, null);
+    const w0 = V.lp.winkel;
+    await new Promise(r => setTimeout(r, 500));                  // mehrere Bilder + feste Schritte laufen
+    const aus = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), vor: new THREE.Vector3(), oben: new THREE.Vector3() };
+    const pose = R.Looping.anzeigePose(st, f.looping, 0.5, aus);
+    const kam = { pos: new THREE.Vector3(), blick: new THREE.Vector3(), oben: new THREE.Vector3() };
+    const kp = R.Looping.kameraPose(st, f.looping, 0.5, 3, kam);
+    const erg = { aktiv: !!f.looping.aktiv, winkel0: w0, winkel: V.lp.winkel, anzeigeWinkel: f.looping.winkel, imLooping: !!f.vehicle.imLooping, sonder: V.sonder,
+      pose, kp, y: pose ? aus.pos.y : null, kamY: kp ? kam.pos.y : null };
+    erg.ok = erg.aktiv && erg.winkel > w0 + 0.3 && erg.imLooping && !erg.sonder && pose && kp && isFinite(erg.y) && isFinite(erg.kamY) && Math.abs(erg.anzeigeWinkel - erg.winkel) < 0.5;
+    return erg;
+  } finally {
+    o.zustandEmpfangen = orig;
+  }
+}"""
 
 try:
     with sync_playwright() as p:
@@ -203,6 +232,13 @@ try:
         abw = [((zh['pos'][i][0] - zg['pos'][i][0]) ** 2 + (zh['pos'][i][1] - zg['pos'][i][1]) ** 2) ** 0.5 for i in (0, 1)]
         pruefe('Positionen beider Sichten (Host-Auto, Gast-Auto) nach dem Anhalten < 3 m auseinander', max(abw) < 3,
                ['%.3f m' % a for a in abw] + ['Tempo %.2f / %.2f m/s' % (zh['tempo'], zg['tempo'])])
+        # ---------- v16: Sonder-Vorhersage im Browser (künstlicher Looping-Zustand, Anzeige-Pfad von online.js) ----------
+        sonder = gast.evaluate(SONDER_ANZEIGE)
+        pruefe('v16 Looping-Vorhersage im Browser: eigener Wagen läuft im Looping (aktiv, Winkel wächst, imLooping), Vorhersage nicht im Sonder-Modus, Kamera-/Anzeige-Pose gültig',
+               sonder and sonder.get('ok'), sonder)
+        gast.wait_for_timeout(900)
+        zurueck = gast.evaluate("(() => { const s = Rennspiel.spiel, o = s.online, f = s.fahrzeuge[o.du]; return { aktiv: !!f.looping.aktiv, imLooping: !!f.vehicle.imLooping, sonder: o.vorhersage.sonder }; })()")
+        pruefe('v16 danach holt der echte Server-Zustand das Auto aus dem künstlichen Looping zurück', zurueck and not zurueck['aktiv'] and not zurueck['imLooping'], zurueck)
         host.screenshot(path=os.path.join(out, 'online_9_host_stand.png'))
         gast.screenshot(path=os.path.join(out, 'online_10_gast_stand.png'))
         # ---------- f) bis die Runde zählt ----------

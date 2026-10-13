@@ -1072,7 +1072,7 @@ def spur_lauf(browser, sid, out):
     return info, zeilen
 
 
-def menge_lauf(browser, sid, out, bilder=True):
+def menge_lauf(browser, sid, out, bilder=True, welt='hindernisse'):
     """12.10. Hindernis-Menge: Welt „Hindernisse“ mit normal / viele / sehrViele im echten Spiel.
     Misst je Menge die Draw-Calls (Blick von 14 Stellen entlang der Runde) und die Anzahl; bei bilder=True außerdem Bilder
     mit 'sehrViele' (Fahrersicht in der dichtesten Stelle, Übersicht von oben, schräg, Autopilot; dichteste Stelle = meiste Hindernisse in 300 m). Prüft: keine JS-Fehler,
@@ -1082,14 +1082,14 @@ def menge_lauf(browser, sid, out, bilder=True):
     fehler = []
 
     def pruefe(name, ok, info_=''):
-        zeilen.append(('OK   ' if ok else 'FEHL ') + '[' + sid + '/hindernisse] ' + name + (' – ' + str(info_) if info_ != '' else ''))
+        zeilen.append(('OK   ' if ok else 'FEHL ') + '[' + sid + '/' + welt + '] ' + name + (' – ' + str(info_) if info_ != '' else ''))
     for menge in ('normal', 'viele', 'sehrViele'):
         page = browser.new_page(viewport={'width': 1280, 'height': 800})
         page.on('pageerror', lambda e: fehler.append(str(e)))
         page.on('console', lambda m: fehler.append('console.' + m.type + ': ' + m.text) if m.type in ('error',) else None)
         page.goto(url)
         page.wait_for_timeout(1500)
-        page.evaluate("([id, m]) => Rennspiel.spiel.rennenStarten({ modus: 'solo', streckeId: id, welt: 'hindernisse', hindernisMenge: m, autoIds: ['troc-cabrio', 'multivan'], runden: 3, gegner: 3, schwierigkeit: 'mittel', fahrhilfe: ['wenig', 'wenig'] })", [sid, menge])
+        page.evaluate("([id, m, w]) => Rennspiel.spiel.rennenStarten({ modus: 'solo', streckeId: id, welt: w, hindernisMenge: m, autoIds: ['troc-cabrio', 'multivan'], runden: 3, gegner: 3, schwierigkeit: 'mittel', fahrhilfe: ['wenig', 'wenig'] })", [sid, menge, welt])
         page.wait_for_timeout(1200)
         info = page.evaluate('''(() => { const st = Rennspiel.spiel.strecke, o = Rennspiel.spiel.einstellungen;
           return { menge: st.hindernisMenge, einst: o.hindernisMenge, L: st.laenge,
@@ -1138,6 +1138,8 @@ def menge_lauf(browser, sid, out, bilder=True):
     pruefe('Fahrersicht sehrViele: mindestens 3 Hindernisse in 110 m voraus (' + str(erg.get('dicht')) + ')', bool(erg.get('dicht')) and erg['dicht']['n'] >= 3 or not bilder)
     pruefe('Draw-Calls: sehrViele höchstens +40 gegenüber normal (max ' + str(s['callsMax']) + ' / ' + str(n['callsMax']) + ', Mittel ' + str(s['callsMittel']) + ' / ' + str(n['callsMittel']) + ')',
            s['callsMax'] <= n['callsMax'] + 40 and s['callsMax'] < 160, 'viele max ' + str(v['callsMax']))
+    if sid == 'fantasie':
+        pruefe('13.10. Fantasie „Sehr viele“: mindestens 20 Hindernisse (' + str(ges(s)) + ')', ges(s) >= 20)
     pruefe('keine JS-Fehler', not fehler, fehler[:3])
     return erg, zeilen
 
@@ -1155,8 +1157,8 @@ with sync_playwright() as p:
             info, pruef = spur_lauf(browser, sid, out)
             print(json.dumps({'stunt': info}, ensure_ascii=False))
             alle += pruef
-        if sid in ('wiese', 'wald', 'wueste', 'dino', 'alpen'):      # 12.10. Hindernis-Menge (Bilder nur für Wiese + Wüste, Messung für alle)
-            erg, pruef = menge_lauf(browser, sid, out, bilder=sid in ('wiese', 'wueste'))
+        if sid in ('wiese', 'wald', 'wueste', 'dino', 'alpen', 'fantasie'):      # 12.10. Hindernis-Menge (Bilder für Wiese, Wüste, 13.10. auch Fantasie + Dino; Fantasie in Welt „fantasie“)
+            erg, pruef = menge_lauf(browser, sid, out, bilder=sid in ('wiese', 'wueste', 'fantasie', 'dino'), welt='fantasie' if sid == 'fantasie' else 'hindernisse')
             print(json.dumps({'hindernisMenge': erg}, ensure_ascii=False))
             alle += pruef
     browser.close()

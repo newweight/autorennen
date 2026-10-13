@@ -41,6 +41,15 @@
 //   Fahrbahnen (_kreuzungZaunOk, Punktmarke kz): genau an der Bande, mit Pfosten an beiden Enden, ≥ 0,6 m Luft zum Randstein
 //   der querenden Fahrbahn. In den 4 Straßenmündungen bleibt die Bande unsichtbar – dort fährt der andere Abschnitt
 //   ungehindert durch (ein Zaun quer über die Mündung würde dessen Fahrbahn versperren).
+//   v16 (13.10.) ABBIEGEN OHNE UNSICHTBARE WAND: Die Wand in den 4 Mündungen entfällt durch einen Abschnittswechsel
+//   (_kreuzungWechsel / _naechsterWechsel, benutzt von abfrage, untergrundAn und collisions.bande): Steht ein Auto
+//   ≥ KREUZ_WECHSEL (17 m) von der Kreuzungsmitte auf der Fahrbahn des ANDEREN Abschnitts (bis 40 m) und nicht mehr auf der
+//   eigenen Fahrbahn, bekommt es dessen Index → dessen normale Bande/Untergrund, keine Wand quer über der Straße. Rein
+//   geometrisch (x, z, Index; keine Zeit/Zufall) → Server, Browser-Vorhersage und Tests rechnen gleich; geradeaus (und überall
+//   sonst) bleibt die Index-Kontinuität unverändert. Keine Abkürzung: kreuzungAbgebogen(x, z, n) (n = Zuordnung OHNE Wechsel)
+//   meldet der Rennleitung das Abbiegen – raceManager._abbiegen friert Fortschritt/Checkpoints ein, Meldung „Falsch abgebogen“,
+//   nach 4 s (oder > 60 m weg) Reset an den letzten Checkpoint (main.js _abbiegenPruefen). Zaun in den Zwickeln (v14) bleibt
+//   unverändert: dort gilt weiter die Bande des eigenen Abschnitts. Test: tests/test_kreuzung_abbiegen.js.
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -78,6 +87,8 @@
   const KREUZ_HALB = 15;         // m: Kreuzungsbereich je Abschnitt (± um sA bzw. sB) – Sperrzone, Fahrbahn der anderen Strecke
   const KREUZ_DY_MAX = 1;        // m: höchstens so viel Höhenunterschied (sonst wäre es eine Überführung)
   const KREUZ_DEKO = 36;         // m Radius um die Kreuzungsmitte ohne Deko
+  const KREUZ_WECHSEL = 17;      // m (v16): ab so weit von der Kreuzungsmitte AUF der Querstraße wechselt die Streckenzuordnung (Abschnittswechsel)
+  const KREUZ_WECHSEL_MAX = 40;  // m: weiter draußen gilt wieder nur die normale Index-Kontinuität (Teleport-Rückfall > Bande + 15 m)
   const KREUZ_WARN = 60;         // m: Auto im anderen Abschnitt so nah vor der Kreuzung → Warnlicht blinkt schnell
 
   /** Weicher Übergang 0 → 1 zwischen a und b. */
@@ -162,7 +173,7 @@
     const nWr = an('wracks') ? (sicht.wracks || []).length : 0;
     const nSt = an('strohballen') ? (sicht.strohballen || []).length : 0;
     const basisSumme = Object.keys(artZahl).reduce((x, k) => x + artZahl[k], 0) + nWr + nSt;
-    const ziel = Math.max(Math.round(basisSumme * faktor), Math.ceil(L / (stufe.meterPro || 1e9)));
+    const ziel = Math.max(Math.round(basisSumme * faktor), Math.ceil(L / (stufe.meterPro || 1e9)), stufe.minGesamt || 0);
     let rest = Math.max(0, ziel - basisSumme);
     const wr = Math.min(C.wrackMax == null ? 2 : C.wrackMax, nWr * (faktor - 1), rest);
     for (let k = 0; k < wr; k++) wunsch.push('wrack');
@@ -196,30 +207,36 @@
 
     // --- Belegt: Liste { c (Mitte), h (halbe Länge), klasse } – feste Sperrzonen mit klasse null (Lücke 0)
     const belegt = [];
-    const zone = (s0, s1, vor, nach, klasse) => {
+    const zone = (s0, s1, vor, nach, klasse, extra) => {
       const len = sp.wrapS(s1 - s0);
-      belegt.push({ c: s0 + (len + nach - vor) / 2, h: (len + vor + nach) / 2, klasse: klasse || null });
+      belegt.push(Object.assign({ c: s0 + (len + nach - vor) / 2, h: (len + vor + nach) / 2, klasse: klasse || null }, extra));
     };
     const punkt = (s, vor, nach, klasse) => belegt.push({ c: s + (nach - vor) / 2, h: (vor + nach) / 2, klasse: klasse || null });
+    // 13.10. (v16): Rand-Abstände der Sperrzonen aus config.hindernisMenge.zonen (vorher fest 30/90/16/12 …): Hindernisse dürfen
+    // dichter an Kreuzung, Looping-Ausfahrt, Bälle, Fontänen, Boost, Kleber heran – mehr Platz für die Menge, Anlauf (90 m) bleibt frei.
+    const ZR = Object.assign({ tunnel: 30, bruecke: 30, ueberf: 30, kreuzung: 30, loopingVor: 90, loopingNach: 30, spuren: 45, schanzeVor: 70,
+      schanzeNach: 80, boost: 12, schild: 12, ball: 16, wasser: 12, dino: 25, kleber: 15, lava: 55 }, C.zonen || {});
     punkt(0, 0, C.startFrei);                        // Start: Anfahren
     punkt(0, C.zielFrei, 0);                         // vor der Ziellinie: Startaufstellung steht dahinter
-    (st.tunnel || []).forEach((t) => zone(t.s0, t.s1, 30, 30));
-    (st.bruecken || []).forEach((b) => zone(b.s0, b.s1, 30, 30));
-    (st.ueberfuehrungen || []).forEach((u) => { zone(u.s0, u.s1, 30, 30); if (u.unten) zone(u.unten.s0, u.unten.s1, 30, 30); });
-    (st.kreuzungen || []).forEach((k) => { zone(k.a.s0, k.a.s1, 30, 30); zone(k.b.s0, k.b.s1, 30, 30); });
-    (st.loopings || []).forEach((l) => zone(l.s0, l.s1, 90, 30));   // davor: Anlauf (volle Fahrt nötig)
-    (st.spuren || []).forEach((e) => zone(e.s0, e.s1, 45, 45));
-    (sicht.schanzen || []).forEach((e) => zone(e.s, e.s + (e.laenge || 10), (e.anlauf || 0) + 70, 80));
-    (sicht.boostFelder || []).forEach((e) => zone(e.s, e.s + (e.laenge || 12), 12, 12));
-    (sicht.schilde || []).forEach((e) => punkt(e.s, 12, 12));
-    (sicht.baelle || []).forEach((e) => punkt(e.s, 16, 16));
-    (sicht.wasserstrahlen || []).forEach((e) => punkt(e.s, 12, 12));
-    (sicht.dinos || []).forEach((e) => punkt(e.s, 25, 25));
-    (sicht.kleber || []).forEach((e) => zone(e.s0, e.s1, 15, 15));
+    (st.tunnel || []).forEach((t) => zone(t.s0, t.s1, ZR.tunnel, ZR.tunnel));
+    (st.bruecken || []).forEach((b) => zone(b.s0, b.s1, ZR.bruecke, ZR.bruecke));
+    (st.ueberfuehrungen || []).forEach((u) => { zone(u.s0, u.s1, ZR.ueberf, ZR.ueberf); if (u.unten) zone(u.unten.s0, u.unten.s1, ZR.ueberf, ZR.ueberf); });
+    (st.kreuzungen || []).forEach((k) => { zone(k.a.s0, k.a.s1, ZR.kreuzung, ZR.kreuzung); zone(k.b.s0, k.b.s1, ZR.kreuzung, ZR.kreuzung); });
+    (st.loopings || []).forEach((l) => zone(l.s0, l.s1, ZR.loopingVor, ZR.loopingNach));   // davor: Anlauf (volle Fahrt nötig)
+    (st.spuren || []).forEach((e) => { if (e.breite < st.breite) zone(e.s0, e.s1, ZR.spuren, ZR.spuren); });   // nur enge Abschnitte; breite (3 Spuren) bleiben frei
+    (sicht.schanzen || []).forEach((e) => zone(e.s, e.s + (e.laenge || 10), (e.anlauf || 0) + ZR.schanzeVor, ZR.schanzeNach));
+    (sicht.boostFelder || []).forEach((e) => zone(e.s, e.s + (e.laenge || 12), ZR.boost, ZR.boost));
+    (sicht.schilde || []).forEach((e) => punkt(e.s, ZR.schild, ZR.schild));
+    (sicht.baelle || []).forEach((e) => punkt(e.s, ZR.ball, ZR.ball));
+    (sicht.wasserstrahlen || []).forEach((e) => punkt(e.s, ZR.wasser, ZR.wasser));
+    (sicht.dinos || []).forEach((e) => punkt(e.s, ZR.dino, ZR.dino));
+    // Kleber: Klebestreifen liegen am Rand (seite −1/1; 0 = beide). Flecken (Öl, Sand) dürfen dort auf die ANDERE Fahrbahnhälfte
+    // (kleberSeite → erzwungene Seite), alles andere und beidseitige Streifen bleiben gesperrt.
+    (sicht.kleber || []).forEach((e) => zone(e.s0, e.s1, ZR.kleber, ZR.kleber, null, { kleberSeite: e.seite === 1 ? 1 : e.seite === -1 ? -1 : 0 }));
     // bestehende Hindernisse (Katalog) mit ihren Klassen
     basis.forEach((h) => {
       const klasse = h.typ === 'oel' || h.typ === 'sand' ? 'fleck' : 'sperr';
-      const pad = h.typ === 'lava' || h.typ === 'krater' ? 55 : 0;   // Lava/Krater: Platz zum Ausweichen, keine Slalom-Falle daneben
+      const pad = h.typ === 'lava' || h.typ === 'krater' ? ZR.lava : 0;   // Lava/Krater: Platz zum Ausweichen, keine Slalom-Falle daneben
       punkt(h.s, Math.abs(diff(h.s0, h.s)) + (h.typ === 'baustelle' ? 12 : 0) + pad, Math.abs(diff(h.s1, h.s)) + pad, klasse);   // Baustelle: + Schild davor
     });
     (sicht.wracks || []).forEach((e) => punkt(e.s, ausdehnung.wrack[0], ausdehnung.wrack[1], 'sperr'));
@@ -233,15 +250,25 @@
     };
     const kHaar = 1 / C.haarnadelRadius;
 
+    // passt() liefert false oder { seite }: seite ≠ 0 = Öl/Sand muss auf diese Fahrbahnhälfte (neben einem Klebestreifen am anderen Rand)
     const passt = (art, s) => {
       const [vor, nach, klasse] = ausdehnung[art];
+      let seite = 0;
       for (const b of belegt) {
         const gap = b.klasse ? gapVon(klasse, b.klasse) : 0;
+        if (b.kleberSeite !== undefined) {
+          // Klebestreifen: nur die Zone selbst zählt (kein Mindestabstand), Flecken weichen auf die freie Hälfte aus
+          if (Math.abs(diff(s + (nach - vor) / 2, b.c)) < (vor + nach) / 2 + b.h) {
+            if (b.kleberSeite === 0 || (art !== 'oel' && art !== 'sand') || (seite !== 0 && seite !== -b.kleberSeite)) return false;
+            seite = -b.kleberSeite;
+          }
+          continue;
+        }
         if (Math.abs(diff(s + (nach - vor) / 2, b.c)) < (vor + nach) / 2 + b.h + gap) return false;
       }
       if (kMax(s - vor, s + nach) > (C.kurveMax[art] || 1 / 60)) return false;
       if (kMax(s + nach, s + nach + C.haarnadelVor) > kHaar) return false;
-      return true;
+      return { seite };
     };
 
     // --- Platzieren: ein Abschnitt je Hindernis (gleichmäßig über die Runde), notfalls irgendwo
@@ -249,20 +276,25 @@
     const wo = [];
     wunsch.forEach((art, i) => {
       const a = von + laenge * i / n, b = von + laenge * (i + 1) / n;
-      let s = null;
-      for (let v = 0; v < C.maxVersuche * 2 && s === null; v++) {
+      let s = null, zwang = 0;
+      for (let v = 0; v < C.maxVersuche + (C.maxVersucheGlobal || C.maxVersuche) && s === null; v++) {
         const kand = Math.round((v < C.maxVersuche ? a + rng() * (b - a) : von + rng() * laenge) * 2) / 2;   // auf 0,5 m
-        if (passt(art, kand)) s = kand;
+        const p = passt(art, kand);
+        if (p) { s = kand; zwang = p.seite; }
       }
       if (s === null) { erg.weggelassen++; return; }
       const [vor, nach, klasse] = ausdehnung[art];
       punkt(s, vor, nach, klasse);
-      const vz = rng() < 0.5 ? -1 : 1, q = rund((rng() * 2 - 1) * 0.65);
+      const vz = rng() < 0.5 ? -1 : 1, q = zwang ? rund(zwang * (0.15 + rng() * 0.5)) : rund((rng() * 2 - 1) * 0.65);
       wo.push({ art, s, vz, q });
       // Slalom: ab und zu ein zweiter Ast/Ölfleck kurz dahinter auf der anderen Seite (zählt zusätzlich)
       if ((art === 'ast' || art === 'oel') && rng() < (C.slalomChance == null ? 0.3 : C.slalomChance)) {
         const s2 = Math.round((s + (C.slalomAbstand || 22)) * 2) / 2;
-        if (s2 < bis && passt(art, s2)) { punkt(s2, vor, nach, klasse); erg.slalom++; wo.push({ art, s: s2, vz: -vz, q: rund(q > 0 ? -0.3 - rng() * 0.35 : 0.3 + rng() * 0.35) }); }
+        const p2 = s2 < bis ? passt(art, s2) : false;
+        if (p2) {
+          punkt(s2, vor, nach, klasse); erg.slalom++;
+          wo.push({ art, s: s2, vz: -vz, q: rund(p2.seite ? p2.seite * (0.15 + rng() * 0.5) : q > 0 ? -0.3 - rng() * 0.35 : 0.3 + rng() * 0.35) });
+        }
       }
     });
     wo.sort((x, y) => x.s - y.s);
@@ -568,6 +600,7 @@
         tA: { x: pa.tx, z: pa.tz }, tB: { x: pb.tx, z: pb.tz }, halbW, halbL: halbW / sin, sin,
         a: { s0: sp.wrapS(best.sA - KREUZ_HALB), s1: sp.wrapS(best.sA + KREUZ_HALB) },
         b: { s0: sp.wrapS(best.sB - KREUZ_HALB), s1: sp.wrapS(best.sB + KREUZ_HALB) },
+        pa, pb,                       // v16: Streckenpunkte (Mitte, Tangente, Normale) beider Abschnitte an der Kreuzung (Abschnittswechsel)
         warnA: false, warnB: false,   // Warnlicht der Masten an Abschnitt A (Auto auf B nah) bzw. B (Auto auf A nah)
       };
       if (k.dy >= KREUZ_DY_MAX) return null;                  // keine niveaugleiche Kreuzung (das wäre eine Überführung)
@@ -582,6 +615,54 @@
         });
       });
       return k;
+    }
+
+    /**
+     * W4-J (v16): ABSCHNITTSWECHSEL beim Abbiegen. n = Ergebnis der Index-Kontinuität (_naechsterKont) – das Auto ist noch
+     * „seinem" Abschnitt zugeordnet. Hat es die Kreuzung aber verlassen und steht eindeutig auf der Querstraße
+     * (≥ KREUZ_WECHSEL m von der Kreuzungsmitte entfernt auf der Fahrbahn des anderen Abschnitts, nicht mehr auf der eigenen
+     * Fahrbahn), gehört es jetzt zum anderen Abschnitt: dessen normale Bande/Untergrund gilt, die Bande des alten Abschnitts
+     * (23 m quer über der Querstraße = unsichtbare Wand) entfällt. Rein geometrisch, ohne Zustand (x, z, Index) → Server,
+     * Browser-Vorhersage und Zaun-Tests rechnen identisch. Geradeaus (nie ≥ KREUZ_WECHSEL m auf der Querstraße): unverändert.
+     * @returns {{n:object, k:object, pass:string, passHeim:string, l:number}|null} n = Abfrage auf dem ANDEREN Abschnitt,
+     *          pass = neuer Abschnitt ('a'|'b'), passHeim = bisheriger, l = Abstand längs der Querstraße von der Mitte (m)
+     */
+    _kreuzungWechsel(x, z, n) {
+      const sp = this.spline;
+      const R2 = (KREUZ_WECHSEL_MAX + this.breite) * (KREUZ_WECHSEL_MAX + this.breite);
+      for (let i = 0; i < this.kreuzungen.length; i++) {
+        const k = this.kreuzungen[i], gx = x - k.x, gz = z - k.z;
+        if (gx * gx + gz * gz > R2) continue;
+        const eigenA = Math.abs(sp.differenzS(n.s, k.sA)) <= KREUZ_HALB + 25, eigenB = Math.abs(sp.differenzS(n.s, k.sB)) <= KREUZ_HALB + 25;
+        if (eigenA === eigenB) continue;                                  // weder noch (oder beides: nicht eindeutig)
+        if (Math.abs(n.seitenabstand) <= k.halbW + 1.5) continue;         // noch auf der eigenen Fahrbahn (samt Rand)
+        const po = eigenA ? k.pb : k.pa, sO = eigenA ? k.sB : k.sA;
+        const dx = x - po.x, dz = z - po.z;
+        const l = dx * po.tx + dz * po.tz, q = dx * po.nx + dz * po.nz;
+        if (Math.abs(l) < KREUZ_WECHSEL || Math.abs(l) > KREUZ_WECHSEL_MAX || Math.abs(q) > k.halbW) continue;
+        const n2 = sp.naechster(x, z, sp.indexBei(sO + l));
+        return { n: n2, k, pass: eigenA ? 'b' : 'a', passHeim: eigenA ? 'a' : 'b', l };
+      }
+      return null;
+    }
+
+    /** W4-J (v16): naechsterKont() + Abschnittswechsel beim Abbiegen (_kreuzungWechsel) – für abfrage, untergrundAn und die Bande. */
+    _naechsterWechsel(x, z, startIndex) {
+      const n = this._naechsterKont(x, z, startIndex);
+      if (!this.kreuzungen.length) return n;
+      const w = this._kreuzungWechsel(x, z, n);
+      return w ? w.n : n;
+    }
+
+    /**
+     * W4-J (v16): Ist das Auto an (x, z) – mit seiner bisherigen Zuordnung n (Index-Kontinuität, OHNE Wechsel) – auf der
+     * Querstraße einer Kreuzung abgebogen? → { k, pass (neuer Abschnitt), passHeim, l } oder null. Für die Rennleitung
+     * (raceManager: „Falsch abgebogen", kein Fortschritt).
+     */
+    kreuzungAbgebogen(x, z, n) {
+      if (!this.kreuzungen.length) return null;
+      const w = this._kreuzungWechsel(x, z, n);
+      return w ? { k: w.k, pass: w.pass, passHeim: w.passHeim, l: w.l } : null;
     }
 
     /** W4-J: Kreuzung, deren Bereich (sA bzw. sB ± KREUZ_HALB + zugabe) s berührt → { k, pass: 'a'|'b', d } oder null. */
@@ -890,7 +971,7 @@
 
     /** 'strasse' | 'rand' | 'gras' | 'sand'. startIndex (optional) beschleunigt die Suche. */
     untergrundAn(x, z, startIndex) {
-      const n = this._naechsterKont(x, z, startIndex);
+      const n = this._naechsterWechsel(x, z, startIndex);   // v16: Abschnittswechsel beim Abbiegen
       const u = this._untergrundAus(n.seitenabstand, n.s);
       return this.kreuzungen.length ? this._kreuzungUntergrund(x, z, n, u) : u;   // W4-J: querende Fahrbahn
     }
@@ -900,7 +981,7 @@
      * W4-I: an Überführungen mit Index-Kontinuität (_naechsterKont) – ein Auto oben bekommt die oberen s-Werte.
      */
     abfrage(x, z, startIndex) {
-      const n = this._naechsterKont(x, z, startIndex);
+      const n = this._naechsterWechsel(x, z, startIndex);   // v16: Abschnittswechsel beim Abbiegen
       n.untergrund = this._untergrundAus(n.seitenabstand, n.s);
       if (this.kreuzungen.length) n.untergrund = this._kreuzungUntergrund(x, z, n, n.untergrund);   // W4-J: querende Fahrbahn
       return n;

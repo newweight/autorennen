@@ -1415,7 +1415,31 @@
       });
       if (polizei && rennen) polizei.schritt(dt, rennen.gasErlaubt);   // Runde 5b: Ziel, Nähe, Anhalten, Freigabe
       if (rennen) rennen.schritt(dt);
+      if (rennen && strecke && strecke.kreuzungen && strecke.kreuzungen.length) this._abbiegenPruefen();   // 13.10. (v16): falsch abgebogen
       if (this.startBoost && rennen && rennen.gasErlaubt) this.startBoost.schritt(dt);
+    }
+
+    /**
+     * 13.10. (v16): Falsch auf der Kreuzung abgebogen (raceManager: t.abgebogen / t.abbiegeReset). Meldung für Kinder beim
+     * Abbiegen; läuft die Frist ab (zurück zur Kreuzung nicht geschafft oder davongefahren), Reset an den letzten Checkpoint
+     * (zuruecksetzen – dieselbe Logik wie R/Abschleppen/KI-Reset inkl. Anlaufposition). Pollt die Flags statt Callbacks,
+     * damit es lokal und im Server-Spiel (ohne streckeAufbauen) gleich läuft.
+     */
+    _abbiegenPruefen() {
+      const tn = this.rennen.teilnehmer;
+      for (let i = 0; i < tn.length; i++) {
+        const t = tn[i], f = this.fahrzeuge[i];
+        if (!f || f.ausgeschieden) continue;
+        if (t.abbiegeReset) {
+          this.zuruecksetzen(i);
+          const fahrer = f.driver || f.autopilot;
+          if (fahrer && fahrer.zurueckgesetzt) fahrer.zurueckgesetzt(f.index);
+          f.abgebogenGemeldet = false;
+          this._meldung(i, '↩️ Zurückgesetzt!\nZurück auf die Strecke', 2200);
+        } else if (t.abgebogen) {
+          if (!f.abgebogenGemeldet) { f.abgebogenGemeldet = true; this._meldung(i, '↩️ Falsch abgebogen!\nZurück zur Kreuzung', 3400); }
+        } else f.abgebogenGemeldet = false;
+      }
     }
 
     /** Runde 4: Schanzen-Ereignis eines Fahrzeugs: Meldung, Kamerawackeln + Aufsetz-Geräusch bei der Landung. */
@@ -1529,6 +1553,14 @@
       if (!f || !this.rennen || f.ausgeschieden) return;     // W3-F: ausgeschiedene Autos bleiben geparkt
       const sp = this.strecke.spline;
       let pose = this.rennen.resetPose(i);
+      // 13.10. (v16): Reset-Stelle im Anlaufbereich eines Loopings/einer Schanze → gleich auf die Anlaufposition (sonst Anlauf-Bremse,
+      // die KI wartet 2 s und setzt sich nochmal zurück, der Spieler muss R drücken). Nicht vor dem ersten Checkpoint (Startaufstellung).
+      let schwung = 0;
+      const tr = this.rennen.teilnehmer[i];
+      if (R.Anlauf && R.Anlauf.resetPosition && tr && tr.letzterCheckpoint >= 0 && pose.s !== undefined) {
+        const ap = R.Anlauf.resetPosition(this.strecke, pose.s, this.fahrzeuge, f.vehicle);
+        if (ap) { pose = ap; schwung = ap.tempo || 0; this.rennen.verfolgungSetzen(i, pose.x, pose.z, pose.s); }
+      }
       // W4-I: Streckenindex aus dem Checkpoint (s) – an einer Überführung sonst evtl. die falsche Ebene
       const hinweis = () => (pose.s !== undefined ? sp.indexBei(pose.s) : undefined);
       const frei = (x, z) => this.fahrzeuge.every((g, j) => j === i || Math.hypot(g.vehicle.x - x, g.vehicle.z - z) >= 6);
@@ -1558,6 +1590,7 @@
       if (f.kleber) { R.Kleber.abbrechen(f.kleber); R.Kleber.optik(f, false); }   // Runde 5: Kleber lösen
       if (f.anlauf) f.anlauf = R.Anlauf.zustand();                                // Runde 5: Anlauf-Bremse aus
       f.vehicle.setzen(pose.x, pose.z, pose.heading);
+      if (schwung > 0) f.vehicle.vLaengs = schwung;   // 13.10.: Start-Schwung, falls der volle Anlauf nicht zurück passt
       const idx = hinweis();
       f.vehicle.y = this.strecke.hoeheAn(pose.x, pose.z, idx);
       this._vorherAngleichen(f);

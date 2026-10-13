@@ -1,8 +1,12 @@
-# Mehrspieler-Protokoll (W5, Version 1)
+# Mehrspieler-Protokoll (W5, Version 2)
 
 WebSocket unter **`/ws`** (gleiche Adresse wie das Spiel; `wss:` hinter HTTPS/Tailscale Funnel, `ws:` lokal).
 Jede Nachricht ist **ein JSON-Objekt** mit dem Typ in `t`. Gemeinsame Konstanten/Helfer: `src/net/protokoll.js`
 (`Rennspiel.Netz`, wird von Browser **und** Server geladen).
+
+**Version 2 (13.10., v16)** ist zu Version 1 rein *additiv*: im Zustand-Teil `ich` kommt das optionale Feld **`sz`** dazu (s. u.). Es gibt keine
+Versionsprüfung – ein Version-1-Browser ignoriert `sz` und verhält sich wie vorher (`so` bleibt unverändert), ein Version-2-Browser an einem
+Version-1-Server (kein `sz`, aber `so: 1`) lässt den Server in Sonderzuständen allein rechnen (= v15). `hallo.v` meldet 2.
 
 Grenzen (Server): Nachricht ≤ 4 KB (sonst Trennung) · > 400 Nachrichten/s werden ignoriert, > 2000/s → Trennung ·
 höchstens 80 Verbindungen, 30 Räume, **6 Menschen je Raum**, 12 Autos (Menschen + Computer) ·
@@ -79,7 +83,12 @@ Warteschlange (> 20 gepuffert → die ältesten werden verworfen, Item/Reset-Fla
          v: [je Auto [turbo s, vFaktor, bFaktor] | 0] },
   ich?: { nr, v: [x, z, y, heading, vLaengs, vQuer, lenkung, drehImpuls, neigung, nicken, _querBeschl, _ueberBeschl],
           ack: letzte verarbeitete Folge-Nr, idx, bi, bs (Bande-/Busch-Index), fk: [vMax-Faktor, Beschl.-Faktor],
-          gs: Gas-Sperre (Fehlstart), so: Sonderzustand (Looping/Flug/Rampe/Anlauf/Kleber → keine Vorhersage),
+          gs: Gas-Sperre (Fehlstart), so: Sonderzustand (Looping/Flug/Rampe/Anlauf/Kleber; v15: keine Vorhersage – ab v16 nur noch,
+          wenn der Browser den Zustand nicht selbst mitrechnet, s. `sz`),
+          sz?: Zustand der Sonderfälle für die Vorhersage (v16, fehlt = alles in Ruhe), je Teil ein Zahlen-Array, fehlt der Teil = Ruhe:
+               k Kleber [zeit, klebt, frei, anzeige] · a Anlauf [stelle (Index in Anlauf.stellen, −1 keine), bremst 0/1, stehZeit] ·
+               f Flug/Rampe [aktiv 0/1, rampe (Index in Schanzen.liste, −1), rampenH, vy, t, y, nicken, index] ·
+               l Looping [aktiv 0/1, fallen 0/1, Looping-Index, winkel, winkelVorher, v, qEin, fallZeit],
           rh/fh: Reset-Hinweis/Falsch-herum, rs, rzn, bz, zz, zp: Rundenstart/-zeiten/Bestzeit/Zielzeit/-platz } }
 ```
 `flags`: 1 bremst · 2 Turbo · 4 Schild · 8 hat Item · 16 im Ziel · 32 fliegt · 64 Schild platzt · 128 Mensch.
@@ -91,7 +100,12 @@ Schaden ist online aus, darum steht er nicht im Zustand.
 - **Eigener Wagen** (`vorhersage.js`): jeder Schritt wird lokal mit `vehicle.js` vorausgerechnet (Untergrund,
   Fahrhilfe, Turbo-/Boost-Faktoren vom Server, Wetter, Bande, Pflanzen, Höhe). Kommt `ich`, wird der Server-Zustand
   übernommen und alle Eingaben mit `n > ack` neu gerechnet; die Abweichung zur Anzeige klingt weich ab (~0,12 s),
-  > 3 m → harter Sprung. Sonderzustände (`so`) rechnet nur der Server, die Anzeige folgt ihm (50 ms Verzug).
+  > 3 m → harter Sprung. **Sonderzustände (v16)**: Kleber, Anlauf-Bremse, Schanze/Flug und Looping (samt Fall-Animation) rechnet die
+  Vorhersage mit demselben deterministischen Code wie der Server mit (`world/kleber.js`, `track/anlauf.js`, `track/schanze.js`,
+  `track/looping.js`, Reihenfolge wie `main.js physikSchritt`). Dafür übernimmt jeder Abgleich den Zustand aus `ich.sz` und rechnet die
+  unbestätigten Eingaben damit neu (Looping-Winkel wird wie die Position weich angeglichen). Nur was die Vorhersage nicht kennt (abgeschaltete Art
+  – `opt.sonderVorhersage` – oder ein alter Server ohne `sz`) rechnet weiter allein der Server (`sonder`): die Anzeige folgt dem Puffer (50 ms
+  Verzug, weicher Übergang) wie in v15.
 - **Andere Autos**: Interpolation 100 ms hinter der geschätzten Server-Zeit (`client.js` Uhr aus den Ticks),
   nie über einen Reset hinweg (`resetZaehler`).
 - **Stufe 1 (Geister)**: Auto↔Auto-Kollisionen sind im Server aus (`Kollisionen.autoAuto` liefert nichts, solange

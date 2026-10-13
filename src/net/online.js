@@ -873,8 +873,24 @@
         V.abklingen(dt);
         V.anzeigen(mein.vehicle);
         mein.bremst = V.bremst;
-        if (mein.looping) mein.looping.aktiv = false;
-        if (mein.flug) mein.flug.aktiv = false;
+        // v16: Looping/Flug stammen aus der Vorhersage (V.lp / V.fz, wenn eingeschaltet), sonst wie v15 aus
+        if (mein.looping) {
+          const lp = V.lp;
+          if (lp && lp.aktiv && lp.looping) {
+            const idx = st.loopings.indexOf(lp.looping);
+            this._looping(mein, [idx, lp.winkel + V.korr.w, lp.qEin]);
+            mein.looping.winkelVorher = lp.winkelVorher + V.korr.w;
+          } else if (lp && lp.fallen && lp.looping) {          // Fall-Animation nach zu langsamem Looping (Startpose fallVon aus der Vorhersage)
+            const m = mein.looping;
+            m.aktiv = false; m.fallen = true; m.looping = lp.looping; m.qEin = lp.qEin; m.fallZeit = lp.fallZeit; m.fallVon = lp.fallVon;
+            mein.vehicle.imLooping = true;
+          } else { mein.looping.aktiv = false; mein.looping.fallen = false; }
+        }
+        if (mein.flug) {
+          const fz = V.fz;
+          mein.flug.aktiv = !!(fz && fz.aktiv);
+          if (fz) { mein.flug.nicken = fz.nicken; mein.flug.nickenVorher = fz.nickenVorher; }
+        }
         mein.index = V.idx;
       } else if (tick !== null) {
         const ziel = this._tmp || (this._tmp = { x: 0, z: 0, y: 0, heading: 0, vLaengs: 0, lenkung: 0, nicken: 0, neigung: 0 });

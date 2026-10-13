@@ -167,7 +167,7 @@ In **Schnell** fahren die Autos **220 bis 270 km/h** (Multivan 220 … Porsche 2
     der anderen Straße gerade ein Auto kommt, blinken sie **schnell und hell**, und oben steht „Achtung Kreuzung!“.
     Wer blinkt, hat Vorfahrt …? Nein: **Schau nach links und rechts!** Lieber kurz vom Gas gehen, als quer erwischt zu werden.
     Die Computer-Autos lassen den Querverkehr vorbei (wer später an der Kreuzung ankommt, wartet) – du musst selbst aufpassen.
-    Auf der Kreuzung darfst du **nicht abbiegen** (die Runde geht geradeaus weiter); **R** setzt dich auf deine eigene Straße zurück.
+    Auf der Kreuzung darfst du **nicht abbiegen** (die Runde geht geradeaus weiter): Du kannst zwar auf die andere Straße fahren, es gibt aber keine Abkürzung – „↩️ Falsch abgebogen!“, es zählt kein Checkpoint, und wer nicht in etwa 4 Sekunden zur Kreuzung zurückfährt, wird zum letzten Checkpoint zurückgesetzt; **R** setzt dich jederzeit auf deine eigene Straße zurück.
 
 ## Tipps
 - Eine Runde dauert ungefähr 2 Minuten (Fantasie kürzer). Für Kleine: 1–2 Runden, Fahrhilfe „viel", Computer „leicht".

@@ -10,7 +10,7 @@
   const CODE_ZEICHEN = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
   const Netz = {
-    VERSION: 1,
+    VERSION: 2,              // 2 (13.10.): ich.sz (Zustände für die Sonder-Vorhersage) – rein additiv, Version-1-Browser ignorieren das Feld
     CODE_ZEICHEN,
     CODE_LAENGE: 4,
     MAX_SPIELER: 6,          // Menschen je Raum

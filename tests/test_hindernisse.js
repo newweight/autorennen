@@ -417,19 +417,22 @@ for (const daten of R.trackCatalog) {
 
       // Sperrzonen (alle mit Zugabe): Start/Ziel, Tunnel, Brücke, Überführung, Kreuzung, Looping, Schanze (Anlauf + Landung), Spuren
       const lage = [];     // Verstöße
+      const ZN = MC.zonen;
       const sch = (a.schanzen || []);
       const alleExt = ext.map(h => ({ art: h.typ, s0: h.s0, s1: h.s1, s: h.s })).concat(extS.map(e => ({ art: 'stroh', s0: e.s - 2, s1: e.s + 2, s: e.s })));
       alleExt.forEach((h) => {
         const pkt = [h.s0, h.s, h.s1];
         const s0n = sp.wrapS(h.s0), s1n = sp.wrapS(h.s1);
         if (sp.wrapS(h.s) < MC.startFrei - 1 || sp.wrapS(h.s) > L - MC.zielFrei + 1) lage.push(h.art + ' Start/Ziel @' + h.s.toFixed(0));
-        if (pkt.some(x => a.imTunnel(x, 20))) lage.push(h.art + ' Tunnel @' + h.s.toFixed(0));
-        if (pkt.some(x => a.brueckeBei(x, 20))) lage.push(h.art + ' Brücke @' + h.s.toFixed(0));
-        if (pkt.some(x => a.ueberfuehrungNah(x, 20))) lage.push(h.art + ' Überführung @' + h.s.toFixed(0));
-        if (pkt.some(x => a.kreuzungNah(x, 20))) lage.push(h.art + ' Kreuzung @' + h.s.toFixed(0));
-        if (pkt.some(x => a.loopingBei(x, 20))) lage.push(h.art + ' Looping @' + h.s.toFixed(0));
-        sch.forEach((c) => { if (dF(h.s, c.s) > -60 && dF(h.s, c.s) < (c.laenge || 10) + 60) lage.push(h.art + ' Schanze @' + h.s.toFixed(0)); });
-        (a.spuren || []).forEach((sr) => { if (pkt.some(x => a._inBereich(sr, x, 20))) lage.push(h.art + ' Spur-Abschnitt @' + h.s.toFixed(0)); });
+        // 13.10. (v16): Zugaben aus config.hindernisMenge.zonen (kleinere Zugaben = mehr Platz für die Menge); Looping-Anlauf (90 m) frei
+        if (pkt.some(x => a.imTunnel(x, ZN.tunnel - 0.1))) lage.push(h.art + ' Tunnel @' + h.s.toFixed(0));
+        if (pkt.some(x => a.brueckeBei(x, ZN.bruecke - 0.1))) lage.push(h.art + ' Brücke @' + h.s.toFixed(0));
+        if (pkt.some(x => a.ueberfuehrungNah(x, ZN.ueberf - 0.1))) lage.push(h.art + ' Überführung @' + h.s.toFixed(0));
+        if (pkt.some(x => a.kreuzungNah(x, ZN.kreuzung - 0.1))) lage.push(h.art + ' Kreuzung @' + h.s.toFixed(0));
+        if (pkt.some(x => a.loopingBei(x, ZN.loopingNach - 0.1))) lage.push(h.art + ' Looping @' + h.s.toFixed(0));
+        (a.loopings || []).forEach((lp) => { if (pkt.some(x => dF(x, lp.s) > -ZN.loopingVor && dF(x, lp.s) < 0)) lage.push(h.art + ' Looping-Anlauf @' + h.s.toFixed(0)); });
+        sch.forEach((c) => { if (dF(h.s, c.s) > -ZN.schanzeVor && dF(h.s, c.s) < (c.laenge || 10) + ZN.schanzeNach) lage.push(h.art + ' Schanze @' + h.s.toFixed(0)); });
+        (a.spuren || []).forEach((sr) => { if (sr.breite < a.breite && pkt.some(x => a._inBereich(sr, x, ZN.spuren))) lage.push(h.art + ' Spur-Abschnitt @' + h.s.toFixed(0)); });
         void s0n; void s1n;
       });
       pruefe(name + ' Zusatz-Hindernisse nicht in Sperrzonen (Start/Ziel, Tunnel, Brücke, Überführung, Kreuzung, Looping, Schanze, Spur)', lage.length === 0, lage.slice(0, 3).join('; '));
@@ -476,6 +479,15 @@ for (const daten of R.trackCatalog) {
       pruefe(name + ' Wracks/Strohballen gültig (Seite ±1, autoId, auf der Fahrbahn)', extW.every(h => h.autoId && Math.abs(h.seitenabstand) < a.breite / 2 - 1) &&
         extS.every(e => (e.von === 1 || e.von === -1) && e.intervall > 0 && e.tempo > 0));
 
+      // 13.10. (v16) Menge auf Fantasie/Dino: Fantasie „Sehr viele“ mindestens 20 (vorher 13 bzw. 10 in Verrückt/Alles), Dino in JEDER Welt ≥ 80 % des Ziels
+      if (d.id === 'fantasie' && menge === 'sehrViele' && !v) {
+        const z = zaehl(a), ges = z.h + z.w + z.s;
+        pruefe(name + ' Fantasie „Sehr viele“: mindestens 20 Hindernisse insgesamt', ges >= 20, ges + ' (gewollt ' + zus.gewollt + ', weggelassen ' + zus.weggelassen + ')');
+      }
+      if (d.id === 'dino') {
+        const gesetzt = zus.hindernisse + zus.wracks + zus.strohballen - zus.slalom;
+        pruefe(name + ' Dino: mindestens 80 % des Ziels gesetzt', gesetzt >= 0.8 * zus.gewollt - 1e-9, gesetzt + ' von ' + zus.gewollt + ' (' + Math.round(100 * gesetzt / zus.gewollt) + ' %)');
+      }
       // Münzen: keine in Hindernissen (Radius 0,5 m)
       const m = new R.Muenzen(a), sp2 = a.spline;
       const drin = m.liste.filter(c => a.hindernisse.some(h => h.typ !== 'krater' && h.laenge && Math.abs(sp2.differenzS(c.s, h.s)) < h.laenge / 2 + 0.5 && Math.abs(c.q - h.seitenabstand) < h.halbbreite + 0.5));

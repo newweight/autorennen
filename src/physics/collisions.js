@@ -57,7 +57,9 @@
     const grenze = (s) => (strecke.grenzeBei ? strecke.grenzeBei(s) : maxStd);
     // W4-J: an einer niveaugleichen Kreuzung mit Index-Kontinuität – die Bande gilt für den EIGENEN Abschnitt
     const kont = strecke.kreuzungen && strecke.kreuzungen.length && strecke._naechsterKont;
-    const such = kont ? (x, z, i) => strecke._naechsterKont(x, z, i) : (x, z, i) => sp.naechster(x, z, i);
+    // v16: + Abschnittswechsel beim Abbiegen (strecke._naechsterWechsel): auf der Querstraße gilt deren Bande, keine Wand quer über der Straße
+    const kontF = strecke._naechsterWechsel || strecke._naechsterKont;
+    const such = kont ? (x, z, i) => kontF.call(strecke, x, z, i) : (x, z, i) => sp.naechster(x, z, i);
     const n = nah || such(vehicle.x, vehicle.z, vehicle._bandeIndex);
     vehicle._bandeIndex = n.index;
     const pk = sp.punkte, d = vehicle.daten;

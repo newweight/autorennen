@@ -282,7 +282,10 @@ for (const k of strecke.kreuzungen || []) {
     r1.untergrund + '/' + r2.untergrund + '/' + r3.untergrund + ' s=' + r1.s.toFixed(1));
   // Bande: im Kreuzungsbereich normal (Zaun fehlt dort optisch automatisch), weit seitlich trotzdem (Index-Kontinuität: eigener Abschnitt)
   pruefe('Kreuzung: Bande normal (seitenabstandMax), Global-Fallback erst > Bande + 15 m', strecke.grenzeBei(k.sA) === strecke.seitenabstandMax && strecke.grenzeBei(k.sB) === strecke.seitenabstandMax &&
-    Math.abs(sp.differenzS(strecke.abfrage(pa.x + pa.nx * 20, pa.z + pa.nz * 20, iA).s, k.sA)) < 3);
+    // v16: 20 m seitlich IM Zwickel (12 m längs, nicht auf der Querstraße) bleibt A; 20 m seitlich AUF der Querstraße = Abschnittswechsel zu B (kein Wall quer über der Straße)
+    Math.abs(sp.differenzS(strecke.abfrage(pa.x + pa.nx * 20 + pa.tx * 12, pa.z + pa.nz * 20 + pa.tz * 12, iA).s, k.sA + 12)) < 3);
+  pruefe('v16 Kreuzung: 20 m seitlich auf der Querstraße = Abschnittswechsel (s nahe sB), 12 m seitlich = noch Abschnitt A',
+    Math.abs(sp.differenzS(strecke.abfrage(pa.x + pa.nx * 20, pa.z + pa.nz * 20, iA).s, k.sB)) < 25 && Math.abs(sp.differenzS(strecke.abfrage(pa.x + pa.nx * 12, pa.z + pa.nz * 12, iA).s, k.sA)) < 3);
   // Masten: 4, je Zufahrt rechts / Ausfahrt links, neben beiden Fahrbahnen (nicht auf Straße oder Rand)
   const mOk = k.masten.length === 4 && k.masten.every((m) => {
     const ug = strecke.untergrundAn(m.x, m.z, sp.indexBei(m.s)), aa = sp.abschnitte(m.x, m.z, 30);

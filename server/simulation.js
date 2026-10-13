@@ -288,7 +288,7 @@ class Simulation {
 
   /**
    * Eigener Teil für Spieler nr: vollständiger Fahrzeugzustand (für den Neuabgleich der Vorhersage), Index,
-   * Faktoren (Turbo × Start-Boost), Sonderzustand (Looping/Flug/Rampe/Anlauf/Kleber → keine Vorhersage), Hinweise.
+   * Faktoren (Turbo × Start-Boost), Sonderzustand `so` (Looping/Flug/Rampe/Anlauf/Kleber) und – v16 – dessen Zustand `sz` für die Vorhersage, Hinweise.
    */
   ich(nr) {
     const sim = this.sim, R = this.R, i = sim.fahrzeuge.findIndex(f => f.istSpieler && f.spielerNr === nr);
@@ -298,7 +298,9 @@ class Simulation {
     const lp = f.looping, fz = f.flug, az = f.anlauf, kz = f.kleber;
     const sonder = !!((lp && (lp.aktiv || lp.fallen)) || (fz && (fz.aktiv || fz.rampe)) || (az && (az.bremst || (R.Anlauf && R.Anlauf.aktiv(az)))) ||
       (kz && R.Kleber && R.Kleber.gesperrt(kz)));
-    return {
+    // v16 (13.10.): Zustände der Sonderfälle für die Vorhersage (nur wenn etwas davon aktiv/nicht in Ruhe ist, sonst fehlt `sz`)
+    const sz = this._sonderZustand(f);
+    const erg = {
       nr: i, v: R.Netz.fahrzeugLesen(v), idx: f.index, bi: v._bandeIndex === undefined ? -1 : v._bandeIndex, bs: v._buschSperre || 0,
       fk: [(fk ? fk.vMax : 1) * (fs ? fs.vMax : 1), (fk ? fk.beschleunigung : 1) * (fs ? fs.beschleunigung : 1)],
       gs: sim.startBoost && sim.startBoost.gasSperre(i) ? 1 : 0,
@@ -306,6 +308,42 @@ class Simulation {
       rh: f.resetHinweis ? 1 : 0, fh: f.falschHerum ? 1 : 0,
       rs: t.rundenStart, rzn: t.rundenzeiten.map(x => R.Netz.rund(x, 3)), bz: t.bestzeit, zz: t.zielZeit, zp: t.zielPlatz || 0,
     };
+    if (sz) erg.sz = sz;
+    return erg;
+  }
+
+  /**
+   * v16: Zustand der Sonderfälle des Fahrzeugs f für `ich.sz` (Protokoll v2, abwärtskompatibel: alte Browser ignorieren das Feld).
+   * Je Teil ein kurzes Zahlen-Array, nur wenn der Teil nicht in Ruhe ist (fehlt = Ruhe/Standardzustand):
+   *   k Kleber  [zeit, klebt, frei, anzeige]
+   *   a Anlauf  [stelle (Index in Anlauf.stellen, −1 keine), bremst 0/1, stehZeit]
+   *   f Flug    [aktiv 0/1, rampe (Index in Schanzen.liste, −1 keine), rampenH, vy, t, y, nicken, index]
+   *   l Looping [aktiv 0/1, fallen 0/1, Looping-Index, winkel, winkelVorher, v, qEin, fallZeit]
+   * Zahlen ungerundet (volle double-Genauigkeit): Schwellen wie `zeit > 2`, `y <= boden`, `winkel >= 2π` müssen im selben Tick auslösen wie im Server.
+   * Liefert null, wenn gar nichts davon aktiv ist.
+   */
+  _sonderZustand(f) {
+    const R = this.R, st = this.sim.strecke, z = {};
+    let any = false;
+    const kz = f.kleber;
+    if (kz && (kz.zeit > 0 || kz.klebt > 0 || kz.frei > 0)) { z.k = [kz.zeit, kz.klebt, kz.frei, kz.anzeige]; any = true; }
+    const az = f.anlauf;
+    if (az && R.Anlauf && (az.bremst || az.stelle || az.stehZeit > 0)) {
+      const l = R.Anlauf.stellen(st);
+      // (Anlauf.stellen baut bei Strecken ohne Schanzen die Liste jedes Mal neu → Stelle über art/nr suchen, nicht über die Objekt-Identität)
+      z.a = [az.stelle ? l.findIndex(x => x.art === az.stelle.art && x.nr === az.stelle.nr) : -1, az.bremst ? 1 : 0, az.stehZeit]; any = true;
+    }
+    const fz = f.flug;
+    if (fz && (fz.aktiv || fz.rampe || Math.abs(fz.nicken) > 1e-3)) {
+      z.f = [fz.aktiv ? 1 : 0, fz.rampe ? R.Schanzen.liste(st).indexOf(fz.rampe) : -1, fz.rampenH, fz.vy, fz.t, fz.y,
+        fz.nicken, fz.index === undefined ? -1 : fz.index]; any = true;
+    }
+    const lp = f.looping;
+    if (lp && (lp.aktiv || lp.fallen)) {
+      z.l = [lp.aktiv ? 1 : 0, lp.fallen ? 1 : 0, st.loopings.indexOf(lp.looping), lp.winkel, lp.winkelVorher, lp.v, lp.qEin || 0,
+        lp.fallZeit || 0]; any = true;
+    }
+    return any ? z : null;
   }
 
   /** Startdaten für alle Browser (Szene bauen, Teilnehmerliste). */
