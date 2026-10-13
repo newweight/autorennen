@@ -11,6 +11,7 @@
     ...&winkel=<grad>                    feste Ansicht statt Drehung (0 = von vorne, 90 = Seite links,
                                          180 = von hinten, -90 = Seite rechts; Standard im Raster: 35)
     ...&hoehe=<grad>                     Kamera-Neigung (Standard 22)
+    ...&dist=<m>                         Kamera-Abstand bei Einzelansicht (Standard 10,5)
     ...&extra=1                          zusätzlich ein Demo-SUV (kein Katalogauto)
     ...&lenkung=<grad>&rollen=<grad>     Räder einschlagen / drehen (Test der userData)
     ?ansicht=alle4                       je Auto eine Zeile mit 4 Blickwinkeln
@@ -173,7 +174,7 @@
     // Abstand so wählen, dass das Raster ins Bild passt
     const breite = spalten * abstandX + 1, tiefe = zeilen * abstandZ + 1;
     const halbHoehe = einzelId ? 3.2 : Math.max(tiefe * 0.5 * Math.sin(neigung) + 2.5, breite * 0.5 / kamera.aspect);
-    const dist = einzelId ? 10.5 : halbHoehe / Math.tan(rad(kamera.fov / 2)) * 1.25;
+    const dist = einzelId ? parseFloat(q.get('dist') || 10.5) : halbHoehe / Math.tan(rad(kamera.fov / 2)) * 1.25;
     kamera.position.set(0, Math.sin(neigung) * dist, Math.cos(neigung) * dist);
     kamera.lookAt(0, einzelId ? 0.7 : 0, 0);
     kamera.updateProjectionMatrix();

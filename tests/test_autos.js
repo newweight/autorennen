@@ -216,8 +216,11 @@ for (const a of R3.carCatalog) {
 }
 const mv = R3.carCatalog.finde('multivan');
 const heller = (h) => ((h >> 16) & 255) + ((h >> 8) & 255) + (h & 255);
-pruefe('Multivan: Bronze mit hellem Dach (farbe2)', ((mv.farbe >> 16) & 255) > ((mv.farbe) & 255) + 40 && mv.farbe2 > 0xdddddd && heller(mv.farbe2) > heller(mv.farbe) + 200
+// Multivan = VW T6.1 Multivan Edition: Kupferbronze, Dach schwarz (farbe2) – 13.10. Umbau nach Fotos
+pruefe('Multivan: Kupferbronze mit schwarzem Dach (farbe2)', ((mv.farbe >> 16) & 255) > ((mv.farbe) & 255) + 40 && heller(mv.farbe2) < 120 && heller(mv.farbe) > heller(mv.farbe2) + 200
   && /bronze/i.test(mv.farbeName) && /bronze/i.test(mv.generischerName), mv.farbeName);
+pruefe('Multivan: T6.1-Maße 4,904 × 1,904 × 1,970 m, Radstand 3,0, Kollisionsbox ≈ Katalogmaß (±0,1 m)', mv.abmessungen.laenge === 4.904 && mv.abmessungen.breite === 1.904 && mv.abmessungen.hoehe === 1.97 && mv.abmessungen.radstand === 3
+  && Math.abs(mv.fahrwerte.laenge - 4.904) < 0.1 && Math.abs(mv.fahrwerte.breite - 1.904) < 0.1, mv.fahrwerte.laenge + ' × ' + mv.fahrwerte.breite);
 pruefe('platzhalterAuto() liefert Group', !!R3.carBuilder.platzhalterAuto().isGroup);
 R3.carBuilder.cacheLeeren();
 pruefe('cacheLeeren() + Neubau klappt', R3.carBuilder.bauen(R3.carCatalog[0]).userData.raeder.length === 4);

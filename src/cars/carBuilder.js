@@ -591,6 +591,41 @@
     }
   }
 
+  /** Flache einseitige Leiste auf Front/Heck (wie anbauLeiste, aber nur 2 Dreiecke je Segment) – für Dekor und Aufkleber. */
+  function anbauLeisteFlach(S, K, farbe, seite, x0, x1, y, h, vor, n) {
+    for (let i = 0; i < n; i++) {
+      const xa = lerp(x0, x1, i / n), xb = lerp(x0, x1, (i + 1) / n);
+      const za = flaecheZ(K, seite, xa, y), zb = flaecheZ(K, seite, xb, y);
+      const lang = za !== null && zb !== null ? Math.hypot(xb - xa, zb - za) : xb - xa;
+      const b2 = (lang + 0.004) / 2, h2 = h / 2;
+      anbauFlach(S, K, farbe, seite, (xa + xb) / 2, y, [[-b2, -h2], [b2, -h2], [b2, h2], [-b2, h2]], vor);
+    }
+  }
+  /** Flache Fläche auf der Seitenwand (beide Seiten, z0 < z1, y0 < y1), folgt der Wölbung der Flanke. */
+  function seitenFlaeche(S, K, farbe, z0, z1, y0, y1, n, vor) {
+    [-1, 1].forEach((s) => {
+      for (let i = 0; i < n; i++) {
+        const za = lerp(z0, z1, i / n), zb = lerp(z0, z1, (i + 1) / n);
+        const p = (z, y) => [s * (seitenX(K, z, y) + vor), y, z];
+        S.viereckNach(p(za, y0), p(zb, y0), p(zb, y1), p(za, y1), [s, 0, 0], farbe);
+      }
+    });
+  }
+  /** Punkt auf der schrägen Heckscheibe (Kabine) bei Breite x und Höhe y -> { z, rx } (Nicken der Scheibenebene). */
+  function heckScheibe(K, x, y) {
+    const M = K.M;
+    let a = M.zDH, b = M.zEnd;
+    for (let i = 0; i < 16; i++) { const m = (a + b) / 2; if (obenY(K, m, x, true) > y) a = m; else b = m; }
+    const z = (a + b) / 2, d = 0.02;
+    const sl = (obenY(K, z + d, x, true) - obenY(K, z - d, x, true)) / (2 * d);
+    return { z, rx: sl < -0.01 ? Math.atan(1 / sl) : 0 };
+  }
+  /** Flaches Teil (Umriss in lokalen x/y) auf der Heckscheibe, Mitte bei (x, y). */
+  function heckScheibeTeil(S, K, farbe, x, y, punkte, vor) {
+    const h = heckScheibe(K, x, y);
+    S.geo(setze(new THREE.ShapeGeometry(umriss(punkte)), x, y, h.z + vor, h.rx, 0, 0), farbe);
+  }
+
   // ------------------------------------------------------------
   // 1. Unterbau
   // ------------------------------------------------------------
@@ -692,6 +727,7 @@
         if (zm > letzteFenster) return M.saeuleC;
         return M.saeuleB;
       }
+      if (f.heckGlas && zone === 'hinten' && (k <= 3 || zm < M.zDH + (M.zEnd - M.zDH) * f.heckGlas.oben)) return M.lack;   // Heckklappe: Lackrahmen um die Scheibe
       if (f.fensterRahmen === 'chrom' && k === 2 && zm > M.zWS + 0.02 && zm < ersteFenster + 0.02 + (letzteFenster - ersteFenster)) return FARBE.CHROM;   // Chrom-Rahmen oberhalb der Seitenfenster
       if (k <= 3) return zone === 'vorn' ? M.saeuleA : zone === 'dach' ? M.dach : (f.heckTyp === 'steil' ? M.dach : M.saeuleC);
       return zone === 'dach' ? M.dach : FARBE.GLAS;
@@ -800,7 +836,9 @@
       } else if (li.form === 'eckig') {
         anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', x, ly, rechteckRund(lb + 0.03, lh + 0.03, 0.03), 0.01, 0.08);
         anbauTeil(SW[si], K, 0, 'vorn', x, ly, rechteckRund(lb, lh, 0.025), 0.018, 0.08);
-        [-0.22, 0.2].forEach((o) => anbauTeil(S, K, FARBE.KUNSTSTOFF, 'vorn', x + s * o * lb, ly + lh * 0.12, kreisPunkte(lh * 0.24, 12), 0.024, 0.08));
+        if (li.blende) {                               // optional: dunkle Blende unten (nur der obere Streifen leuchtet) statt zwei Punkten
+          anbauTeil(S, K, FARBE.KUNSTSTOFF, 'vorn', x, ly - lh * (0.5 - li.blende / 2) + lh * 0.02, rechteckRund(lb - 0.02, lh * li.blende, 0.015), 0.024, 0.08);
+        } else [-0.22, 0.2].forEach((o) => anbauTeil(S, K, FARBE.KUNSTSTOFF, 'vorn', x + s * o * lb, ly + lh * 0.12, kreisPunkte(lh * 0.24, 12), 0.024, 0.08));
       } else {                                       // 'schmal': Keil, außen höher
         const pk = [[-lb / 2, -lh / 2], [lb / 2, -lh * 0.15], [lb / 2, lh / 2], [-lb / 2, lh * 0.25]].map(([a, b]) => [a * s, b]);
         anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', x, ly, pk.map(([a, b]) => [a * 1.06, b * 1.25]), 0.01, 0.08);
@@ -840,8 +878,23 @@
         anbauLeiste(S, K, FARBE.CHROM, 'vorn', -xInnen - 0.02, xInnen + 0.02, ly - 0.005 + gy + hG / 2 + 0.006, 0.013, 0.016, 3);
         anbauLeiste(S, K, FARBE.CHROM, 'vorn', -xInnen - 0.02, xInnen + 0.02, ly - 0.005 + gy - hG / 2 - 0.004, 0.013, 0.016, 3);
       }
-      const bU = g === 'van' ? 1.3 : 1.2, hU = g === 'van' ? 0.24 : 0.12;
-      anbauLeiste(S, K, FARBE.SCHWARZ, 'vorn', -bU / 2, bU / 2, kY + (g === 'van' ? 0.02 : 0.0), hU, 0.008, 6);
+      const bU = f.stossBreite || (g === 'van' ? 1.3 : 1.2), hU = f.stossHoehe || (g === 'van' ? 0.24 : 0.12);
+      if (f.chromSpange) {                           // dicke Chromspange unter dem Grill, durchgehend bis unter die Scheinwerfer
+        const cs = f.chromSpange;
+        anbauLeiste(S, K, FARBE.CHROM, 'vorn', -cs.x * hb, cs.x * hb, ly + (cs.y || -0.085), cs.d || 0.03, 0.02, 3);
+      }
+      if (f.grillUnten) {                            // unteres, breiteres Grillfeld mit waagrechten Lamellen
+        const gu = f.grillUnten, yu = ly + gu.y;
+        anbauLeiste(S, K, FARBE.SCHWARZ, 'vorn', -gu.b / 2, gu.b / 2, yu, gu.h, 0.008, 4);
+        for (let i = 0; i < gu.n; i++) anbauLeisteFlach(S, K, FARBE.GITTER, 'vorn', -gu.b / 2 + 0.03, gu.b / 2 - 0.03, yu - gu.h / 2 + (gu.h * (i + 0.7)) / gu.n, 0.012, 0.014, gu.seg || 4);
+      }
+      if (f.stossForm === 'seiten') {                // zwei schwarze Seitenteile (mit Nebelscheinwerfern) + schmaler Mittelschlitz hinter dem Kennzeichen
+        const yS = kY + (f.stossY || 0), xi = f.stossInnen * hb;
+        [-1, 1].forEach((s) => anbauLeiste(S, K, FARBE.SCHWARZ, 'vorn', Math.min(s * xi, s * bU / 2), Math.max(s * xi, s * bU / 2), yS, hU, 0.008, 3));
+        anbauLeiste(S, K, FARBE.SCHWARZ, 'vorn', -bU / 2 + 0.05, bU / 2 - 0.05, kY + 0.005, hU * 0.42, 0.008, 4);
+        anbauLeisteFlach(S, K, FARBE.GITTER, 'vorn', -xi + 0.02, xi - 0.02, kY + hU * 0.1, 0.01, 0.014, 4);
+      } else
+      anbauLeiste(S, K, FARBE.SCHWARZ, 'vorn', -bU / 2, bU / 2, kY + (g === 'van' ? 0.02 : 0.0) + (f.stossY || 0), hU, 0.008, 6);
       if (g === 'quer') anbauLeiste(S, K, FARBE.CHROM, 'vorn', -bU / 2 + 0.04, bU / 2 - 0.04, kY + hU / 2 + 0.012, 0.012, 0.012, 6);
     } else if (g === 'doppelt') {
       // generische, hohe zweigeteilte dunkle Fläche (keine Markenform)
@@ -903,8 +956,9 @@
     // --- Nebelscheinwerfer-Mulden ---
     if (f.nebel) {
       [-1, 1].forEach((s) => {
-        anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', s * 0.72 * hb, ey + 0.01, rechteckRund(0.17, 0.09, 0.04), 0.008, 0.08);
-        anbauTeil(S, K, FARBE.NEBEL, 'vorn', s * 0.72 * hb, ey + 0.01, kreisPunkte(0.032, 12), 0.013, 0.08);
+        const nx = (f.nebelX || 0.72) * hb;
+        anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', s * nx, ey + 0.01, rechteckRund(0.17, 0.09, 0.04), 0.008, 0.08);
+        anbauTeil(S, K, FARBE.NEBEL, 'vorn', s * nx, ey + 0.01, kreisPunkte(0.032, 12), 0.013, 0.08);
       });
     }
     // --- Kennzeichen (leer, weiß) ---
@@ -941,8 +995,12 @@
     S: [[0, 4.3, 3, 5], [0, 2.15, 3, 2.85], [0, 0, 3, 0.7], [0, 2.15, 0.7, 5], [2.3, 0, 3, 2.85]],
     T: [[0, 4.3, 3, 5], [1.15, 0, 1.85, 4.3]],
     U: [[0, 0, 0.7, 5], [2.3, 0, 3, 5], [0, 0, 3, 0.7]],
+    D: [[0, 0, 0.7, 5], [0, 4.3, 2.4, 5], [0, 0, 2.4, 0.7], [2.3, 0.8, 3, 4.2]],
+    N: [[0, 0, 0.7, 5], [2.3, 0, 3, 5], [0.7, 3.5, 1.4, 5], [1.15, 2.1, 1.85, 3.6], [1.6, 0, 2.3, 1.6]],
+    M: [[0, 0, 0.7, 5], [2.3, 0, 3, 5], [0.7, 3.7, 1.4, 5], [1.6, 3.7, 2.3, 5], [1.15, 2.4, 1.85, 4]],
+    V: [[0, 2.8, 0.7, 5], [2.3, 2.8, 3, 5], [0.45, 1.3, 1.2, 3], [1.8, 1.3, 2.55, 3], [1.1, 0, 1.9, 1.5]],
   };
-  function bauSchrift(S, K, text, x, y, h, breite) {
+  function bauSchrift(S, K, text, x, y, h, breite, farbe) {
     const n = text.length, zelle = h / 5;
     const luecke = zelle * 1.2;
     const soll = n * 3 * zelle + (n - 1) * luecke;
@@ -952,7 +1010,7 @@
     for (const ch of text) {
       (GLYPHEN[ch] || []).forEach(([a, b, d, e]) => {
         const w = (d - a) * c, hh = (e - b) * zelle;
-        anbauFlach(S, K, FARBE.CHROM, 'hinten', x0 + (a + d) / 2 * c, y - h / 2 + (b + e) / 2 * zelle, [[-w / 2, -hh / 2], [w / 2, -hh / 2], [w / 2, hh / 2], [-w / 2, hh / 2]], 0.01);
+        anbauFlach(S, K, farbe !== undefined ? farbe : FARBE.CHROM, 'hinten', x0 + (a + d) / 2 * c, y - h / 2 + (b + e) / 2 * zelle, [[-w / 2, -hh / 2], [w / 2, -hh / 2], [w / 2, hh / 2], [-w / 2, hh / 2]], 0.01);
       });
       x0 += 3 * c + lk;
     }
@@ -988,6 +1046,7 @@
         anbauTeil(S, K, ru.form === 'senkrecht' ? FARBE.CHROM : FARBE.SCHWARZ, 'hinten', xm, ry, rechteckRund(w + 0.03, rh + 0.03, 0.05), 0.01, 0.08);
         anbauTeil(BL[si], K, 0, 'hinten', xm, ry, rechteckRund(w, rh, 0.045), 0.018, 0.08);
         anbauTeil(S, K, FARBE.WEISS, 'hinten', xm, ry - rh * 0.25, rechteckRund(w * 0.6, rh * 0.12, 0.01), 0.024, 0.06);
+        for (let i = 0; i < (ru.balken || 0); i++) anbauFlach(S, K, FARBE.SCHWARZ, 'hinten', xm, ry + rh * (0.30 - i * 0.2), rechteckRund(w * 0.9, 0.016, 0.004), 0.026);   // optional: dunkle LED-Balken
       } else {
         anbauLeiste(BL[si], K, 0, 'hinten', lo(xa, xb), hi(xa, xb), ry, rh, 0.018, 4);
         anbauLeiste(S, K, FARBE.SCHWARZ, 'hinten', lo(xa + 0.03, xb - 0.04), hi(xa + 0.03, xb - 0.04), ry - rh * 0.05, rh * 0.22, 0.022, 3);
@@ -996,6 +1055,38 @@
     });
     if (ru.form === 'kombi') anbauLeiste(S, K, FARBE.SCHWARZ, 'hinten', -ru.x0 * hb, ru.x0 * hb, ry, rh * 0.7, 0.012, 6);
 
+    // Heckklappe (Van): Kennzeichenmulde, Dekorleiste unten mit rotem Strich, Reflektoren, Griffleiste (alles optional)
+    if (f.heckMulde) {
+      const hm = f.heckMulde, my = hm.y * H;
+      anbauFlach(S, K, M.lackDunkel, 'hinten', 0, my, [[-hm.bo / 2, hm.h / 2], [-hm.bu / 2, -hm.h / 2], [hm.bu / 2, -hm.h / 2], [hm.bo / 2, hm.h / 2]], 0.006);
+    }
+    if (f.heckGriff) {
+      const hg = f.heckGriff;
+      anbauFlach(S, K, M.lackDunkel, 'hinten', 0, hg.y * H, rechteckRund(hg.b, hg.h, 0.01), 0.008);
+      anbauLeisteFlach(S, K, FARBE.SCHWARZ, 'hinten', -hg.b / 2 + 0.01, hg.b / 2 - 0.01, hg.y * H - hg.h / 2 + 0.004, 0.008, 0.012, 1);
+    }
+    if (f.heckDeko) {
+      const hd = f.heckDeko;
+      anbauLeisteFlach(S, K, FARBE.SCHWARZ, 'hinten', -hd.x * hb, hd.x * hb, hd.y * H, hd.h, 0.012, hd.n || 6);
+      anbauLeisteFlach(S, K, 0xc4281c, 'hinten', -hd.x * hb + 0.02, hd.x * hb - 0.02, hd.y * H - hd.h / 2 + 0.012, 0.007, 0.016, hd.n || 6);
+    }
+    if (f.reflektoren) {
+      [-1, 1].forEach((s) => anbauLeisteFlach(S, K, 0xc4281c, 'hinten', s * (f.reflektoren.x - 0.07) * hb, s * (f.reflektoren.x + 0.07) * hb, f.reflektoren.y * H, 0.03, 0.012, 1));
+    }
+    // Heckscheibe (Kabine): Wischer und dritte Bremsleuchte oben
+    if (f.heckGlas) {
+      const hg = f.heckGlas;
+      if (hg.wischer) {
+        const w = hg.wischer;
+        heckScheibeTeil(S, K, FARBE.SCHWARZ, w.x * hb, w.y * H, strich(-0.02, 0, w.l, w.l * 0.14, 0.024), 0.006);
+        heckScheibeTeil(S, K, FARBE.SCHWARZ, w.x * hb, w.y * H, kreisPunkte(0.022, 8), 0.007);
+      }
+      if (hg.bremsleuchte) {
+        const b = hg.bremsleuchte, hh = heckScheibe(K, 0, b.y * H);
+        BL[0].geo(setze(new THREE.ShapeGeometry(umriss(rechteckRund(b.b, 0.022, 0.006))), 0, b.y * H, hh.z + 0.005, hh.rx, 0, 0), 0);
+      }
+    }
+
     // Kennzeichen
     const kY = f.kennzeichenHY * H;
     anbauTeil(S, K, FARBE.SCHWARZ, 'hinten', 0, kY, rechteckRund(0.56, 0.15, 0.01), 0.006, 0.08);
@@ -1003,7 +1094,8 @@
 
     // Markenzeichen und Schriftzug (optional)
     if (f.logoHeck) bauLogo(S, K, 'hinten', 0, f.logoHeck.y * H, f.logoHeck.r || 0.05);
-    if (f.schriftzug) bauSchrift(S, K, f.schriftzug.text, 0, f.schriftzug.y * H, f.schriftzug.h || 0.04, f.schriftzug.b || 0.4);
+    if (f.schriftzug) bauSchrift(S, K, f.schriftzug.text, (f.schriftzug.x || 0) * hb, f.schriftzug.y * H, f.schriftzug.h || 0.04, f.schriftzug.b || 0.4, f.schriftzug.farbe);
+    if (f.schriftzug2) bauSchrift(S, K, f.schriftzug2.text, (f.schriftzug2.x || 0) * hb, f.schriftzug2.y * H, f.schriftzug2.h || 0.04, f.schriftzug2.b || 0.4, f.schriftzug2.farbe);
     // Chromleiste oben am hinteren Stoßfänger (optional)
     if (f.heckLeiste) anbauLeiste(S, K, FARBE.CHROM, 'hinten', -f.heckLeiste.x * hb, f.heckLeiste.x * hb, f.heckLeiste.y * H, 0.016, 0.014, 8);
     // Diffusor / dunkler Stoßfänger unten
@@ -1088,13 +1180,29 @@
     const yG = M.guertel - 0.11;
     const tuerEnden = M.fugen.slice(1);
     if (M.typ === 'van' && f.schiebetuer) tuerEnden.splice(0, tuerEnden.length, M.fugen[1], M.fugen[2]);
-    tuerEnden.forEach((zE) => {
-      const z = zE - 0.17;
+    let griffZ = tuerEnden.map((zE) => zE - 0.17);
+    if (f.schiebetuerGriffVorn && M.typ === 'van' && f.schiebetuer && M.fugen.length > 2) griffZ = [M.fugen[1] - 0.2, M.fugen[1] + 0.19];   // Schiebetür-Griff vorn (hinter der B-Säule)
+    griffZ.forEach((z) => {
       [-1, 1].forEach((s) => {
         const x = seitenX(K, z, yG);
         quader(S, griff, s * (x + 0.006), yG, z, 0.025, 0.035, 0.16);
       });
     });
+    // Seitendekor unten (schwarz + roter Strich, optional) und Charakterlinie der Flanke
+    if (f.seitenDeko) {
+      const z0 = M.zVA + M.archV + 0.05, z1 = M.zHA - M.archH - 0.05, sd = f.seitenDeko;
+      seitenFlaeche(S, K, FARBE.SCHWARZ, z0, z1, M.sill + 0.075, M.sill + 0.075 + sd.h, 4, 0.004);
+      seitenFlaeche(S, K, 0xc4281c, z0, z1, M.sill + 0.075 - 0.028, M.sill + 0.075 - 0.01, 4, 0.005);
+    }
+    if (f.seitenLinie) {
+      const sl = f.seitenLinie, z0 = M.zF + sl.z0 * M.L, z1 = M.zF + sl.z1 * M.L;
+      seitenFlaeche(S, K, M.lackDunkel, z0, z1, sl.y * M.H, sl.y * M.H + 0.014, sl.n || 8, 0.004);
+    }
+    if (f.seitenBlinker) {                 // kleiner oranger Blinker vorn an der Flanke + Typenschild
+      const zb = M.zF + 0.24, yb = f.seitenBlinker.y * M.H;
+      seitenFlaeche(S, K, 0xffa020, zb, zb + 0.07, yb, yb + 0.032, 1, 0.006);
+      seitenFlaeche(S, K, FARBE.CHROM, zb + 0.23, zb + 0.37, yb + 0.02, yb + 0.05, 1, 0.006);
+    }
     // Schiebetür-Schiene (Van)
     if (f.schiebetuer) {
       const z0 = M.zF + f.schiebetuer * M.L, z1 = M.zHA + M.archH + 0.15;
@@ -1118,6 +1226,8 @@
       const z0 = M.zF + 0.12, z1 = M.zWS - 0.04;
       [[-0.21, -0.09], [0.09, 0.21]].forEach(([a, b]) => belag(S, K, M.dach, z0, z1, a, b, 0.006, 5));
     }
+    // Wischer-/Wasserkasten-Streifen (schwarz) am Fuß der Frontscheibe (optional)
+    if (f.scheibenRand) belag(S, K, FARBE.SCHWARZ, M.zWS - 0.1, M.zWS + 0.03, -0.66 * M.B / 2, 0.66 * M.B / 2, 0.004, 2);
     // Hauben-Lüftungsschlitze
     if (f.haubenSchlitze) {
       [-1, 1].forEach((s) => {

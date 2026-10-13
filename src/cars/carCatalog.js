@@ -61,26 +61,44 @@ window.Rennspiel = window.Rennspiel || {};
     {
       id: 'multivan',
       name: 'VW Multivan 6.1',
-      marke: 'Volkswagen', modell: 'Multivan 6.1',
-      farbe: 0xa5703c, farbe2: 0xf3eddc, farbeName: 'Bronze-Cremeweiß',   // Bronze-Lack, Dach cremeweiß (Runde 6)
+      marke: 'Volkswagen', modell: 'T6.1 Multivan Edition',
+      farbe: 0xcb975e, farbe2: 0x15171a, farbeName: 'Kupferbronze, Dach schwarz',   // Kupferbronze Metallic, Dach + Dachkante schwarz (Edition)
       karosserie: 'van',
-      // Quelle Maße: ADAC Autokatalog T6.1 Multivan: 4904 × 1904 × 1970 mm, Radstand 3000; Reifen 215/60 R17 C
+      // Quelle Maße: ultimatespecs.com T6.1 L1H1: 4904 × 1904 × 1970 mm, Radstand 3000, Spur 1624/1630; Reifen 215/60 R17
+      // (Edition: schwarz glänzende 18/19-Zoll-Felgen → hier 19 Zoll, Reifenradius 0,35 m)
       abmessungen: { laenge: 4.904, breite: 1.904, hoehe: 1.970, radstand: 3.000, ueberhangVorn: 0.99,
-        radRadius: 0.345, radBreite: 0.215, felgeZoll: 17 },
-      // Merkmale: Kasten, kurze steile Schnauze, riesige Frontscheibe, Fensterreihe, Schiebetür-Schiene, zweifarbig
+        radRadius: 0.35, radBreite: 0.235, felgeZoll: 19 },
+      // Merkmale: Kasten, kurze schräge Haube, riesige steile Frontscheibe, flaches schwarzes Dach, Fenster (Fahrertür, B-Säule,
+      // Schiebetür, hinten) mit schwarzen Säulen, Schiebetür-Schiene, T6.1-Front (Chrom-Lamellen + Chromspange bis zu den Scheinwerfern,
+      // großes VW-Logo, schwarzer Stoßfänger mit Nebelscheinwerfern), steile Heckklappe mit großer Scheibe, hohe Rückleuchten,
+      // MULTIVAN-Schriftzug, schwarze Dekorleisten (rot abgesetzt) hinten und seitlich
       form: {
-        sill: 0.155, nase: 0.50, haubeH: 0.585, guertel: 0.585, deck: 0.58, heckH: 0.60,
-        scheibeUnten: 0.175, dachVorn: 0.31, dachHinten: 0.975, heckscheibeEnde: 0.996, heckTyp: 'steil',
+        sill: 0.175, nase: 0.53, haubeH: 0.60, guertel: 0.64, deck: 0.58, heckH: 0.63,
+        scheibeUnten: 0.19, dachVorn: 0.335, dachHinten: 0.975, heckscheibeEnde: 0.996, heckTyp: 'steil',
         frontNeigung: 0.12, heckNeigung: 0.04, eckVorn: 0.30, eckHinten: 0.14, tumble: 0.07, wolbung: 0.03,
-        kotfluegel: 0.06, zweifarbig: true, schiebetuer: 0.595, tueren: 2,
-        fenster: [[0.18, 0.335], [0.36, 0.58], [0.605, 0.83], [0.85, 0.965]], tuerFugen: [0.295, 0.348, 0.595],
-        licht: { form: 'eckig', x: 0.66, y: 0.47, b: 0.42, h: 0.17 }, tfl: 'linie', grill: 'van', nebel: true,
-        rueck: { form: 'hoch', y: 0.47, h: 0.34, x0: 0.80, x1: 0.93 }, endrohre: { n: 0 }, spoiler: 'dach',
-        kennzeichenY: 0.30, kennzeichenHY: 0.50,
+        kotfluegel: 0.06, kontrastdach: true, schiebetuer: 0.726, tueren: 2, spiegelFarbe: 'schwarz',
+        fenster: [[0.275, 0.455], [0.487, 0.715], [0.738, 0.915]], tuerFugen: [0.298, 0.471, 0.726],
+        felgeFarbe: 0x30333a, felgeSpeichen: 10,
+        scheibenRand: true, schiebetuerGriffVorn: true, seitenDeko: { h: 0.095 }, seitenLinie: { y: 0.43, z0: 0.31, z1: 0.94, n: 8 }, seitenBlinker: { y: 0.455 },
+        // Front: Scheinwerfer mit Tagfahrlicht, oben 4 Chrom-Lamellen + Chromrahmen, dicke Chromspange bis unter die Scheinwerfer,
+        // unteres breites Grillfeld, großes VW-Logo, schwarzer Stoßfänger mit Nebelscheinwerfern
+        licht: { form: 'eckig', x: 0.77, y: 0.475, b: 0.37, h: 0.115, blende: 0.4 }, tfl: 'linie', grill: 'van', nebel: true, nebelX: 0.86,
+        grillHoehe: 0.17, grillLeisten: 4, grillRahmen: true, chromSpange: { x: 0.85, y: -0.098, d: 0.03 },
+        grillUnten: { y: -0.22, h: 0.18, b: 1.36, n: 4, seg: 4 }, logo: { y: -0.045, r: 0.085 },
+        stossBreite: 1.78, stossHoehe: 0.27, stossY: 0.03, stossForm: 'seiten', stossInnen: 0.58,
+        // Heck: hohe LED-Rückleuchten, große Scheibe mit Lackrahmen + Wischer + dritte Bremsleuchte, VW-Logo, MULTIVAN-Schriftzug,
+        // Kennzeichenmulde, Griffleiste, schwarze Dekorleiste mit rotem Strich + EDITION, Reflektoren
+        rueck: { form: 'hoch', y: 0.44, h: 0.36, x0: 0.80, x1: 0.96, balken: 2 }, endrohre: { n: 0 }, spoiler: null,
+        heckGlas: { oben: 0.2, wischer: { x: 0, y: 0.67, l: 0.58 }, bremsleuchte: { y: 0.955, b: 0.36 } },
+        logoHeck: { y: 0.553, r: 0.075 }, schriftzug: { text: 'MULTIVAN', x: -0.66, y: 0.513, h: 0.033, b: 0.26, farbe: 0xa9adb3 },
+        heckMulde: { y: 0.42, h: 0.28, bo: 1.30, bu: 1.10 }, heckGriff: { y: 0.292, b: 0.28, h: 0.06 },
+        heckDeko: { y: 0.221, h: 0.045, x: 0.79, n: 6 }, schriftzug2: { text: 'EDITION', x: 0.56, y: 0.221, h: 0.02, b: 0.22, farbe: 0xa9adb3 },
+        reflektoren: { x: 0.88, y: 0.231 },
+        kennzeichenY: 0.235, kennzeichenHY: 0.44, leistenSeg: 0.14,
       },
       fahrwerte: {
         vMax: 220 / 3.6, beschleunigung: 4.4, bremsen: 18, rueckwaertsMax: 7,
-        wendigkeit: 1.6, grip: 0.84, masse: 2200, laenge: 4.97, breite: 1.94,
+        wendigkeit: 1.6, grip: 0.84, masse: 2200, laenge: 4.90, breite: 1.90,
       },
       beschreibung: 'Groß, schwer und kaum aus der Spur zu bringen – der Bus für die ganze Familie.',
       generischerName: 'Bronzefarbener Familienbus',
