@@ -45,9 +45,16 @@ Sand-Fleck grip 0,55 / Rollwiderstand 6 / vMax ×0,75; Hindernis-Menge fest je S
 Nicht angefasst (braucht Praxistest/Entscheidung): KI-Reparatur bis 60 %, iPhone-Funktionen, Spielgefühl Öl/Sand/Rempeln.
 
 ## Wunschliste für später (13.10., Sebastian nach dem Spielen: „super Spiel!“)
-23. [ ] Rückspiegel oben rechts (Bild nach hinten)
+23. [ ] Rückspiegel in der MITTE oben über dem Tacho (Bild nach hinten)
 24. [ ] Cockpit-Ansicht „aus dem Auto rausgucken“ mit Tacho UND Drehzahlmesser (Zeiger), Tacho zeigt Geschwindigkeit
         (prüfen: tests/cockpit_test.py – es gibt schon eine Cockpit-Kamera, darauf aufbauen)
 25. [ ] Scheibenwischer im Cockpit bei Regen, Schnee, Hagel
 26. [ ] Verkehrsschilder am Streckenrand vor Kurven: Kurvenrichtung/-art + empfohlene Geschwindigkeit
 Weiter offen: 20. Kreuzung ohne unsichtbare Wand – in v16 HALBFERTIG enthalten (Agent abgebrochen, ungeprüft) → erst prüfen/fertigmachen.
+
+Ergänzung 13.10. (Sebastian):
+- Positionen von Rückspiegel, Tacho, Drehzahlmesser usw. konfigurierbar machen (später selbst verschiebbar, z. B. Layout-Datei/Editor).
+- Cockpits MARKENSPEZIFISCH je Auto (VW T-Roc Cabrio, Multivan 6.1, Passat B8, 911, M4, GT, RS6 Avant, Mini Cooper, Formel-Renner, Polizei):
+  echte Armaturen-Vorbilder vorher GOOGELN (Rundinstrumente/Digital, Farben, Skalen-Endwerte, Drehzahlbereich, rote Zone).
+- Motorsound je Auto passend zum echten Motor GOOGELN und nachbilden (Zylinderzahl, Diesel/Benzin, Leistung, Drehzahlbereich):
+  z. B. 6-Zylinder-Boxer 911 ≠ 150-PS-Diesel im Multivan-Bus.
