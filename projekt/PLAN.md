@@ -35,3 +35,19 @@ Entschieden: Fantasie bleibt immer mit Kreuzung (keine Variante „klassisch“)
 17. [x] Prüfung, v15 ablegen
 Befund vorher: Polizei stoppDauer 10 s; Abschleppen = 5 s liegen, dann Reset mit 60 %; Öl grip 0,25 (nur rutschig);
 Sand-Fleck grip 0,55 / Rollwiderstand 6 / vMax ×0,75; Hindernis-Menge fest je Strecke/Welt.
+
+## v16 (13.10., „fixe alles“)
+18. [ ] Fantasie: KI nach Reset vor dem Looping kommt nicht hoch → Reset-Punkt/Anlauf fixen – Sonnet A
+19. [ ] „Sehr viele“ Hindernisse: Fantasie/Dino näher an Wunschmenge – Sonnet A
+20. [ ] Kreuzung: keine unsichtbare Wand in den Einmündungen; Abbiegen → „Falsch abgebogen“ + Reset (keine Abkürzung) – Sonnet B (nach A)
+21. [ ] Online-Vorhersage für Kleber/Anlauf/Rampe/Looping, nur wenn Test Verbesserung zeigt – Sonnet C (parallel zu A)
+22. [ ] Prüfung, v16 ablegen, GitHub main (Tag v16 durch Sebastian)
+Nicht angefasst (braucht Praxistest/Entscheidung): KI-Reparatur bis 60 %, iPhone-Funktionen, Spielgefühl Öl/Sand/Rempeln.
+
+## Wunschliste für später (13.10., Sebastian nach dem Spielen: „super Spiel!“)
+23. [ ] Rückspiegel oben rechts (Bild nach hinten)
+24. [ ] Cockpit-Ansicht „aus dem Auto rausgucken“ mit Tacho UND Drehzahlmesser (Zeiger), Tacho zeigt Geschwindigkeit
+        (prüfen: tests/cockpit_test.py – es gibt schon eine Cockpit-Kamera, darauf aufbauen)
+25. [ ] Scheibenwischer im Cockpit bei Regen, Schnee, Hagel
+26. [ ] Verkehrsschilder am Streckenrand vor Kurven: Kurvenrichtung/-art + empfohlene Geschwindigkeit
+Weiter offen: 20. Kreuzung ohne unsichtbare Wand – in v16 HALBFERTIG enthalten (Agent abgebrochen, ungeprüft) → erst prüfen/fertigmachen.

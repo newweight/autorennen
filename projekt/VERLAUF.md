@@ -68,3 +68,16 @@
 - 12.10. Prüfung Hauptmodell v15: alle Node-Tests (ohne welten_ki) selbst grün, online_test 31/32 → Wiederholung 32/32 (Flake unter
   Last), menu_test 0 FEHL, Bilder Reparatur-HUD und Wiese „sehr viele“ angesehen. Abgelegt als v15_…_reparatur_oel_hindernisse,
   NEUESTE → v15. Offen: Fantasie/Dino bleiben wegen Sperrzonen unter Wunschmenge; Öl-Schleudern nur im Test gemessen, nicht gefahren.
+- 13.10. Git vorbereitet (Cloud): 15 Commits v1–v15 mit Tags + README/Projekt-Doku, ohne Node-Binary/tests/out/.app. Sicherung als _transfer/autorennen.bundle. Push wartet auf leeres GitHub-Repo (kann ich nicht selbst anlegen).
+- 13.10. GitHub: newweight/autorennen (privat) – main mit 16 Commits (v1–v15 + Doku) hochgeladen. Tags v1–v15 vom Cloud-Proxy abgelehnt (HTTP 403) → Sebastian pusht Tags vom Mac aus dem Bundle.
+- 13.10. Tags v1–v15 von Sebastian (M2 Max, gh neu angemeldet) gepusht → GitHub newweight/autorennen komplett. Lokaler Klon: ~/Documents/Autorennen-Projekt/autorennen-git.
+- 13.10. Start v16 („fixe alles“): Looping-KI, Hindernisse Fantasie/Dino, Kreuzung ohne unsichtbare Wand, Online-Vorhersage Sonderzustände.
+- 13.10. v16 Agent A (Sonnet): Reset vor Looping/Schanze legt Auto auf Anlaufposition (max 150 m zurück, sonst Start-Schwung;
+  Anlauf.resetPosition, main.js zuruecksetzen) – test_reset_anlauf 340/388 → 388/388. Hindernisse sehrViele: Fantasie 13→23,
+  Dino Stunt 24→37, Verrückt 25→38 (Sperrzonen in config.hindernisMenge.zonen kleiner); normal bitgleich. Alle Node-Tests grün.
+- 13.10. v16 Agent C (Sonnet): Online-Vorhersage für Kleber/Anlauf/Flug/Looping (Protokoll ich.sz, Netz.VERSION 2, abwärtskompatibel);
+  Looping Ø-Fehler 3,8 m → 0, Flug 2,9 m → 0 (Gleichschritt), Echtzeit mit Zittern: 0 harte Korrekturen. test_netz 96 OK, online 33/33.
+- 13.10. ABBRUCH (Credits): v16 gesichert als Autorennen-Versionen/v16_2026-10-13_looping_vorhersage (Agent A + C, Tests der Agenten grün,
+  keine Abschlussprüfung durch Hauptmodell), GitHub main = v16 (Commit e4c6232), Tag v16 nur lokal in der Cloud → von Sebastian setzen.
+  OFFEN: Punkt 20 Kreuzung ohne unsichtbare Wand (nicht begonnen); Abschlussprüfung v16 (online_test, welten_ki selbst laufen lassen).
+- 13.10. Sebastian spielt v15 auf dem M2 Max. Neue Wünsche (Rückspiegel, Cockpit mit Tacho/Drehzahl, Scheibenwischer, Kurvenschilder mit Tempo) in PLAN.md Punkte 23–26 notiert. Tag v16 auf GitHub gesetzt.
