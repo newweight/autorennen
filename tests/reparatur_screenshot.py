@@ -4,7 +4,8 @@ Aufruf: python3 tests/reparatur_screenshot.py [ausgabeordner]   (Standard tests/
 Bilder: 01_reparatur_20 (orange, „ab 30 % kannst du losfahren“), 02_gasversuch_20 (rot, „Noch nicht!“), 03_reparatur_40 (grün, „Gas = losfahren“),
         04_split_20_50 (2 Spieler: links 20 %, rechts 50 %)
 Prüft im echten Spiel (main.js-Verdrahtung): Gas bei 20 % wirkungslos (Auto steht), Gas bei 30 % → fährt, bleibt 30 %; Warten → 100 % nach 10 s;
-KI wird nach dem Abschleppen gehalten und ab 60 % freigegeben; keine JS-Fehler."""
+KI wird nach dem Abschleppen gehalten und ab 40 % freigegeben; keine JS-Fehler.
+14.10. (v18): 10 % = 3 s (config.schaden.reparaturJe10), Abschleppen nach 5,5 s (liegenZeit), KI ab 40 %."""
 import sys, os, json
 from playwright.sync_api import sync_playwright
 
@@ -23,9 +24,9 @@ START = '''([modus, nSpieler]) => { const s = Rennspiel.spiel; s.laeuft = false;
   s._log = [];
   s.schaden.bei((e) => s._log.push(e.art + (e.grund ? ':' + e.grund : '') + ':' + e.i + ':' + e.prozent));
   return { an: s.schaden.an, spieler: s.fahrzeuge.filter(f => f.istSpieler).length }; }'''
-# Auto i liegenbleiben lassen und bis zum Abschleppen (5 s) vorspulen → Reparatur beginnt
+# Auto i liegenbleiben lassen und bis zum Abschleppen (5,5 s) vorspulen → Reparatur beginnt
 LIEGEN = '''(i) => { const s = Rennspiel.spiel, sc = s.schaden; sc.z[i].abkling = 0; sc._punkteSetzen(i, 5); sc.treffer(i, 'hindernis', 5);
-  let n = 0; while (sc.zustand(i).liegengeblieben && n < 900) { s.physikSchritt(1 / 60); n++; }
+  let n = 0; while (sc.zustand(i).liegengeblieben && n < 1200) { s.physikSchritt(1 / 60); n++; }
   return sc.zustand(i); }'''
 # n Physikschritte, Anzeige (Kamera/HUD) nachziehen
 SCHRITTE = '''([sek]) => { const s = Rennspiel.spiel; for (let n = 0; n < Math.round(sek * 60); n++) s.physikSchritt(1 / 60);
@@ -36,6 +37,7 @@ HUD = '''() => Array.from(document.querySelectorAll('.hud-reparatur')).map(e => 
 STOPP = '''() => { const s = Rennspiel.spiel; s.uhr.rest = 0; s.pausiert = true; document.querySelectorAll('.hud-banner').forEach(b => { b.className = 'hud-banner'; }); }'''
 GAS = '''([nr, g]) => { Rennspiel.spiel._gas[nr] = g; }'''
 
+J = 3          # config.schaden.reparaturJe10 (10 % = 3 s)
 fehler, pr = [], []
 def pruefe(name, ok, info=''):
     pr.append((name, bool(ok), info)); print(('OK   ' if ok else 'FEHL ') + name + ('  (' + str(info) + ')' if info != '' else ''))
@@ -51,8 +53,8 @@ with sync_playwright() as pw:
     pruefe('Rennen mit Schaden an gestartet', info['an'] and info['spieler'] == 1, info)
     z = page.evaluate(LIEGEN, 0)
     pruefe('nach dem Abschleppen: Reparatur 0 %, Auto steht', z['reparatur'] and z['prozent'] == 0, z)
-    r = page.evaluate(SCHRITTE, [2.05])
-    pruefe('2 s später 20 %', r[0]['p'] == 20 and r[0]['rep'], r[0])
+    r = page.evaluate(SCHRITTE, [2.05 * J])
+    pruefe('6 s später 20 %', r[0]['p'] == 20 and r[0]['rep'], r[0])
     page.wait_for_timeout(400)
     hud = page.evaluate(HUD)
     pruefe('HUD zeigt „Reparatur 20 %“ und „ab 30 %“', hud and hud[0]['an'] and 'Reparatur 20 %' in hud[0]['text'] and 'ab 30 %' in hud[0]['text'], hud)
@@ -70,7 +72,7 @@ with sync_playwright() as pw:
     page.screenshot(path=os.path.join(aus, '02_gasversuch_20.png'))
     page.evaluate('() => { Rennspiel.spiel.pausiert = false; }')
     # weiter bis 30 % (Gas gedrückt gehalten): fährt sofort los, bleibt 30 %
-    r = page.evaluate(SCHRITTE, [1.0])[0]
+    r = page.evaluate(SCHRITTE, [3 * J + 0.05 - 2.05 * J - 0.3])[0]       # bis 30 % (9 s)
     r2 = page.evaluate(SCHRITTE, [2.0])[0]
     pruefe('Gas gehalten: ab 30 % fährt das Auto los (kein Warten bis 40 %), Wert bleibt 30 %', r['p'] == 30 and not r['rep'] and r2['tempo'] > 3 and r2['p'] == 30, [r, r2])
     log = page.evaluate('() => Rennspiel.spiel._log')
@@ -78,29 +80,29 @@ with sync_playwright() as pw:
     page.evaluate(GAS, [0, 0])
     # zweiter Versuch: warten bis 40 % → Bild; dann bis 100 %
     page.evaluate(LIEGEN, 0)
-    r = page.evaluate(SCHRITTE, [4.05])[0]
+    r = page.evaluate(SCHRITTE, [4.05 * J])[0]
     page.wait_for_timeout(400)
     hud = page.evaluate(HUD)
     pruefe('40 %: HUD „Gas = losfahren“', r['p'] == 40 and hud and 'Gas = losfahren' in hud[0]['text'] and '40 %' in hud[0]['text'], hud)
     page.evaluate(STOPP); page.wait_for_timeout(300)
     page.screenshot(path=os.path.join(aus, '03_reparatur_40.png'))
     page.evaluate('() => { Rennspiel.spiel.pausiert = false; }')
-    r = page.evaluate(SCHRITTE, [6.0])[0]
-    pruefe('ohne Gas: nach 10 s 100 %, Reparatur endet, Auto steht noch', r['p'] == 100 and not r['rep'] and r['tempo'] < 0.3, r)
+    r = page.evaluate(SCHRITTE, [10 * J + 0.1 - 4.05 * J])[0]
+    pruefe('ohne Gas: nach 30 s 100 %, Reparatur endet, Auto steht noch', r['p'] == 100 and not r['rep'] and r['tempo'] < 0.3, r)
     page.wait_for_timeout(300)
     hud = page.evaluate(HUD)
     pruefe('HUD-Reparatur danach weg', not hud or not hud[0]['an'], hud)
-    # KI: nach dem Abschleppen gehalten, ab 60 % frei
+    # KI: nach dem Abschleppen gehalten, ab 40 % frei
     ki = page.evaluate('''() => { const s = Rennspiel.spiel, sc = s.schaden; const i = s.fahrzeuge.findIndex(f => !f.istSpieler && !f.polizei);
       sc.z[i].abkling = 0; sc._punkteSetzen(i, 5); sc.treffer(i, 'hindernis', 5);
-      let n = 0; while (sc.zustand(i).liegengeblieben && n < 900) { s.physikSchritt(1 / 60); n++; }
+      let n = 0; while (sc.zustand(i).liegengeblieben && n < 1200) { s.physikSchritt(1 / 60); n++; }
       const a = sc.zustand(i), g0 = sc.gesperrt(i);
-      for (let k = 0; k < 330; k++) s.physikSchritt(1 / 60);     // 5,5 s → 50 %
+      for (let k = 0; k < 570; k++) s.physikSchritt(1 / 60);     // 9,5 s → 30 %
       const b = sc.zustand(i), g1 = sc.gesperrt(i);
-      for (let k = 0; k < 60; k++) s.physikSchritt(1 / 60);      // 6,5 s → 60 %, frei
+      for (let k = 0; k < 180; k++) s.physikSchritt(1 / 60);     // 12,5 s → 40 %, frei
       const c = sc.zustand(i);
       return { start: a.prozent, rep: a.reparatur, g0, p55: b.prozent, g1, p65: c.prozent, frei: !sc.gesperrt(i), repEnde: c.reparatur }; }''')
-    pruefe('KI: nach Abschleppen 0 %, gesperrt; bei 50 % noch gesperrt; ab 60 % frei', ki['start'] == 0 and ki['rep'] and ki['g0'] and ki['p55'] == 50 and ki['g1'] and ki['p65'] == 60 and ki['frei'] and not ki['repEnde'], ki)
+    pruefe('KI: nach Abschleppen 0 %, gesperrt; bei 30 % noch gesperrt; ab 40 % frei', ki['start'] == 0 and ki['rep'] and ki['g0'] and ki['p55'] == 30 and ki['g1'] and ki['p65'] == 40 and ki['frei'] and not ki['repEnde'], ki)
     page.close()
 
     # ---------------- Split-Screen (2 Spieler) ----------------
@@ -115,8 +117,8 @@ with sync_playwright() as pw:
     page.evaluate('''() => { const s = Rennspiel.spiel, sc = s.schaden; sc.z[0].abkling = 0; sc._punkteSetzen(0, 5); sc.treffer(0, 'hindernis', 5); }''')
     page.evaluate(SCHRITTE, [1.5])
     page.evaluate('''(i) => { const s = Rennspiel.spiel, sc = s.schaden; sc.z[i].abkling = 0; sc._punkteSetzen(i, 5); sc.treffer(i, 'hindernis', 5);
-      let n = 0; while (sc.zustand(i).liegengeblieben && n < 900) { s.physikSchritt(1 / 60); n++; } }''', idx2)
-    r = page.evaluate(SCHRITTE, [2.05])
+      let n = 0; while (sc.zustand(i).liegengeblieben && n < 1200) { s.physikSchritt(1 / 60); n++; } }''', idx2)
+    r = page.evaluate(SCHRITTE, [7.6])
     p0, p1 = r[0]['p'], r[idx2]['p']
     pruefe('Split-Screen: beide Spieler unabhängig in der Reparatur (Spieler 1 weiter als Spieler 2)', r[0]['rep'] and r[idx2]['rep'] and p0 > p1, [p0, p1])
     page.wait_for_timeout(400)

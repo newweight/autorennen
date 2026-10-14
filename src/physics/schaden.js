@@ -17,7 +17,10 @@
 //                            'abschleppwagen' (Hälfte der Wartezeit: zweite Meldung + Hupe),
 //                            'abschleppen' (main.js: zuruecksetzen(i); mit Reparatur beginnt sie jetzt: Auto steht bei 0 %,
 //                              e.reparatur = true; ohne Reparatur (reparaturJe10 = 0) hat es sofort resetProzent),
-//                            'reparatur' (alle 10 % – Pling), 'reparaturEnde' (e.grund: 'voll' | 'losgefahren' | 'ki')
+//                            'reparatur' (alle 10 % – Pling), 'reparaturEnde' (e.grund: 'voll' | 'losgefahren' | 'ki'),
+//                            'werkstatt' (v18: Heilung in der Werkstatt, world/garage.js → werkstattHeilen(i, prozent))
+//   14.10. (v18): Liegen = Abschleppwagen-Ablauf (config.schaden.abschlepp, liegenZeit 5,5 s; Ereignis 'abschleppwagen' hupeBei s nach dem Liegenbleiben,
+//   zustand(i).liegeVergangen/liegeGesamt für die Optik in world/abschleppwagen.js); reparaturJe10 = 3 (10 % = 3 s), KI frei ab 40 %.
 //   Abschlepp-Reparatur (Runde 7, config.schaden.reparaturJe10 > 0): nach dem Abschleppen steigt der Wert von 0 % in
 //   10er-Sprüngen, je 10 % reparaturJe10 s. Das Auto steht (Tempo 0, Treffer zählen nicht). Mensch: ab losfahrenAb (30 %) beendet
 //   Gas die Reparatur sofort (Wert bleibt), darunter ist Gas gesperrt; bis 100 % endet sie von selbst. Computer-Auto (kein
@@ -247,9 +250,11 @@
         if (z.liegengeblieben) {
           const v = this._v(i);
           if (v) { v.vLaengs = 0; v.vQuer = 0; }          // eingefroren (auch gegen Schieben)
-          const halb = wert(cfg().liegenZeit, 5) / 2, vorher = z.liegen;
+          // 14.10. (v18): Ereignis 'abschleppwagen' (Meldung + Hupe) hupeBei s nach dem Liegenbleiben (config.schaden.abschlepp), sonst zur Hälfte
+          const ab = cfg().abschlepp, gesamt = wert(cfg().liegenZeit, 5);
+          const bei = gesamt - (ab && ab.hupeBei !== undefined ? Math.min(ab.hupeBei, gesamt * 0.9) : gesamt / 2), vorher = z.liegen;
           z.liegen -= dt;
-          if (vorher > halb && z.liegen <= halb) this._melden('abschleppwagen', i);
+          if (vorher > bei && z.liegen <= bei) this._melden('abschleppwagen', i);
           if (z.liegen <= 1e-9) {
             z.liegen = 0; z.liegengeblieben = false; z.abkling = wert(cfg().abklingZeit, 0.7);
             if (wert(cfg().reparaturJe10, 0) > 0) { z.rep = true; z.repZeit = 0; z.gasVersuch = 0; }   // Reparatur beginnt bei 0 %
@@ -258,6 +263,25 @@
           }
         } else if (z.rep) this._reparaturSchritt(i, dt);
       }
+    }
+
+    /**
+     * 14.10. (v18) Werkstatt (world/garage.js): Fahrzeug i um `prozent` Prozentpunkte heilen (Bruchteile werden gesammelt, der Wert selbst bleibt ganzzahlig).
+     * Nicht liegengeblieben / nicht in der Abschlepp-Reparatur, Schaden an. → tatsächlich geheilte ganze Prozentpunkte (0 = nichts, auch bei 100 %).
+     */
+    werkstattHeilen(i, prozent) {
+      const z = this.z[i];
+      if (!this.an || !z || z.liegengeblieben || z.rep || z.punkte >= 100) { if (z) z.wAkku = 0; return 0; }
+      z.wAkku = (z.wAkku || 0) + prozent;
+      const ganz = Math.floor(z.wAkku + 1e-9);
+      if (ganz < 1) return 0;
+      z.wAkku -= ganz;
+      const vorher = z.punkte;
+      this._punkteSetzen(i, Math.min(100, vorher + ganz));
+      const plus = z.punkte - vorher;
+      if (plus > 0) this._melden('werkstatt', i);
+      if (z.punkte >= 100) z.wAkku = 0;
+      return plus;
     }
 
     /** Mensch (Spieler ohne Autopilot) oder Computer-Auto? Entscheidet über die Losfahr-Schwelle. */
@@ -318,6 +342,8 @@
         // Reparatur (Runde 7): läuft, ab wann man losfahren darf, darf man schon, Gasversuch unter der Schwelle (kurz true)
         reparatur: !!(this.an && z.rep), losfahrenAb: this.losfahrenAb(i), kannLosfahren: !!(this.an && z.rep) && p >= this.losfahrenAb(i),
         gasVersuch: !!(this.an && z.rep && z.gasVersuch > 0),
+        // 14.10. (v18) Abschleppwagen (Optik): Sekunden seit dem Liegenbleiben und Gesamtdauer
+        liegeVergangen: this.an && z.liegengeblieben ? Math.max(0, wert(C.liegenZeit, 5) - z.liegen) : 0, liegeGesamt: wert(C.liegenZeit, 5),
       };
     }
 

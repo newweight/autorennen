@@ -36,6 +36,13 @@
 // nach dessen Ausfahrt ankommt). Bei Gleichstand hat Abschnitt A (erste Durchfahrt) Vorfahrt. Wer schon an/auf der
 // Kreuzung ist oder nicht mehr anhalten kann, fährt durch (kein Hängenbleiben, kein Rückwärts-Manöver beim Warten);
 // nach QUER_GEDULD s Warten fährt die KI trotzdem. Stehende Autos AUF der Kreuzung bleiben normale Hindernisse (ausweichen).
+// 14.10. (v18) Gabelung (strecke.gabelungen, Wiese/Wüste): Die KI wählt vor der Teilung EINEN Ast (this.ast −1 links / +1 rechts) und bleibt
+// bis zur Zusammenführung darauf. Wahl deterministisch ohne Zufallszahlen: Paritätsbit aus dem Seed (astBasis) + Rundennummer
+// (streckeFortschritt / Länge) → jedes Auto wechselt den Ast von Runde zu Runde, die Autos verteilen sich auf beide Äste. Wer (Reset, Start)
+// mitten im Abschnitt steht, bleibt auf dem Ast, auf dem er steht. Zum Testen/Erzwingen: driver.astWunsch = −1 | +1.
+// Rechnung: die KI arbeitet weiter im Seitenabstand zur Mittellinie; _ao(s) = ast·c(s) ist der Versatz der Astmitte, alle Querlagen (eigene,
+// fremde Autos, Ausweichziele) werden relativ zur Astmitte gerechnet (qMe, oq), der Zielpunkt bekommt _ao(sZiel) wieder dazu.
+// Tempo: tempoProfil addiert die Zusatzkrümmung der auseinanderlaufenden Äste (strecke.gabelKruemmung).
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -50,6 +57,7 @@
   const ROLLEN_BAND = 1.5;         // m/s über dem Zieltempo: nur rollen, nicht bremsen
   const VERSATZ_MAX = 3;           // m seitlicher Grundversatz (± aus dem Seed)
   const SPUR_GRENZE_RAND = 2.2;    // m Abstand der Auto-Mitte zum Straßenrand (mindestens)
+  const ASTWAHL_VORAUS = 140, ASTWAHL_NACH = 40;   // 14.10. (v18): Gabelung – so weit vor der Teilung wird der Ast gewählt, so weit nach der Zusammenführung gilt er noch
   const SCHANZE_VORLAUF = 80;      // m vor der Rampe beginnt der Mindesttempo-Bereich (Runde 5)
   const SCHANZE_TEMPO = 27;        // m/s (≈ 97 km/h) Mindest-Zieltempo bis zur Kante (Reserve über 90 km/h)
 
@@ -184,6 +192,8 @@
       this.zufall = mulberry32(seedZahl(opt.seed));
       // Wer innen schneidet, fährt sonst auf der Ideallinie (nur kleiner Seed-Versatz)
       this.versatzBasis = (this.zufall() * 2 - 1) * VERSATZ_MAX * (this.innenSchneiden ? 0.3 : 1);
+      this.astBasis = Math.floor((this.versatzBasis + VERSATZ_MAX) * 997) & 1;   // 14.10. (v18): Paritätsbit für die Astwahl (ohne neue Zufallszahl)
+      this.ast = 0; this.astSchluessel = null; this.astWunsch = 0;
       this.schwankungPhase = this.zufall() * 2 * Math.PI;
 
       this.index = -1;              // Suchhilfe für spline.naechster()
@@ -305,6 +315,9 @@
       this.zeit += dt;
       const tempo = v.vLaengs;
       const p = sp.punktBei(n.s);
+      // 14.10. (v18): Gabelung – Ast wählen; qMe = eigene Querlage relativ zur Astmitte (ohne Gabelung = n.seitenabstand)
+      if (strecke.gabelungen && strecke.gabelungen.length) this._astWaehlen(n); else if (this.ast) this.ast = 0;
+      const qMe = this.ast ? n.seitenabstand - this._ao(n.s) : n.seitenabstand;
       // W4-J: Querverkehr an Kreuzungen (vor dem Festfahr-Check: Warten ist kein Festfahren)
       const quer = kreuz ? this._querverkehr(n, tempo, u.andere || [], dt) : null;
       if (quer && quer.wartet) this.festZeit = 0;
@@ -334,7 +347,7 @@
           // Gegenlenken: rückwärts lenkt spiegelverkehrt → Nase dreht zur Strecke
           const hZiel = R.headingAus(p.tx, p.tz);
           const diff = winkelNorm(hZiel - v.heading);
-          const zurMitte = -n.seitenabstand;   // >0: Mitte liegt links
+          const zurMitte = -qMe;   // >0: Mitte liegt links
           const richtung = Math.abs(diff) > 0.15 ? diff : zurMitte * 0.1;
           this.rueckLenkung = richtung > 0 ? 1 : -1;
           this.rueckRest = RUECK_ZEIT;
@@ -371,7 +384,8 @@
         if (abst > fensterLangsam + 15) continue;
         const on = sp.naechster(ov.x, ov.z, this.index);
         if (this._andereEbene(ov, on)) continue;     // W4-I: Auto auf der anderen Ebene (Überführung) – kein Gegner hier
-        if (abst < naechsterAbstand) { naechsterAbstand = abst; naechsterAndererQ = on.seitenabstand; }
+        const oq = this.ast ? on.seitenabstand - this._ao(on.s) : on.seitenabstand;   // 14.10. (v18): relativ zur Astmitte
+        if (abst < naechsterAbstand) { naechsterAbstand = abst; naechsterAndererQ = oq; }
         const voraus = sp.differenzS(on.s, n.s);
         const vo = ov.vLaengs || 0;
         // Direkt neben mir (Längsabstand < NEBEN): nie als "stehendes" Auto behandeln – sonst
@@ -385,25 +399,25 @@
         // fahrende Autos weiter vorn nur, wenn ich schneller bin (sonst kein Grund)
         if (!langsam && voraus > AUSWEICH_MIN && tempo - vo < 1) continue;
         const linie = this._grundVersatz(on.s);
-        const inMeinerSpur = Math.abs(on.seitenabstand - n.seitenabstand) < 2.2;
-        const blockiert = Math.abs(on.seitenabstand - linie) < AUSWEICH_SEITE ||
+        const inMeinerSpur = Math.abs(oq - qMe) < 2.2;
+        const blockiert = Math.abs(oq - linie) < AUSWEICH_SEITE ||
           (voraus < AUSWEICH_MIN && inMeinerSpur) || (neben && inMeinerSpur);
         if (!blockiert) continue;
 
         // Seite wählen (pro Hindernis gemerkt, kein Hin-und-her): bevorzugt die Seite,
         // auf der ich schon bin – wenn dort genug Platz ist, sonst die andere.
         const abstand = langsam ? AUSWEICH_ABSTAND_LANGSAM : AUSWEICH_ABSTAND;
-        const platz = seite => (seite > 0 ? grenze - on.seitenabstand : on.seitenabstand + grenze);
+        const platz = seite => (seite > 0 ? grenze - oq : oq + grenze);
         let seite = this.seitenMerk.get(ov) || 0;
         // Direkt daneben: immer auf der Seite bleiben, auf der ich bin (nicht "durch" das Auto)
-        if (neben) seite = n.seitenabstand >= on.seitenabstand ? 1 : -1;
+        if (neben) seite = qMe >= oq ? 1 : -1;
         if (!seite) {
-          seite = n.seitenabstand >= on.seitenabstand ? 1 : -1;
+          seite = qMe >= oq ? 1 : -1;
           if (platz(seite) < 2.4) seite = -seite;
         }
         this.seitenMerk.set(ov, seite);
         gesehen.add(ov);
-        const ziel = clamp(on.seitenabstand + seite * abstand, -grenze, grenze);
+        const ziel = clamp(oq + seite * abstand, -grenze, grenze);
         this.hindernisse.push({ d: voraus, ziel, langsam });
         if (langsam && voraus > -6) langsamVoraus = true;
 
@@ -426,9 +440,9 @@
       const frueher = this.tempoVerlauf[0];
       if (this.stossRest <= 0 && this.zeit - frueher[0] >= STOSS_FENSTER - 1e-9 && frueher[1] - tempo > STOSS_EINBRUCH) {
         // weg vom nächsten Auto, sonst Richtung Mitte
-        let seite = naechsterAndererQ !== null ? Math.sign(n.seitenabstand - naechsterAndererQ) : -Math.sign(n.seitenabstand);
+        let seite = naechsterAndererQ !== null ? Math.sign(qMe - naechsterAndererQ) : -Math.sign(qMe);
         if (!seite) seite = 1;
-        this.stossZiel = clamp(n.seitenabstand + seite * STOSS_VERSATZ, -grenze, grenze);
+        this.stossZiel = clamp(qMe + seite * STOSS_VERSATZ, -grenze, grenze);
         this.stossRest = STOSS_HALTEN;
       }
       if (this.stossRest > 0) this.stossRest -= dt;
@@ -440,7 +454,7 @@
       // damit die Sehne zum Zielpunkt nicht am Hindernis vorbeischneidet
       const vA = this._spurVersatz(n.s, vorausblick, tempo, grenze);
       const vB = this._spurVersatz(n.s, vorausblick / 2, tempo, grenze);
-      const q = vB.w > vA.w ? vB.q : vA.q;
+      const q = (vB.w > vA.w ? vB.q : vA.q) + (this.ast ? this._ao(sZiel) : 0);   // 14.10. (v18): + Versatz der Astmitte am Zielpunkt
       const z = sp.punktBei(sZiel);
       const zx = z.x + z.nx * q, zz = z.z + z.nz * q;
       // Lenkverzug ausgleichen: Pose LENK_VORHALT s voraus schätzen (Lenkung wirkt geglättet,
@@ -575,6 +589,33 @@
       return erg;
     }
 
+    /** 14.10. (v18): Versatz der Astmitte ab der Mittellinie an Bogenlänge s (ast·c(s); 0 ohne gewählten Ast). */
+    _ao(s) { return this.ast ? this.ast * this.strecke.gabelC(s) : 0; }
+
+    /**
+     * 14.10. (v18): Ast für die Gabelung voraus wählen (≤ ASTWAHL_VORAUS m vor der Teilung) bzw. beibehalten (im Abschnitt und kurz danach).
+     * Wahl je (Gabelung, Runde): Parität astBasis + Runde + Gabelungsnummer (deterministisch); mitten im Abschnitt: wo das Auto steht.
+     * this.astWunsch (−1 | +1) überschreibt die Wahl. Außerhalb: this.ast = 0.
+     */
+    _astWaehlen(n) {
+      const st = this.strecke, sp = this.spline;
+      let aktiv = null;
+      for (const g of st.gabelungen) {
+        const d0 = sp.differenzS(g.s0, n.s);              // > 0: Teilung liegt voraus
+        if (d0 <= ASTWAHL_VORAUS && d0 >= -g.L - ASTWAHL_NACH) { aktiv = g; break; }
+      }
+      if (!aktiv) { this.ast = 0; this.astSchluessel = null; return; }
+      const L = sp.laenge, lap = Math.max(0, Math.floor(((this.vehicle.streckeFortschritt || 0) + 1e-6) / L));
+      const schluessel = aktiv.nr + ':' + lap;
+      if (this.astSchluessel === schluessel && this.ast) return;
+      const innen = sp.differenzS(n.s, aktiv.s0) > 4 && sp.differenzS(n.s, aktiv.s0) < aktiv.L - 4;
+      let a;
+      if (this.astWunsch) a = this.astWunsch < 0 ? -1 : 1;
+      else if (innen && Math.abs(n.seitenabstand) > 1) a = n.seitenabstand < 0 ? -1 : 1;     // schon im Abschnitt: auf dem Ast bleiben
+      else a = ((this.astBasis + lap + aktiv.nr) & 1) ? 1 : -1;
+      this.ast = a; this.astSchluessel = schluessel;
+    }
+
     /** Grundversatz an Stelle s (Seed-Versatz, innen in Kurven verringert). */
     _grundVersatz(s) {
       const sp = this.spline;
@@ -695,6 +736,7 @@
       // stärkste Krümmung in ±3 Punkten (Kurveneingang nicht unterschätzen)
       let k = 0;
       for (let j = -3; j <= 3; j++) k = Math.max(k, Math.abs(pk[(i + j + N) % N].kruemmung));
+      if (strecke.gabelungen && strecke.gabelungen.length) k += strecke.gabelKruemmung(pk[i].s);   // 14.10. (v18): Äste laufen auseinander/zusammen
       if (o.innen) k = k / Math.max(0.5, 1 - o.innen * k);
       // k·v² − (A/T)·v − A = 0 → positive Lösung
       const vk = k < 1e-6 ? Infinity : (A / T + Math.sqrt((A / T) * (A / T) + 4 * k * A)) / (2 * k);

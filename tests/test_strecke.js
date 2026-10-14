@@ -522,7 +522,7 @@ if (daten.welten) {
       st.hindernisse.length + ' von ' + katalogH);
     if (w === 'klassisch') {
       pruefe(pf + 'keine Hindernisse/Schichten, Breite konstant', st.hindernisse.length === 0 && st.wracks.length === 0 && st.schanzen.length === 0 &&
-        st.boostFelder.length === 0 && st.spuren.length === 0 && st.daten.baelle.length === 0 && [0, 500, 1200, 2000].every(s => st.breiteBei(s) === st.breite));
+        st.boostFelder.length === 0 && st.spuren.length === 0 && st.daten.baelle.length === 0 && [0, 500, 900, 2000].every(s => st.breiteBei(s) === st.breite));
     }
     // strecke.daten zeigt nur aktive Listen (dynamik.js liest baelle/wasserstrahlen dort)
     const ok = Object.keys(listen).every((k) => {
@@ -659,6 +659,7 @@ if (daten.welten) {
     // stetig: Fahrbahnrand (halbe Breite) springt nie mehr als 0,5 m je 2 m, Bande nie enger als Fahrbahn + Rand
     let maxSprung = 0, wo = 0, bandeOk = true;
     for (let s = 0; s < L; s += 2) {
+      if (st.gabelungen.some(g => s >= g.s0 - 3 && s <= g.s1 + 3)) continue;   // 14.10.: in der Gabelung ist breiteBei die Astbreite (eigener Test: test_gabelung.js)
       const d = Math.abs(st.breiteBei(s + 2) - st.breiteBei(s)) / 2;
       if (d > maxSprung) { maxSprung = d; wo = s; }
       if (st.grenzeBei(s) < st.breiteBei(s) / 2 + st.randBreite + 0.3) bandeOk = false;

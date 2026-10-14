@@ -40,7 +40,10 @@ function lauf(st, s, seite, tempo, grad, auto) {
   const sp = st.spline, p = sp.punktBei(s), g0 = st.grenzeBei(s);
   const q0 = seite * Math.max(0, g0 - 5);
   const v = new R.Vehicle(auto);
-  v.setzen(p.x + p.nx * q0, p.z + p.nz * q0, R.headingAus(p.tx, p.tz) - seite * grad * Math.PI / 180);
+  // 14.10. (v18) Gabelung: Start relativ zum eigenen Ast (außen), gemessen mit der astbewussten Abfrage (st._naechsterWechsel)
+  const gw = st.gabelungen && st.gabelungen.length ? st.gabelBei(s) : null, cq = gw ? seite * gw.c : 0;
+  const nq = (x, z) => (st.gabelungen && st.gabelungen.length ? st._naechsterWechsel(x, z) : sp.naechster(x, z));
+  v.setzen(p.x + p.nx * (q0 + cq), p.z + p.nz * (q0 + cq), R.headingAus(p.tx, p.tz) - seite * grad * Math.PI / 180);
   v.vLaengs = tempo;
   const lp = R.Looping.zustand(), fz = R.Schanzen.zustand();
   const mitLoop = st.loopings && st.loopings.length;
@@ -53,11 +56,11 @@ function lauf(st, s, seite, tempo, grad, auto) {
     index = r.index;
     R.Kollisionen.bande(v, st);
     if (v.imLooping) continue;
-    const n = sp.naechster(v.x, v.z);
+    const n = nq(v.x, v.z);
     const ueM = Math.abs(n.seitenabstand) - st.grenzeBei(n.s);
     if (ueM > maxM) { maxM = ueM; wo = 's=' + n.s.toFixed(0); }
     for (const e of ecken(v)) {
-      const ne = sp.naechster(e.x, e.z), ue = Math.abs(ne.seitenabstand) - st.grenzeBei(ne.s);
+      const ne = nq(e.x, e.z), ue = Math.abs(ne.seitenabstand) - st.grenzeBei(ne.s);
       if (ue > maxB) maxB = ue;
     }
   }

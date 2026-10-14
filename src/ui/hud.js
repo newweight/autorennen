@@ -77,6 +77,7 @@
       const breite = Math.max(4 * dpr, strecke.breite * mass);
       pfad(); g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = breite + 3 * dpr; g.stroke();   // heller Rand
       pfad(); g.strokeStyle = '#3a3f4a'; g.lineWidth = breite; g.stroke();                        // Fahrbahn
+      if (strecke.gabelMinimap && strecke.gabelungen && strecke.gabelungen.length) strecke.gabelMinimap(g, nachPx, mass, dpr, breite);   // 14.10. (v18): Gabelung = zwei Äste
       // Runde 6 (W4-I): Überführungen obenauf – Brücke mit hellem Rand und hellerer Fahrbahn (man sieht, wer oben fährt)
       (strecke.ueberfuehrungen || []).forEach((u) => {
         const sp = strecke.spline, len = sp.differenzS(u.s1, u.s0) + 8, n = Math.max(4, Math.round(len / 2));
@@ -280,6 +281,45 @@
       setzeAnzeige(this.eGesund, !!this.schaden);
     }
 
+    /** 14.10. (v18): Werkstatt (R.Werkstatt, world/garage.js) + Fahrzeug-Index: Anzeige „🔧 Werkstatt: 65 %“ beim Heilen; null = nichts. */
+    werkstattSetzen(werkstatt, index) {
+      this.werkstatt = werkstatt || null;
+      this.werkstattIndex = index;
+      if (!this.werkstatt && this.eWerk) { this.eWerk.style.display = 'none'; this.eWerk._an = false; }
+    }
+
+    /**
+     * 14.10. (v18): Werkstatt-Anzeige (eigenes Element unter der Reparatur-Meldung). Zustände (werkstatt.zustand): voraus (Fläche ≤ 60 m voraus) →
+     * blau „Werkstatt voraus – anhalten = reparieren“; drin (auf der Fläche, noch in Fahrt) → „Anhalten!“; heilt → grün „Werkstatt: 65 %“;
+     * voll → „Werkstatt: 100 % ✔“; benutzt → rot „schon benutzt – nächste Runde“. Sonst unsichtbar.
+     */
+    _werkstattAnzeigen() {
+      const w = this.werkstatt, zs = w.zustand(this.werkstattIndex), sz = this.schaden ? this.schaden.zustand(this.schadenIndex) : null;
+      let e = this.eWerk;
+      const status = zs.status;
+      if (status === 'aus' || !sz) { if (e && e._an) { e.style.display = 'none'; e._an = false; e._t = ''; } return; }
+      if (!e) {
+        e = this.eWerk = document.createElement('div'); e.className = 'hud-werkstatt';
+        Object.assign(e.style, { position: 'absolute', left: '50%', top: '42%', transform: 'translateX(-50%)', boxSizing: 'border-box', maxWidth: '92%',
+          textAlign: 'center', whiteSpace: 'pre-line', fontWeight: '900', lineHeight: '1.2', color: '#fff', padding: '.25em .8em', borderRadius: '1em',
+          border: '.08em solid #fff', pointerEvents: 'none', textShadow: '0 .06em .12em rgba(0,0,0,.5)', display: 'none' });
+        this.el.appendChild(e);
+      }
+      const p = sz.prozent;
+      const text = status === 'voraus' ? '🔧 Werkstatt voraus\nanhalten = reparieren'
+        : status === 'drin' ? '🔧 Werkstatt: hier anhalten!'
+        : status === 'heilt' ? '🔧 Werkstatt: ' + p + ' %'
+        : status === 'voll' ? '🔧 Werkstatt: ' + p + ' % ✔'
+        : '🔧 Werkstatt: schon benutzt\nnächste Runde wieder';
+      const farbe = status === 'benutzt' ? 'linear-gradient(90deg, rgba(200,50,40,.92), rgba(230,90,60,.92))'
+        : status === 'heilt' || status === 'voll' ? 'linear-gradient(90deg, rgba(40,170,80,.92), rgba(90,200,110,.92))'
+        : 'linear-gradient(90deg, rgba(31,111,209,.92), rgba(70,150,235,.92))';
+      if (e._t !== text) { e._t = text; e.textContent = text; }
+      if (e._f !== farbe) { e._f = farbe; e.style.background = farbe; }
+      if (!e._an) { e._an = true; e.style.display = 'block'; }
+      e.style.fontSize = this.el.clientWidth < 700 ? '1.1em' : '1.5em';
+    }
+
     /**
      * Runde 5b: Polizei-System (R.Polizei) + Fahrzeug-Index. Anzeige „🚨 Polizei! Anhalten… 10 s" mit Countdown
      * (angehalten) bzw. kleines „🚨 Polizei!" (wird verfolgt); null = nichts.
@@ -475,6 +515,7 @@
 
       if (this.wetter) this._windAnzeigen(v);
       if (this.schaden) this._gesundheitAnzeigen();
+      if (this.werkstatt && this.schaden) this._werkstattAnzeigen();       // 14.10. (v18)
       if (this.polizei && this.ePolizei) this._polizeiAnzeigen();
       if (this.pickups && this.eItem) this._itemAnzeigen();
       if (this.minimap) this.minimap.zeichnen(r.teilnehmer, t, this.polizei ? this.polizei.minimapPunkte() : null);

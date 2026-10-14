@@ -56,7 +56,8 @@
     const maxStd = strecke.seitenabstandMax !== undefined ? strecke.seitenabstandMax : strecke.breite / 2 + 40;
     const grenze = (s) => (strecke.grenzeBei ? strecke.grenzeBei(s) : maxStd);
     // W4-J: an einer niveaugleichen Kreuzung mit Index-Kontinuität – die Bande gilt für den EIGENEN Abschnitt
-    const kont = strecke.kreuzungen && strecke.kreuzungen.length && strecke._naechsterKont;
+    // 14.10. (v18): auch an einer Gabelung (Seitenabstand relativ zum nächsten Ast, strecke._gabelAnpassen)
+    const kont = ((strecke.kreuzungen && strecke.kreuzungen.length) || (strecke.gabelungen && strecke.gabelungen.length)) && strecke._naechsterKont;
     // v16: + Abschnittswechsel beim Abbiegen (strecke._naechsterWechsel): auf der Querstraße gilt deren Bande, keine Wand quer über der Straße
     const kontF = strecke._naechsterWechsel || strecke._naechsterKont;
     const such = kont ? (x, z, i) => kontF.call(strecke, x, z, i) : (x, z, i) => sp.naechster(x, z, i);

@@ -47,6 +47,14 @@
 // Runde 6 (W4-J, Fantasie): kreuzungen: [{ s0, s1 }]  niveaugleiche Kreuzung mit sich selbst (Bahnübergang mit Warnlicht);
 //   s0..s1 = Bereich des ersten Abschnitts, die Stelle (sA/sB, Winkel 70–110°, |Δy| < 1 m) sucht trackBuilder.
 //   Listen-Einträge nicht an der Kreuzung (kreuzungNah, test_strecke prüft das).
+// 14.10. (v18) Gabelung (nur Wiese + Wüste, in ALLEN Welten): gabelungen: [{ s0, s1, versatz?, astBreite?, anteil? }]
+//   Die doppelspurige Straße teilt sich bei s0 (Y) in zwei getrennte, je 1-spurige Fahrbahnen (astBreite ≈ 6 m) links und rechts
+//   (Mittellinie der Äste = Strecken-Mittellinie ± c(s), c wächst von breite/4 auf `versatz` m) mit Insel dazwischen und führt bei s1
+//   wieder zusammen. anteil = Länge der Teilung/Zusammenführung als Anteil der Gesamtlänge (Standard 0,36). Nur s0/s1 skalieren in
+//   Varianten (XL), Versatz/Breiten bleiben. Beide Äste folgen derselben Mittellinie → fast gleich lang (Längen: strecke.gabelInfo()).
+//   Listen-Einträge (spuren, hindernisse, wracks, … ) liegen nicht in [s0 − 30, s1 + 30] (tests/test_gabelung.js prüft das):
+//   Wiese: Baustelle 1107 → 985 (die enge Stelle 1210–1330 entfällt, dort liegt jetzt die Gabelung);
+//   Wüste: Baustelle 1102 → 945 (die enge Piste 1210–1400 entfällt). Details: trackBuilder.js (Kopfkommentar „Gabelung“).
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -98,12 +106,14 @@
       // seite = Anteil der halben Breite (-1 links … +1 rechts, Baustelle: gesperrte Hälfte)
       hindernisse: [
         { typ: 'sand', s: 648, seite: -0.35 },
-        { typ: 'baustelle', s: 1107, seite: 1 },
+        { typ: 'baustelle', s: 305, seite: 1 },        // 14.10.: war 1107 (dort liegt jetzt die Gabelung)
         { typ: 'ast', s: 1755, seite: -1 },
       ],
+      // 14.10. Gabelung auf der langen Geraden nach der Baustelle (s 1050–1390, ≈ 340 m, fast gerade, Längenunterschied der Äste ≈ 0)
+      gabelungen: [{ s0: 1050, s1: 1390, versatz: 10.5, astBreite: 6 }],
       // Runde 4 – Welten-Schichten (s in m)
       spuren: [
-        { s0: 1210, s1: 1330, spuren: 1 },     // enge Stelle auf der langen Geraden nach der Baustelle
+        { s0: 1840, s1: 1950, spuren: 1 },     // enge Stelle nach der Gabelung (14.10.: war 1210–1330, dort teilt sich jetzt die Straße)
         { s0: 2250, s1: 2420, spuren: 3 },     // breite Kurve vor der Brücke
       ],
       wracks: [
@@ -131,7 +141,7 @@
         { s: 2160, von: 1, abRunde: 'letzte', intervall: 8, tempo: 9, radius: 2.2, farbe: 0x4fc3ff },
       ],
       wasserstrahlen: [
-        { s: 1900, seitenabstand: 3, intervall: 20, dauer: 2, vorwarnung: 1 },
+        { s: 1690, seitenabstand: 3, intervall: 20, dauer: 2, vorwarnung: 1 },
       ],
       // Bauplan (Runde 3, vor ×1,35 um den Schwerpunkt):
       // G143 K38/90 G66 K35/-90 G55 K35/90 G121 K44/45 G33 K110/-40 K110/40 G? K50/-45 G44 K30/180
@@ -287,11 +297,13 @@
         { typ: 'sand', s: 609, seite: 0.3 },
         { typ: 'sand', s: 1812, seite: -0.4 },
         { typ: 'oel', s: 2175, seite: 0.2 },
-        { typ: 'baustelle', s: 1102, seite: 1 },
+        { typ: 'baustelle', s: 945, seite: 1 },        // 14.10.: war 1102 (dort liegt jetzt die Gabelung)
       ],
+      // 14.10. Gabelung auf der langen Geraden (s 1030–1430, ≈ 400 m, gerade, Längenunterschied der Äste ≈ 0)
+      gabelungen: [{ s0: 1030, s1: 1430, versatz: 11.5, astBreite: 6.4 }],
       // Runde 4 – Welten-Schichten (s in m)
       spuren: [
-        { s0: 1210, s1: 1400, spuren: 1 },     // enge Piste auf der langen Geraden nach der Baustelle
+        { s0: 2275, s1: 2355, spuren: 1 },     // enge Piste auf der Geraden vor der Brücke (14.10.: war 1210–1400, dort teilt sich jetzt die Piste)
         { s0: 3000, s1: 3150, spuren: 3 },     // Schikane vor dem Ziel mit drei Spuren
       ],
       wracks: [
@@ -305,12 +317,12 @@
         { s: 2810, winkel: 12, laenge: 10 },
       ],
       boostFelder: [
-        { s: 1000, seitenabstand: -3.5, laenge: 12 },
+        { s: 1910, seitenabstand: -3.5, laenge: 12 },   // 14.10.: war 1000 (Gabelung/Baustelle)
         { s: 3185, seitenabstand: 0, laenge: 12 },
       ],
       schilde: [
         { s: 1700, seitenabstand: 2 },
-        { s: 2380, seitenabstand: -2 },
+        { s: 2460, seitenabstand: -2 },   // 14.10.: war 2380 (enge Piste 2265–2345)
       ],
       baelle: [
         { s: 1600, von: -1, abRunde: 2, intervall: 8, tempo: 9, radius: 2.2, farbe: 0xff4fa3 },

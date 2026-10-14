@@ -50,6 +50,24 @@
 //   meldet der Rennleitung das Abbiegen – raceManager._abbiegen friert Fortschritt/Checkpoints ein, Meldung „Falsch abgebogen“,
 //   nach 4 s (oder > 60 m weg) Reset an den letzten Checkpoint (main.js _abbiegenPruefen). Zaun in den Zwickeln (v14) bleibt
 //   unverändert: dort gilt weiter die Bande des eigenen Abschnitts. Test: tests/test_kreuzung_abbiegen.js.
+//
+// 14.10. (v18) GABELUNG (Wiese + Wüste, Katalog gabelungen [{ s0, s1, versatz, astBreite, anteil }], in allen Welten):
+//   Die doppelspurige Straße teilt sich bei s0 (Y) in zwei getrennte, je ≈ 6 m breite Fahrbahnen (Ast −1 links, +1 rechts) mit Insel
+//   dazwischen und führt bei s1 wieder zusammen. Beide Äste liegen auf Mittellinie ± c(s) (c wächst smoothstep von breite/4 auf `versatz`,
+//   Astbreite 2·h(s) schrumpft von breite/2 auf astBreite; ganz am Anfang/Ende liegen die zwei Hälften Rand an Rand = die volle Straße).
+//   Weil beide Äste derselben Mittellinie folgen, ist s (Fortschritt, Checkpoints, Runden, Platzierung) für beide Äste gleich und die Längen
+//   unterscheiden sich nur um 2·∫c·κ ds (auf den gewählten fast geraden Stücken ≈ 0, strecke.gabelInfo() meldet sie).
+//   gabelBei(s) → { g, u, t, c, h } | null · breiteBei(s) = 2h im Abschnitt · grenzeBei(s) = h + Rand + 0,4 (Leitplanke direkt am Ast).
+//   SEITENABSTAND IM ABSCHNITT: abfrage()/untergrundAn()/Bande messen relativ zur Mitte des NÄCHSTEN Astes (Vorzeichen des rohen
+//   Seitenabstands q wählt den Ast): n.seitenabstand = q − ast·c(s), n.abstand entsprechend, n.ast = ±1, n.q0 = roher Wert.
+//   Dadurch gelten Untergrund (Straße/Rand/Gras), Bande, Fahrhilfe, „abseits“ und die KI-Fahrbahnbreite ohne Sonderfall; die Insel ist
+//   Gras (zwischen den Rändern) mit Leitplanke an beiden Inselkanten → keine Abkürzung. Rohe Spline-Abfragen (spline.naechster) liefern
+//   weiter den Abstand zur Mittellinie (raceManager: s/Checkpoints). Hilfsfunktionen: gabelAst(q, s), astPunkt(s, ast) (Punkt + Tangente auf
+//   dem Ast, für Reset), gabelQ(sNeu, sAlt, q) (Querlage auf den anderen s übertragen), gabelKruemmung(s) (zusätzliche Kurvenkrümmung der Äste).
+//   Grafik: Straßenband und Randsteine entfallen im Abschnitt (zwei Bänder + Randsteine + Inselrasen = Mesh „Gabelung“), Leitplanken,
+//   Pfeilschild, Leitpfosten und Inseldeko (Wiese: Bäume, Büsche, Blumen · Wüste: Kakteen, Felsen, Gestrüpp) = Mesh „Gabeldeko“.
+//   Sperrzone für Deko, Hindernis-Extras (hindernisMenge) und Münzen. Minimap: gabelMinimap(g, nachPx, mass, dpr) (hud.js ruft es auf).
+//   Test: tests/test_gabelung.js.
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -90,6 +108,11 @@
   const KREUZ_WECHSEL = 17;      // m (v16): ab so weit von der Kreuzungsmitte AUF der Querstraße wechselt die Streckenzuordnung (Abschnittswechsel)
   const KREUZ_WECHSEL_MAX = 40;  // m: weiter draußen gilt wieder nur die normale Index-Kontinuität (Teleport-Rückfall > Bande + 15 m)
   const KREUZ_WARN = 60;         // m: Auto im anderen Abschnitt so nah vor der Kreuzung → Warnlicht blinkt schnell
+  // 14.10. (v18): Gabelung (Standardwerte, der Katalog kann versatz/astBreite/anteil überschreiben)
+  const GABEL_VERSATZ = 11;      // m: Mitte eines Astes ab der Mittellinie auf der Plateau-Strecke
+  const GABEL_AST_BREITE = 6;    // m: Fahrbahnbreite eines Astes (1 Spur)
+  const GABEL_ANTEIL = 0.36;     // Anteil der Gesamtlänge für die Teilung (und ebenso die Zusammenführung)
+  const GABEL_SPERRE = 30;       // m: Katalog-Einträge/Hindernis-Extras/Münzen halten so viel Abstand zum Abschnitt
 
   /** Weicher Übergang 0 → 1 zwischen a und b. */
   function glatt(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
@@ -223,6 +246,7 @@
     (st.ueberfuehrungen || []).forEach((u) => { zone(u.s0, u.s1, ZR.ueberf, ZR.ueberf); if (u.unten) zone(u.unten.s0, u.unten.s1, ZR.ueberf, ZR.ueberf); });
     (st.kreuzungen || []).forEach((k) => { zone(k.a.s0, k.a.s1, ZR.kreuzung, ZR.kreuzung); zone(k.b.s0, k.b.s1, ZR.kreuzung, ZR.kreuzung); });
     (st.loopings || []).forEach((l) => zone(l.s0, l.s1, ZR.loopingVor, ZR.loopingNach));   // davor: Anlauf (volle Fahrt nötig)
+    (st.gabelungen || []).forEach((g) => zone(g.s0, g.s1, GABEL_SPERRE, GABEL_SPERRE));   // 14.10. (v18): Gabelung (zwei Äste + Insel) frei
     (st.spuren || []).forEach((e) => { if (e.breite < st.breite) zone(e.s0, e.s1, ZR.spuren, ZR.spuren); });   // nur enge Abschnitte; breite (3 Spuren) bleiben frei
     (sicht.schanzen || []).forEach((e) => zone(e.s, e.s + (e.laenge || 10), (e.anlauf || 0) + ZR.schanzeVor, ZR.schanzeNach));
     (sicht.boostFelder || []).forEach((e) => zone(e.s, e.s + (e.laenge || 12), ZR.boost, ZR.boost));
@@ -392,6 +416,8 @@
       this.abseitsUntergrund = daten.abseitsUntergrund || 'gras';   // 'gras' | 'sand'
       this.spline = new R.Spline(daten.punkte, { abstand: 2 });
       this.laenge = this.spline.laenge;
+      // 14.10. (v18): Gabelungen [{ s0, s1, … }] (Katalog; gelten in allen Welten – sind Teil der Strecke, nicht einer Schicht)
+      this.gabelungen = (daten.gabelungen || []).map((e, i) => this._gabelBerechnen(e, i)).filter(Boolean);
       // Spuren (nur wenn die Welt sie einschaltet): [{ s0, s1, spuren, breite }]
       this.spuren = (sicht.spuren || []).map(e => ({ s0: this.spline.wrapS(e.s0), s1: this.spline.wrapS(e.s1), spuren: e.spuren,
         breite: SPUR_BREITE[e.spuren] || this.breite }));
@@ -648,10 +674,115 @@
 
     /** W4-J (v16): naechsterKont() + Abschnittswechsel beim Abbiegen (_kreuzungWechsel) – für abfrage, untergrundAn und die Bande. */
     _naechsterWechsel(x, z, startIndex) {
-      const n = this._naechsterKont(x, z, startIndex);
-      if (!this.kreuzungen.length) return n;
-      const w = this._kreuzungWechsel(x, z, n);
-      return w ? w.n : n;
+      let n = this._naechsterKont(x, z, startIndex);
+      if (this.kreuzungen.length) {
+        const w = this._kreuzungWechsel(x, z, n);
+        if (w) n = w.n;
+      }
+      return this.gabelungen.length ? this._gabelAnpassen(n) : n;   // 14.10. (v18): Seitenabstand relativ zum nächsten Ast
+    }
+
+    // ---------------------------------------------------------- Gabelung (14.10., v18)
+
+    /** Katalogeintrag { s0, s1, versatz, astBreite, anteil } → Abschnitt (s0/s1 auf Abtastpunkte gerastet, damit das Straßenband exakt anschließt). */
+    _gabelBerechnen(e, nr) {
+      const ds = this.spline.ds, L0 = this.spline.laenge;
+      const ia = Math.ceil(e.s0 / ds - 1e-9), ib = Math.floor(e.s1 / ds + 1e-9);
+      const s0 = ia * ds, s1 = ib * ds;
+      if (!(s1 - s0 > 80) || s0 <= 0 || s1 >= L0) return null;
+      const L = s1 - s0, h0 = this.breite / 4;
+      const C = Math.max(e.versatz || GABEL_VERSATZ, h0 + 4);
+      return { nr, s0, s1, L, ia, ib, P: L * Math.min(0.45, e.anteil || GABEL_ANTEIL), c0: h0, h0, C, hMin: Math.min(h0, (e.astBreite || GABEL_AST_BREITE) / 2) };
+    }
+
+    /** Gabelung an Bogenlänge s: { g, u (m ab s0), t (0 = Y-Spitze … 1 = ganz getrennt), c (Mitte eines Astes ab der Mittellinie), h (halbe Astbreite) } oder null. */
+    gabelBei(s) {
+      const G = this.gabelungen;
+      for (let i = 0; i < G.length; i++) {
+        const g = G[i], u = s - g.s0;
+        if (u < -1e-6 || u > g.L + 1e-6) continue;
+        const x = u < g.P ? Math.max(0, u) / g.P : u > g.L - g.P ? (g.L - u) / g.P : 1, t = x * x * (3 - 2 * x);
+        return { g, u, t, c: g.c0 + (g.C - g.c0) * t, h: g.h0 + (g.hMin - g.h0) * t };
+      }
+      return null;
+    }
+
+    /** Mitte eines Astes ab der Mittellinie an s (m, ≥ 0; 0 außerhalb der Gabelung) – schnelle Kurzform von gabelBei(s).c. */
+    gabelC(s) { const w = this.gabelungen.length ? this.gabelBei(s) : null; return w ? w.c : 0; }
+
+    /** Liegt s in (oder ± zugabe um) einer Gabelung? → Abschnitt oder null (Sperrzone für Deko, Münzen, Listen). */
+    gabelNah(s, zugabe) {
+      const z = zugabe || 0;
+      for (const g of this.gabelungen) if (s >= g.s0 - z && s <= g.s1 + z) return g;
+      return null;
+    }
+
+    /** Roher Seitenabstand q (Mittellinie) und Bogenlänge s → Ast −1 (links) | +1 (rechts) | 0 (keine Gabelung hier). */
+    gabelAst(q, s) { return this.gabelungen.length && this.gabelBei(s) ? (q >= 0 ? 1 : -1) : 0; }
+
+    /** n (spline.naechster-Ergebnis, wird verändert): Seitenabstand relativ zur Mitte des nächsten Astes (siehe Kopfkommentar). */
+    _gabelAnpassen(n) {
+      const w = this.gabelBei(n.s);
+      if (!w) return n;
+      const q = n.seitenabstand, ast = q >= 0 ? 1 : -1, rel = q - ast * w.c;
+      n.abstand = Math.sqrt(Math.max(0, n.abstand * n.abstand - q * q) + rel * rel);
+      n.seitenabstand = rel; n.q0 = q; n.ast = ast;
+      return n;
+    }
+
+    /** Querlage q (roh, an Bogenlänge sAlt) auf Bogenlänge sNeu übertragen, ohne den Ast zu wechseln (Reset-Suche nach hinten). */
+    gabelQ(sNeu, sAlt, q) {
+      const a = this.gabelBei(sAlt);
+      if (!a) return q;
+      const ast = q >= 0 ? 1 : -1, b = this.gabelBei(sNeu);
+      return ast * (b ? b.c : 0) + (q - ast * a.c);
+    }
+
+    /** Punkt + Tangente auf dem Ast (−1/+1) bei s (Mitte des Astes; ohne Gabelung hier = Mittellinie). */
+    astPunkt(s, ast) {
+      const sp = this.spline, w = this.gabelBei(s), c = w ? ast * w.c : 0;
+      const p = sp.punktBei(s), x = p.x + p.nx * c, z = p.z + p.nz * c;
+      const w2 = this.gabelBei(s + 1), w1 = this.gabelBei(s - 1), p2 = sp.punktBei(s + 1), p1 = sp.punktBei(s - 1);
+      const c2 = w2 ? ast * w2.c : 0, c1 = w1 ? ast * w1.c : 0;
+      let tx = (p2.x + p2.nx * c2) - (p1.x + p1.nx * c1), tz = (p2.z + p2.nz * c2) - (p1.z + p1.nz * c1);
+      const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
+      return { x, z, tx, tz, s: p.s, c };
+    }
+
+    /** |c''(s)| (1/m): zusätzliche Kurvenkrümmung der Äste durch das Auseinanderlaufen (KI-Tempoprofil). 0 außerhalb. */
+    gabelKruemmung(s) {
+      const w = this.gabelBei(s);
+      if (!w) return 0;
+      const g = w.g, x = w.u < g.P ? w.u / g.P : w.u > g.L - g.P ? (g.L - w.u) / g.P : 1;
+      if (x >= 1) return 0;
+      return Math.abs((g.C - g.c0) * (6 - 12 * x)) / (g.P * g.P);
+    }
+
+    /**
+     * Längen der Äste (Mittellinie jedes Astes von s0 bis s1, m) und Querlage-Kennwerte – für Tests und Doku.
+     * @returns {{nr, s0, s1, laenge, links, rechts, mitte, unterschied, rMin}[]}
+     */
+    gabelInfo() {
+      return this.gabelungen.map((g) => {
+        const len = { '-1': 0, '1': 0 }, ds = 1;
+        let rMin = Infinity, vorher = { '-1': null, '1': null };
+        for (let s = g.s0; s <= g.s1 + 1e-6; s += ds) {
+          [-1, 1].forEach((a) => {
+            const P = this.astPunkt(s, a);
+            if (vorher[a]) len[a] += Math.hypot(P.x - vorher[a].x, P.z - vorher[a].z);
+            vorher[a] = P;
+          });
+        }
+        for (let s = g.s0 + 4; s <= g.s1 - 4; s += 4) {
+          [-1, 1].forEach((a) => {
+            const A = this.astPunkt(s - 4, a), B = this.astPunkt(s, a), Cc = this.astPunkt(s + 4, a);
+            const a1 = Math.atan2(B.x - A.x, B.z - A.z), a2 = Math.atan2(Cc.x - B.x, Cc.z - B.z);
+            let d = a2 - a1; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+            if (Math.abs(d) > 1e-6) rMin = Math.min(rMin, 4 / Math.abs(d));
+          });
+        }
+        return { nr: g.nr, s0: g.s0, s1: g.s1, laenge: g.L, links: len['-1'], rechts: len['1'], mitte: g.L, unterschied: Math.abs(len['-1'] - len['1']), rMin };
+      });
     }
 
     /**
@@ -880,6 +1011,12 @@
       if (this.ueberfuehrungen.length) {
         for (const e of this.spline.abschnitte(x, z, this.grenzeEng + 12)) if (this.ueberfuehrungNah(e.s, 6)) return true;
       }
+      // 14.10. (v18): Gabelung – beide Äste samt Rand + Insel frei (die Inseldeko baut _gabelBauen selbst)
+      if (this.gabelungen.length) {
+        const nn = n || this.spline.naechster(x, z), w = this.gabelBei(nn.s);
+        if (w && Math.abs(nn.seitenabstand) < w.c + w.h + this.randBreite + 3.5) return true;
+        if (!w && this.gabelNah(nn.s, 12) && Math.abs(nn.seitenabstand) < this.breite / 2 + this.randBreite + 6) return true;
+      }
       if (this.tunnel.length) {
         const nn = n || this.spline.naechster(x, z);
         if (this.imTunnel(nn.s, 8) && Math.abs(nn.seitenabstand) < this.grenzeEng + 16) return true;
@@ -911,6 +1048,15 @@
         const t = aussen <= SPUR_UEBERGANG ? 0 : glatt(0, 1, (aussen - SPUR_UEBERGANG) / TRICHTER);
         g = Math.min(g, gRand + (this.seitenabstandMax - gRand) * t);
       }
+      // 14.10. (v18): Gabelung – im Abschnitt Leitplanke direkt am Ast (Seitenabstand relativ zur Astmitte, siehe _gabelAnpassen),
+      // davor/danach Trichter von der normalen Bande auf den Straßenrand (die Bande an der Y-Spitze liegt bei Mittellinie ± (breite/2 + Rand + 0,4))
+      for (const gb of this.gabelungen) {
+        const aussen = this._aussen(gb, s);
+        if (aussen >= TRICHTER) continue;
+        const w = aussen === 0 ? this.gabelBei(s) : null;
+        const gRand = (w ? w.h : this.breite / 2) + this.randBreite + ENG_ZUGABE;
+        g = Math.min(g, w ? gRand : gRand + (this.seitenabstandMax - gRand) * glatt(0, 1, aussen / TRICHTER));
+      }
       void sp;
       return g;
     }
@@ -926,6 +1072,7 @@
      * die Spurbreite (1 Spur 5 m, 3 Spuren 15 m), davor und danach SPUR_UEBERGANG m weicher Übergang.
      */
     breiteBei(s) {
+      if (this.gabelungen.length) { const w = this.gabelBei(s); if (w) return 2 * w.h; }   // 14.10. (v18): Astbreite
       const sp = this.spuren;
       if (!sp.length) return this.breite;
       for (let i = 0; i < sp.length; i++) {
@@ -950,7 +1097,7 @@
     /** Untergrund aus Seitenabstand (+ Bogenlänge s für Brücke und Hindernis-Flecken). */
     _untergrundAus(seitenabstand, s) {
       const a = Math.abs(seitenabstand);
-      const b2 = (s !== undefined && this.spuren.length) ? this.breiteBei(s) / 2 : this.breite / 2;
+      const b2 = (s !== undefined && (this.spuren.length || this.gabelungen.length)) ? this.breiteBei(s) / 2 : this.breite / 2;
       if (a <= b2) {
         // Öl- und Sandflecken (Ellipse um die Mitte des Flecks)
         if (s !== undefined) {
@@ -1179,6 +1326,7 @@
       gruppe.add(this._strasseBauen(thema.asphalt || 0x3c3f45));
       gruppe.add(this._mittellinieBauen());
       gruppe.add(this._randBauen());
+      if (this.gabelungen.length) this._gabelBauen(thema).forEach(m => gruppe.add(m));   // 14.10. (v18): Äste, Insel, Leitplanken, Schilder
       gruppe.add(this._startZielBauen());
       gruppe.add(this._startbogenBauen());
       gruppe.add(this._zaunBauen(thema.zaun || {}));
@@ -1612,7 +1760,7 @@
       const pos = new Float32Array(N * 2 * 3), col = new Float32Array(N * 2 * 3);
       const c = new THREE.Color();
       for (let i = 0; i < N; i++) {
-        const p = pk[i], b = this.breiteBei(p.s) / 2;      // Runde 4: Breite je Stelle (Spuren)
+        const p = pk[i], b = this._breiteGeo(i, p.s) / 2;      // Runde 4: Breite je Stelle (Spuren)
         const l = this._seitPunkt(p, -b, 0.06), r = this._seitPunkt(p, b, 0.06);
         pos.set(l, i * 6); pos.set(r, i * 6 + 3);
         // Asphalt mit leichter Streifung (Flickstellen)
@@ -1622,6 +1770,7 @@
       }
       const index = [];
       for (let i = 0; i < N; i++) {
+        if (this._gabelIdx(i)) continue;      // 14.10. (v18): im Gabel-Abschnitt zeichnet _gabelBauen die zwei Äste
         const j = (i + 1) % N;
         const l0 = i * 2, r0 = i * 2 + 1, l1 = j * 2, r1 = j * 2 + 1;
         index.push(l0, r0, r1, l0, r1, l1);
@@ -1643,6 +1792,7 @@
         // Runde 4: 3 Spuren → zwei Linien bei ±Breite/6, 1 Spur → keine Mittellinie
         const spur = this.spurBei(s + strich / 2);
         if (spur && spur.spuren === 1) continue;
+        if (this.gabelungen.length && this.gabelNah(s + strich / 2, strich / 2 + 0.5)) continue;   // 14.10. (v18): Äste haben keine Mittellinie
         // Strich in 1-m-Stücken, damit er Kurven folgt
         for (let t = 0; t < strich; t += 1) {
           const p = sp.punktBei(s + t), q = sp.punktBei(s + t + 1);
@@ -1667,13 +1817,14 @@
       const hell = rb6 ? rb6.map(f => new THREE.Color(f).lerp(new THREE.Color(0xffffff), 0.45).getHex()) : null;
       for (let i = 0; i < N; i++) {
         const p = pk[i], q = pk[(i + 1) % N];
+        if (this._gabelIdx(i)) continue;      // 14.10. (v18): Randsteine der Äste baut _gabelBauen
         // Kurve? (stärkste Krümmung in ±4 Punkten, damit die Steine nicht flackern)
         let k = 0;
         for (let j = -4; j <= 4; j++) k = Math.max(k, Math.abs(pk[(i + j + N) % N].kruemmung));
         const kurve = k > KERB_KRUEMMUNG;
         let farbe = kurve ? (i % 2 === 0 ? 0xd42a2a : 0xf4f4f4) : 0x8f9294;
         if (rb6) farbe = (kurve ? rb6 : hell)[i % rb6.length];
-        const b = this.breiteBei(p.s) / 2, bq = this.breiteBei(q.s) / 2;   // Runde 4: Breite je Stelle
+        const b = this._breiteGeo(i, p.s) / 2, bq = this._breiteGeo(i + 1, q.s) / 2;   // Runde 4: Breite je Stelle
         // W4-J: Randstein dort weglassen, wo die querende Fahrbahn (+ Rand) liegt – die Kreuzungsplatte deckt die Lücke
         const frei = (sg) => {
           if (!this.kreuzungen.length) return true;
@@ -1765,6 +1916,11 @@
         // Runde 5: nur, wenn der Punkt wirklich zu SEINEM Streckenstück gehört (dort hält die Bande genau hier);
         // vorher reichte „Abstand ≥ g − 1 m" → bis zu 1 m Zaun, hinter dem ein anderes Stück näher lag (keine Bande)
         let ok = n.abstand >= g - 0.05 && Math.abs(sp.differenzS(n.s, p.s)) < 6;
+        if (ok && this.gabelungen.length && this.gabelNah(p.s, 1.5)) ok = false;   // 14.10. (v18): in der Gabelung hält die Ast-Bande (Leitplanken statt Zaun)
+        if (ok && this.gabelungen.length) {   // 14.10. (v18): im Trichter vor/nach der Gabelung steigt die Bande steil – Zaun nur, wo sie 0,3 m dahinter noch hält
+          const n2 = sp.naechster(p.x + p.nx * (g + 0.3) * seite, p.z + p.nz * (g + 0.3) * seite);
+          if (!(Math.abs(n2.seitenabstand) > this.grenzeBei(n2.s))) ok = false;
+        }
         // v14: an einer niveaugleichen Kreuzung steht der Zaun auch in den Zwickeln zwischen den Fahrbahnen (dort greift
         // die Bande des eigenen Abschnitts), nur nicht auf/an der querenden Fahrbahn – die bleibt frei
         let kz = false;
@@ -1793,6 +1949,7 @@
         zp.forEach((a) => {
           if (this._engstellen.some(b => this._inBereich(b, a.s, 1.5))) a.ok = false;
           if (this._spurEng.some(e => this._aussen(e, a.s) < SPUR_UEBERGANG + 1.5)) a.ok = false;
+          if (this.gabelungen.length && this.gabelNah(a.s, 1.5)) a.ok = false;    // 14.10. (v18): an der Gabelung stehen Leitplanken
         });
         for (let i = 0; i < N; i++) {
           const a = zp[i], b = zp[(i + 1) % N];
@@ -1870,6 +2027,243 @@
         new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
       mesh.name = 'Leitplanken';
       return mesh;
+    }
+
+    // ---------------------------------------------------------- Gabelung: Grafik (14.10., v18)
+
+    /** Breite für die Grafik am Abtastpunkt i: an den Gabel-Grenzpunkten (ia, ib) die volle Straße (breiteBei liefert dort eine Astbreite). */
+    _breiteGeo(i, s) {
+      const N = this.spline.punkte.length;
+      for (let k = 0; k < this.gabelungen.length; k++) { const g = this.gabelungen[k]; if (i % N === g.ia || i % N === g.ib) return this.breite; }
+      return this.breiteBei(s);
+    }
+
+    /** Liegt das Straßenband-Segment i → i+1 im Gabel-Abschnitt? (ia ≤ i < ib) */
+    _gabelIdx(i) {
+      for (let k = 0; k < this.gabelungen.length; k++) { const g = this.gabelungen[k]; if (i >= g.ia && i < g.ib) return g; }
+      return null;
+    }
+
+    /**
+     * Gabelung bauen: Mesh „Gabelung“ (zwei Asphalt-Bänder, Randsteine, Inselrasen; Vertex-Farben) und Mesh „Gabeldeko“ (Leitplanken an
+     * den Außen- und Inselkanten, Pfeilschild + Prallkissen an der Y-Spitze, Inseldeko themengerecht) = 2 Draw-Calls je Strecke.
+     * Positionen/Zufall deterministisch (Seed aus Strecken-ID + Variante), also auf Server und Browser gleich.
+     */
+    _gabelBauen(thema) {
+      const sp = this.spline, pk = sp.punkte, N = pk.length, rb = this.randBreite;
+      const wueste = this.thema === 'wueste';
+      const asphalt = thema.asphalt || 0x3c3f45, rasen = wueste ? 0xe9d3a0 : 0x78b94a;
+      const strasse = [], deko = [];
+      const c = new THREE.Color();
+      const gruppe = [];
+      for (const g of this.gabelungen) {
+        // ---- Bänder: je Abtastpunkt-Paar
+        for (let i = g.ia; i < g.ib; i++) {
+          const p = pk[i], q = pk[(i + 1) % N], w0 = this.gabelBei(p.s), w1 = this.gabelBei(q.s);
+          let k = 0;
+          for (let j = -4; j <= 4; j++) k = Math.max(k, Math.abs(pk[(i + j + N) % N].kruemmung));
+          const kurve = k > KERB_KRUEMMUNG, kerb = kurve ? (i % 2 === 0 ? 0xd42a2a : 0xf4f4f4) : 0x8f9294;
+          const f = 1 + 0.05 * Math.sin(i * 0.9) * Math.sin(i * 0.23);
+          const asph = c.setHex(asphalt).multiplyScalar(f).getHex();
+          const gap0 = w0.c - w0.h, gap1 = w1.c - w1.h;           // halber Abstand zwischen den Innenkanten
+          const r0 = Math.min(rb, gap0), r1 = Math.min(rb, gap1);   // innerer Randstein: an der Y-Spitze schmal
+          strasse.push(this._band2(p, q, -gap0, gap0, -gap1, gap1, 0.03, rasen));
+          [-1, 1].forEach((sg) => {
+            const a0 = sg * w0.c - w0.h, b0 = sg * w0.c + w0.h, a1 = sg * w1.c - w1.h, b1 = sg * w1.c + w1.h;
+            strasse.push(this._band2(p, q, a0, b0, a1, b1, 0.06, asph));
+            // äußerer Randstein
+            if (sg > 0) strasse.push(this._band2(p, q, b0, b0 + rb, b1, b1 + rb, 0.07, kerb));
+            else strasse.push(this._band2(p, q, a0 - rb, a0, a1 - rb, a1, 0.07, kerb));
+            // innerer Randstein (zur Insel hin)
+            if (r0 > 0.02 || r1 > 0.02) {
+              if (sg > 0) strasse.push(this._band2(p, q, a0 - r0, a0, a1 - r1, a1, 0.07, kerb));
+              else strasse.push(this._band2(p, q, b0, b0 + r0, b1, b1 + r1, 0.07, kerb));
+            }
+          });
+        }
+        // ---- Leitplanken: außen immer, innen ab dem Punkt, an dem die Bande der Inselkante hinter der Mittellinie liegt
+        const RAIL = 0.25, SCHRITT = 2;
+        const schiene = (sg, innen) => {
+          const qAt = (s) => {
+            const w = this.gabelBei(s);
+            return innen ? sg * (w.c - w.h - rb - RAIL) : sg * (w.c + w.h + rb + RAIL);
+          };
+          const gueltig = (s) => !innen || Math.abs(qAt(s)) >= 0.45 && qAt(s) * sg > 0;
+          let letzter = null, kn = 0;
+          for (let s = g.s0; s <= g.s1 + 1e-6; s += SCHRITT, kn++) {
+            const sa = Math.min(s, g.s1);
+            if (!gueltig(sa)) { letzter = null; continue; }
+            const q1 = qAt(sa), P1 = this._punktSQ(sa, q1, 0);
+            if (letzter) {
+              const P0 = letzter.P, wand = (u0, u1, farbe) => ({ a: [P0[0], P0[1] + u0, P0[2]], b: [P1[0], P1[1] + u0, P1[2]],
+                c: [P1[0], P1[1] + u1, P1[2]], d: [P0[0], P0[1] + u1, P0[2]], farbe });
+              deko.push(wand(0.45, 0.62, 0xc9ced3), wand(0.62, 0.8, 0xaeb4ba));
+            }
+            if (kn % 2 === 0 || !letzter) {
+              const pp = sp.punktBei(sa);
+              this._kiste(deko, P1[0], P1[2], pp.tx, pp.tz, 0.06, 0.06, P1[1] - 0.2, P1[1] + 0.85, 0x6f757b);
+            }
+            letzter = { P: P1 };
+          }
+        };
+        [-1, 1].forEach((sg) => { schiene(sg, false); schiene(sg, true); });
+        // ---- Y-Spitzen: Prallkissen (orange-weiß) an Teilung und Zusammenführung, Pfeilschild vor der Teilung auf der Insel
+        const spitzeS = (richtung) => {     // erster/letzter s mit Inselhalbbreite ≥ 1,6 m
+          if (richtung > 0) { for (let s = g.s0; s <= g.s1; s += 0.5) { const w = this.gabelBei(s); if (w.c - w.h >= 1.6) return s; } }
+          else { for (let s = g.s1; s >= g.s0; s -= 0.5) { const w = this.gabelBei(s); if (w.c - w.h >= 1.6) return s; } }
+          return null;
+        };
+        const sA = spitzeS(1), sB = spitzeS(-1);
+        const kissen = (s0, richtung) => {
+          for (let k = 0; k < 4; k++) {
+            const s = s0 + richtung * (k + 0.5) * 0.9, pp = sp.punktBei(s), P = this._punktSQ(s, 0, 0);
+            this._kiste(deko, P[0], P[2], pp.tx, pp.tz, 0.45, 0.5, P[1], P[1] + 0.8 - k * 0.0, k % 2 === 0 ? 0xf0861e : 0xf4f4f4);
+          }
+        };
+        if (sA !== null) kissen(sA, 1);
+        if (sB !== null) kissen(sB, -1);
+        if (sA !== null) this._pfeilschild(deko, sA + 4.5);
+        // ---- Inseldeko
+        this._inselDeko(deko, g, wueste);
+        gruppe.push(g);
+      }
+      const meshS = new THREE.Mesh(this._viereckeZuGeometrie(strasse), this._material(undefined, 1));
+      meshS.name = 'Gabelung';
+      const meshD = new THREE.Mesh(this._viereckeZuGeometrie(deko), new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+      meshD.name = 'Gabeldeko';
+      return [meshS, meshD];
+    }
+
+    /** Pfeilschild (blau, zwei weiße Pfeile „links / rechts vorbei“) auf der Insel bei s, Vorderseite zum Verkehr (gegen die Fahrtrichtung). */
+    _pfeilschild(v, s) {
+      const sp = this.spline, pp = sp.punktBei(s), P = this._punktSQ(s, 0, 0);
+      const tx = pp.tx, tz = pp.tz, nx = pp.nx, nz = pp.nz;
+      this._kiste(v, P[0], P[2], tx, tz, 0.05, 0.05, P[1] - 0.1, P[1] + 1.9, 0x8a8f95);          // Pfosten
+      const W = 0.62, H0 = 1.15, H1 = 2.05, d = 0.07;                                              // Schild: Breite/2, Unterkante, Oberkante
+      this._kiste(v, P[0], P[2], tx, tz, 0.035, W, P[1] + H0, P[1] + H1, 0x1d4fb0);
+      // Pfeile auf der Vorderseite (zeigt gegen die Fahrtrichtung: −t)
+      const pkt = (u, w) => [P[0] + nx * u - tx * d, P[1] + w, P[2] + nz * u - tz * d];
+      const pfeil = (u0, w0, u1, w1) => {
+        const dx = u1 - u0, dw = w1 - w0, l = Math.hypot(dx, dw), ex = dx / l, ew = dw / l, px = -ew, pw = ex, dick = 0.045, kopfL = 0.2, kopfB = 0.14;
+        const bx = u1 - ex * kopfL, bw = w1 - ew * kopfL;
+        v.push({ a: pkt(u0 + px * dick, w0 + pw * dick), b: pkt(u0 - px * dick, w0 - pw * dick), c: pkt(bx - px * dick, bw - pw * dick), d: pkt(bx + px * dick, bw + pw * dick), farbe: 0xffffff });
+        v.push({ a: pkt(bx + px * kopfB, bw + pw * kopfB), b: pkt(bx - px * kopfB, bw - pw * kopfB), c: pkt(u1, w1), d: pkt(u1, w1), farbe: 0xffffff });
+      };
+      const wm = (H0 + H1) / 2;
+      pfeil(-0.06, H0 + 0.18, -0.44, wm + 0.2);     // nach links oben
+      pfeil(0.06, H0 + 0.18, 0.44, wm + 0.2);       // nach rechts oben
+    }
+
+    /** Inseldeko: Wiese = Bäume, Büsche, Blumen, Steine · Wüste = Kakteen, Felsen, Gestrüpp, Sandhügel. Als Vierecke in v (Lambert, Vertex-Farben). */
+    _inselDeko(v, g, wueste) {
+      const sp = this.spline, rb = this.randBreite;
+      const rnd = zufallsFolge(textSeed([this.id, this.variante || '', 'gabel', g.nr].join('|')));
+      const boden = (x, z) => this.hoeheAn(x, z);
+      // Kleine Bausteine als Vierecke: Prisma (n Ecken), Kegel, Kugel (grob). Mitte (x, y unten, z).
+      const ring = (x, y, z, r, n, ph) => Array.from({ length: n }, (_, k) => [x + Math.cos(ph + 2 * Math.PI * k / n) * r, y, z + Math.sin(ph + 2 * Math.PI * k / n) * r]);
+      const prisma = (x, y, z, r0, r1, h, n, farbe, ph) => {       // Zylinder/Kegelstumpf
+        const a = ring(x, y, z, r0, n, ph || 0), b = ring(x, y + h, z, r1, n, ph || 0);
+        for (let k = 0; k < n; k++) { const j = (k + 1) % n; v.push({ a: a[k], b: a[j], c: b[j], d: b[k], farbe }); }
+        if (r1 > 0.01) { for (let k = 1; k < n - 1; k++) v.push({ a: b[0], b: b[k], c: b[k + 1], d: b[k + 1], farbe }); }
+      };
+      const kugel = (x, y, z, r, farbe, platt) => {                  // Ikosaeder-artige Kugel: 3 Ringe
+        const hy = r * (platt || 1), r1 = r * 0.92;
+        const n = 7, ph = rnd() * 6.28, a = ring(x, y, z, r1 * 0.72, n, ph), b = ring(x, y + hy * 0.7, z, r1, n, ph + 0.4), c2 = ring(x, y + hy * 1.4, z, r1 * 0.72, n, ph);
+        const m = [x, y + hy * 2.0, z], u = [x, y - hy * 0.1, z];
+        for (let k = 0; k < n; k++) {
+          const j = (k + 1) % n;
+          v.push({ a: a[k], b: a[j], c: b[j], d: b[k], farbe }, { a: b[k], b: b[j], c: c2[j], d: c2[k], farbe },
+            { a: c2[k], b: c2[j], c: m, d: m, farbe }, { a: u, b: u, c: a[j], d: a[k], farbe });
+        }
+      };
+      const mischen = (hex, f) => { const col = new THREE.Color(hex); col.multiplyScalar(f); return col.getHex(); };
+      // Platz: Insel zwischen den inneren Leitplanken. s-Raster mit zufälligem Versatz, Abstand zu den Rändern der Insel.
+      const stellen = (abst, rMax, f) => {
+        let s = g.s0 + g.P * 0.55;
+        const erg = [];
+        const bis = g.s1 - g.P * 0.55;
+        while (s < bis) {
+          const w = this.gabelBei(s), frei = (w.c - w.h) - rb - 0.25 - 0.45;     // halbe freie Inselbreite (bis zur Leitplanke)
+          const r = rMax * (0.7 + 0.5 * rnd());
+          if (frei > r + 0.5) {
+            const lat = (rnd() * 2 - 1) * (frei - r - 0.3), p = sp.punktBei(s);
+            erg.push({ x: p.x + p.nx * lat, z: p.z + p.nz * lat, r, f: f ? f(rnd) : 0 });
+          }
+          s += abst * (0.7 + 0.6 * rnd());
+        }
+        return erg;
+      };
+      if (!wueste) {
+        stellen(11, 1.7).forEach((o) => {            // Bäume (Eichen/Birken gemischt)
+          const y = boden(o.x, o.z), birke = rnd() < 0.3, h = (birke ? 3.0 : 2.3) + rnd() * 1.1;
+          prisma(o.x, y - 0.1, o.z, 0.2, 0.15, h, 6, birke ? 0xd8d2c4 : 0x6b4a2b, rnd() * 3);
+          kugel(o.x, y + h - 0.5, o.z, o.r * (birke ? 0.85 : 1.1), mischen(birke ? 0x8fc95a : 0x3f8f35, 0.85 + 0.3 * rnd()), 1.15);
+          if (o.r > 1.4) kugel(o.x + 0.5, y + h - 0.1, o.z - 0.3, o.r * 0.6, mischen(0x4ea040, 0.9 + 0.2 * rnd()), 1.0);
+        });
+        stellen(6, 0.8).forEach((o) => { kugel(o.x, boden(o.x, o.z) - 0.05, o.z, o.r, mischen(0x2f7a2c, 0.85 + 0.3 * rnd()), 0.8); });   // Büsche
+        const blume = [0xffd23a, 0xff5a8a, 0xffffff, 0xff8a2a, 0x9a6bff];
+        stellen(4.5, 1.0).forEach((o) => {           // Blumeninseln: je 6 kleine Blüten
+          const farbe = blume[Math.floor(rnd() * blume.length)];
+          for (let k = 0; k < 6; k++) {
+            const x = o.x + (rnd() - 0.5) * 1.6, z = o.z + (rnd() - 0.5) * 1.6, y = boden(x, z);
+            prisma(x, y, z, 0.02, 0.02, 0.28, 3, 0x3f8f35, 0);
+            kugel(x, y + 0.26, z, 0.1, farbe, 0.6);
+          }
+        });
+        stellen(14, 0.7).forEach((o) => { kugel(o.x, boden(o.x, o.z) - 0.1, o.z, 0.5 + o.r * 0.5, 0x9a9a96, 0.7); });   // Steine
+      } else {
+        stellen(13, 1.0).forEach((o) => {            // Saguaro-Kakteen
+          const y = boden(o.x, o.z), h = 3.0 + rnd() * 1.8, cg = mischen(0x3f8a45, 0.85 + 0.3 * rnd());
+          prisma(o.x, y - 0.1, o.z, 0.3, 0.26, h, 7, cg, 0);
+          kugel(o.x, y + h - 0.2, o.z, 0.27, cg, 0.9);
+          const arme = 1 + Math.floor(rnd() * 2);
+          for (let k = 0; k < arme; k++) {
+            const sg = k === 0 ? 1 : -1, ah = 0.9 + rnd() * 0.7, yy = y + 1.0 + rnd() * (h - 2.3);
+            prisma(o.x + sg * 0.62, yy + 0.35, o.z, 0.17, 0.15, ah, 6, cg, 0);
+            prisma(o.x + sg * 0.3, yy, o.z, 0.15, 0.15, 0.4, 6, cg, 0);
+          }
+        });
+        stellen(6, 0.5).forEach((o) => {             // Kugelkakteen mit Blüte
+          const y = boden(o.x, o.z);
+          kugel(o.x, y - 0.05, o.z, 0.4 + 0.2 * rnd(), mischen(0x4a9a52, 0.9 + 0.2 * rnd()), 0.9);
+          kugel(o.x, y + 0.72, o.z, 0.1, 0xff6a9a, 0.6);
+        });
+        stellen(9, 1.3).forEach((o) => { kugel(o.x, boden(o.x, o.z) - 0.2, o.z, o.r, mischen(0xb08a55, 0.85 + 0.3 * rnd()), 0.65); });   // Felsen
+        stellen(5, 0.8).forEach((o) => {             // trockenes Gestrüpp
+          const y = boden(o.x, o.z);
+          for (let k = 0; k < 4; k++) prisma(o.x + (rnd() - 0.5) * 0.7, y, o.z + (rnd() - 0.5) * 0.7, 0.04, 0.02, 0.5 + rnd() * 0.5, 4, 0x8a6a3a, rnd());
+        });
+        stellen(24, 2.2).forEach((o) => { kugel(o.x, boden(o.x, o.z) - 0.25, o.z, o.r, 0xe2c27a, 0.28); });   // flache Sandhügel
+      }
+    }
+
+    /**
+     * Minimap (hud.js ruft es nach dem Zeichnen der Straße auf): im Gabel-Abschnitt wird die Mittellinie ausgeschnitten und es werden zwei
+     * Äste gezeichnet. Weil 2·11 m bei ~0,12 Pixel/m nur ≈ 3 Pixel wären, laufen die Äste in der Karte übertrieben auseinander (≈ ±4 Pixel).
+     */
+    gabelMinimap(g, nachPx, mass, dpr, breite) {
+      const sp = this.spline;
+      for (const gb of this.gabelungen) {
+        const bahn = (versatzPx, sg) => {
+          g.beginPath();
+          for (let s = gb.s0 - 6; s <= gb.s1 + 6 + 1e-6; s += 3) {
+            const w = this.gabelBei(Math.max(gb.s0, Math.min(gb.s1, s))), t = w ? w.t : 0, p = sp.punktBei(s);
+            const dq = sg * (versatzPx * (0.35 + 0.65 * t)) / mass;
+            const [x, y] = nachPx(p.x + p.nx * dq, p.z + p.nz * dq);
+            if (s <= gb.s0 - 6 + 1e-6) g.moveTo(x, y); else g.lineTo(x, y);
+          }
+        };
+        const bahnBreite = Math.max(2.6 * dpr, breite * 0.55);
+        g.save();
+        g.lineJoin = g.lineCap = 'butt';
+        g.globalCompositeOperation = 'destination-out';          // Mittellinie samt hellem Rand ausschneiden
+        bahn(0, 0); g.lineWidth = breite + 5 * dpr; g.stroke();
+        g.globalCompositeOperation = 'source-over';
+        const V = 4.6 * dpr;
+        [-1, 1].forEach((sg) => { bahn(V, sg); g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = bahnBreite + 2.6 * dpr; g.stroke(); });
+        [-1, 1].forEach((sg) => { bahn(V, sg); g.strokeStyle = '#3a3f4a'; g.lineWidth = bahnBreite; g.stroke(); });
+        g.restore();
+      }
     }
 
     // ---------------------------------------------------------- Brücken, Senken, Tunnel

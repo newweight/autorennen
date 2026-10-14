@@ -40,6 +40,8 @@
       const a = u.s0 - 15; let b = u.s1 + 15; if (b < a) b += L; sperre.push([a, b]);
       if (u.unten) { const c = u.unten.s0 - 15; let d = u.unten.s1 + 15; if (d < c) d += L; sperre.push([c, d]); }
     });
+    // 14.10. (v18): Gabelung – keine Münzen in den zwei Ästen (und 15 m davor/danach)
+    (strecke.gabelungen || []).forEach((g) => sperre.push([g.s0 - 15, g.s1 + 15]));
     // W4-J: niveaugleiche Kreuzung – nicht auf/vor der Kreuzung (beide Abschnitte, sonst sammelt der Querverkehr mit)
     (strecke.kreuzungen || []).forEach((k) => [k.a, k.b].forEach((b) => {
       const a = b.s0 - 20; let e = b.s1 + 20; if (e < a) e += L; sperre.push([a, e]);

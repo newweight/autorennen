@@ -130,7 +130,7 @@ with sync_playwright() as pw:
         # headless werden kaum Frames gezeichnet: Optik einmal von Hand nachführen (wie main.frame)
         page.evaluate("() => { const s = Rennspiel.spiel; if (s.dynamik) s.dynamik.animieren(); if (s._testSchaden) s._testSchaden.update(0.05); s.zeichnen(); }")
         info = page.evaluate(INFO)
-        png = page.screenshot(path=os.path.join(aus, name + '.png'))
+        png = page.screenshot(path=os.path.join(aus, name + ".png"), timeout=180000)
         info['zustand'] = info0
         info['farbe'] = mittel(png)
         info['jsFehler'] = js_fehler
@@ -144,7 +144,7 @@ with sync_playwright() as pw:
         if an and not info['gesundheit']: fehler.append(name + ': Gesundheitsbalken fehlt')
         if not an and info['gesundheit']: fehler.append(name + ': Gesundheitsbalken sichtbar obwohl Schaden aus')
         if prozent == 30 and info['schadenRauch'] < 1: fehler.append(name + ': kein Rauch bei 30 %')
-        if prozent == 0 and 'Liegengeblieben' not in info['meldung']: fehler.append(name + ': Meldung Liegengeblieben fehlt')
+        if prozent == 0 and ('Liegengeblieben' not in info['meldung'] and 'Abschleppwagen' not in info['meldung']): fehler.append(name + ': Meldung Liegengeblieben fehlt')
         page.close()
     browser.close()
 

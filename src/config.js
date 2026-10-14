@@ -304,18 +304,44 @@ Rennspiel.config = {
     stufeJe: 20,
     vMaxJeStufe: 0.04, beschleunigungJeStufe: 0.06, gripJeStufe: 0.03,
     rauchUnter: 40, qualmUnter: 20,
-    liegenZeit: 5,
+    // 14.10. (v18): Liegenzeit = Abschleppwagen-Ablauf (siehe `abschlepp`): kommt (anfahrt), lädt auf (aufladen), fährt weg (Rest).
+    liegenZeit: 5.5,
+    // Sichtbarer Abschleppwagen (src/world/abschleppwagen.js, nur Optik – die Zeiten bestimmt schaden.js): nach dem Liegenbleiben fährt er
+    // anfahrt s lang aus anfahrtWeg m Entfernung heran und hält neben dem Auto, lädt es aufladen s lang per Kran auf die Ladefläche, fährt
+    // mit ihm los (Rest der liegenZeit, abfahrtWeg m) – beim Ende der Liegezeit wird das Auto am Reset-Punkt repariert. hupeBei = Sekunden nach
+    // dem Liegenbleiben, zu denen das Ereignis 'abschleppwagen' (Meldung „Abschleppwagen kommt!“ + Hupe) kommt.
+    abschlepp: { an: true, anfahrt: 2.5, aufladen: 1.5, hupeBei: 0.6, anfahrtWeg: 38, abfahrtWeg: 34, seitlich: 3.6, ladeHoehe: 1.15, kranHoehe: 3.9 },
     // Runde 7 (Abschlepp-Reparatur): Nach dem Abschleppen steht das Auto am Checkpoint und wird REPARIERT: Anzeige springt
     // von 0 % in 10er-Schritten, je 10 % genau reparaturJe10 Sekunden (Sprünge statt stetig: für Kinder klar zählbar „1 Sekunde = 10 %“).
     // Spieler: ab losfahrenAb (30 %) beendet Gas die Reparatur sofort, das Auto behält den erreichten Wert; darunter ist Gas
     // gesperrt (Hinweis im HUD). Wer wartet, bekommt bis 100 % (Reparatur endet dann von selbst).
     // Computer-Autos warten bis kiLosfahrenAb (60 %) und fahren dann los (Balance wie bisher: früher 60 % nach 5 s).
     // reparaturJe10 = 0 → Reparatur AUS: altes Verhalten (sofort resetProzent). Gilt nur fürs Abschleppen nach Liegenbleiben.
-    reparaturJe10: 1, losfahrenAb: 30, kiLosfahrenAb: 60,
+    // 14.10. (v18): 10 % = 3 s (Wunsch des Vaters; vorher 1 s) → Losfahren ab 30 % nach 9 s, 100 % nach 30 s.
+    // KI-Grenze 60 → 40 %: Mit 3 s je 10 % stünde ein Computer-Auto 18 s (60 %) + 5,5 s Abschleppen = 23,5 s; ein Mensch, der sofort ab 30 % losfährt,
+    // steht nur 5,5 + 9 = 14,5 s. 40 % → 12 s + 5,5 = 17,5 s (≈ 1,2 × Mensch-Minimum statt 1,6×). Gleiches Verhältnis wie früher (11 s KI / 8 s Mensch).
+    reparaturJe10: 3, losfahrenAb: 30, kiLosfahrenAb: 40,
     reparaturTon: true,        // leises Pling je 10 % (nur Spieler)
     resetProzent: 60,          // nur noch Fallback/Doku: wirkt NUR bei reparaturJe10 = 0 (Reparatur aus)
     blinkTakt: 0.5,
     rauchTeilchen: 36,
+  },
+
+  // --- 14.10. (v18): Werkstatt (Boxenplatz neben der Fahrbahn, src/world/garage.js; NUR bei Schaden „an“, sonst gibt es sie nicht) ---
+  // (Der Abschnitt heißt `werkstatt`, weil `config.garage` schon die Auto-Garage mit Münzen ist.)
+  // Wer auf der Parkfläche steht (Tempo < steheTempo m/s), bekommt prozentProSekunde % je Sekunde bis 100 %; einmal je Runde
+  // (nach dem ersten Heilen gilt die Werkstatt in dieser Runde für dieses Auto als benutzt). Platz: gerade Stelle (Krümmung < maxKruemmung 1/m
+  // über das ganze Fenster) ab sucheAb m nach Start/Ziel, Fläche laenge × breite neben dem Randstreifen, Gebäude dahinter.
+  // KI (Computer-Autos, Autopilot): fährt hin, wenn ihr Wert < kiUnter % ist, steht bis kiBis % (höchstens kiMaxWarten s).
+  werkstatt: {
+    prozentProSekunde: 15,
+    steheTempo: 1.0,           // m/s – darunter gilt ein Auto als stehend
+    laenge: 13, breite: 6.4,   // m – Parkfläche (längs × quer), zwei Boxen hintereinander
+    randAbstand: 1.4,          // m Gras zwischen Randstreifen und Parkfläche
+    gebaeudeTiefe: 5.5, gebaeudeBreite: 12, gebaeudeHoehe: 4.4,
+    sucheAb: 70, sucheFenster: 36, maxKruemmung: 0.0022, hindernisAbstand: 8, sperrAbstand: 40,
+    kiUnter: 40, kiBis: 100, kiMaxWarten: 9, kiVorlauf: 90, kiTempo: 22, kiBremse: 6,
+    melden: 60,                // m vor der Einfahrt: HUD-Hinweis „Werkstatt voraus“ (nur Spieler mit Schaden)
   },
 
   // --- Runde 6 (W1-A3/A4/A5): Kollisionen Auto↔Auto, Rempeln, Pflanzen (Logik: src/physics/collisions.js) ---

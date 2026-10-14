@@ -23,6 +23,9 @@
 //   Checkpoint zurück (zuruecksetzen). Nur Position + dt, deterministisch (Online-Server rechnet dasselbe).
 //   Nur für Menschen (t.istSpieler): Computerautos biegen nie ab; werden sie bei einem Zusammenstoß auf die Querstraße
 //   geschoben, läuft ihr Fortschritt wie bisher weiter (sonst bliebe die KI „abgebogen" hängen) – nur die Bande gilt dort normal.
+// - 14.10. (v18) Gabelung (Wiese/Wüste): s, Fortschritt, Checkpoints und Runden laufen über die Mittellinie (spline.naechster) und gelten für
+//   beide Äste gleich (Checkpoint-Bedingung b: s springt über cp.s). t.ast (−1/+1/0) = Ast des Autos im Abschnitt, t.cpAst = Ast beim
+//   letzten Checkpoint: resetPose setzt in einem Gabel-Abschnitt auf die Mitte DIESES Astes (nie auf die Insel).
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -145,6 +148,7 @@
       const weg = Math.hypot(v.x - t._x, v.z - t._z);
       const dsSchritt = sp.differenzS(n.s, t._s);
       t.index = n.index; t.s = n.s; t.seitenabstand = n.seitenabstand;
+      if (this.strecke.gabelAst) t.ast = this.strecke.gabelAst(n.seitenabstand, n.s);   // 14.10. (v18): Ast im Gabel-Abschnitt (sonst 0)
 
       if (zaehlen && !t.imZiel && weg < MAX_SCHRITT_WEG) {
         // Mehrere Checkpoints in einem Schritt sind unmöglich (Abstand ≥ 100 m)
@@ -224,6 +228,7 @@
     _checkpointErreicht(t, cp) {
       const anzahl = this.strecke.checkpoints.length;
       t.letzterCheckpoint = cp.nr;
+      t.cpAst = t.ast || 0;      // 14.10. (v18): auf welchem Ast wurde der Checkpoint passiert (Reset-Pose)
       if (cp.nr === 0) {
         if (!t.gestartet) {
           // erstes Überfahren der Startlinie: Runde 1 beginnt (Zeit läuft seit dem Start)
@@ -341,6 +346,11 @@
       } else {
         const cp = this.strecke.checkpoints[t.letzterCheckpoint];
         pose = { x: cp.x, z: cp.z, heading: R.headingAus(cp.tx, cp.tz), s: cp.s };   // W4-I: s des Checkpoints
+        // 14.10. (v18): Checkpoint in einer Gabelung → Mitte des Astes, auf dem er passiert wurde (die Mitte selbst ist Insel)
+        if (this.strecke.gabelBei && this.strecke.gabelBei(cp.s)) {
+          const P = this.strecke.astPunkt(cp.s, t.cpAst || t.ast || 1);
+          pose = { x: P.x, z: P.z, heading: R.headingAus(P.tx, P.tz), s: cp.s };
+        }
       }
       this.verfolgungSetzen(t, pose.x, pose.z, pose.s);
       return pose;
@@ -357,6 +367,7 @@
       const idx = s !== undefined && s !== null ? this.spline.indexBei(s) : undefined;
       const n = this._kreuz && idx !== undefined ? this.strecke._naechsterKont(x, z, idx) : this.spline.naechster(x, z, idx);   // W4-J
       t.index = n.index; t.s = n.s; t._s = n.s; t._x = x; t._z = z; t.seitenabstand = n.seitenabstand;
+      if (this.strecke.gabelAst) t.ast = this.strecke.gabelAst(n.seitenabstand, n.s);   // 14.10. (v18)
     }
   }
 

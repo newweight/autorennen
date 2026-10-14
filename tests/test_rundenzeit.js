@@ -95,7 +95,8 @@ function perfekteRunde(strecke) {
     v.untergrund = n.untergrund;
     maxAbseits = Math.max(maxAbseits, n.abstand);
     const L = Math.max(9, Math.min(50, 0.55 * v.vLaengs + 8));
-    const ziel = sp.punktBei(n.s + L);
+    // 14.10. (v18): in der Gabelung fährt die perfekte Linie auf dem rechten Ast (Mittellinie = Insel)
+    const ziel = strecke.gabelBei && strecke.gabelBei(n.s + L) ? strecke.astPunkt(n.s + L, 1) : sp.punktBei(n.s + L);
     const hZiel = R.headingAus(ziel.x - v.x, ziel.z - v.z);
     let diff = hZiel - v.heading;
     while (diff > Math.PI) diff -= 2 * Math.PI;

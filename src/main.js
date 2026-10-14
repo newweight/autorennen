@@ -261,6 +261,8 @@
       // Runde 4: Teile an den Auto-Meshes (Schild-Hülle, Turbo-Flammen, Rauch) zuerst lösen – die Meshes sind Katalog-Caches
       if (this.pickups) { this.pickups.zerstoeren(); this.pickups = null; }
       if (this.muenzen) { this.muenzen.zerstoeren(); this.muenzen = null; }     // Runde 6 (W3-G)
+      if (this.abschlepp) { this.abschlepp.zerstoeren(); this.abschlepp = null; }     // 14.10. (v18): Auto-Meshes wieder freigeben (Katalog-Caches)
+      if (this.werkstatt) { this.werkstatt.zerstoeren(); this.werkstatt = null; }
       if (this.schaden) { this.schaden.zerstoeren(); this.schaden = null; }
       if (this.polizei) { this.polizei.zerstoeren(); this.polizei = null; }   // Runde 5b: Blaulicht-Lichter, Sirene
       this.huds.forEach(h => h.zerstoeren());
@@ -432,6 +434,7 @@
       if (this.wetter) { this.wetter.partikelBauen(this.kameras.length); this.huds.forEach(h => h.wetterSetzen && h.wetterSetzen(this.wetter)); }
       // Runde 4: Gesundheitsbalken (HUD i gehört zu Fahrzeug i – Spieler stehen vorne); aus = versteckt
       this.huds.forEach((h, i) => h.schadenSetzen && h.schadenSetzen(this.schaden, i));
+      this.huds.forEach((h, i) => h.werkstattSetzen && h.werkstattSetzen(this.werkstatt, i));   // 14.10. (v18)
       this.huds.forEach((h, i) => h.itemSetzen && h.itemSetzen(this.pickups, this.fahrzeuge.findIndex(f => f.istSpieler && f.spielerNr === i), i));   // W3-H
       // Runde 5b: Polizei-Anzeige (Stopp-Countdown) + Streifenwagen auf der Minimap
       this.huds.forEach((h, i) => h.polizeiSetzen && h.polizeiSetzen(this.polizei, i));
@@ -668,6 +671,20 @@
           this.schaden.bei((e) => this._schadenEreignis(e));
         }
       }
+      // 14.10. (v18): sichtbarer Abschleppwagen + Werkstatt neben der Fahrbahn – nur mit Schaden „an“ (online/Server: gar nicht geladen)
+      this.abschlepp = null; this.werkstatt = null;
+      if (this.schaden && this.schaden.an) {
+        if (R.Abschleppwagen) this.abschlepp = new R.Abschleppwagen(strecke, this.fahrzeuge, this.schaden, this.szene);
+        if (R.Werkstatt) {
+          const w = new R.Werkstatt(strecke);
+          if (w.vorhanden) {
+            const gr = w.bauen();
+            if (gr) this.szene.add(gr);
+            w.bei((e) => this._werkstattEreignis(e));
+            this.werkstatt = w;
+          }
+        }
+      }
       // Runde 5b: Polizei – Streifenwagen NACH Schaden (bekommt keinen Schaden) als eigene Fahrzeug-Einträge hinter
       // allen Teilnehmern (f.polizei = true); RaceManager/Platzierung/Ergebnis kennen ihn nicht.
       this.polizei = null;
@@ -709,6 +726,16 @@
       } else if (e.art === 'reparaturEnde') {
         if (spieler && e.grund === 'voll') this._meldung(e.i, 'Voll repariert! 💯', 1400);
       }
+    }
+
+    /** 14.10. (v18): Ereignis der Werkstatt (world/garage.js) → Meldung/Ton für Spieler. */
+    _werkstattEreignis(e) {
+      const f = this.fahrzeuge[e.i];
+      if (!f || !f.istSpieler || f.autopilot) return;
+      const A = R.Audio;
+      if (e.art === 'start') this._meldung(e.i, 'Werkstatt! 🔧', 1100);
+      else if (e.art === 'heilen') { if (A && A.reparaturTon) A.reparaturTon(e.prozent, 1000); }
+      else if (e.art === 'voll') this._meldung(e.i, 'Voll repariert! 💯', 1400);
     }
 
     /** Fahrzeug aus einem Katalog-Eintrag anlegen (Physik + 3D-Modell). */
@@ -828,6 +855,8 @@
       if (this.pickups) this.pickups.animieren(this._physikZeit || 0, this.fahrzeuge);
       if (this.muenzen) this.muenzen.animieren(this._physikZeit || 0);      // Runde 6 (W3-G)
       if (this.schaden && this.schaden.an) this.schaden.update(this.pausiert || this.zustand === 'menue' ? 0 : dt);
+      if (this.abschlepp) this.abschlepp.update(this.pausiert ? 0 : dt);                      // 14.10. (v18): Abschleppwagen/Kran überschreibt die Mesh-Pose des Wracks
+      if (this.werkstatt) this.werkstatt.animieren(this._physikZeit || 0, this.fahrzeuge);   // Schild/Lampe der Werkstatt
       if (this.polizei) this.polizei.animieren(this._physikZeit || 0);   // Runde 5b: Blaulicht
       if (this.tunnelLichter) this._tunnelLichterAktualisieren();
       const t2 = performance.now();
@@ -1114,6 +1143,7 @@
       const strecke = this.strecke, rennen = this.rennen;
       const countdown = !!rennen && !rennen.gasErlaubt;
       const schaden = this.schaden && this.schaden.an ? this.schaden : null;
+      const werkstatt = schaden && this.werkstatt ? this.werkstatt : null;     // 14.10. (v18): nur mit Schaden an
       const pickups = this.pickups;
       const polizei = this.polizei;      // Runde 5b (null = aus → alles wie vorher)
       const rempeln = this.einstellungen && this.einstellungen.rempeln === 'echt' ? 'echt' : 'sanft';   // Runde 6
@@ -1140,6 +1170,7 @@
         else if (f.polizei) { if (polizei) s = polizei.steuerung(i, dt, rennen); }   // Runde 5b: Streifenwagen
         else if (f.istSpieler && tn[i] && tn[i].imZiel) s = { gas: 0, bremse: 0.6, lenkung: 0 };   // im Ziel: ausrollen
         else if (f.istSpieler && f.spielerNr >= 0 && !f.autopilot) s = this.input.steuerung(f.spielerNr);
+        else if (fahrer && rennen && werkstatt && (s = werkstatt.kiSteuerung(i, f, dt, rennen, schaden))) { /* 14.10. (v18): Computer-Auto fährt zur Werkstatt / steht dort */ }
         else if (fahrer && rennen) {
           const t = tn[i];
           // andere = alle Teilnehmer (die KI überspringt ihr eigenes Fahrzeug selbst)
@@ -1195,6 +1226,8 @@
             const ue = R.config.physik.abseitsUebergang || 1;
             v.untergrundMisch = Math.max(0, Math.min(1, (Math.abs(n.seitenabstand) - b2 - strecke.randBreite) / ue));
           } else v.untergrundMisch = undefined;
+          // 14.10. (v18): Werkstatt – auf der Parkfläche Asphalt, auf der Zufahrt Randstreifen statt Gras (kein Bremsen beim Anhalten)
+          if (werkstatt) { const wu = werkstatt.untergrund(v, n); if (wu) { v.untergrund = wu; v.untergrundMisch = undefined; } }
           // Runde 6 (W3-H): dynamisch gelegte Ölflecken wirken wie das Hindernis „Ölfleck" (Schild fängt sie ab)
           if (pickups && v.untergrund === 'strasse' && pickups.oel.length && pickups.oelWirkt(i, v)) v.untergrund = 'oel';
           f.nah = n;
@@ -1347,6 +1380,7 @@
         }
         schaden.stoesseAuswerten({ bande: bandeSt, auto: this.stoesse, hindernis: hs, dynamik: ds || [], pflanzen: ps });
         schaden.schritt(dt);
+        if (werkstatt && (!rennen || rennen.gasErlaubt)) werkstatt.schritt(dt, this.fahrzeuge, schaden, rennen);   // 14.10. (v18): +15 %/s im Stand
       }
 
       // --- 10. Pickups: zuerst geplatzte Schilde dieses Schritts melden (schritt() leert die Liste), dann Felder/Kugeln
@@ -1569,7 +1603,8 @@
         for (let k = 1; k <= 12; k++) {
           const p = sp.punktBei(n.s - 8 * k);
           if (k < 12 && this.strecke.kreuzungNah && this.strecke.kreuzungNah(p.s, 6)) continue;   // W4-J: nicht mitten auf die Kreuzung
-          const x = p.x + p.nx * n.seitenabstand, z = p.z + p.nz * n.seitenabstand;
+          const qq = this.strecke.gabelQ ? this.strecke.gabelQ(p.s, n.s, n.seitenabstand) : n.seitenabstand;   // 14.10. (v18): Gabelung – auf dem Ast bleiben
+          const x = p.x + p.nx * qq, z = p.z + p.nz * qq;
           if (frei(x, z) || k === 12) { pose = { x, z, heading: R.headingAus(p.tx, p.tz), s: p.s }; break; }
         }
         this.rennen.verfolgungSetzen(i, pose.x, pose.z, pose.s);
