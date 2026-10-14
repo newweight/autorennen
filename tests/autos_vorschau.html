@@ -18,6 +18,8 @@
                                          (Front-Dreiviertel, Seite, Heck-Dreiviertel, Front)
     ?ansicht=alle4&auto=<id>             nur dieses Auto, 4 große Ansichten nebeneinander
     ...&bremsen=1                        Bremslichter an
+    ...&dach=zu|offen|<0..1>             Verdeck (nur T-Roc): zu, offen oder Zwischenstand der Klappbewegung
+    ...&lack=gulf                        Lackvariante (nur T-Roc: gulf)
     ...&blaulicht=<phase>                Blaulicht (nur Streifenwagen): 0 aus, 1 links, 2 rechts, 3 beide
                                          (&blaulichtFarbe=rot für rot)
   Autos mit waehlbar: false (Streifenwagen) werden mit „(nicht wählbar)" beschriftet.
@@ -148,7 +150,8 @@
   const zeilen = Math.ceil(autos.length / spalten);
   const abstandX = 6.6, abstandZ = 8;
   const eintraege = autos.map((a, i) => {
-    const auto = R.carBuilder.bauen(a);
+    const auto = R.carBuilder.bauen(a, q.get('lack') ? { lack: q.get('lack') } : undefined);
+    if (q.get('dach') !== null) R.carBuilder.setzeDach(auto, q.get('dach') === 'zu' ? 1 : q.get('dach') === 'offen' ? 0 : parseFloat(q.get('dach')));
     const sx = i % spalten, sz = Math.floor(i / spalten);
     auto.position.set((sx - (spalten - 1) / 2) * abstandX, 0, (sz - (zeilen - 1) / 2) * abstandZ);
     szene.add(auto);

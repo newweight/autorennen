@@ -99,6 +99,7 @@
   // zieht den Boden NICHT mit (Gewicht 0 im Brückenbereich, UEB_RAMPE m Übergang) → Boden darunter = untere Straße/Tal.
   const FLACH_ZUGABE = 2.5, BLEND_R = 28, UEB_RAMPE = 12, GLATT_SIGMA = 45, GRUND_ZELLE = 10;
   const KORRIDOR_SENKE = 3;      // grobes Bodengitter im Straßenkorridor so viel tiefer (die feine Böschung liegt darüber)
+  const BOESCHUNG_TOL = 0.04, BOESCHUNG_STUFEN = 4;   // 14.10. (v20): Böschung wird geteilt, bis die Sehne höchstens 3 cm von der wahren Höhe abweicht
   const BOESCHUNG_BIS = BLEND_R + 26;   // feine Böschung quer bis hierhin (m ab Mitte)
   const UNTEN_HALB = 45;         // unterer Abschnitt an einer Überführung: ± so viel m um die Kreuzung gilt als „darunter"
   // Runde 6 (W4-J): niveaugleiche Kreuzung
@@ -546,6 +547,43 @@
         if (aussen < TRICHTER) return p.y + (boden - p.y) * glatt(0, TRICHTER, aussen);
       }
       return boden;
+    }
+
+    /**
+     * 14.10. (v20, Bug „Auto im Grünen"): Gewicht 0…1, mit dem das Auto abseits der Fahrbahn auf das Gelände ausgerichtet wird.
+     * 0 auf der Fahrbahn (dort bleibt alles wie bisher: flache Straße, Nicken nach der Steigung), 1 ab 1,5 m hinter dem Randstreifen,
+     * dazwischen weich (smoothstep) → kein Sprung beim Rand → Gras. nah = Abfrage des Autos { s, seitenabstand } (f.nah).
+     */
+    abseitsGewicht(nah) {
+      if (!nah) return 0;
+      const rand = (this.breiteBei ? this.breiteBei(nah.s) : this.breite) / 2 + this.randBreite;
+      return glatt(rand - 0.6, rand + 1.5, Math.abs(nah.seitenabstand));
+    }
+
+    /**
+     * 14.10. (v20, Bug „Auto im Grünen"): Auto-Pose auf dem Gelände abseits der Fahrbahn. Bisher stand das Auto mit der Mitte auf
+     * hoeheAn(x, z), ohne Querneigung: an einem Hang tauchte die Hangseite der Karosserie in den Boden (bis 0,7 m, Alpen).
+     * Die Höhe wird an den vier Ecken der Karosserie (hl/hb = halbe Länge/Breite, Fahrtrichtung rx/rz) mit DERSELBEN Funktion
+     * gelesen, die auch Physik/Server/Vorhersage benutzen (hoeheAn mit Streckenindex), und daraus Nicken, Querneigung und ein
+     * Zuschlag bestimmt, damit keine Ecke unter dem Gelände liegt. Nur Anzeige: Physik und Netz-Abgleich bleiben bei v.y = hoeheAn.
+     * @param {object} aus optionales Ausgabeobjekt { dy, nicken, neigung }
+     * @returns {{dy:number, nicken:number, neigung:number}} dy = Anhebung der Anzeige-Höhe gegenüber hoeheAn(x, z) (m, kann < 0 sein),
+     *          nicken (> 0 = Bug hoch) und neigung (> 0 = rechte Seite hoch) in rad, jeweils für Gewicht 1
+     */
+    gelaendePose(x, z, rx, rz, hl, hb, startIndex, aus) {
+      const o = aus || {}, qx = -rz, qz = rx;
+      const h = (a, b) => this.hoeheAn(x + rx * hl * a + qx * hb * b, z + rz * hl * a + qz * hb * b, startIndex);
+      const vl = h(1, -1), vr = h(1, 1), hlk = h(-1, -1), hr = h(-1, 1);
+      const mitte = (vl + vr + hlk + hr) / 4;
+      const nick = Math.atan2((vl + vr) / 2 - (hlk + hr) / 2, 2 * hl), neig = Math.atan2((vr + hr) / 2 - (vl + hlk) / 2, 2 * hb);
+      const tn = Math.tan(nick), tq = Math.tan(neig);
+      // Ebene durch die Mitte; jede Ecke (und die Mitte), die unter dem Gelände läge, hebt das Auto an (verdrehtes Gelände, Wölbung)
+      const h0 = this.hoeheAn(x, z, startIndex);
+      let zu = Math.max(0, h0 - mitte);                    // Kuppe quer/längs unter dem Auto: die Mitte darf nicht einsinken
+      for (const [a, b, g] of [[1, -1, vl], [1, 1, vr], [-1, -1, hlk], [-1, 1, hr]]) zu = Math.max(zu, g - (mitte + tn * hl * a + tq * hb * b));
+      o.dy = mitte + zu + 0.03 - h0;      // +3 cm: Netz-Sehne über den Dreiecken des Bodens (Böschung ≤ BOESCHUNG_TOL)
+      o.nicken = nick; o.neigung = neig;
+      return o;
     }
 
     /**
@@ -1347,6 +1385,8 @@
       if (this.aktiveSchichten.boost && this.boostFelder.length) gruppe.add(this.boostBauen());
       // Runde 5: Klebe-Seitenstreifen (Fantasie), Grafik in world/kleber.js
       if (this.kleber.length && R.Kleber && R.Kleber.bauen) gruppe.add(R.Kleber.bauen(this));
+      // 14.10. (v20): Kurvenschilder (Warnzeichen + Tempo-Schild vor jeder nennenswerten Kurve), world/schilder.js: 1 Mesh, 1 Textur-Atlas
+      if (R.Kurvenschilder && R.Kurvenschilder.bauen) { const ks = R.Kurvenschilder.bauen(this, this.tempoKlasse); if (ks) gruppe.add(ks); }
       return gruppe;
     }
 
@@ -1500,6 +1540,32 @@
         c.lerp(fels, Math.max(0, Math.min(1, (st - 0.55) / 0.5)));
         return [c.r, c.g, c.b];
       };
+      // 14.10. (v20, Bug „Auto im Grünen"): adaptive Verfeinerung. Die Querreihen sind nur an den Stützstellen exakt; dazwischen liegt
+      // die Sehne. Wo die wahre Bodenhöhe (bodenHoehe = hoeheAn) stark gekrümmt ist – vor allem dort, wo sich an einer Serpentine die
+      // Streifen der Nachbar-Abschnitte überlagern (bis 10 m breite Dreiecke über steilem Hang) –, lag die Fläche bis 0,6 m ÜBER dem Auto
+      // (Fahrzeughöhe = hoeheAn): das Auto stand im Hang. Jetzt wird ein Viereck geteilt, solange Mitte/Kantenmitten mehr als
+      // BOESCHUNG_TOL von der wahren Höhe abweichen (höchstens 4 Stufen, nicht unter 1 m Kante).
+      const hoch = (x, z) => this.bodenHoehe(x, z) - 0.02;
+      const viereck = (a, b, c, d, f1, f2, tiefe) => {       // a,b: Reihe k (Stationen j, j+1) · d,c: Reihe k+1; a→b quer, a→d längs
+        if (tiefe < BOESCHUNG_STUFEN) {
+          const mx = (a[0] + b[0] + c[0] + d[0]) / 4, mz = (a[2] + b[2] + c[2] + d[2]) / 4;
+          const kante = Math.max(Math.hypot(a[0] - b[0], a[2] - b[2]), Math.hypot(a[0] - d[0], a[2] - d[2]), Math.hypot(c[0] - b[0], c[2] - b[2]), Math.hypot(c[0] - d[0], c[2] - d[2]));
+          if (kante > 1.2) {
+            const m = [mx, 0, mz];
+            m[1] = hoch(mx, mz);
+            if (Math.abs(m[1] - (a[1] + b[1] + c[1] + d[1]) / 4) > BOESCHUNG_TOL) {      // Mitte weicht ab → in 4 Teile teilen
+              const ab = [(a[0] + b[0]) / 2, 0, (a[2] + b[2]) / 2], bc = [(b[0] + c[0]) / 2, 0, (b[2] + c[2]) / 2];
+              const cd = [(c[0] + d[0]) / 2, 0, (c[2] + d[2]) / 2], da = [(d[0] + a[0]) / 2, 0, (d[2] + a[2]) / 2];
+              [ab, bc, cd, da].forEach((P) => { P[1] = hoch(P[0], P[2]); });
+              viereck(a, ab, m, da, f1, f1, tiefe + 1); viereck(ab, b, bc, m, f1, f2, tiefe + 1);
+              viereck(da, m, cd, d, f1, f2, tiefe + 1); viereck(m, bc, c, cd, f1, f2, tiefe + 1);
+              return;
+            }
+          }
+        }
+        pos.push(...a, ...b, ...c, ...a, ...c, ...d);
+        col.push(...f1, ...f1, ...f2, ...f1, ...f2, ...f2);
+      };
       for (let k = 0; k < n; k++) {
         const A = reihen[k], B = reihen[k + 1];
         if (A.ub || B.ub) continue;
@@ -1507,8 +1573,7 @@
           const pa = A.punkte[sgi], pb = B.punkte[sgi];
           for (let j = 0; j < QS.length - 1; j++) {
             const f1 = farbe(pa[j], pa[j + 1]), f2 = farbe(pb[j], pb[j + 1]);
-            pos.push(...pa[j], ...pa[j + 1], ...pb[j + 1], ...pa[j], ...pb[j + 1], ...pb[j]);
-            col.push(...f1, ...f1, ...f2, ...f1, ...f2, ...f2);
+            viereck(pa[j], pa[j + 1], pb[j + 1], pb[j], f1, f2, 0);
           }
         }
       }

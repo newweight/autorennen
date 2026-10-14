@@ -691,6 +691,7 @@
   }
   function baueKabine(S, K) {
     const M = K.M, f = M.f;
+    const GLAS = M.glas !== undefined ? M.glas : FARBE.GLAS;     // optional (Verdeck): hellere Scheiben
     const wichtig = [M.zWS, M.zDV, M.zDH, M.zEnd];
     M.fenster.forEach(([a, b]) => { wichtig.push(a, b); });
     const weitere = [];
@@ -733,7 +734,7 @@
       const zone = zm < M.zDV ? 'vorn' : zm > M.zDH ? 'hinten' : 'dach';
       if (k === 0) return M.leiste;
       if (k === 1) {
-        if (imFenster(zm)) return FARBE.GLAS;
+        if (imFenster(zm)) return GLAS;
         if (zm < ersteFenster) return M.saeuleA;
         if (zm > letzteFenster) return M.saeuleC;
         return M.saeuleB;
@@ -741,10 +742,11 @@
       if (f.heckGlas && zone === 'hinten' && (k <= 3 || zm < M.zDH + (M.zEnd - M.zDH) * f.heckGlas.oben)) return M.lack;   // Heckklappe: Lackrahmen um die Scheibe
       if (f.fensterRahmen && k === 2 && zm > M.zWS + 0.02 && zm < ersteFenster + 0.02 + (letzteFenster - ersteFenster)) return f.fensterRahmen === 'schwarz' ? FARBE.SCHWARZ : FARBE.CHROM;   // Chrom-Rahmen oberhalb der Seitenfenster
       if (k <= 3) return zone === 'vorn' ? M.saeuleA : zone === 'dach' ? M.dach : (f.heckTyp === 'steil' ? M.dach : M.saeuleC);
-      return zone === 'dach' ? M.dach : FARBE.GLAS;
+      if (f.heckGlasAb !== undefined && zone === 'hinten' && zm < M.zDH + (M.zEnd - M.zDH) * f.heckGlasAb) return M.dach;   // optional (Verdeck): Stoff bis zur kleinen Heckscheibe
+      return zone === 'dach' ? M.dach : GLAS;
     });
     // Heck-Abschluss (bei steilem Heck bleibt eine kleine Stirnfläche)
-    deckel(S, ringe[ringe.length - 1], [0, 0, 1], FARBE.GLAS);
+    deckel(S, ringe[ringe.length - 1], [0, 0, 1], GLAS);
   }
 
   // ------------------------------------------------------------
@@ -762,6 +764,7 @@
     quader(S, FARBE.SCHWARZ, 0, yt - 0.012, M.zDV + 0.01, 2 * wb - 0.02, 0.05, 0.09);
     // Armaturenbrett und Lenkrad (Fahrer links = -x)
     const boden = yb - 0.42;
+    const SITZ = f.sitzFarbe !== undefined ? f.sitzFarbe : FARBE.SITZ;     // optional: dunkle Sitze
     quader(S, FARBE.INNEN, 0, yb - 0.08, M.zWS + 0.2, 2 * wb - 0.16, 0.2, 0.32);
     const lr = setze(new THREE.TorusGeometry(0.17, 0.022, 4, 14), -0.36, yb + 0.06, M.zWS + 0.46, 0.45, 0, 0);
     S.geo(lr, FARBE.SCHWARZ);
@@ -769,22 +772,62 @@
     // Sitze (Fläche, Lehne, Kopfstütze)
     const zS = M.zWS + 0.86;
     [-0.36, 0.36].forEach((x) => {
-      quader(S, FARBE.SITZ, x, boden + 0.14, zS, 0.48, 0.12, 0.48);
-      quader(S, FARBE.SITZ, x, boden + 0.44, zS + 0.27, 0.48, 0.52, 0.12, 0.22);
-      quader(S, FARBE.SITZ, x, boden + 0.77, zS + 0.34, 0.26, 0.15, 0.1, 0.22);
+      quader(S, SITZ, x, boden + 0.14, zS, 0.48, 0.12, 0.48);
+      quader(S, SITZ, x, boden + 0.44, zS + 0.27, 0.48, 0.52, 0.12, 0.22);
+      quader(S, SITZ, x, boden + 0.77, zS + 0.34, 0.26, 0.15, 0.1, 0.22);
     });
     const zH = zS + 0.72;
-    quader(S, FARBE.SITZ, 0, boden + 0.18, zH, 1.15, 0.12, 0.42);
-    quader(S, FARBE.SITZ, 0, boden + 0.46, zH + 0.22, 1.15, 0.48, 0.11, 0.18);
-    [-0.32, 0.32].forEach((x) => quader(S, FARBE.SITZ, x, boden + 0.76, zH + 0.27, 0.24, 0.14, 0.09, 0.18));
+    quader(S, SITZ, 0, boden + 0.18, zH, 1.15, 0.12, 0.42);
+    quader(S, SITZ, 0, boden + 0.46, zH + 0.22, 1.15, 0.48, 0.11, 0.18);
+    [-0.32, 0.32].forEach((x) => quader(S, SITZ, x, boden + 0.76, zH + 0.27, 0.24, 0.14, 0.09, 0.18));
     // Verdeckpaket: abgerundeter Stoffwulst hinter der Rückbank
     const v0 = M.zF + f.verdeck[0] * M.L, v1 = M.zF + f.verdeck[1] * M.L;
     const yv = schulter(M, (v0 + v1) / 2);
-    const prof = [[v0 - 0.02, yv - 0.08], [v0, yv + 0.05], [v0 + 0.06, yv + 0.1], [lerp(v0, v1, 0.5), yv + 0.115], [v1 - 0.06, yv + 0.08], [v1, yv - 0.02], [v1, yv - 0.08]];
+    const vf = f.verdeckFlach !== undefined ? f.verdeckFlach : 1;   // optional: flacheres Verdeckpaket (Faktor auf die Wulsthöhe)
+    const prof = [[v0 - 0.02, yv - 0.08], [v0, yv + 0.05 * vf], [v0 + 0.06, yv + 0.1 * vf], [lerp(v0, v1, 0.5), yv + 0.115 * vf], [v1 - 0.06, yv + 0.08 * vf], [v1, yv - 0.02], [v1, yv - 0.08]];
     const g = new THREE.ExtrudeGeometry(umriss(prof), { depth: 2 * wb - 0.06, bevelEnabled: false });
     g.translate(0, 0, -(2 * wb - 0.06) / 2);
     g.rotateY(-Math.PI / 2);
     S.geo(g, FARBE.VERDECK);
+    // Überrollbügel (optional): zwei schlanke schwarze Bügel hinter den Rücksitz-Kopfstützen mit Querstrebe
+    if (f.ueberrollbuegel) {
+      // eigene Geometrie (K.buegel): nur bei offenem Verdeck sichtbar (bei geschlossenem Dach sind die Bügel „eingefahren“)
+      const B = K.buegel = new Sammler(), zb = zH + 0.36, yu = boden + 0.9;
+      [-0.32, 0.32].forEach((x) => {
+        quader(B, FARBE.SCHWARZ, x, (boden + 0.5 + yu) / 2, zb, 0.05, yu - boden - 0.5, 0.05);
+        quader(B, 0x3a3d44, x, yu + 0.012, zb, 0.06, 0.026, 0.06);
+      });
+      quader(B, FARBE.SCHWARZ, 0, yu, zb, 0.69, 0.04, 0.045);
+    }
+  }
+
+  // ------------------------------------------------------------
+  // 2c. Cabrio-Verdeck (geschlossen) als eigene Geometrie – wird in bauen() als eigenes Mesh in einer Gruppe um den Drehpunkt
+  // gehängt und von dach.js auf-/zugeklappt. Nutzt die Kabinen-Schleife (baueKabine) mit anderen Maßen: Stoff schwarz, Seitenscheiben
+  // (Tür + kleine hintere), kleine Heckscheibe, dazu zwei Glasdreiecke vor der Tür (unter dem Dachvorderrand).
+  // form.dach = { hinten, ende (Anteile von laenge), fenster [[z0, z1], …] (Anteile), heckGlasAb (Anteil der Heckschräge ohne Glas) }
+  // ------------------------------------------------------------
+  function baueDach(M, K) {
+    const f0 = M.f, dh = f0.dach;
+    if (!f0.cabrio || !dh) return null;
+    const t = (v) => M.zF + v * M.L;
+    const f2 = Object.assign({}, f0, { cabrio: false, heckTyp: 'stufe', dachHinten: dh.hinten, heckscheibeEnde: dh.ende,
+      heckGlasAb: dh.heckGlasAb, dachAbfall: 0, heckVerjuengung: dh.heckVerjuengung !== undefined ? dh.heckVerjuengung : 0.08, tumble: 0.1, schwarzeSaeulen: true });
+    const M2 = Object.assign({}, M, { f: f2, zWS: M.zDV - 0.03, zDH: t(dh.hinten), zEnd: t(dh.ende),
+      fenster: (dh.fenster || []).map(([a, b]) => [Math.max(a * M.L + M.zF, M.zDV - 0.02), t(b)]),
+      glas: 0x3b4d62, dach: FARBE.VERDECK, saeuleA: FARBE.SCHWARZ, saeuleB: FARBE.VERDECK, saeuleC: FARBE.VERDECK, leiste: M.lack });
+    const S = new Sammler();
+    const K2 = { M: M2 };
+    baueKabine(S, K2);
+    // Glasdreiecke vorn (zwischen Scheibenfuß, Dachvorderrand und Gürtellinie)
+    const zA = M.zWS + 0.1, zB = M.zDV - 0.03;
+    [-1, 1].forEach((s) => {
+      const xa = halbBreite(M, zA, 0.4) * f0.schulterX - 0.05, xb = halbBreite(M, zB, 0.4) * f0.schulterX - 0.05;
+      const ya = schulter(M, zA) + 0.02, yb = schulter(M, zB) + 0.035, yt = kabinenHoehe(M2, zB + 0.02, schulter(M, zB)) - 0.07;
+      S.dreieckNach([s * xa, ya, zA], [s * xb, yb, zB], [s * xb, yt, zB], [s, 0, 0], FARBE.GLAS);
+    });
+    // Dachvorderrand-Abschluss (schwarze Stoffkante) – Stirnfläche der ersten Kabinenstation ist null hoch, daher kein Deckel nötig
+    return { geo: S.fertig(), pivot: { y: schulter(M, M2.zEnd) + 0.02, z: M2.zEnd } };
   }
 
   // ------------------------------------------------------------
@@ -878,7 +921,7 @@
         anbauTeil(SW[si], K, 0, 'vorn', x - s * lb * 0.02, ly - lh * 0.05, rechteckRund(0.016, lh * 0.75, 0.004), 0.028, 0.06);
       } else if (f.tfl === 'leiste') {
         // durchgehende Lichtleiste über die Front (jede Hälfte gehört zu einem Scheinwerfer)
-        anbauLeiste(SW[si], K, 0, 'vorn', s < 0 ? -xInnen : 0.005, s < 0 ? -0.005 : xInnen, ly - lh * 0.15 + (f.tflY || 0), 0.014, 0.022, 4);
+        anbauLeiste(SW[si], K, 0, 'vorn', s < 0 ? -xInnen : 0.005, s < 0 ? -0.005 : xInnen, ly - lh * 0.15 + (f.tflY || 0), f.tflH || 0.014, f.tflVor || 0.022, f.tflN || 4);   // optional: dickere/feiner unterteilte Leiste (T-Roc)
       }
     });
 
@@ -887,7 +930,7 @@
     const g = f.grill;
     if (g === 'leiste') {
       anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', 0, ly + 0.0, rechteckRund(2 * xInnen, 0.1, 0.02), 0.008, 0.07);
-      anbauTeil(S, K, FARBE.CHROM, 'vorn', 0, ly + 0.055, rechteckRund(2 * xInnen - 0.04, 0.014, 0.005), 0.014, 0.07);
+      if (f.grillChrom !== false) anbauTeil(S, K, FARBE.CHROM, 'vorn', 0, ly + 0.055, rechteckRund(2 * xInnen - 0.04, 0.014, 0.005), 0.014, 0.07);   // optional: ohne Chromleiste
       anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', 0, kY + 0.02, [[-0.42, -0.13], [0.42, -0.13], [0.52, 0.13], [-0.52, 0.13]], 0.008, 0.07);
       [-0.06, 0.06].forEach((o) => anbauTeil(S, K, FARBE.GITTER, 'vorn', 0, kY + 0.02 + o * 1.4, rechteckRund(0.9, 0.012, 0.004), 0.012, 0.07));
     } else if (g === 'quer' || g === 'van') {
@@ -968,6 +1011,20 @@
       });
       anbauLeiste(S, K, FARBE.SCHWARZ, 'vorn', -(f.mittelB || 0.34), f.mittelB || 0.34, kY, f.mittelH || 0.15, 0.008, 4);
       anbauLeiste(S, K, FARBE.SCHWARZ, 'vorn', -(f.lippeB || 0.84) * hb, (f.lippeB || 0.84) * hb, M.sill + (f.lippeY !== undefined ? f.lippeY : 0.03), 0.05, 0.01, 8);
+    } else if (f.einlass === 'rline') {
+      // R-Line-Stoßfänger (T-Roc): breiter schwarzer Mittel-Einlass mit Wabengitter hinter dem Kennzeichen, außen zwei große schwarze
+      // Einlässe mit senkrechtem LED-Streifen (Nebel/Kurvenlicht), schlanke silberne Lippe unten
+      const eh = f.einlassH || 0.17, yE = f.einlassY !== undefined ? f.einlassY * H : ey;
+      anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', 0, kY + 0.012, [[-0.5, -0.115], [0.5, -0.115], [0.6, 0.115], [-0.6, 0.115]], 0.008, 0.08);
+      for (let i = 0; i < 3; i++) anbauLeisteFlach(S, K, FARBE.GITTER, 'vorn', -0.46, 0.46, kY - 0.05 + i * 0.075, 0.01, 0.012, 4);
+      [-1, 1].forEach((s2, si) => {
+        const xo = s2 * (f.einlassX || 0.70) * hb, w = 0.2;
+        anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', xo, yE, rechteckRund(2 * w, eh, 0.05), 0.012, 0.08);
+        anbauLeisteFlach(S, K, FARBE.GITTER, 'vorn', xo - w * 0.8, xo + w * 0.8, yE - eh * 0.2, 0.012, 0.014, 3);
+        anbauLeisteFlach(S, K, FARBE.GITTER, 'vorn', xo - w * 0.8, xo + w * 0.8, yE + eh * 0.12, 0.012, 0.014, 3);
+        anbauTeil(SW[si], K, 0, 'vorn', xo + s2 * w * 0.78, yE, rechteckRund(0.018, eh * 0.7, 0.004), 0.018, 0.06);
+      });
+      anbauLeiste(S, K, 0xaeb4bc, 'vorn', -0.84 * hb, 0.84 * hb, M.sill + 0.07, 0.016, 0.014, 8);
     } else if (f.einlass === 'gross') {
       [-1, 1].forEach((s) => {
         anbauTeil(S, K, FARBE.SCHWARZ, 'vorn', s * ex, ey, [[-0.15, -0.09], [0.15, -0.09], [0.15 + s * 0.03, 0.09], [-0.12, 0.09]].map(([a, b]) => [a * s, b]), 0.008, 0.08);
@@ -1110,6 +1167,11 @@
       }
     });
     if (ru.form === 'kombi') anbauLeiste(S, K, FARBE.SCHWARZ, 'hinten', -ru.x0 * hb, ru.x0 * hb, ry, rh * 0.7, 0.012, 6);
+    // optional (T-Roc Facelift): dünne durchgehende Leuchtlinie zwischen den Rückleuchten (rot, leuchtet mit dem Bremslicht)
+    if (ru.verbinder) {
+      anbauLeiste(S, K, FARBE.SCHWARZ, 'hinten', -ru.x0 * hb - 0.01, ru.x0 * hb + 0.01, ry, 0.04, 0.012, 6);
+      anbauLeiste(BL[0], K, 0, 'hinten', -ru.x0 * hb - 0.01, ru.x0 * hb + 0.01, ry + 0.004, 0.016, 0.018, 6);
+    }
 
     // Heckklappe (Van): Kennzeichenmulde, Dekorleiste unten mit rotem Strich, Reflektoren, Griffleiste (alles optional)
     if (f.heckMulde) {
@@ -1298,6 +1360,16 @@
     if (f.streifen) {
       const z0 = M.zF + 0.12, z1 = M.zWS - 0.04;
       [[-0.21, -0.09], [0.09, 0.21]].forEach(([a, b]) => belag(S, K, M.dach, z0, z1, a, b, 0.006, 5));
+    }
+    // Gulf-Lackierung (optional, f.gulfStreifen = Farbe): zwei Streifen über Haube, Dach-Stoffpaket und Heckdeckel, Seitenstreifen über den Schwellern
+    if (f.gulfStreifen !== undefined) {
+      const gc = f.gulfStreifen;
+      [[-0.2, -0.07], [0.07, 0.2]].forEach(([a, b]) => {
+        belag(S, K, gc, M.zF + 0.1, M.zWS - 0.03, a, b, 0.006, 5);
+        belag(S, K, gc, M.zEnd + 0.02, M.zR - 0.1, a, b, 0.006, 4);
+      });
+      const z0 = M.zVA + M.archV + 0.04, z1 = M.zHA - M.archH - 0.04;
+      seitenFlaeche(S, K, gc, z0, z1, M.sill + 0.17, M.sill + 0.235, 4, 0.005);
     }
     // Fugen zwischen Haube und Kotflügeln (optional): dünne dunkle Linien von vorn nach hinten, nach außen laufend
     if (f.haubenFugen) {
@@ -1735,13 +1807,14 @@
     baueHeck(S, BL, K);
     baueAnbauten(S, K);
     if (M.f.blaulicht && !M.f.cabrio) baueBlaulicht(S, BLAU, K);
+    const dach = baueDach(M, K);
     const raeder = achsen(M).map((a) => ({
       vorn: a.vorn, z: a.zc, r: a.r, w: a.w, x: halbBreite(M, a.zc, 1) - a.w / 2 - 0.005,   // Rad steht leicht nach außen
       geo: radGeometrie(a.r, a.w, a.vorn ? M.zollV : M.zollH, M.f.felgeFarbe, false, M.f.felgeSpeichen),
     }));
     raeder.forEach((a) => bremssattel(S, a, M));
-    return { geo: S.fertig(), sw: SW.map((s) => s.fertig()), bl: BL.map((s) => s.fertig()),
-      blau: M.f.blaulicht && !M.f.cabrio ? BLAU.map((s) => s.fertig()) : [], raeder, M, schatten: null };
+    return { geo: S.fertig(), sw: SW.map((s) => s.fertig()), bl: BL.map((s) => s.fertig()), buegel: K.buegel ? K.buegel.fertig() : null,
+      blau: M.f.blaulicht && !M.f.cabrio ? BLAU.map((s) => s.fertig()) : [], raeder, M, schatten: null, dach };
   }
 
   /**
@@ -1749,6 +1822,13 @@
    * @returns {THREE.Group} Ursprung = Bodenmitte, Front bei -z
    */
   function bauen(autoDaten, opt) {
+    // Optionen: auto.optionen = { dach: 'offen'|'zu', lack: <Schlüssel aus auto.lackVarianten, z. B. 'gulf'> } und/oder bauen(auto, { dach, lack, farbe }).
+    // opt überschreibt auto.optionen. Lack: Variante wird in farbe/farbeName/form gemischt (eigener Cache-Eintrag), danach gilt opt.farbe (Garage).
+    const optionen = Object.assign({}, autoDaten.optionen || {}, opt || {});
+    if (optionen.lack && autoDaten.lackVarianten && autoDaten.lackVarianten[optionen.lack] && Object.keys(autoDaten.lackVarianten[optionen.lack]).length) {
+      const v = autoDaten.lackVarianten[optionen.lack];
+      autoDaten = Object.assign({}, autoDaten, v, v.form ? { form: Object.assign({}, autoDaten.form, v.form) } : {});
+    }
     // Runde 6 (W3-G): Garage-Lack – bauen(auto, { farbe: 0xff5fb8 }) ersetzt die Hauptfarbe (Formel-Renner: Hauptlack,
     // farbe2 bleibt). Ohne opt/farbe = Katalogfarbe → derselbe Cache-Eintrag wie bisher (Standard-Autos unverändert);
     // die Farbe steht im Cache-Schlüssel, jede Garage-Farbe bekommt also eine eigene Karosserie-Geometrie.
@@ -1808,13 +1888,51 @@
 
     g.add(e.schatten ? schattenMesh(e.M.L, e.M.B, e.schatten[0], e.schatten[1]) : schattenMesh(e.M.L, e.M.B));
 
+    // Verdeck (nur Cabrio mit form.dach): Gruppe um den Drehpunkt hinten; Zustand 0 = offen (Standard), 1 = geschlossen
+    let dachInfo = null;
+    if (e.dach) {
+      const gr = new THREE.Group();
+      gr.name = 'dachGruppe';
+      gr.position.set(0, e.dach.pivot.y, e.dach.pivot.z);
+      const dm = new THREE.Mesh(e.dach.geo, karosserieMaterial());
+      dm.name = 'dach';
+      dm.position.set(0, -e.dach.pivot.y, -e.dach.pivot.z);
+      gr.add(dm);
+      g.add(gr);
+      dachInfo = { gruppe: gr, pivot: e.dach.pivot, p: 0, ziel: 0, buegel: null };
+      if (e.buegel) { dachInfo.buegel = new THREE.Mesh(e.buegel, karosserieMaterial()); dachInfo.buegel.name = 'ueberrollbuegel'; g.add(dachInfo.buegel); }
+    }
+
     g.userData = {
+      dach: dachInfo,
       autoId: autoDaten.id, karosserie: typ, lackFarbe: autoDaten.farbe,   // W3-G: tatsächlicher Lack (Garage-Tests)
       raeder, vorderraeder, lenkObjekte, bremslichter, scheinwerfer,
       bremslichtMaterial: bremslichtMat,
       blaulicht,
     };
+    if (dachInfo) { const zu = optionen.dach === 'zu'; dachInfo.ziel = zu ? 1 : 0; setzeDach(g, zu ? 1 : 0); }
     return g;
+  }
+
+  /**
+   * Verdeck stellen (nur Autos mit userData.dach, sonst ohne Wirkung): p = 0 offen (Dach unsichtbar), 1 geschlossen.
+   * Dazwischen klappt das Dach um den hinteren Drehpunkt nach hinten weg und schrumpft dabei in der Länge (vereinfachtes Z-Falten).
+   * Rückgabe: true, wenn das Auto ein Verdeck hat.
+   */
+  function setzeDach(auto, p) {
+    const d = auto && auto.userData && auto.userData.dach;
+    if (!d) return false;
+    p = clamp(p, 0, 1); d.p = p;
+    const gr = d.gruppe;
+    if (d.buegel) d.buegel.visible = p < 0.5;
+    if (p <= 0.01) { gr.visible = false; gr.rotation.x = 0; gr.scale.set(1, 1, 1); gr.position.set(0, d.pivot.y, d.pivot.z); return true; }
+    gr.visible = true;
+    const t = smooth(1 - p);                           // 0 = zu, 1 = offen
+    gr.rotation.x = t * Math.PI;                       // klappt hoch, über die Senkrechte und legt sich umgedreht auf das Verdeckfach
+    gr.scale.set(1, 1, 1 - 0.7 * t);                   // wird dabei in der Länge kürzer (Z-Faltung vereinfacht)
+    gr.position.y = d.pivot.y - 0.1 * t;
+    gr.position.z = d.pivot.z - 0.7 * t;               // und rückt nach vorn, damit es nicht über das Heck ragt
+    return true;
   }
 
   /** Bremslichter an/aus (heller beim Bremsen). Runde 6: mit eingeschaltetem Licht (setzeLicht) leuchtend rot. */
@@ -1901,5 +2019,5 @@
     return g;
   }
 
-  R.carBuilder = { bauen, platzhalterAuto, setzeBremslicht, setzeLicht, setzeBlaulicht, lenkeRaeder, dreheRaeder, cacheLeeren, TYP_STANDARD };
+  R.carBuilder = { bauen, platzhalterAuto, setzeBremslicht, setzeLicht, setzeBlaulicht, setzeDach, lenkeRaeder, dreheRaeder, cacheLeeren, TYP_STANDARD };
 })();

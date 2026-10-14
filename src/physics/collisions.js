@@ -480,6 +480,15 @@
       if (!pos || !mat) return;
       const pa = pos.array, pn = pos.count !== undefined ? pos.count : pa.length / 3;
       const anz = m.count !== undefined ? m.count : mat.length / 16;
+      let box3 = null;            // Geometrie-Box (lokal) für den Körper der weichen Kollider
+      if (art === 'weich' && pn > 0) {
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+        for (let k = 0; k < pn; k++) {
+          const px = pa[k * 3], py = pa[k * 3 + 1], pz = pa[k * 3 + 2];
+          if (px < x0) x0 = px; if (px > x1) x1 = px; if (py < y0) y0 = py; if (py > y1) y1 = py; if (pz < z0) z0 = pz; if (pz > z1) z1 = pz;
+        }
+        box3 = { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, cz: (z0 + z1) / 2, ex: (x1 - x0) / 2, ey: (y1 - y0) / 2, ez: (z1 - z0) / 2 };
+      }
       for (let i = 0; i < anz; i++) {
         const e = mat, o = i * 16;
         const x = e[o + 12], z = e[o + 14];
@@ -499,10 +508,23 @@
         if (r < (P.rMin || 0.25)) continue;
         r = Math.min(r, art === 'fest' ? (P.rMaxFest || 3) : (P.rMaxWeich || 2.5));
         if (Math.abs(nah.seitenabstand) - r > grenze(nah.s) + zugabe) continue;
+        // 14.10. (v20, Bug „Auto im Grünen"): weicher Kollider = Körper (Ellipsoid ≈ 0,85 der Geometrie-Box) mit Mittelhöhe cy (über dem Boden),
+        // Halbhöhe ay und waagrechtem Halbmesser ah (die längere Achse); pflanzen() lässt das Auto nicht tiefer hinein, als der Körper dort noch Autohöhe hat
+        let kern = null;
+        if (art === 'weich' && box3) {
+          const L = (a, b, c) => Math.hypot(e[o + a], e[o + b], e[o + c]);
+          const cy = e[o + 1] * box3.cx + e[o + 5] * box3.cy + e[o + 9] * box3.cz + e[o + 13] - yb;
+          kern = { x: e[o] * box3.cx + e[o + 4] * box3.cy + e[o + 8] * box3.cz + e[o + 12], z: e[o + 2] * box3.cx + e[o + 6] * box3.cy + e[o + 10] * box3.cz + e[o + 14], yb, cy, ay: L(4, 5, 6) * box3.ey * 0.85, ah: Math.max(L(0, 1, 2) * box3.ex, L(8, 9, 10) * box3.ez) * 0.85 };
+          if (kern.ah > r / 0.45) kern = null;          // dünner Stamm unter weitem Schirm (Riesenfarn): Dach, kein Körper – wie ein Baum
+        }
         const sch = Math.round(x * 5) + ',' + Math.round(z * 5);
         const alt = nachStelle.get(sch);
-        if (alt) { alt.r = Math.max(alt.r, r); if (art === 'fest') alt.art = 'fest'; continue; }
-        const kol = { x, z, r, art, name: m.name, s: nah.s, seitenabstand: nah.seitenabstand };
+        if (alt) {
+          alt.r = Math.max(alt.r, r); if (art === 'fest') alt.art = 'fest';
+          if (kern && (!alt.kern || kern.ah > alt.kern.ah)) alt.kern = kern;
+          continue;
+        }
+        const kol = { x, z, r, art, name: m.name, s: nah.s, seitenabstand: nah.seitenabstand, kern };
         nachStelle.set(sch, kol);
         liste.push(kol);
       }
@@ -519,6 +541,14 @@
     });
     strecke._pflanzenRaster = raster;
     return liste.length;
+  }
+
+  /** 14.10. (v20): waagrechter Halbmesser des Busch-Körpers auf Höhe h über dem Boden (0, wenn der Körper dort schon zu Ende ist). */
+  function kernRadius(k, h) {
+    const kn = k.kern;
+    if (!kn || kn.ay <= 0) return 0;
+    const dy = (h - kn.cy) / kn.ay;
+    return Math.abs(dy) >= 1 ? 0 : kn.ah * Math.sqrt(1 - dy * dy) + 0.1;     // +10 cm Sicherheit (Boden-/Dreieckshöhe)
   }
 
   /**
@@ -559,7 +589,27 @@
         let ex = px - k.x, ez = pz - k.z, d = Math.hypot(ex, ez);
         const drinnen = Math.abs(lx) <= bx.hl && Math.abs(lq) <= bx.hb;
         if (!drinnen && d >= k.r) continue;
-        if (k.art === 'weich') { busch = true; continue; }
+        if (k.art === 'weich') {
+          busch = true;
+          // 14.10. (v20, Bug „Auto im Grünen"): durchfahren ja – aber nicht so tief, dass das Auto im Busch verschwindet: die Mitte
+          // des Autos bleibt außerhalb des Kerns (Querschnitt des Körpers auf dachRef-Höhe, ≈ niedrigstes Dach). Tempo-Anteil nach innen weg.
+          // Dach-Höhe relativ zum Fuß des Busches (Hang: steht das Auto tiefer als der Busch, ragt das Dach weniger heraus) – an der Stelle,
+          // an die das Auto geschoben wird (Fixpunkt-Iteration, weil sich die Höhe beim Schieben ändert)
+          const dach = P.dachRef !== undefined ? P.dachRef : 0.95;
+          const kx = k.kern ? k.kern.x : k.x, kz = k.kern ? k.kern.z : k.z;       // Mitte des Körpers (Geometrie-Box)
+          const mx = v.x - kx, mz = v.z - kz, md = Math.hypot(mx, mz);
+          const nx = md > 1e-6 ? mx / md : bx.rx, nz = md > 1e-6 ? mz / md : bx.rz;     // genau in der Mitte: nach hinten hinaus
+          const tief = (px, pz) => (strecke.hoeheAn && k.kern ? Math.min(0, strecke.hoeheAn(px, pz) - k.kern.yb) : 0);
+          let kr = kernRadius(k, dach + tief(v.x, v.z));
+          for (let it = 0; it < 6 && kr > 0; it++) { const k2 = kernRadius(k, dach + tief(kx + nx * kr, kz + nz * kr)); if (k2 <= kr + 0.01) break; kr = k2; }
+          if (kr > 0 && md < kr) {
+            v.x = kx + nx * (kr + 0.02); v.z = kz + nz * (kr + 0.02);
+            bx.x = v.x; bx.z = v.z;
+            const vw = v.weltGeschwindigkeit(), vn = vw.x * nx + vw.z * nz;
+            if (vn < 0) v.weltGeschwindigkeitSetzen(vw.x - nx * vn, vw.z - nz * vn);
+          }
+          continue;
+        }
         // fest: Auto herausschieben (Normale vom Stamm zum Auto)
         let nx, nz, tief;
         if (drinnen || d < 1e-6) {

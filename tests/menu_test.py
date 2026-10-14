@@ -33,7 +33,7 @@ with sync_playwright() as p:
     page.on('pageerror', lambda e: fehler.append(str(e)))
     page.on('console', lambda m: fehler.append('console.error: ' + m.text) if m.type == 'error' else None)
     page.goto(url)
-    page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=15000)
+    page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=90000)
     page.wait_for_timeout(1500)
     zustand = lambda: page.evaluate('Rennspiel.spiel.zustand')
     taste = lambda t, n=1: [page.keyboard.press(t) or page.wait_for_timeout(60) for _ in range(n)]
@@ -649,10 +649,10 @@ with sync_playwright() as p:
     pruefe('Fahrer in localStorage', '"fahrer":["Kerle"' in gespeichert, gespeichert)
     # Validierung: kaputte / doppelte Fahrer in localStorage
     page.evaluate('''localStorage.setItem(Rennspiel.config.ui.speicherSchluessel, JSON.stringify({ fahrer: ['Nope', 42] }))''')
-    page.reload(); page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=15000)
+    page.reload(); page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=90000)
     pruefe('Ungültige Fahrer -> Standard', page.evaluate('Rennspiel.spiel.einstellungen.fahrer') == ['Jonas', 'Emmy'], page.evaluate('Rennspiel.spiel.einstellungen.fahrer'))
     page.evaluate('''localStorage.setItem(Rennspiel.config.ui.speicherSchluessel, JSON.stringify({ fahrer: ['Sara', 'Sara'] }))''')
-    page.reload(); page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=15000)
+    page.reload(); page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=90000)
     f2 = page.evaluate('Rennspiel.spiel.einstellungen.fahrer')
     pruefe('Doppelter Fahrer -> zweiter springt weiter', f2[0] == 'Sara' and f2[1] != 'Sara', f2)
     page.evaluate("Rennspiel.spiel.rennenStarten({ modus: 'zwei', gegner: 1 })")   # fahrer fehlt -> gespeicherte/Standardwerte

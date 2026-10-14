@@ -15,6 +15,7 @@
 | Spieler 2 | W | S | A D | T |
 
 Weitere Tasten: **Space** (Spieler 1) bzw. **E** (Spieler 2) legt eine Ölfalle (nur mit Ölfass-Item), **G** im Modus-Schritt öffnet die Garage, **C** Kamera (Verfolger / Cockpit / weit), **M** Ton an/aus, **Esc** Pause, **H** Leistungs-Anzeige (fps), **F** Vollbild.
+**Dach auf/zu** (nur VW T-Roc Cabrio, fährt offen los): im **Stand** beide Gegentasten gleichzeitig – allein **↑ + ↓** (zu zweit auch ← + →), Spieler 2 **W + S** oder **A + D**; am Handy ▲ + ▼ zusammen. Dauert 2 Sekunden. In Fahrt kommt „Erst anhalten!“. Online sieht nur du selbst das Dach.
 Im Menü: Pfeile oder WASD bewegen, **Enter** weiter, **Esc** zurück – oder mit der Maus klicken.
 Bei der Fahrer- und Autowahl bewegt Spieler 1 mit den Pfeilen, Spieler 2 mit WASD.
 

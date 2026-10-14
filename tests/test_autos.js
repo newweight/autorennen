@@ -153,7 +153,7 @@ for (const a of R3.carCatalog) {
     [L, Bu, H].map((x) => x.toFixed(2)).join('/') + '  vs ' + [ab.laenge, ab.breite, ab.hoehe].join('/'));
   pruefe(`${a.id}: Dreiecke 1.500 .. 8.000`, tris >= 1500 && tris <= 8000, String(tris));
   pruefe(`${a.id}: höchstens 12 Meshes`, meshes <= 12, String(meshes));
-  const sollMeshes = formel ? 8 : blau ? 12 : 10;
+  const sollMeshes = formel ? 8 : blau ? 12 : (a.form && a.form.dach ? 12 : 10);   // 14.10. (v20): Cabrio mit Verdeck = +Dach-Mesh +Überrollbügel-Mesh
   pruefe(`${a.id}: Meshzahl je Typ (${sollMeshes})`, meshes === sollMeshes, String(meshes));
   const nah = (ist, soll) => Math.abs(ist / soll - 1) <= 0.08;
   // Höhe: beim Streifenwagen kommt der Blaulichtbalken (~0,19 m) aufs Dach

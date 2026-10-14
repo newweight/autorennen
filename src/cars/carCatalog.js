@@ -15,6 +15,10 @@
 //   abmessungen { laenge, breite, hoehe, radstand, ueberhangVorn (m), radRadius (+radRadiusHinten),
 //                 radBreite (+radBreiteHinten), felgeZoll (+felgeZollHinten) } – echte Maße, nur für die Optik
 //                 (die Physik nutzt weiter fahrwerte.laenge/breite)
+//   optionen (optional) { dach: 'offen'|'zu', lack: <Schlüssel aus lackVarianten> } – Standardwerte je Auto; wirken über carBuilder.bauen(auto, opt)
+//                 (opt überschreibt auto.optionen). Für Gegner: Object.assign({}, auto, { optionen: { dach: 'zu', lack: 'gulf' } }) – den
+//                 Katalogeintrag selbst nie verändern. Derzeit nur 'troc-cabrio' (Verdeck + Lackvarianten blau/gulf, siehe src/cars/dach.js).
+//   lackVarianten (optional) { <name>: { farbe, farbeName, form: { … nur überschriebene Felder } } } – '{}' = Katalogfarbe
 //   form { … } – Silhouetten-Merkmale für den carBuilder (siehe TYP_STANDARD in carBuilder.js):
 //                 Höhen als Anteil von hoehe, Längspositionen als Anteil von laenge (0 = Front, 1 = Heck),
 //                 x-Lagen als Anteil der halben Breite, Detailgrößen (b, h) in Metern
@@ -35,21 +39,37 @@ window.Rennspiel = window.Rennspiel || {};
     {
       id: 'troc-cabrio',
       name: 'VW T-Roc Cabrio',
-      marke: 'Volkswagen', modell: 'T-Roc Cabrio',
-      farbe: 0x1f7bff, farbeName: 'Blau',
+      marke: 'Volkswagen', modell: 'T-Roc Cabriolet R-Line Edition Blue',
+      farbe: 0x4d6fe0, farbeName: 'Mattblau',   // Facelift ab 2022, „Edition Blue“: mattes Blau (Lambert-Material = matt), schwarze 19-Zoll-Felgen
       karosserie: 'cabrio',
-      // Quelle Maße: auto-data.net (T-Roc I Cabriolet): 4268 × 1811 × 1522 mm, Radstand 2630; Reifen 215/55 R17
+      // Quelle Maße: auto-data.net (T-Roc I Cabriolet): 4268 × 1811 × 1522 mm, Radstand 2630 (meinauto.de: „4,27 m“, Räder 17/18/19 Zoll);
+      // R-Line Edition: 19 Zoll mit 235/40 R19 → Reifenradius ≈ 0,335 m
       abmessungen: { laenge: 4.268, breite: 1.811, hoehe: 1.522, radstand: 2.630, ueberhangVorn: 0.87,
-        radRadius: 0.334, radBreite: 0.215, felgeZoll: 17 },
-      // Merkmale: SUV-Höhe, sehr hohe Gürtellinie, offen mit Verdeckpaket, LED-Leiste vorne, schwarze Radlauf-Verkleidung
+        radRadius: 0.335, radBreite: 0.235, felgeZoll: 19 },
+      // Optionen (auto.optionen = { dach, lack } oder carBuilder.bauen(auto, { dach, lack })):
+      //   dach: 'offen' (Standard) | 'zu'  – Anfangszustand des Stoffverdecks (umschalten im Spiel: src/cars/dach.js)
+      //   lack: 'blau' (Standard, Mattblau) | 'gulf' (hellblau mit orangen Streifen, siehe lackVarianten)
+      optionen: { dach: 'offen', lack: 'blau' },
+      // Lackvarianten: überschreiben farbe/farbeName und mischen form-Felder dazu (nur diese Felder, Rest bleibt)
+      lackVarianten: {
+        blau: {},
+        gulf: { farbe: 0x95d9f2, farbeName: 'Gulf-Hellblau mit orangen Streifen', form: { gulfStreifen: 0xffa02a } },
+      },
+      // Merkmale (Facelift): SUV-Höhe, hohe Gürtellinie, schmale LED-Scheinwerfer mit LED-Leiste durch den Grill, R-Line-Front mit großen
+      // Lufteinlässen, 2 Türen, kurze Heckklappe mit Lippe, durchgehend rote Rückleuchten, Diffusor + Trapez-Endrohre, Überrollbügel,
+      // schwarzes Stoff-Klappverdeck (Dach: Zustand „zu“), schwarze 19-Zoll-Felgen, schwarze Sitze
       form: {
         sill: 0.165, nase: 0.56, haubeH: 0.655, guertel: 0.67, deck: 0.66, heckH: 0.645,
-        scheibeUnten: 0.335, dachVorn: 0.445, dachHoehe: 0.93, verdeck: [0.80, 0.93],
+        scheibeUnten: 0.335, dachVorn: 0.445, dachHoehe: 0.975, verdeck: [0.80, 0.93], verdeckFlach: 0.55,
         frontNeigung: 0.12, heckNeigung: 0.12, eckVorn: 0.30, eckHinten: 0.24, kotfluegel: 0.07, wolbung: 0.03,
-        tueren: 2, verkleidung: true, spiegelFarbe: 'lack', felgeFarbe: 0xb9bec6,
-        licht: { form: 'schmal', x: 0.70, y: 0.525, b: 0.32, h: 0.09 }, tfl: 'leiste', grill: 'leiste', nebel: true,
-        rueck: { form: 'eckig', y: 0.585, h: 0.085, x0: 0.50, x1: 0.95 }, endrohre: { n: 0 },
-        kennzeichenY: 0.275, kennzeichenHY: 0.47,
+        tueren: 2, verkleidung: true, spiegelFarbe: 'schwarz', felgeFarbe: 0x1a1b1e, felgeSpeichen: 10,
+        licht: { form: 'schmal', x: 0.72, y: 0.545, b: 0.36, h: 0.075 }, tfl: 'leiste', grill: 'leiste', grillChrom: false, tflH: 0.02, tflVor: 0.034, tflN: 10, einlass: 'rline', nebel: false,
+        logo: { y: 0.0, r: 0.065 }, logoHeck: { y: 0.60, r: 0.05 },
+        rueck: { form: 'eckig', y: 0.585, h: 0.095, x0: 0.16, x1: 0.96, verbinder: true }, spoiler: 'lippe',
+        diffusor: true, diffusorX: 0.80, diffusorH: 0.12, endrohre: { n: 2, form: 'trapez', x: 0.70, r: 0.05 },
+        kennzeichenY: 0.275, kennzeichenHY: 0.40, sitzFarbe: 0x2a2c32, ueberrollbuegel: true,
+        // Verdeck (geschlossen): schwarzer Stoff, kleine Heckscheibe, Türscheiben + Seitenscheibe hinten
+        dach: { hinten: 0.69, ende: 0.885, fenster: [[0.0, 0.60], [0.645, 0.725]], heckGlasAb: 0.62 },
       },
       fahrwerte: {
         vMax: 230 / 3.6, beschleunigung: 4.8, bremsen: 20, rueckwaertsMax: 8,

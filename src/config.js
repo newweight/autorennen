@@ -344,6 +344,31 @@ Rennspiel.config = {
     melden: 60,                // m vor der Einfahrt: HUD-Hinweis „Werkstatt voraus“ (nur Spieler mit Schaden)
   },
 
+  // --- 14.10. (v20): Kurvenschilder (src/world/schilder.js) – Straßenschilder vor jeder nennenswerten Kurve ---
+  // Kurve = zusammenhängende Strecke mit Radius < radiusMax (gleiche Richtung); „nennenswert“ = Winkel ≥ minWinkel und Ideallinien-Tempo
+  // (strecke.tempoBei) < nennenswertAnteil × Höchsttempo der Tempo-Klasse (refKmh × tempoKlassen[k].vMax). Schild 60–120 m vor dem Kurvenbeginn
+  // (Abstand ≈ abstandSek × Anfahrtstempo), rechts neben der Fahrbahn. Tempo = tempoBei an der engsten Stelle, auf 10 km/h gerundet, höchstens
+  // das Höchsttempo der Klasse. Folgen Kurven näher als gruppeAbstand aufeinander, steht EIN Schild (Doppelkurve bzw. engstes Tempo).
+  // Haarnadel (Winkel ≥ haarnadelWinkel): zusätzlich Leitpfeil-Tafeln an der Kurvenaußenseite. massstab vergrößert die Schilder (gut lesbar).
+  kurvenschilder: {
+    an: true,
+    massstab: 3.0,             // 1 = Originalgröße (Dreieck 0,9 m Seite, Tempo-Scheibe 0,6 m); 2 = doppelt so groß
+    radiusMax: 200,            // m – Kurvenbeginn/-ende: |Krümmung| > 1/radiusMax
+    minWinkel: 25,             // ° Richtungsänderung, ab der eine Kurve ein Schild bekommt
+    refKmh: 260, nennenswertAnteil: 0.75,
+    abstandMin: 60, abstandMax: 120, abstandSek: 2.4, abstandSuche: 5,   // m vor Kurvenbeginn; Suche in 5-m-Schritten nach einem freien Platz
+    abstandNot: 30, sperreNot: 12,   // Notlösung, wenn im Wunschbereich kein freier Platz ist: ab 30 m vor der Kurve, nur 12 m Sperrabstand
+    gruppeMax: 280, abstandKette: 30,   // längere Kurvenfolgen werden in Stücke von höchstens gruppeMax m geteilt (je Stück ein Schild, ab abstandKette m davor)
+    gruppeAbstand: 75,         // m zwischen Kurvenende und nächstem Kurvenbeginn, darunter ein gemeinsames Schild
+    mindestAbstandSchilder: 40,// m (in s) zwischen zwei Schild-Masten
+    lage: 'rand',              // 'rand' = knapp neben dem Randstreifen (abstandRand m; nie weiter weg als die Bande) | 'bande' = außerhalb der Bande
+    abstandRand: 3.2,          // m neben dem Randstreifen (lage 'rand')
+    abstandBande: 1.2,         // m hinter der Bande (lage 'bande')
+    startFreiVor: 70, startFreiNach: 30,   // m vor/nach Start/Ziel ohne Schilder
+    sperre: 30,                // m Abstand zu Brücke, Tunnel, Überführung, Kreuzung, Gabelung, Looping, Schanze
+    haarnadelWinkel: 130, haarnadelKmh: 80, leitpfeilAbstand: 24,
+  },
+
   // --- Runde 6 (W1-A3/A4/A5): Kollisionen Auto↔Auto, Rempeln, Pflanzen (Logik: src/physics/collisions.js) ---
   // Autos = gedrehte Rechtecke (laenge × breite), Trennung per SAT in `teilschritte` Durchgängen, danach `mindestAbstand` m Luft.
   // rempeln 'sanft' (Standard) = nur Abstoßung wie bisher; 'echt' = je nach Treffer Drehung / Abdrängen / Nebeneinander-Schieben.

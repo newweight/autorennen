@@ -303,6 +303,7 @@
       const variante = e.variante && daten.varianten && daten.varianten[e.variante] ? e.variante : '';   // Runde 6: ungültig → Normal
       const strecke = new R.Strecke(daten, { welt, variante, hindernisMenge: e.hindernisMenge });
       this.strecke = strecke;
+      strecke.tempoKlasse = e.tempoKlasse || this.tempoKlasse;   // 14.10. (v20): Kurvenschilder (world/schilder.js) beschriften je Tempo-Klasse
       // Runde 4: Wetter/Jahreszeit/Wind (Standard Sommer/klar/0 = wie bisher)
       this.wetter = null;
       if (R.Wetter) {
@@ -824,23 +825,32 @@
           mesh.position.set(d.x, d.y, d.z);
         }
         // Längsneigung nach der Straßensteigung: Höhe 1,6 m vor und hinter der (interpolierten) Mitte
-        let steigung = 0;
+        let steigung = 0, geleNeig = 0;
         if (this.strecke) {
           const st = this.strecke, r = d.richtung();
           steigung = Math.atan2(st.hoeheAn(d.x + r.x * 1.6, d.z + r.z * 1.6, f.index) - st.hoeheAn(d.x - r.x * 1.6, d.z - r.z * 1.6, f.index), 3.2);   // W4-I: Index
+          // 14.10. (v20, Bug „Auto im Grünen"): abseits der Fahrbahn Nicken/Querneigung/Höhe nach dem Gelände unter den 4 Ecken der
+          // Karosserie (Gewicht 0 auf der Straße = unverändert, weich über den Randstreifen); nur Anzeige, v.y bleibt hoeheAn
+          const gw = !f.loopAnzeige && !(f.flug && (f.flug.aktiv || f.flug.rampe)) && st.abseitsGewicht ? st.abseitsGewicht(f.nah) : 0;
+          if (gw > 0.001) {
+            const gp = st.gelaendePose(d.x, d.z, r.x, r.z, v.daten.laenge / 2, v.daten.breite / 2, f.index, this._gelPose || (this._gelPose = {}));
+            steigung += (gp.nicken - steigung) * gw; geleNeig = gp.neigung * gw;
+            if (gp.dy) mesh.position.y += gp.dy * gw;
+          }
         }
         // Runde 4: in der Luft ersetzt das Flug-Nicken die Straßensteigung; Rampe/Landung: Zusatz-Nicken (interpoliert)
         const fz = f.flug;
         if (fz && fz.aktiv) steigung = 0;
         const flugNicken = fz ? R.Schanzen.anzeigeNicken(fz, alpha) : 0;
         // YXZ: erst Heading (Hochachse), dann Nicken (Querachse, > 0 = Bug hoch), dann Wanken (Längsachse) – alles lokal
-        if (!f.loopAnzeige) mesh.rotation.set(d.nicken + steigung + flugNicken, d.heading, d.neigung, 'YXZ');
+        if (!f.loopAnzeige) mesh.rotation.set(d.nicken + steigung + flugNicken, d.heading, d.neigung + geleNeig, 'YXZ');
         // Räder rollen und lenken, Bremslicht
         f.radwinkel -= v.vLaengs * dt / 0.34;   // Rolldrehung (Radradius ≈ 0,34 m)
         R.carBuilder.dreheRaeder(mesh, f.radwinkel);
         R.carBuilder.lenkeRaeder(mesh, -v.lenkung * 0.5);
         R.carBuilder.setzeBremslicht(mesh, !!f.bremst);
       }
+      if (R.dach) R.dach.frame(this, this.pausiert ? 0 : dt);   // 14.10. (v20): Cabrio-Verdeck auf/zu (src/cars/dach.js), nur Optik
       if (this.zustand === 'menue') this.menueKameraFlug(dt);
       else if (this.rennen && this.rennen.elimination) this._zuschauerKameras();   // W3-F (vor dem Kamera-Update)
       if (this.zustand !== 'menue' && !this.pausiert) for (let i = 0; i < this.kameras.length; i++) { this.kameras[i].update(dt); this._loopingKamera(this.kameras[i], dt, alpha); }
