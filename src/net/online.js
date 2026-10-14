@@ -675,7 +675,8 @@
       const tl = [];
       this.geisterMat = [];
       m.teilnehmer.forEach((t, i) => {
-        const p = plaetze[i], auto = katalog.find(a => a.id === t.autoId) || katalog[0];
+        const p = plaetze[i], basis = katalog.find(a => a.id === t.autoId) || katalog[0];
+        const auto = t.optionen ? Object.assign({}, basis, { optionen: Object.assign({}, basis.optionen || {}, t.optionen) }) : basis;   // v20: Lack/Dach der Computer-Füller
         const f = spiel.fahrzeugHinzufuegen(auto, p.x, p.z, p.heading, null);
         f.vehicle.y = strecke.hoeheAn(p.x, p.z);
         spiel._vorherAngleichen(f);

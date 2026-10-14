@@ -14,6 +14,9 @@
 //   autoId, karosserie, bremslichtMaterial
 //   blaulicht[2]      (nur Autos mit form.blaulicht, z. B. Streifenwagen) linke/rechte Leuchte im Dachbalken,
 //                     je eigenes Material; schalten mit setzeBlaulicht(auto, phase, farbe). Sonst [].
+//                     14.10. (v20): Streifenwagen = Passat-Geometrie + Optionen (auto.optionen / bauen(auto, opt)): lack 'polizei' (Katalog-lackVarianten),
+//                     lichtbalken true (form.blaulicht), farbe (Hauptlack, auch für Gegner). form.polizeiDekor = zusätzliches Mesh 'polizeiDekor'
+//                     (Canvas-Textur „POLIZEI“ auf Seiten/Haube/Heck, 1 Draw-Call; im Browser sichtbar, ohne Canvas unsichtbar).
 //   Formel-Renner (Typ 'formel'): scheinwerfer = [] (keine Scheinwerfer); bremslichter = [Regenlicht hinten,
 //                     Leuchtstreifen an den Heckflügel-Endplatten].
 //
@@ -1744,6 +1747,104 @@
   }
 
   // ------------------------------------------------------------
+  // 9. Polizei-Dekor (form.polizeiDekor, 14.10. v20): Schriftzug „POLIZEI“ als Canvas-Textur auf Seiten, Haube und Heck.
+  //    EIN zusätzliches Mesh 'polizeiDekor' (alle Flächen in einer Geometrie, ein Textur-Atlas 1024 × 512):
+  //    Zeile 0–128 Seite (weiß auf der blauen Flanke), 128–352 Haube (blau auf Silber, von vorn lesbar), 352–512 Heck.
+  // ------------------------------------------------------------
+  const DEKOR_TEX = { w: 1024, h: 512, seite: [0, 128], haube: [128, 352], heck: [352, 512] };
+  function bauePolizeiDekor(M, K) {
+    const pos = [], nrm = [], uv = [], idx = [];
+    const gitter = (nu, nv, reg, punkt, normal) => {
+      const base = pos.length / 3, [y0, y1] = DEKOR_TEX[reg];
+      for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) {
+        const u = i / nu, v = j / nv, p = punkt(u, v);
+        pos.push(p[0], p[1], p[2]); nrm.push(normal[0], normal[1], normal[2]);
+        uv.push(u, 1 - (y1 - (y1 - y0) * v) / DEKOR_TEX.h);
+      }
+      for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+        const a = base + j * (nu + 1) + i, b = a + 1, c = b + nu + 1, d = a + nu + 1;
+        idx.push(a, b, c, a, c, d);
+      }
+    };
+    // Seiten: zwischen den Radhäusern, auf dem blauen Flankenband (Ring-Segment 2)
+    const z0 = M.zVA + M.archV + 0.08, z1 = M.zHA - M.archH - 0.08, zc = (z0 + z1) / 2, len = Math.min(1.6, z1 - z0), h = len / 8;
+    const yc = lerp(M.sill, schulter(M, zc), 0.56);
+    [-1, 1].forEach((sd) => {
+      gitter(8, 1, 'seite', (u, v) => {
+        const z = sd > 0 ? zc + (0.5 - u) * len : zc - len / 2 + u * len, y = yc - h / 2 + v * h;
+        return [sd * (seitenX(K, z, y) + 0.006), y, z];
+      }, [sd, 0, 0]);
+    });
+    // Haube: von vorn lesbar (u nach −x, v nach hinten)
+    const hz = lerp(M.zF, M.zWS, 0.56), hb = 0.92, hh = hb * 224 / 1024;
+    gitter(6, 2, 'haube', (u, v) => {
+      const x = -(u - 0.5) * hb, z = hz - hh / 2 + v * hh;
+      return [x, obenY(K, z, x) + 0.006, z];
+    }, [0, 1, 0]);
+    // Heck: Streifen auf der Heckklappe an Stelle des PASSAT-Schriftzugs
+    const ry = M.H * 0.575, rb = 0.8, rh = rb * 160 / 1024;
+    gitter(4, 1, 'heck', (u, v) => {
+      const x = (u - 0.5) * rb, y = ry - rh / 2 + v * rh, z = flaecheZ(K, 'hinten', x, y);
+      return [x, y, (z === null ? M.zR : z) + 0.005];
+    }, [0, 0, 1]);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    return g;
+  }
+  /** Canvas-Textur mit dem Schriftzug (nur im Browser; ohne document → null, das Dekor-Mesh bleibt dann unsichtbar). */
+  function polizeiTextur() {
+    if (cache.material.polizeiDekor !== undefined) return cache.material.polizeiDekor;
+    let tex = null;
+    try {
+      if (typeof document !== 'undefined' && THREE.CanvasTexture) {
+        const T = DEKOR_TEX, c = document.createElement('canvas');
+        c.width = T.w; c.height = T.h;
+        const x = c.getContext('2d');
+        x.clearRect(0, 0, T.w, T.h);
+        const BLAU = '#1d4fb0', WEISS = '#f4f6f8';
+        const text = (reg, farbe, breiteAnteil, spiegeln) => {
+          const [y0, y1] = T[reg], hh = y1 - y0;
+          let px = hh * 0.9;
+          x.font = '800 ' + px + 'px "Arial Black", Arial, Helvetica, sans-serif';
+          x.textBaseline = 'middle'; x.textAlign = 'center';
+          const buchst = 'POLIZEI'.split(''), luecke = hh * 0.1;
+          let w = buchst.reduce((a, ch) => a + x.measureText(ch).width, 0) + luecke * (buchst.length - 1);
+          const soll = T.w * breiteAnteil;
+          if (w > soll) { px *= soll / w; x.font = '800 ' + px + 'px "Arial Black", Arial, Helvetica, sans-serif'; w = soll; }
+          let cx = (T.w - w) / 2;
+          x.fillStyle = farbe; x.textAlign = 'left';
+          x.strokeStyle = farbe; x.lineWidth = px * 0.05; x.lineJoin = 'round';
+          buchst.forEach((ch) => { const bw = x.measureText(ch).width, yy = (y0 + y1) / 2 + hh * 0.04; x.strokeText(ch, cx, yy); x.fillText(ch, cx, yy); cx += bw + luecke * (px / (hh * 0.9)); });
+        };
+        text('seite', WEISS, 0.9);
+        // Haube: blaue Schrift mit schmalen Linien darüber/darunter
+        text('haube', BLAU, 0.9);
+        x.fillStyle = BLAU; x.fillRect(T.w * 0.05, T[ 'haube' ][0] + 6, T.w * 0.9, 7); x.fillRect(T.w * 0.05, T['haube'][1] - 13, T.w * 0.9, 7);
+        // Heck: blaue Schrift
+        text('heck', BLAU, 0.88);
+        tex = new THREE.CanvasTexture(c);
+        if (THREE.sRGBEncoding !== undefined && 'encoding' in tex) tex.encoding = THREE.sRGBEncoding;
+        else if (THREE.SRGBColorSpace !== undefined && 'colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = 4;
+      }
+    } catch (e) { tex = null; }
+    cache.material.polizeiDekor = tex;
+    return tex;
+  }
+  function polizeiDekorMaterial() {
+    if (!cache.material.polizeiDekorMat) {
+      const map = polizeiTextur();
+      cache.material.polizeiDekorMat = new THREE.MeshLambertMaterial({ map, transparent: true, depthWrite: false, polygonOffset: true,
+        polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.FrontSide, emissive: 0x4a4a4a });
+      cache.material.polizeiDekorMat.userData.ohneTextur = !map;
+    }
+    return cache.material.polizeiDekorMat;
+  }
+
+  // ------------------------------------------------------------
   // Material, Schatten
   // ------------------------------------------------------------
   function karosserieMaterial() {
@@ -1808,13 +1909,14 @@
     baueAnbauten(S, K);
     if (M.f.blaulicht && !M.f.cabrio) baueBlaulicht(S, BLAU, K);
     const dach = baueDach(M, K);
+    const dekor = M.f.polizeiDekor ? bauePolizeiDekor(M, K) : null;
     const raeder = achsen(M).map((a) => ({
       vorn: a.vorn, z: a.zc, r: a.r, w: a.w, x: halbBreite(M, a.zc, 1) - a.w / 2 - 0.005,   // Rad steht leicht nach außen
       geo: radGeometrie(a.r, a.w, a.vorn ? M.zollV : M.zollH, M.f.felgeFarbe, false, M.f.felgeSpeichen),
     }));
     raeder.forEach((a) => bremssattel(S, a, M));
     return { geo: S.fertig(), sw: SW.map((s) => s.fertig()), bl: BL.map((s) => s.fertig()), buegel: K.buegel ? K.buegel.fertig() : null,
-      blau: M.f.blaulicht && !M.f.cabrio ? BLAU.map((s) => s.fertig()) : [], raeder, M, schatten: null, dach };
+      blau: M.f.blaulicht && !M.f.cabrio ? BLAU.map((s) => s.fertig()) : [], raeder, M, schatten: null, dach, dekor };
   }
 
   /**
@@ -1829,11 +1931,15 @@
       const v = autoDaten.lackVarianten[optionen.lack];
       autoDaten = Object.assign({}, autoDaten, v, v.form ? { form: Object.assign({}, autoDaten.form, v.form) } : {});
     }
+    // 14.10. (v20): optionen.lichtbalken = true → Lichtbalken + Blaulicht auf dem Dach (form.blaulicht), z. B. Streifenwagen = Passat mit lack 'polizei'
+    if (optionen.lichtbalken && !(autoDaten.form && autoDaten.form.blaulicht)) autoDaten = Object.assign({}, autoDaten, { form: Object.assign({}, autoDaten.form, { blaulicht: true }) });
+    else if (optionen.lichtbalken === false && autoDaten.form && autoDaten.form.blaulicht) autoDaten = Object.assign({}, autoDaten, { form: Object.assign({}, autoDaten.form, { blaulicht: false }) });
     // Runde 6 (W3-G): Garage-Lack – bauen(auto, { farbe: 0xff5fb8 }) ersetzt die Hauptfarbe (Formel-Renner: Hauptlack,
     // farbe2 bleibt). Ohne opt/farbe = Katalogfarbe → derselbe Cache-Eintrag wie bisher (Standard-Autos unverändert);
     // die Farbe steht im Cache-Schlüssel, jede Garage-Farbe bekommt also eine eigene Karosserie-Geometrie.
-    if (opt && opt.farbe !== undefined && opt.farbe !== null && Number.isFinite(opt.farbe) && opt.farbe !== autoDaten.farbe) {
-      autoDaten = Object.assign({}, autoDaten, { farbe: opt.farbe >>> 0 });
+    // 14.10. (v20): auch auto.optionen.farbe (Computer-Gegner in anderen Lackfarben) wirkt wie opt.farbe
+    if (optionen.farbe !== undefined && optionen.farbe !== null && Number.isFinite(optionen.farbe) && optionen.farbe !== autoDaten.farbe) {
+      autoDaten = Object.assign({}, autoDaten, { farbe: optionen.farbe >>> 0 });
     }
     const typ = TYP_STANDARD[autoDaten.karosserie] ? autoDaten.karosserie : 'limousine';
     const key = JSON.stringify([autoDaten.id, typ, autoDaten.farbe, autoDaten.farbe2, autoDaten.abmessungen, autoDaten.form,
@@ -1885,6 +1991,14 @@
       g.add(m);
       return m;
     });
+
+    // Polizei-Dekor: ein Mesh mit Canvas-Textur (Schriftzug „POLIZEI“); ohne Canvas (Node-Tests) unsichtbar
+    if (e.dekor) {
+      const dm = new THREE.Mesh(e.dekor, polizeiDekorMaterial());
+      dm.name = 'polizeiDekor'; dm.renderOrder = 1;
+      if (polizeiDekorMaterial().userData.ohneTextur) dm.visible = false;
+      g.add(dm);
+    }
 
     g.add(e.schatten ? schattenMesh(e.M.L, e.M.B, e.schatten[0], e.schatten[1]) : schattenMesh(e.M.L, e.M.B));
 

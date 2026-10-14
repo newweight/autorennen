@@ -11,6 +11,11 @@
 //   (damit es fair wirkt). Nicht wählbar: im Ziel, angehalten, in der Schonfrist, in dieser Runde schon angehalten.
 //   Ist er ≥ naheZeit (1,5 s) am Stück mit Karosserie-Abstand ≤ naheAbstand (6 m, Kapsel zu Kapsel) neben/hinter dem
 //   Ziel, wird es angehalten: stoppDauer (4 s, bis v14: 10 s) gesperrt (Steuerung = Bremse), der Streifenwagen stellt sich daneben.
+//   14.10. (v20) „Immer NEBEN dem Auto“: Parkpose = parallel (gleiche Fahrtrichtung), seitlicher Karosserie-Abstand nebenLuecke (0,8 m),
+//   versatzVor (0,4 m) leicht vor der Ziel-Mitte. Seite (parkSeiteWaehlen): die mit mehr Platz auf der Fahrbahn (also meist zur
+//   Fahrbahnmitte), nicht über den Fahrbahnrand/Bande hinaus, nicht in ein anderes Auto; bei Gleichstand die Seite, auf der er schon fährt.
+//   Fahren: parkSteuerung (Tempo des Ziels angleichen, seitlich einschwenken); ist er nah genug (einparken: ≤ 5 m längs, ≤ 3 m quer),
+//   gleitet er in ~0,5 s weich auf die Parkpose (Position, Richtung, Geschwindigkeit des Ziels) – kein Teleport. Freigabe: normales Weiterfahren.
 //   Danach „Weiterfahren!", schonfrist (30 s) für dieses Auto, neues Ziel. Hat das Ziel einen Schild, platzt nur der
 //   Schild (kein Stopp). Je Auto höchstens 1 Anhaltung pro Runde. Im Looping/Flug/liegengeblieben/festgeklebt: kein Stopp.
 //
@@ -31,7 +36,7 @@
 
   const STANDARD = {
     anzahl: 1, anzahlViele: 2, vieleAb: 6, startHinter: 60, naheAbstand: 6, naheZeit: 1.5, vorZiel: 1, stoppDauer: 4,
-    schonfrist: 30, kiRadius: 300, zielWahl: 1, folgeAbstand: 8, nebenAbstand: 3.8, blinkHz: 4, lichtAbstand: 40,
+    schonfrist: 30, kiRadius: 300, zielWahl: 1, folgeAbstand: 8, nebenLuecke: 0.8, versatzVor: 0.4, einparkRate: 5, blinkHz: 4, lichtAbstand: 40,
     lichtStaerke: 30, lichtReichweite: 14, sireneHoerweite: 120, schwierigkeit: 'meister', autoId: 'polizei',
   };
   function cfg() { return Object.assign({}, STANDARD, (R.config && R.config.polizei) || {}); }
@@ -191,25 +196,98 @@
   // ------------------------------------------------------------
   // Fahren (rein): neben dem angehaltenen Auto parken
   // ------------------------------------------------------------
+  /** Seitlicher Mitten-Abstand Streifenwagen–Ziel: halbe Breiten + Lücke zwischen den Karosserien. */
+  function parkAbstand(z, pBreite, c) { return (z.breite || 1.8) / 2 + (c ? c.nebenLuecke : 0.8) + (pBreite || 1.83) / 2; }
+
+  /** Parkpose neben dem Ziel z (parallel): seite +1 = rechts, −1 = links vom Ziel; D = Mitten-Abstand quer, vor = m vor der Ziel-Mitte. */
+  function parkPose(z, seite, D, vor) {
+    const fx = -Math.sin(z.heading), fz = -Math.cos(z.heading), qx = Math.cos(z.heading), qz = -Math.sin(z.heading);
+    return { x: z.x + qx * seite * D + fx * vor, z: z.z + qz * seite * D + fz * vor, heading: z.heading };
+  }
+
+  /** Lage von Punkt (x, z) im Rahmen des Ziels: längs (vor = +) und quer (rechts = +). */
+  function imZielRahmen(z, x, zz) {
+    const fx = -Math.sin(z.heading), fz = -Math.cos(z.heading), qx = Math.cos(z.heading), qz = -Math.sin(z.heading);
+    return { laengs: (x - z.x) * fx + (zz - z.z) * fz, quer: (x - z.x) * qx + (zz - z.z) * qz };
+  }
+
   /**
-   * Steuerung zum Parkpunkt neben dem Ziel. v = Vehicle des Streifenwagens, z = { x, z, heading } des Ziels,
-   * seite = +1 rechts / −1 links vom Ziel. Steht er (fast) am Punkt oder liegt der Punkt hinter ihm: bremsen/stehen.
+   * Steuerung zur Parkpose neben dem Ziel. v = Vehicle des Streifenwagens, z = Vehicle (oder { x, z, heading }) des Ziels,
+   * seite = +1 rechts / −1 links vom Ziel, D = Mitten-Abstand quer, vor = Versatz nach vorn. Er gleicht das Tempo des Ziels an
+   * (auch beim Abbremsen), schwenkt erst kurz vorher seitlich ein und bleibt dann mit dem Ziel stehen.
    */
-  function parkSteuerung(v, z, seite, neben) {
-    const rx = -Math.sin(z.heading), rz = -Math.cos(z.heading);
-    const qx = -rz, qz = rx;                                     // rechts vom Ziel
-    const px = z.x + qx * seite * neben + rx * 0.5, pz = z.z + qz * seite * neben + rz * 0.5;
-    const dx = px - v.x, dz = pz - v.z, dist = Math.hypot(dx, dz);
+  function parkSteuerung(v, z, seite, D, vor) {
+    vor = vor === undefined ? 0.4 : vor;
+    const p = parkPose(z, seite, D, vor), r = imZielRahmen(z, p.x, p.z), a = imZielRahmen(z, v.x, v.z);
+    const eA = r.laengs - a.laengs, eL = r.quer - a.quer;                   // + = Streifenwagen muss nach vorn / nach rechts
+    const vT = z.vLaengs || 0;
     const halt = { gas: 0, bremse: v.vLaengs > 0.3 ? 1 : 0, lenkung: 0 };
-    if (dist < 1.5) return halt;
-    const soll = Math.atan2(-dx, -dz);                           // heading zum Punkt (Richtung = (−sin h, −cos h))
-    const diff = winkelNorm(soll - v.heading);
-    if (Math.abs(diff) > 1.9) return halt;                       // Punkt hinter ihm: stehen bleiben
-    const lenkung = klemme(-diff * 2.5, -1, 1);                  // links negativ, heading wächst nach links
-    const vSoll = Math.min(14, 0.5 + dist * 1.2) * (Math.abs(diff) > 0.8 ? 0.5 : 1);
+    // Tempo: Tempo des Ziels + Aufholen (weit hinten) bzw. darunter (zu weit vorn)
+    let vSoll = eA > 0 ? vT + Math.min(18, eA * 1.4) : Math.max(0, vT + eA * 1.0);
+    if (Math.abs(vT) < 0.5 && eA > 0) vSoll = Math.min(vSoll, 0.5 + eA * 1.2);       // Ziel steht: sanft heranrollen
+    if (eA < -3 && Math.abs(vT) < 0.5) return halt;                                    // weit vor dem Parkpunkt, Ziel steht: stehen bleiben
+    // Richtung: auf der Ziel-Spur heranfahren, erst die letzten Meter seitlich einschwenken
+    const wicht = eA > 0 ? klemme((16 - eA) / 10, 0.15, 1) : 1;
+    const wunsch = z.heading - klemme(eL * 0.3, -0.5, 0.5) * wicht;
+    const diff = winkelNorm(wunsch - v.heading);
+    const lenkung = klemme(-diff * 2.5, -1, 1);                                        // links negativ, heading wächst nach links
     const e = vSoll - v.vLaengs;
     if (e > 0) return { gas: klemme(e / 2, 0.15, 1), bremse: 0, lenkung };
     return { gas: 0, bremse: e < -1 && v.vLaengs > 0.3 ? klemme(-e / 4, 0.2, 1) : 0, lenkung };
+  }
+
+  /**
+   * Weiches Einparken: ist der Streifenwagen v nah an der Parkpose (≤ 5 m längs, ≤ 3 m quer, Richtung ≤ 35° daneben), gleiten Position,
+   * Richtung und Geschwindigkeit mit Zeitkonstante 1/rate (s) auf Parkpose und Tempo des Ziels. Rückgabe: Restfehler { laengs, quer, winkel }
+   * oder null (noch zu weit weg → nur fahren). Mit z.weltGeschwindigkeit() (Vehicle) folgt er dem Tempo des Ziels.
+   */
+  function einparken(v, z, seite, D, vor, dt, rate) {
+    const p = parkPose(z, seite, D, vor), r = imZielRahmen(z, p.x, p.z), a = imZielRahmen(z, v.x, v.z);
+    const eA = r.laengs - a.laengs, eL = r.quer - a.quer, dw = winkelNorm(z.heading - v.heading);
+    if (Math.abs(eA) > 5 || Math.abs(eL) > 3 || Math.abs(dw) > 0.6) return null;
+    const b = 1 - Math.exp(-(rate || 5) * dt);
+    v.x += (p.x - v.x) * b; v.z += (p.z - v.z) * b;
+    v.heading += dw * b;
+    const w = z.weltGeschwindigkeit ? z.weltGeschwindigkeit() : { x: 0, z: 0 };
+    const u = v.weltGeschwindigkeit ? v.weltGeschwindigkeit() : { x: 0, z: 0 };
+    if (v.weltGeschwindigkeitSetzen) v.weltGeschwindigkeitSetzen(u.x + (w.x - u.x) * b, u.z + (w.z - u.z) * b);
+    return { laengs: eA * (1 - b), quer: eL * (1 - b), winkel: dw * (1 - b) };
+  }
+
+  /**
+   * Seite für den Streifenwagen neben dem Ziel wählen: +1 rechts / −1 links vom Ziel. Gewertet wird der Platz auf der Fahrbahn
+   * (Fahrbahnhälfte − Abstand der äußersten Karosserie-Ecke von der Mitte, an allen 4 Ecken), ein Auto in der Parklücke zählt −4 (knapp daneben −1),
+   * die bisherige Seite +1,5 (kein Hin-und-her, kein Queren durch den Verkehr). strecke braucht abfrage(x, z) oder spline.naechster und breiteBei(s) / breite.
+   * @param z      Ziel { x, z, heading, laenge, breite }
+   * @param p      Streifenwagen { laenge, breite }
+   * @param andere weitere Autos [{ x, z, heading, laenge, breite }] (ohne Ziel und Streifenwagen)
+   * @returns {{seite:number, platz:number, platzAndere:number}} platz = Rand-Reserve der gewählten Seite (m, < 0 = ragt über den Rand)
+   */
+  function parkSeiteWaehlen(strecke, z, p, andere, bisher, c) {
+    const pL = p.laenge || 4.88, pB = p.breite || 1.83, D = parkAbstand(z, pB, c), vor = c ? c.versatzVor : 0.4;
+    const platzFuer = (pose) => {
+      let min = Infinity;
+      const fx = -Math.sin(pose.heading), fz = -Math.cos(pose.heading), qx = Math.cos(pose.heading), qz = -Math.sin(pose.heading);
+      for (const la of [-pL / 2, pL / 2]) for (const qa of [-pB / 2, pB / 2]) {
+        const x = pose.x + fx * la + qx * qa, zz = pose.z + fz * la + qz * qa;
+        let n = null;
+        if (strecke && strecke.abfrage) n = strecke.abfrage(x, zz); else if (strecke && strecke.spline) n = strecke.spline.naechster(x, zz);
+        if (!n) continue;
+        const halb = (strecke.breiteBei ? strecke.breiteBei(n.s) : strecke.breite || 12) / 2;
+        min = Math.min(min, halb - Math.abs(n.seitenabstand));
+      }
+      return min === Infinity ? 99 : min;
+    };
+    let best = null;
+    for (const seite of [1, -1]) {
+      const pose = parkPose(z, seite, D, vor), platz = platzFuer(pose);
+      let pen = 0;
+      const o = { x: pose.x, z: pose.z, heading: pose.heading, laenge: pL, breite: pB };
+      for (const g of andere || []) { const d = kapselAbstand(o, g); if (d < 0.3) pen -= 4; else if (d < 0.8) pen -= 1; }
+      const wert = Math.min(platz, 3) + pen + (seite === bisher && platz >= 0 ? 1.5 : 0);   // Bonus nur, wenn die Seite auf die Fahrbahn passt
+      if (!best || wert > best.wert) best = { seite, platz, platzAndere: pen, wert };
+    }
+    return best;
   }
 
   // ------------------------------------------------------------
@@ -288,7 +366,7 @@
     steuerung(i, dt, rennen) {
       const fz = this.spiel.fahrzeuge, f = fz[i], k = this.idx.indexOf(i), v = f.vehicle, d = f.polizeiFahrer, c = this.c;
       const st = this.logik._s(k), ziel = st.ziel >= 0 ? fz[st.ziel] : null;
-      if (st.phase === 'halt' && ziel) return parkSteuerung(v, ziel.vehicle, this.seite[k], c.nebenAbstand);
+      if (st.phase === 'halt' && ziel) return parkSteuerung(v, ziel.vehicle, this.seite[k], this._parkD(ziel, f), c.versatzVor);
       // Jagd: ist das Ziel ≤ 60 m voraus, langsam auf seine Spur einschwenken (fährt dann hinter ihm her)
       const L = this.spiel.strecke.spline.laenge;
       let dS = Infinity;
@@ -309,6 +387,9 @@
       }
       return s;
     }
+
+    /** Seitlicher Mitten-Abstand Streifenwagen f ↔ Ziel (Fahrzeug-Eintrag). */
+    _parkD(ziel, f) { return parkAbstand({ breite: ziel.vehicle.daten.breite || 1.8 }, f.vehicle.daten.breite || 1.83, this.c); }
 
     /** Streifenwagen festgefahren: 10 m zurück auf die Straßenmitte (freie Stelle). */
     _zuruecksetzen(i) {
@@ -357,7 +438,33 @@
       for (let k = 0; k < this.idx.length; k++) streifen[k] = this._daten(fz[this.idx[k]], streifen[k]);
       const ev = this.logik.schritt(dt, autos, streifen, sp.strecke.spline.laenge);
       for (let e = 0; e < ev.length; e++) this._ereignis(ev[e], autos, streifen);
+      this._einparken(dt);
       return ev;
+    }
+
+    /** Streifenwagen im Halt: nah an der Parkpose → weich auf Parkpose und Tempo des Ziels gleiten (kein Teleport). */
+    _einparken(dt) {
+      const fz = this.spiel.fahrzeuge;
+      for (let k = 0; k < this.idx.length; k++) {
+        const st = this.logik.streifen[k];
+        if (!st || st.phase !== 'halt' || st.ziel < 0) continue;
+        const f = fz[this.idx[k]], z = fz[st.ziel];
+        if (!f || !z) continue;
+        if (einparken(f.vehicle, z.vehicle, this.seite[k], this._parkD(z, f), this.c.versatzVor, dt, this.c.einparkRate)) {
+          f.stehZeit = 0; st.fern = 0;
+        } else {
+          // Parkpose liegt (noch) weit weg: nach 1 s Seite neu bewerten (bisherige Seite zählt mehr) – z. B. wenn Verkehr dazwischen steht
+          st.fern = (st.fern || 0) + dt;
+          if (st.fern > 1) {
+            st.fern = 0;
+            const rz = imZielRahmen(z.vehicle, f.vehicle.x, f.vehicle.z), bisher = rz.quer >= 0 ? 1 : -1, andere = [];
+            this._autos.forEach((a, i) => { if (i !== st.ziel && a) andere.push(a); });
+            this._streifen.forEach((a, j) => { if (j !== k && a) andere.push(a); });
+            const zd = this._autos[st.ziel], pd = this._streifen[k];
+            if (zd && pd) this.seite[k] = parkSeiteWaehlen(this.spiel.strecke, zd, pd, andere, bisher, this.c).seite;
+          }
+        }
+      }
     }
 
     _ereignis(e, autos, streifen) {
@@ -365,7 +472,12 @@
       if (e.art === 'anhalten') {
         const z = autos[e.nr], p = streifen[e.k];
         const rx = -Math.sin(z.heading), rz = -Math.cos(z.heading);
-        this.seite[e.k] = ((p.x - z.x) * -rz + (p.z - z.z) * rx) >= 0 ? 1 : -1;     // auf seiner Seite parken
+        const bisher = ((p.x - z.x) * -rz + (p.z - z.z) * rx) >= 0 ? 1 : -1;
+        const andere = [];
+        for (let i = 0; i < this.n; i++) if (i !== e.nr && autos[i]) andere.push(autos[i]);
+        for (let k = 0; k < streifen.length; k++) if (k !== e.k) andere.push(streifen[k]);
+        // Seite mit Platz (Fahrbahn, keine anderen Autos), sonst die bisherige – siehe parkSeiteWaehlen
+        this.seite[e.k] = parkSeiteWaehlen(sp.strecke, z, p, andere, bisher, this.c).seite;
         this.statistik.anhaltungen.push({ nr: e.nr, zeit: this.logik.zeit, spieler: !!f.istSpieler, runde: z.runde });
         if (f.istSpieler && A && A.polizeiStopp) A.polizeiStopp();
         // Text: HUD-Anzeige „🚨 Polizei! Anhalten… N s" (hud.polizeiSetzen), keine zusätzliche Meldung
@@ -527,5 +639,9 @@
   Polizei.kapselAbstand = kapselAbstand;
   Polizei.vorAbstand = vorAbstand;
   Polizei.parkSteuerung = parkSteuerung;
+  Polizei.parkAbstand = parkAbstand;
+  Polizei.parkPose = parkPose;
+  Polizei.einparken = einparken;
+  Polizei.parkSeiteWaehlen = parkSeiteWaehlen;
   R.Polizei = Polizei;
 })();

@@ -623,12 +623,14 @@
       const katalog = R.carCatalog.waehlbare();   // Polizei (waehlbar: false) weder Spielerwahl noch KI-Gegner
       const spielerIds = opt.autoIds.slice(0, opt.spieler);
       const plaetze = strecke.startpositionen(opt.spieler + opt.gegner);
-      const frei = katalog.filter(a => !spielerIds.includes(a.id));
+      // 14.10. (v20): Computer-Gegner nur aus den 4 Modellen mit der guten Optik (Passat, Multivan, 911, T-Roc), bunt gemischt (Lack, T-Roc: Dach
+      // offen/zu, Lack blau/gulf), deterministisch je Rennen (Seed aus Strecke, Gegnerzahl und Spielerautos; opt.gegnerSeed überschreibt)
+      const gegnerAutos = R.carCatalog.gegnerAutos(opt.gegner, { seed: opt.gegnerSeed !== undefined ? opt.gegnerSeed : [trackId, opt.gegner, spielerIds.join('+')].join('|'), spielerIds });
       const teilnehmer = plaetze.map((p, i) => {
         const istSpieler = i < opt.spieler;
         const auto = istSpieler
           ? (katalog.find(a => a.id === spielerIds[i]) || katalog[0])
-          : (frei.length ? frei[(i - opt.spieler) % frei.length] : katalog[0]);
+          : (gegnerAutos[i - opt.spieler] || katalog[0]);
         // Runde 6 (W3-G): Garage-Werte (Lack, Upgrade-Faktoren) nur für Spieler – die KI nie
         const gw = istSpieler && R.Garage ? R.Garage.fahrzeugWerte(spielerNamen[i], auto.id, opt.upgradesZaehlen !== false) : null;
         const f = this.fahrzeugHinzufuegen(auto, p.x, p.z, p.heading, gw);

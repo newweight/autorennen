@@ -124,13 +124,16 @@ function laufen(lg, autos, st, sek, fn) {
   pruefe('Kapsel-Abstand quer (T) korrekt', Math.abs(P.kapselAbstand({ x: 0, z: 0, heading: 0, laenge: 4.5, breite: 1.8 }, { x: 5, z: 0, heading: Math.PI / 2, laenge: 4.5, breite: 1.8 }) - (5 - 1.35 - 0.9 - 0.9)) < 1e-6);
   [[-1, 'links'], [1, 'rechts']].forEach(([seite, name]) => {
     const v = new R.Vehicle({}); v.setzen(seite * 1.5, 12, 0); v.vLaengs = 8;    // 12 m hinter dem stehenden Ziel
-    const ziel = { x: 0, z: 0, heading: 0 };
+    const ziel = { x: 0, z: 0, heading: 0, breite: 1.8 };
+    const D = P.parkAbstand(ziel, 1.83, C);
     let maxV = 0;
-    for (let k = 0; k < 60 * 12; k++) { v.schritt(dt, P.parkSteuerung(v, ziel, seite, C.nebenAbstand)); maxV = Math.max(maxV, v.vLaengs); }
+    for (let k = 0; k < 60 * 12; k++) { v.schritt(dt, P.parkSteuerung(v, ziel, seite, D, C.versatzVor)); P.einparken(v, ziel, seite, D, C.versatzVor, dt, C.einparkRate); maxV = Math.max(maxV, v.vLaengs); }
     const quer = v.x, laengs = -v.z;
-    pruefe('Park-Steuerung ' + name + ': steht neben dem Ziel (quer ≈ ' + (seite * C.nebenAbstand) + ' m, längs ±2,5 m, Tempo < 0,5)',
-      Math.abs(quer - seite * C.nebenAbstand) < 1.6 && Math.abs(laengs) < 2.5 && Math.abs(v.vLaengs) < 0.5 && P.kapselAbstand({ x: v.x, z: v.z, heading: v.heading, laenge: 4.7, breite: 1.83 }, { x: 0, z: 0, heading: 0, laenge: 4.5, breite: 1.8 }) > 0.2,
-      'x ' + quer.toFixed(2) + ', längs ' + laengs.toFixed(2) + ', v ' + v.vLaengs.toFixed(2) + ', max ' + maxV.toFixed(1));
+    pruefe('Park-Steuerung ' + name + ': steht neben dem Ziel (quer = ' + (seite * D).toFixed(2) + ' m ± 0,1, längs 0,4 ± 0,2, Tempo < 0,5)',
+      Math.abs(quer - seite * D) < 0.1 && Math.abs(laengs - C.versatzVor) < 0.2 && Math.abs(v.vLaengs) < 0.5 && Math.abs(v.heading) < 0.03,
+      'x ' + quer.toFixed(2) + ', längs ' + laengs.toFixed(2) + ', v ' + v.vLaengs.toFixed(2) + ', max ' + maxV.toFixed(1) + ', heading ' + v.heading.toFixed(3));
+    const gap = P.kapselAbstand({ x: v.x, z: v.z, heading: v.heading, laenge: 4.88, breite: 1.83 }, { x: 0, z: 0, heading: 0, laenge: 4.5, breite: 1.8 });
+    pruefe('Park-Steuerung ' + name + ': Karosserie-Abstand 0,6–1 m', gap >= 0.6 && gap <= 1.0, gap.toFixed(2));
   });
   // angehaltenes Auto: haltSteuerung bremst bis zum Stand und fährt NICHT rückwärts
   const v = new R.Vehicle({}); v.setzen(0, 0, 0); v.vLaengs = 30;

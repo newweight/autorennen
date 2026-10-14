@@ -616,7 +616,7 @@ Rennspiel.config = {
   // --- Runde 5b: Polizei (Einstellung `polizei`, Standard aus; Logik + Optik: src/world/polizei.js) ---
   // Streifenwagen (nicht im Rennen) verfolgt den nächsten Spieler vor ihm (KI nur, wenn kein Spieler in kiRadius m);
   // ≥ naheZeit s mit Karosserie-Abstand ≤ naheAbstand m neben/hinter dem Ziel → Ziel stoppDauer s angehalten
-  // (Steuerung = Bremse), danach schonfrist s in Ruhe gelassen; je Auto höchstens 1 Anhaltung pro Runde. Schild platzt statt Stopp.
+  // (Steuerung = Bremse; der Streifenwagen steht parallel NEBEN ihm, v20), danach schonfrist s in Ruhe gelassen; je Auto höchstens 1 Anhaltung pro Runde. Schild platzt statt Stopp.
   polizei: {
     standardAn: false,
     autoId: 'polizei',           // Katalog-Eintrag (Ersatz: Passat in Weiß + eigener Blaulichtbalken)
@@ -631,7 +631,9 @@ Rennspiel.config = {
     kiRadius: 300,               // m: kein Spieler so nah → auch KI-Autos anhalten
     zielWahl: 1,                 // s: so oft wird das Ziel neu gewählt
     folgeAbstand: 8,             // m Mitten-Abstand, ab dem er sich dem Tempo des Ziels anpasst (nicht rammen)
-    nebenAbstand: 3.8,           // m seitlich neben dem angehaltenen Auto
+    nebenLuecke: 0.8,            // m Karosserie-Abstand seitlich neben dem angehaltenen Auto (v20: parallel daneben, vorher 3,8 m Mitte)
+    versatzVor: 0.4,             // m: Streifenwagen-Mitte leicht vor der Ziel-Mitte
+    einparkRate: 5,              // 1/s: weiches Einparken auf die Parkpose (Zeitkonstante 0,2 s)
     blinkHz: 4,                  // Blaulicht blau/rot
     lichtAbstand: 40,            // m: PointLights nur so nah an einer Spieler-Kamera
     lichtStaerke: 30, lichtReichweite: 14,

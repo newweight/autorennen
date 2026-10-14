@@ -326,35 +326,86 @@ window.Rennspiel = window.Rennspiel || {};
       beschreibung: 'Ein echter Rennwagen mit Flügeln: superschnell und klebt in den Kurven wie Kaugummi!',
       generischerName: 'Blau-weißer Formel-Renner',
     },
-    {
+  ];
+
+  // 14.10. (v20): Streifenwagen = Passat Variant (Geometrie des Katalogeintrags 'passat') in Polizei-Lackierung + Lichtbalken.
+  // Nichts am Passat-Eintrag wird verändert: Kopie mit eigener id, Fahrwerte wie der bisherige Streifenwagen (schneller, wendiger).
+  //   optionen { lack: 'polizei', lichtbalken: true }  → carBuilder: lackVarianten.polizei (silber-weiße Grundfarbe, blaue Flächen,
+  //   form.polizeiDekor = Schriftzug „POLIZEI“ als Canvas-Textur auf Seiten, Haube und Heck) + Lichtbalken mit Blaulicht auf dem Dach.
+  //   carBuilder.bauen(auto, { lichtbalken: false, lack: null }) baut ihn ohne Lack und Balken (= Passat-Optik, Fahrwerte der Polizei).
+  //   Weitere Optionen: optionen.farbe (hex) ersetzt den Hauptlack – für Gegner (siehe gegnerAutos unten).
+  (function () {
+    const passat = katalog.find((a) => a.id === 'passat');
+    katalog.push(Object.assign({}, passat, {
       id: 'polizei',
       name: 'Streifenwagen',
-      marke: 'Einsatzwagen', modell: 'Streifenwagen Kombi',
-      farbe: 0xf3f4f1, farbe2: 0x1d4fb0, farbeName: 'Weiß mit blauen Streifen',
-      karosserie: 'kombi',
+      marke: 'Einsatzwagen', modell: 'Passat B8 Variant Streifenwagen',
+      farbe: 0xe8eaed, farbe2: 0x1d4fb0, farbeName: 'Silber-Weiß mit blauen Flächen',
       waehlbar: false,                 // nicht im Spielermenü, kein Computer-Gegner – setzt nur das Spiel ein
-      // Generischer Kombi (kein echtes Behördendesign, kein Wappen, kein Schriftzug); Maße wie ein Mittelklasse-Kombi
-      abmessungen: { laenge: 4.85, breite: 1.85, hoehe: 1.48, radstand: 2.84, ueberhangVorn: 0.90,
-        radRadius: 0.334, radBreite: 0.225, felgeZoll: 17 },
-      // Merkmale: weiß, blau-silberne Seitenstreifen, Blaulichtbalken auf dem Dach (userData.blaulicht)
-      form: {
-        sill: 0.13, nase: 0.49, haubeH: 0.60, guertel: 0.665, deck: 0.70, heckH: 0.70,
-        scheibeUnten: 0.31, dachVorn: 0.45, dachHinten: 0.90, heckscheibeEnde: 0.985, heckTyp: 'steil', dachAbfall: 0.04,
-        frontNeigung: 0.13, heckNeigung: 0.18, eckVorn: 0.28, eckHinten: 0.22, kotfluegel: 0.05, tumble: 0.15,
-        dachreling: false, fensterleiste: 'schwarz', felgeFarbe: 0xc2c7cd, spiegelFarbe: 'schwarz',
-        flankenStreifen: { 2: 'farbe2', 3: 0x98a2ae }, blaulicht: true,
-        licht: { form: 'schmal', x: 0.72, y: 0.49, b: 0.40, h: 0.10 }, tfl: 'linie', grill: 'quer', einlass: 'flach',
-        rueck: { form: 'kombi', y: 0.65, h: 0.08, x0: 0.42, x1: 0.95 }, endrohre: { n: 0 }, spoiler: 'dach',
-        kennzeichenY: 0.26, kennzeichenHY: 0.43,
+      abmessungen: Object.assign({}, passat.abmessungen),
+      optionen: { lack: 'polizei', lichtbalken: true },
+      lackVarianten: {
+        polizei: {
+          farbe: 0xe8eaed, farbe2: 0x1d4fb0, farbeName: 'Silber-Weiß mit blauen Flächen',
+          // Basis = Passat-Form; überschrieben: Seitenstreifen (Ring-Segment 2 blau, 3 silbergrau), Dekor, Fensterrahmen schwarz, kein PASSAT-Schriftzug
+          form: { flankenStreifen: { 1: 'farbe2', 2: 'farbe2' }, polizeiDekor: true, schriftzug: null, fensterRahmen: 'schwarz', fensterleiste: 'schwarz',
+            felgeFarbe: 0xc2c7cd, dachreling: false },
+        },
       },
       fahrwerte: {
         vMax: 62, beschleunigung: 9.5, bremsen: 22, rueckwaertsMax: 8,
-        wendigkeit: 2.0, grip: 0.9, masse: 1700, laenge: 4.85, breite: 1.85,
+        wendigkeit: 2.0, grip: 0.9, masse: 1700, laenge: 4.88, breite: 1.83,
       },
       beschreibung: 'Mit Blaulicht auf dem Dach passt der Streifenwagen auf, dass alle fair fahren.',
       generischerName: 'Streifenwagen',
-    },
-  ];
+    }));
+  })();
+
+  // 14.10. (v20): Computer-Gegner nur aus den 4 Modellen mit der guten Optik (Passat, Multivan, 911, T-Roc), bunt gemischt:
+  //   R.carCatalog.gegnerAutos(anzahl, { seed, spielerIds }) → Array abgeleiteter Katalogeinträge (Katalogeintrag selbst unverändert):
+  //   Object.assign({}, auto, { optionen: { dach, lack, farbe } }) – gleiche id/Fahrwerte, nur Optik (carBuilder.bauen liest auto.optionen).
+  //   Deterministisch: gleicher seed (Text) → gleiches Feld. Modelle reihum in gemischter Reihenfolge, Farben ohne Doppel je Modell
+  //   (solange die Palette reicht) und nie die Standardfarbe eines gleichen Spielerautos; T-Roc: dach 'offen'/'zu' und lack 'blau'/'gulf' gemischt.
+  const GEGNER_MODELLE = ['passat', 'multivan', 'porsche-911', 'troc-cabrio'];
+  const GEGNER_FARBEN = {   // Hauptlack-Alternativen je Modell (hex); null = Katalogfarbe
+    passat: [null, 0xb9bec6, 0x8f1d2c, 0x2a5b9e, 0xf0f0ec],
+    multivan: [null, 0x2f6b4f, 0xc7ccd2, 0x2a4f8a, 0x9c2b2b],
+    'porsche-911': [null, 0xf2c200, 0xd7d9dc, 0xc01f24, 0x2f7d4f],
+  };
+  function hashText(t) { let h = 2166136261 >>> 0; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h >>> 0; }
+  function zufall(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  function gegnerAutos(anzahl, opt) {
+    opt = opt || {};
+    const rnd = zufall(hashText(String(opt.seed === undefined ? 'rennen' : opt.seed)));
+    const spielerIds = opt.spielerIds || [];
+    const modelle = GEGNER_MODELLE.map((id) => katalog.find((a) => a.id === id)).filter(Boolean);
+    const benutzt = {}, liste = [];
+    let reihe = [];
+    for (let j = 0; j < anzahl; j++) {
+      if (!reihe.length) { reihe = modelle.slice(); for (let i = reihe.length - 1; i > 0; i--) { const k = Math.floor(rnd() * (i + 1)); const t = reihe[i]; reihe[i] = reihe[k]; reihe[k] = t; } }
+      const auto = reihe.shift();
+      const o = Object.assign({}, auto.optionen || {});
+      if (auto.id === 'troc-cabrio') {
+        o.dach = rnd() < 0.5 ? 'offen' : 'zu';
+        o.lack = rnd() < 0.5 ? 'blau' : 'gulf';
+      } else if (GEGNER_FARBEN[auto.id]) {
+        const pal = GEGNER_FARBEN[auto.id], zaehler = benutzt[auto.id] || (benutzt[auto.id] = {});
+        // frei = noch nicht vergeben (Standardfarbe nur, wenn kein Spieler dasselbe Modell fährt), sonst die am seltensten vergebene
+        let best = -1, bestN = Infinity;
+        const start = Math.floor(rnd() * pal.length);
+        for (let q = 0; q < pal.length; q++) {
+          const i = (start + q) % pal.length;
+          if (pal[i] === null && spielerIds.includes(auto.id)) continue;
+          const n = zaehler[i] || 0;
+          if (n < bestN) { bestN = n; best = i; }
+        }
+        zaehler[best] = (zaehler[best] || 0) + 1;
+        if (pal[best] !== null) o.farbe = pal[best];
+      }
+      liste.push(Object.assign({}, auto, { optionen: o }));
+    }
+    return liste;
+  }
 
   /** Auto per id holen (oder undefined). */
   function finde(id) {
@@ -370,4 +421,6 @@ window.Rennspiel = window.Rennspiel || {};
   R.carCatalog.KAROSSERIEN = KAROSSERIEN;
   R.carCatalog.finde = finde;
   R.carCatalog.waehlbare = waehlbare;
+  R.carCatalog.gegnerAutos = gegnerAutos;
+  R.carCatalog.GEGNER_MODELLE = GEGNER_MODELLE;
 })();

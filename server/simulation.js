@@ -166,11 +166,12 @@ class Simulation {
     const spielerNamen = spieler.map(s => s.fahrer);
     const computerNamen = R.fahrerComputerNamen(spielerNamen, G);
     const spielerIds = spieler.map(s => s.auto);
-    const frei = katalog.filter(a => !spielerIds.includes(a.id));
     const plaetze = strecke.startpositionen(P + G);
+    // 14.10. (v20): Computer-Füller wie im Einzelspiel nur aus Passat, Multivan, 911, T-Roc (gemischter Lack, T-Roc Dach/Lack); deterministisch je Rennen
+    const gegnerAutos = R.carCatalog.gegnerAutos(G, { seed: [e.streckeId, G, spielerIds.join('+')].join('|'), spielerIds });
     const teilnehmer = plaetze.map((p, i) => {
       const istSpieler = i < P;
-      const auto = istSpieler ? (katalog.find(a => a.id === spielerIds[i]) || katalog[0]) : (frei.length ? frei[(i - P) % frei.length] : katalog[0]);
+      const auto = istSpieler ? (katalog.find(a => a.id === spielerIds[i]) || katalog[0]) : (gegnerAutos[i - P] || katalog[0]);
       const vehicle = new R.Vehicle(auto.fahrwerte, { tempoKlasse: e.tempoKlasse });
       vehicle.setzen(p.x, p.z, p.heading);
       vehicle.y = strecke.hoeheAn(p.x, p.z);
@@ -185,7 +186,7 @@ class Simulation {
       sim.fahrzeuge.push(f);
       return { vehicle, name: istSpieler ? spielerNamen[i] : computerNamen[i - P], istSpieler };
     });
-    this.teilnehmerInfo = teilnehmer.map((t, i) => ({ nr: i, name: t.name, autoId: sim.fahrzeuge[i].auto.id, mensch: t.istSpieler,
+    this.teilnehmerInfo = teilnehmer.map((t, i) => ({ nr: i, name: t.name, autoId: sim.fahrzeuge[i].auto.id, optionen: !t.istSpieler && sim.fahrzeuge[i].auto.optionen ? sim.fahrzeuge[i].auto.optionen : undefined, mensch: t.istSpieler,
       hilfe: sim.fahrzeuge[i].fahrhilfe }));
     const rennen = new R.RaceManager(strecke, teilnehmer, { runden: e.runden });
     sim.rennen = rennen;

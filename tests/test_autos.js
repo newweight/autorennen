@@ -122,7 +122,8 @@ for (const a of R3.carCatalog) {
   pruefe(`${a.id}: form-Objekt vorhanden`, a.form && typeof a.form === 'object');
   const g = R3.carBuilder.bauen(a);
   const u = g.userData;
-  const formel = a.karosserie === 'formel', blau = !!(a.form && a.form.blaulicht);
+  const formel = a.karosserie === 'formel', blau = u.blaulicht.length === 2;   // v20: Streifenwagen = Passat + Option lichtbalken (nicht mehr form.blaulicht im Katalog)
+  const dekor = g.children.some((c) => c.name === 'polizeiDekor');   // v20: Polizei-Schriftzug = 1 Mesh mehr (Canvas-Textur)
   // Formel: keine Scheinwerfer (leer erlaubt); Streifenwagen: zwei Blaulicht-Meshes; alle anderen: blaulicht = []
   pruefe(`${a.id}: userData-Felder`, u.raeder.length === 4 && u.vorderraeder.length === 2 && u.lenkObjekte.length === 2
     && u.bremslichter.length === 2 && u.scheinwerfer.length === (formel ? 0 : 2) && u.autoId === a.id && !!u.bremslichtMaterial
@@ -152,8 +153,8 @@ for (const a of R3.carCatalog) {
   console.log('  ' + a.id.padEnd(16) + String(tris).padStart(7) + String(meshes).padStart(8) + '   ' +
     [L, Bu, H].map((x) => x.toFixed(2)).join('/') + '  vs ' + [ab.laenge, ab.breite, ab.hoehe].join('/'));
   pruefe(`${a.id}: Dreiecke 1.500 .. 8.000`, tris >= 1500 && tris <= 8000, String(tris));
-  pruefe(`${a.id}: höchstens 12 Meshes`, meshes <= 12, String(meshes));
-  const sollMeshes = formel ? 8 : blau ? 12 : (a.form && a.form.dach ? 12 : 10);   // 14.10. (v20): Cabrio mit Verdeck = +Dach-Mesh +Überrollbügel-Mesh
+  pruefe(`${a.id}: höchstens ${dekor ? 13 : 12} Meshes`, meshes <= (dekor ? 13 : 12), String(meshes));
+  const sollMeshes = (formel ? 8 : blau ? 12 : (a.form && a.form.dach ? 12 : 10)) + (dekor ? 1 : 0);   // 14.10. (v20): Cabrio mit Verdeck = +Dach-Mesh +Überrollbügel-Mesh
   pruefe(`${a.id}: Meshzahl je Typ (${sollMeshes})`, meshes === sollMeshes, String(meshes));
   const nah = (ist, soll) => Math.abs(ist / soll - 1) <= 0.08;
   // Höhe: beim Streifenwagen kommt der Blaulichtbalken (~0,19 m) aufs Dach
