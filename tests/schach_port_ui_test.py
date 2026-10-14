@@ -212,6 +212,9 @@ with sync_playwright() as p:
     pruefe('Weiß = Ersteller, Schwarz sieht von Schwarz', not ev(a, '__schach.S.vonSchwarz') and ev(c, '__schach.S.vonSchwarz'))
     pruefe('Status: Du bist am Zug / wartet', 'Du bist am Zug' in stat(a) and 'am Zug' in stat(c), (stat(a), stat(c)))
     shot(a, '27_online_spiel_weiss'); shot(c, '28_online_spiel_schwarz')
+    for sp_ in (a, c):
+        if ev(sp_, '__schach.S.use3D'): sp_.click('#b-3d'); sp_.wait_for_timeout(500)
+    pruefe('Online: 3D/2D lokal wählbar (hier 2D, schneller im Test)', not ev(a, '__schach.S.use3D') and not ev(c, '__schach.S.use3D'))
     # Schwarz darf nicht ziehen
     zug(c, 'e7e5', warten=False); c.wait_for_timeout(500); pruefe('Schwarz kann nicht außer der Reihe ziehen', hist(c) == [], hist(c))
     zug(a, 'e2e4'); c.wait_for_timeout(1500); frei(c)
@@ -220,6 +223,7 @@ with sync_playwright() as p:
     pruefe('Gegenzug kommt an', hist(a) == ['e2e4', 'e7e5'], hist(a))
     # Wiederverbinden (Reload von A)
     a.reload(timeout=90000); a.wait_for_selector('#status', timeout=30000); a.wait_for_timeout(1500); frei(a)
+    if ev(a, '__schach.S.use3D'): a.click('#b-3d'); a.wait_for_timeout(500)
     pruefe('Wiederverbinden nach Reload', hist(a) == ['e2e4', 'e7e5'] and ev(a, '__schach.S.online'), hist(a))
     # Schnelles Matt: Schäfermatt (nach e4 e5)
     for sp_, u in ((a, 'f1c4'), (c, 'b8c6'), (a, 'd1h5'), (c, 'g8f6'), (a, 'h5f7')):
