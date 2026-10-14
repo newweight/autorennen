@@ -10,7 +10,8 @@
 # Nach jeder neuen Spielversion nochmal doppelklicken.
 P="$HOME/Documents/Autorennen-Projekt"; U=autorennen; UH="/Users/$U"; LABEL="de.newweight.autorennen"
 SLABEL="de.newweight.autorennen.schalter"; STEU="/Users/Shared/autorennen-steuerung"; HELFER="/Library/PrivilegedHelperTools/$SLABEL"; SSTATE="/var/db/autorennen-schalter"
-TS="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+# Tailscale-CLI: zuerst Homebrew-tailscaled (Systemdienst, läuft vor der Anmeldung), sonst alte App
+TS=""; for _k in /opt/homebrew/bin/tailscale /usr/local/bin/tailscale /Applications/Tailscale.app/Contents/MacOS/Tailscale; do [ -x "$_k" ] && { TS="$_k"; break; }; done; [ -n "$TS" ] || TS="/opt/homebrew/bin/tailscale"
 V=$(grep -o 'Autorennen-Versionen/[^"]*' "$P/🚗 Autorennen NEUESTE starten.command" | head -1)
 [ -z "$V" ] && { echo "❌ Neueste Version nicht gefunden."; read -r -p "Enter …" _; exit 1; }
 echo "🔑 Einmal dein Mac-Passwort (für Benutzer + Systemdienst):"; sudo -v || exit 1
@@ -62,7 +63,7 @@ EOS
 else
   STEUARG=""; echo "⚠️  Helfer-Skript nicht gefunden/fehlerhaft ($HSRC) – Internet-Schalter im Spiel bleibt aus (Doppelklick-Dateien gehen weiter)."
 fi
-NAME=$("$TS" status --json 2>/dev/null | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null)
+NAME=$(sudo "$TS" status --json 2>/dev/null | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null)
 ADRESSE="https://${NAME:-mac-mini-von-sebastian.tail39c1c2.ts.net}:10000/"
 sudo tee /Library/LaunchDaemons/$LABEL.plist >/dev/null <<EOP
 <?xml version="1.0" encoding="UTF-8"?>
@@ -84,7 +85,7 @@ sudo launchctl bootstrap system /Library/LaunchDaemons/$LABEL.plist
 [ -n "$STEUARG" ] && sudo launchctl bootstrap system /Library/LaunchDaemons/$SLABEL.plist
 # Server intern auf 8444, Tailscale leitet :10000 → 127.0.0.1:8444 (seit 14.10.: Port 8443 gehört einem anderen Projekt!)
 # Umzug: alte Autorennen-Freigabe auf :8443 entfernen – NUR wenn sie nachweislich auf 127.0.0.1:8444 (= Autorennen) zeigt.
-ALT=$("$TS" serve status --json 2>/dev/null | /usr/bin/python3 -c '
+ALT=$(sudo "$TS" serve status --json 2>/dev/null | /usr/bin/python3 -c '
 import sys, json
 try:
     d = json.load(sys.stdin)
@@ -98,14 +99,14 @@ for host, cfg in web.items():
                 print("ja")
 ' 2>/dev/null)
 if [ "$ALT" = "ja" ]; then
-  "$TS" funnel --https=8443 off >/dev/null 2>&1; "$TS" serve --https=8443 off >/dev/null 2>&1
+  sudo "$TS" funnel --https=8443 off >/dev/null 2>&1; sudo "$TS" serve --https=8443 off >/dev/null 2>&1
   echo "🔁 Alte Autorennen-Freigabe auf Port 8443 entfernt (Port 8443 ist jetzt frei für das andere Projekt)."
 else
   echo "ℹ️  Port 8443 nicht angefasst (gehört nicht dem Autorennen)."
 fi
 # Tailscale: Internet (Funnel) AUS, nur eigenes Tailnet (Serve) AN
-"$TS" funnel --https=10000 off >/dev/null 2>&1
-"$TS" serve --bg --https=10000 http://127.0.0.1:8444 >/dev/null 2>&1 && echo "🔒 Zugang nur im eigenen Tailscale-Netz." || echo "⚠️ tailscale serve fehlgeschlagen"
+sudo "$TS" funnel --https=10000 off >/dev/null 2>&1
+sudo "$TS" serve --bg --https=10000 http://127.0.0.1:8444 >/dev/null 2>&1 && echo "🔒 Zugang nur im eigenen Tailscale-Netz." || echo "⚠️ tailscale serve fehlgeschlagen"
 for i in $(seq 1 30); do curl -s -o /dev/null http://localhost:8444/ && break; sleep 1; done
 echo ""
 if curl -s -o /dev/null http://localhost:8444/; then

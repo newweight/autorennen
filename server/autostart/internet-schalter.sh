@@ -27,7 +27,7 @@ export PATH=/usr/bin:/bin:/usr/sbin:/sbin
 umask 077
 
 # --- Einstellungen (Zeilen mit #TEST werden NUR in der Testkopie ersetzt, tests/test_schalter.sh) ---
-TS="/Applications/Tailscale.app/Contents/MacOS/Tailscale"   #TEST
+TS="AUTO"                                                   #TEST
 STEU="/Users/Shared/autorennen-steuerung"                   #TEST
 STATE="/var/db/autorennen-schalter"                         #TEST
 SPIELER="autorennen"                                        #TEST
@@ -37,6 +37,13 @@ AUTO_AUS_S=14400                                            # 4 Stunden
 LOKAL="http://127.0.0.1:8444"
 PORT_HTTPS="10000"
 
+# Tailscale-CLI suchen: zuerst Homebrew-tailscaled (Systemdienst, läuft schon vor der Anmeldung), sonst alte App
+if [ "$TS" = "AUTO" ]; then
+  TS=""
+  for _k in /opt/homebrew/bin/tailscale /usr/local/bin/tailscale /Applications/Tailscale.app/Contents/MacOS/Tailscale; do
+    [ -x "$_k" ] && { TS="$_k"; break; }
+  done
+fi
 OS=$(uname)
 st_eigner() { if [ "$OS" = Darwin ]; then stat -f '%Su' "$1"; else stat -c '%U' "$1"; fi; }
 st_groesse() { if [ "$OS" = Darwin ]; then stat -f '%z' "$1"; else stat -c '%s' "$1"; fi; }

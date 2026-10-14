@@ -17,10 +17,12 @@
 //   Die Spiel-Höchstgeschwindigkeiten (carCatalog.js) sind höher als bei den echten Autos; deshalb wird die Übersetzung so gelegt,
 //   dass der höchste Gang bei vMax die Drehzahl `rpmVmax` ergibt (Annahme), die tieferen Gänge folgen der Spreizung.
 //
-//  passat      VW Passat Variant B8 Facelift 2.0 TDI: 4 Zyl. Reihe, Diesel, 1968 cm³, 150 PS bei 3500–4000/min, 360 Nm bei 1600–2750/min,
-//              7-Gang-DSG, Vmax lt. Hersteller 210 km/h.   Quelle: auto-data.net
-//              https://www.auto-data.net/en/volkswagen-passat-variant-b8-facelift-2019-2.0-tdi-150hp-dsg-39226
-//              Annahmen: Leerlauf 800, Abregeln ~4500 (wie rote Zone im Cockpit), Schaltpunkt Volllast 3900 (frühes Schalten), Übersetzung geometrisch (Spreizung ~6,3).
+//  passat      VW Passat Variant B8 Facelift 2.0 TDI 200 PS (Wunsch Sebastian 14.10.: „Passat 200 PS TDI“): 4 Zyl. Reihe, Diesel, 1968 cm³,
+//              200 PS (147 kW) bei ca. 3600–4000/min, 400 Nm bei 1750–3500/min, 7-Gang-DSG, 4MOTION.
+//              Quellen: Nachfolger B9 2.0 TDI 4MOTION DSG 142 kW, 400 Nm bei 1750/min, 7 Gänge (autohled.cz:
+//              https://www.autohled.cz/de/a/volkswagen/passat-variant/variant-2-0-tdi-4motion-dsg-3957312); 200-PS-Wert des B8 laut Sebastian.
+//              Annahmen: Leerlauf 800, Abregeln ~4800, Schaltpunkt Volllast 4100, etwas mehr Turbo und weniger Nageln als der 150-PS-Bus.
+//              (Vorher 150-PS-Profil – Sicherung tests/sicherung_motorsound_alt/ bzw. Git 48f75bd.)
 //  polizei     = Passat-Basis (gleicher Motor, `waehlbar: false`) → Profil passat.
 //  multivan    VW Multivan: 2.0 TDI 150 PS (Katalog: „T6.1 Multivan Edition“ – der Auftrag nannte T7; beide haben denselben 4-Zyl.-Diesel):
 //              T7: 1968 cm³, 150 PS bei 3000–3750/min, 360 Nm bei 1600–2750/min, 7-Gang-DSG, Vmax 190 km/h.
@@ -76,13 +78,13 @@
   const P = {};
 
   P.passat = {
-    id: 'passat', name: 'VW Passat Variant 2.0 TDI', bauart: 'Reihen-4 Diesel', zyl: 4, hubraum: 1968, ps: 150,
-    leerlauf: 800, rpmMax: 4500, rpmVmax: 3700, startRpm: 2000, hoch: 2200, hochVoll: 3900, runter: 1300,
+    id: 'passat', name: 'VW Passat Variant 2.0 TDI 200 PS', bauart: 'Reihen-4 Diesel', zyl: 4, hubraum: 1968, ps: 200,
+    leerlauf: 800, rpmMax: 4800, rpmVmax: 3900, startRpm: 2000, hoch: 2300, hochVoll: 4100, runter: 1300,
     gaenge: stufen(7, 3.9, 0.62), schaltZeit: 0.16, steigK: 12, fallK: 9,
     wave: { slope: 1.15, odd: 1, bump: [4, 2.5, 1.0] }, halb: 0.40, beat: 0.004, wobble: 7,
-    klopf: 1.65, klopfHz: 1700, klopfQ: 0.9, klopfDuty: 0.12,
+    klopf: 1.45, klopfHz: 1700, klopfQ: 0.9, klopfDuty: 0.12,
     formant: { hz: 380, db: 4, q: 1.0 }, cut0: 520, cut1: 900, cutGas: 500,
-    turbo: 0.25, knallen: 0, pegel: 1.0,
+    turbo: 0.32, knallen: 0, pegel: 1.0,
   };
   P.polizei = Object.assign({}, P.passat, { id: 'polizei', name: 'Streifenwagen (Passat-Basis)' });
 

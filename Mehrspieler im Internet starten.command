@@ -18,7 +18,8 @@ fi
 
 PORT=8444
 HTTPS_PORT=10000   # Tailscale-Port (8443 gehört seit 14.10. einem anderen Projekt)
-TS="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+# Tailscale-CLI: zuerst Homebrew-tailscaled (Systemdienst, läuft vor der Anmeldung), sonst alte App
+TS=""; for _k in /opt/homebrew/bin/tailscale /usr/local/bin/tailscale /Applications/Tailscale.app/Contents/MacOS/Tailscale; do [ -x "$_k" ] && { TS="$_k"; break; }; done; [ -n "$TS" ] || TS="/opt/homebrew/bin/tailscale"
 ADRESSE="https://mac-mini-von-sebastian.tail39c1c2.ts.net:$HTTPS_PORT/"
 
 NODE=""

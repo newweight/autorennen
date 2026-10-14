@@ -519,7 +519,7 @@ if (require.main === module) {
     console.log('🏎️  Jonas Hot Steering Wheel – Mehrspieler-Server läuft (Port ' + s.port + ')');
     console.log('   Auf diesem Mac:        http://localhost:' + s.port);
     netz.forEach(ip => console.log('   Im Heimnetz (WLAN):    http://' + ip + ':' + s.port));
-    console.log('   Übers Internet:        /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --https=' + s.port + ' ' + s.port + '   (siehe server/README.md)');
+    console.log('   Übers Internet:        sudo /opt/homebrew/bin/tailscale funnel --https=' + s.port + ' ' + s.port + '   (siehe server/README.md)');
     if (steuerung) console.log('   Internet-Schalter:     an (Ordner ' + steuerung + ')');
     if (oeffentlich) console.log('   Öffentliche Adresse:   ' + oeffentlich + '   (Link/QR in der Lobby)');
     console.log('   Beenden: Ctrl+C (oder Fenster schließen)');
