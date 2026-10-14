@@ -1,8 +1,12 @@
-# Mehrspieler-Protokoll (W5, Version 2)
+# Mehrspieler-Protokoll (W5, Version 3)
 
 WebSocket unter **`/ws`** (gleiche Adresse wie das Spiel; `wss:` hinter HTTPS/Tailscale Funnel, `ws:` lokal).
 Jede Nachricht ist **ein JSON-Objekt** mit dem Typ in `t`. Gemeinsame Konstanten/Helfer: `src/net/protokoll.js`
 (`Rennspiel.Netz`, wird von Browser **und** Server geladen).
+
+**Version 3 (14.10., v19)** ist zu Version 2 rein *additiv*: drei neue Nachrichten für den **Internet-Schalter** (s. u. „Internet-Schalter“). Ein Version-2-Server
+antwortet auf `schalterFrage` mit `fehler`; darum fragt der Browser nur, wenn `hallo.v ≥ 3` ist. Ein Version-2-Browser kennt die Nachrichten nicht und ignoriert `schalter`.
+`hallo.v` meldet 3.
 
 **Version 2 (13.10., v16)** ist zu Version 1 rein *additiv*: im Zustand-Teil `ich` kommt das optionale Feld **`sz`** dazu (s. u.). Es gibt keine
 Versionsprüfung – ein Version-1-Browser ignoriert `sz` und verhält sich wie vorher (`so` bleibt unverändert), ein Version-2-Browser an einem
@@ -40,6 +44,8 @@ Host trennt/verlässt → Raum zu (alle Gäste: raumZu). Gast trennt im Rennen �
 | `geladen` | – | Browser hat die Szene gebaut; wenn alle da sind, läuft das Rennen (Countdown) |
 | `eingabe` | `n` (Folge-Nr, +1 je Schritt), `g` 0..100, `b` 0..100, `l` −100..100, `i:1` Item, `r:1` Reset | 60×/s im Rennen; ältere/doppelte `n` werden verworfen |
 | `zurLobby` | – | nur Host, im Zustand `ergebnis` |
+| `schalterFrage` | – | (v3) Status des Internet-Schalters; Antwort immer `schalter` |
+| `schalterUmschalten` | `an` (bool; nur ein echtes `true` = AN, alles andere = AUS) | (v3) Internet für Freunde an/aus wünschen; nur mit Recht, höchstens 1× je 5 s; Antwort `schalter` |
 
 `einstellungen`: `streckeId`, `welt`, `variante`, `runden`, `gegner` (Computer, 0 … 12 − Menschen), `schwierigkeit`,
 `tempoKlasse`, `jahreszeit` (auch `zufall`), `wetter` (auch `zufall`), `windStaerke`, `tageszeit`, `hindernisMenge`,
@@ -72,6 +78,7 @@ Warteschlange (> 20 gepuffert → die ältesten werden verworfen, Item/Reset-Fla
 | `ergebnis` | `runden`, `zeilen: [{ platz, nr, name, mensch, weg, autoId, zeit (null = unterwegs), beste, runden }]` |
 | `fehler` | `grund` (`json`, `unbekannt`, `keinRaum`, `voll`, `laeuft`, `nurHost`, `nichtBereit`, `fahrerVergeben`, `ungueltig`, `intern`), `text` (für Kinder lesbar) |
 | `verlassen` | Bestätigung |
+| `schalter` | (v3) ohne Recht **immer genau** `{ t:'schalter', recht:false }` (auch wenn die Funktion ganz aus ist – verrät nichts). Mit Recht: `{ recht:true, funnel:'an'\|'aus'\|'unbekannt', rest: Sekunden bis Auto-Aus \| null, wartet: bool, fehler?: 'zuSchnell'\|'schreiben' }` |
 
 ### `zustand`
 
@@ -121,3 +128,27 @@ Schaden ist online aus, darum steht er nicht im Zustand.
   in der Vorhersage geradeaus (Lenken/Gasgeben in den letzten ~100 ms kennt sie nicht), mehr als 90 Schritte (1,5 s) Abstand zum
   letzten Zustand → keine Stöße mehr in der Vorhersage; die gezeichneten anderen Autos sind ~100 ms + Ping/2 „hinter" dem eigenen
   (vorhergesagten) Wagen, der Stoß sieht deshalb leicht versetzt aus. Sinnvoll bei Ping < 100 ms.
+
+## Internet-Schalter (v3, 14.10.)
+
+„🌐 Internet für Freunde“ (Tailscale Funnel) lässt sich im Spiel (🌐 Online, Startansicht) an/aus schalten – **nur von Geräten im eigenen Tailnet**.
+Der Spielserver führt dafür **nie** einen Befehl aus. Er läuft nur mit `--steuerung <Ordner>` (ohne = Funktion aus, jede Anfrage → `recht:false`):
+
+```
+Browser ──schalterUmschalten──▶ Spielserver (Benutzer „autorennen“) ──schreibt──▶ <Ordner>/wunsch.json {"funnel":"an"|"aus","seit":<ms>}
+                                                                                       │ (alle 5 s, streng geprüft)
+Browser ◀──schalter (Status)── Spielserver ◀──liest── <Ordner>/status.json ◀── root-Helfer internet-schalter.sh ──▶ Tailscale-CLI
+                                                    {"funnel":"an"|"aus","bis":<ms>|null,"zeit":<ms>}
+```
+
+**Recht** (einmal beim WebSocket-Upgrade entschieden, `schalterRecht()` in `server.js`): Quelladresse 127.0.0.1/::1 (= Tailscale-Proxy) **und** Header
+`Tailscale-User-Login` genau einmal und unauffällig **und** kein `Tailscale-Funnel-Request` **und** (falls `X-Forwarded-For` da) nur Tailscale-Adressen
+(100.64.0.0/10, fd7a:115c:a1e0::/48) **und** (falls `Origin` da, Browser senden ihn immer) Origin = `Host` / `X-Forwarded-Host` / `--oeffentlich`
+(Schutz gegen fremde Webseiten, die im Browser eines Tailnet-Geräts eine Verbindung öffnen). Tagged Devices bekommen von Tailscale keinen Login-Header → kein Recht.
+Die Identität wird weder gespeichert noch protokolliert.
+
+**Wunsch-Datei** immer exakt `{"funnel":"an","seit":1760000000000}` (kein Leerzeichen, `seit` = Server-Zeit in ms); der Helfer nimmt nur diese Form.
+**Status** gilt nur, wenn `zeit` höchstens 30 s alt ist (der Helfer schreibt alle ~5 s), sonst `funnel:'unbekannt'` (Helfer läuft nicht) → Browser zeigt keinen Knopf.
+`wartet:true` = Wunsch ist raus, Helfer hat den Status noch nicht angepasst (bis 20 s). Rate-Limit: 1 Umschaltung je 5 s für alle Verbindungen zusammen
+(`fehler:'zuSchnell'`); `fehler:'schreiben'` = Wunsch-Datei nicht beschreibbar.
+Browser: Zeile erscheint nur bei `recht:true`; Einschalten verlangt einen zweiten Tipp (5 s, „Sicher? …“), Ausschalten sofort; Taste **I**.

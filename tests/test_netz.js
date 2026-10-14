@@ -10,6 +10,8 @@
 //  F) Gast trennt mitten im Rennen → Auto fährt als Computer weiter, Host bekommt „weg“, Rennen endet mit Ergebnis
 //  G) Host trennt → Raum zu, Gast bekommt raumZu; max. 6 Spieler je Raum
 //  H) Ping auf localhost (gemessene Latenz)
+//  J) v19 Internet-Schalter (Protokoll 3): Recht nur über Tailnet-Header von 127.0.0.1 (nicht ohne, nicht gefälscht von fremder Adresse, nicht über Funnel),
+//     Wunsch-Datei exakt geschrieben, Status gelesen, Rate-Limit, ohne --steuerung aus, Zusammenspiel mit dem root-Helfer (Testkopie, Stub-Tailscale)
 //  M) v16 Sonder-Vorhersage (Kleber, Anlauf-Bremse, Schanze/Flug, Looping, Looping-Absturz): Anzeige-Fehler und -Sprünge im Sonderzustand,
 //     v15 (opt.sonderVorhersage:false) gegen neu, Zustände 100/200 ms verzögert; M2: Ende-zu-Ende in Echtzeit mit Zittern (Fantasie-Looping).
 //     Kurztest nur der synchronen Blöcke: NETZ_NUR_SYNC=1 node tests/test_netz.js
@@ -804,6 +806,165 @@ if (process.env.NETZ_NUR_SYNC) { console.log(`\n${ok} OK, ${fehler} FEHL (nur di
     ws.terminate();
     await s2.schliessen();
     pruefe('I öffentliche Adresse ' + wert + ' → Lobby ' + (soll ? 'meldet ' + soll : 'ohne Adresse (abgewiesen)'), !!lobby && lobby.oeffentlich === soll, lobby && lobby.oeffentlich);
+  }
+
+
+  // ---------------------------------------------------------------- J) Internet-Schalter (Protokoll 3)
+  {
+    const fs = require('fs'), os = require('os'), cp = require('child_process');
+    const { schalterRecht } = require('../server/server');
+    const TAIL = { 'tailscale-user-login': 'sebastian@example.com', 'tailscale-user-name': 'Sebastian' };
+    const ordner = fs.mkdtempSync(path.join(os.tmpdir(), 'steuerung-'));
+    const wunschDatei = path.join(ordner, 'wunsch.json');
+    const statusSchreiben = (funnel, bis, zeit) => fs.writeFileSync(path.join(ordner, 'status.json'), `{"funnel":"${funnel}","bis":${bis},"zeit":${zeit}}`);
+    /** Verbindung mit eigenen Upgrade-Headern; liefert frage(nachricht) → nächste „schalter“-Antwort. */
+    const mitHeadern = (port, headers, host) => new Promise((ok, nein) => {
+      const ws = new WebSocket('ws://' + (host || '127.0.0.1') + ':' + port + '/ws', { headers });
+      const wartende = [];
+      ws.on('message', (d) => { const m = JSON.parse(d); if (m.t === 'hallo') return; if (m.t === 'schalter' && wartende.length) wartende.shift()(m); });
+      ws.on('open', () => ok({ ws, frage: (obj) => new Promise((r) => { wartende.push(r); ws.send(JSON.stringify(obj)); setTimeout(() => r(null), 2000); }) }));
+      ws.on('error', nein);
+    });
+
+    // 1) ohne --steuerung: Funktion aus, auch mit Tailnet-Header
+    const sA = await starten({ port: 0, host: '127.0.0.1', leise: true });
+    let k = await mitHeadern(sA.port, TAIL);
+    let a = await k.frage({ t: 'schalterFrage' });
+    pruefe('J1 ohne --steuerung: Schalter aus (recht:false), auch mit Tailnet-Header', a && a.recht === false && Object.keys(a).length === 2, JSON.stringify(a));
+    a = await k.frage({ t: 'schalterUmschalten', an: true });
+    pruefe('J1b ohne --steuerung: Umschalten wirkungslos', a && a.recht === false && !fs.existsSync(wunschDatei));
+    k.ws.terminate(); await sA.schliessen();
+
+    // 2) mit --steuerung
+    const s = await starten({ port: 0, host: '127.0.0.1', leise: true, steuerung: ordner, oeffentlich: 'https://mac-mini.tail1.ts.net:8443/' });
+    k = await mitHeadern(s.port, {});
+    a = await k.frage({ t: 'schalterFrage' });
+    pruefe('J2 ohne Tailnet-Header: kein Recht, Antwort verrät nichts', a && a.recht === false && Object.keys(a).length === 2, JSON.stringify(a));
+    a = await k.frage({ t: 'schalterUmschalten', an: true });
+    pruefe('J2b ohne Recht: Umschalten schreibt keine Wunsch-Datei', a && a.recht === false && !fs.existsSync(wunschDatei));
+    k.ws.terminate();
+
+    k = await mitHeadern(s.port, Object.assign({ 'tailscale-funnel-request': '?1' }, TAIL));
+    a = await k.frage({ t: 'schalterFrage' });
+    pruefe('J3 Funnel-Header (auch mit Login): kein Recht', a && a.recht === false);
+    a = await k.frage({ t: 'schalterUmschalten', an: true });
+    pruefe('J3b Funnel: Umschalten wirkungslos', a && a.recht === false && !fs.existsSync(wunschDatei));
+    k.ws.terminate();
+
+    k = await mitHeadern(s.port, Object.assign({ origin: 'https://boese-seite.example' }, TAIL));
+    a = await k.frage({ t: 'schalterFrage' });
+    pruefe('J4 fremder Origin (Webseite im Tailnet-Browser): kein Recht', a && a.recht === false);
+    k.ws.terminate();
+
+    k = await mitHeadern(s.port, Object.assign({ origin: 'https://mac-mini.tail1.ts.net:8443' }, TAIL));
+    a = await k.frage({ t: 'schalterFrage' });
+    pruefe('J4b Origin = öffentliche Tailnet-Adresse: Recht', a && a.recht === true);
+    k.ws.terminate();
+
+    k = await mitHeadern(s.port, TAIL);
+    a = await k.frage({ t: 'schalterFrage' });
+    pruefe('J5 Tailnet-Header von 127.0.0.1, kein status.json: Recht, Status „unbekannt“', a && a.recht === true && a.funnel === 'unbekannt' && a.rest === null && a.wartet === false, JSON.stringify(a));
+    statusSchreiben('an', Date.now() + 3700000, Date.now());
+    a = await k.frage({ t: 'schalterFrage' });
+    pruefe('J6 status.json „an“ → funnel an, Rest ≈ 3700 s', a && a.funnel === 'an' && a.rest >= 3690 && a.rest <= 3700, JSON.stringify(a));
+    statusSchreiben('aus', 'null', Date.now());
+    a = await k.frage({ t: 'schalterFrage' });
+    pruefe('J6b status.json „aus“ → funnel aus, rest null', a && a.funnel === 'aus' && a.rest === null);
+    statusSchreiben('an', Date.now() + 1000, Date.now() - 60000);
+    a = await k.frage({ t: 'schalterFrage' });
+    pruefe('J6c veralteter Status (60 s) → unbekannt', a && a.funnel === 'unbekannt');
+    for (const kaputt of ['{"funnel":"an; rm -rf /","bis":null,"zeit":' + Date.now() + '}', 'müll', '{"funnel":"an","bis":null,"zeit":' + Date.now() + ',"x":1}', '']) {
+      fs.writeFileSync(path.join(ordner, 'status.json'), kaputt);
+      a = await k.frage({ t: 'schalterFrage' });
+      if (!(a && a.funnel === 'unbekannt')) { pruefe('J6d kaputter Status → unbekannt', false, kaputt); break; }
+    }
+    pruefe('J6d kaputte/bösartige status.json → unbekannt', true);
+
+    // Umschalten: Wunsch-Datei exakt
+    statusSchreiben('aus', 'null', Date.now());
+    const t0 = Date.now();
+    a = await k.frage({ t: 'schalterUmschalten', an: true });
+    const roh = fs.readFileSync(wunschDatei, 'utf8'), mm = /^\{"funnel":"an","seit":(\d{13})\}$/.exec(roh);
+    pruefe('J7 Umschalten AN: wunsch.json exakt {"funnel":"an","seit":<ms>}', !!mm && +mm[1] >= t0 && +mm[1] <= Date.now(), roh);
+    pruefe('J7b Antwort: recht, „wartet“ (Status noch aus)', a && a.recht === true && a.wartet === true && !a.fehler, JSON.stringify(a));
+    a = await k.frage({ t: 'schalterUmschalten', an: false });
+    pruefe('J8 Rate-Limit: zweites Umschalten sofort → zuSchnell, Datei unverändert', a && a.fehler === 'zuSchnell' && fs.readFileSync(wunschDatei, 'utf8') === roh);
+    a = await k.frage({ t: 'schalterFrage' });
+    pruefe('J8b Abfragen sind nicht begrenzt', a && a.recht === true);
+    // Rate-Limit gilt für alle Verbindungen zusammen
+    const k2 = await mitHeadern(s.port, TAIL);
+    a = await k2.frage({ t: 'schalterUmschalten', an: false });
+    pruefe('J8c Rate-Limit gilt auch für eine zweite Verbindung', a && a.fehler === 'zuSchnell');
+    k2.ws.terminate();
+    await warte(5100);
+    for (const bad of [undefined, 'true', 1, null, 'an']) {
+      a = await k.frage({ t: 'schalterUmschalten', an: bad });
+      if (bad !== undefined) await warte(5100);
+      const inh = fs.readFileSync(wunschDatei, 'utf8');
+      if (!/^\{"funnel":"aus","seit":\d{13}\}$/.test(inh)) { pruefe('J9 nur echtes true schaltet AN', false, JSON.stringify(bad) + ' → ' + inh); break; }
+    }
+    pruefe('J9 nur ein echtes true schaltet AN (alles andere → AUS), Datei immer im festen Format', true);
+    k.ws.terminate();
+
+    // Zusammenspiel mit dem root-Helfer (Testkopie, Stub-Tailscale): was der Server schreibt, nimmt der Helfer an
+    {
+      const T = fs.mkdtempSync(path.join(os.tmpdir(), 'helfer-')), me = os.userInfo().username;
+      fs.mkdirSync(path.join(T, 'state'));
+      fs.writeFileSync(path.join(T, 'ts-stub'), '#!/bin/bash\necho "$*" >> "' + T + '/log"\n', { mode: 0o755 });
+      const quelle = fs.readFileSync(path.join(__dirname, '..', 'server', 'autostart', 'internet-schalter.sh'), 'utf8');
+      const ers = { TS: `"${T}/ts-stub"`, STEU: `"${ordner}"`, STATE: `"${T}/state"`, SPIELER: `"${me}"`, ORDNER_EIGNER: `"${me}"`, JETZT_S_BEFEHL: '"date +%s"' };
+      const kopie = quelle.replace(/^([A-Z_]+)=.*#TEST$/gm, (z, n) => `${n}=${ers[n]}`);
+      fs.writeFileSync(path.join(T, 'h.sh'), kopie);
+      fs.chmodSync(ordner, 0o755);
+      const kk = await mitHeadern(s.port, TAIL);
+      await kk.frage({ t: 'schalterUmschalten', an: true });
+      cp.spawnSync('bash', [path.join(T, 'h.sh')]);
+      const log = fs.existsSync(path.join(T, 'log')) ? fs.readFileSync(path.join(T, 'log'), 'utf8') : '';
+      const st = fs.readFileSync(path.join(ordner, 'status.json'), 'utf8');
+      pruefe('J10 Helfer (Testkopie) nimmt die Wunsch-Datei des Servers an: Funnel-Befehl + status.json „an“', log.trim() === 'funnel --bg --https=8443 http://127.0.0.1:8444' && /"funnel":"an","bis":\d+/.test(st), log.trim() + ' | ' + st);
+      a = await kk.frage({ t: 'schalterFrage' });
+      pruefe('J10b Server liest den Status des Helfers: an, Rest ≈ 4 h', a && a.funnel === 'an' && a.wartet === false && a.rest > 14390 && a.rest <= 14400, JSON.stringify(a));
+      kk.ws.terminate();
+      fs.rmSync(T, { recursive: true, force: true });
+    }
+
+    // Verbindung von einer NICHT-Loopback-Adresse (z. B. WLAN-Adresse des Rechners) mit gefälschtem Tailnet-Header
+    await s.schliessen();
+    const sB = await starten({ port: 0, host: '0.0.0.0', leise: true, steuerung: ordner });
+    const fremd = Object.values(os.networkInterfaces()).flat().find(x => x && x.family === 'IPv4' && !x.internal);
+    if (fremd) {
+      const kf = await mitHeadern(sB.port, TAIL, fremd.address);
+      a = await kf.frage({ t: 'schalterFrage' });
+      pruefe('J11 gefälschter Tailnet-Header von nicht-lokaler Adresse (' + fremd.address + '): kein Recht', a && a.recht === false);
+      kf.ws.terminate();
+      const kl = await mitHeadern(sB.port, TAIL, '127.0.0.1');
+      a = await kl.frage({ t: 'schalterFrage' });
+      pruefe('J11b gleicher Server, Verbindung über 127.0.0.1: Recht', a && a.recht === true);
+      kl.ws.terminate();
+    } else console.log('SKIP J11 (keine Nicht-Loopback-Adresse im Testrechner; J12 prüft die Regel direkt)');
+    await sB.schliessen();
+
+    // Regel direkt (gefälschte Requests)
+    const rq = (adr, h) => ({ socket: { remoteAddress: adr }, headers: h });
+    const L = '127.0.0.1';
+    const faelle = [
+      ['Loopback + Login', rq(L, TAIL), true], ['::1 + Login', rq('::1', TAIL), true], ['::ffff:127.0.0.1 + Login', rq('::ffff:127.0.0.1', TAIL), true],
+      ['fremde LAN-Adresse + Login', rq('192.168.1.20', TAIL), false], ['Tailnet-Adresse direkt (nicht Proxy) + Login', rq('100.101.102.103', TAIL), false],
+      ['öffentliche Adresse + Login', rq('8.8.8.8', TAIL), false], ['kein Login', rq(L, {}), false], ['leerer Login', rq(L, { 'tailscale-user-login': '' }), false],
+      ['doppelter Login (a, b)', rq(L, { 'tailscale-user-login': 'a@x.de, b@y.de' }), false], ['Login mit Leerzeichen/Müll', rq(L, { 'tailscale-user-login': 'a b' }), false],
+      ['Funnel-Header + Login', rq(L, Object.assign({ 'tailscale-funnel-request': '?1' }, TAIL)), false], ['Funnel-Header leer + Login', rq(L, Object.assign({ 'tailscale-funnel-request': '' }, TAIL)), false],
+      ['XFF Tailnet-IPv4', rq(L, Object.assign({ 'x-forwarded-for': '100.101.102.103' }, TAIL)), true], ['XFF Tailnet-IPv6', rq(L, Object.assign({ 'x-forwarded-for': 'fd7a:115c:a1e0::1' }, TAIL)), true],
+      ['XFF öffentliche IP', rq(L, Object.assign({ 'x-forwarded-for': '203.0.113.9' }, TAIL)), false], ['XFF Tailnet, dann öffentlich', rq(L, Object.assign({ 'x-forwarded-for': '100.64.0.1, 8.8.8.8' }, TAIL)), false],
+      ['XFF 100.63.x (knapp außerhalb)', rq(L, Object.assign({ 'x-forwarded-for': '100.63.0.1' }, TAIL)), false], ['XFF 100.128.x (knapp außerhalb)', rq(L, Object.assign({ 'x-forwarded-for': '100.128.0.1' }, TAIL)), false],
+      ['Origin = Host', rq(L, Object.assign({ origin: 'https://spiel.ts.net:8443', host: 'spiel.ts.net:8443' }, TAIL)), true],
+      ['Origin ≠ Host', rq(L, Object.assign({ origin: 'https://boese.example', host: 'spiel.ts.net:8443' }, TAIL)), false],
+      ['Origin „null“ (sandbox/file)', rq(L, Object.assign({ origin: 'null', host: 'spiel.ts.net:8443' }, TAIL)), false],
+      ['Origin = X-Forwarded-Host', rq(L, Object.assign({ origin: 'https://spiel.ts.net:8443', host: '127.0.0.1:8444', 'x-forwarded-host': 'spiel.ts.net:8443' }, TAIL)), true],
+      ['kaputtes Objekt', null, false], ['ohne Socket', { headers: TAIL }, false],
+    ];
+    const falsch = faelle.filter(([n, r, soll]) => schalterRecht(r) !== soll).map(f => f[0]);
+    pruefe('J12 Rechte-Regel direkt (' + faelle.length + ' Fälle: Adressen, Login, Funnel, X-Forwarded-For, Origin)', falsch.length === 0, falsch.join('; '));
+    fs.rmSync(ordner, { recursive: true, force: true });
   }
 
   console.log(`\n${ok} OK, ${fehler} FEHL`);

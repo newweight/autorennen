@@ -47,6 +47,10 @@
 .online .on-wahl .karte.gross { width: 13em; }
 .online .on-hinweis { margin-top: 1em; background: rgba(214,40,40,.75); border: .12em solid #fff; padding: .35em 1em; border-radius: 1em; font-size: .85em; }
 .online .on-info { margin-top: .8em; font-size: .75em; opacity: .9; max-width: 34em; text-align: center; }
+.online .on-schalter { margin-top: .9em; display: flex; gap: .8em; align-items: center; justify-content: center; flex-wrap: wrap; font-size: .9em;
+  background: rgba(0,0,0,.38); border: .1em solid rgba(255,255,255,.35); border-radius: 1em; padding: .35em 1em; }
+.online .on-schalter b.an { color: #7dff8a; } .online .on-schalter b.aus { color: #ffd23a; }
+.online .on-schalter .knopf.warn { background: #d62828; }
 .online .on-codefelder { display: flex; gap: .5em; margin: .2em 0 .6em; }
 .online .on-codefelder span { width: 1.6em; height: 1.9em; line-height: 1.9em; text-align: center; font-size: 2.4em; font-weight: 900; border-radius: .25em;
   background: rgba(14,24,58,.8); border: .1em solid rgba(255,255,255,.45); color: #fff; font-family: ui-monospace, Menlo, monospace; }
@@ -131,6 +135,9 @@
       this.verb = null;
       this.dialog = false;
       this.statistik = { korrekturen: null };
+      this.schalter = null;         // letzte Antwort des Servers zum Internet-Schalter (nur mit Recht), sonst null
+      this.schalterSicher = 0;      // Zeit des ersten Tipps auf „AN“ (zweiter Tipp nötig)
+      this.schalterTimer = null;
       [this.wurzel, this.ergEl, this.dialogEl].forEach((w) => w.addEventListener('click', (e) => {
         const t = e.target.closest('[data-a]');
         if (t) this.aktion(t.dataset.a);
@@ -159,12 +166,14 @@
       } else if (this.lobby && this.verb && this.verb.offen) this.ansicht = 'lobby';
       else this.ansicht = 'start';
       this.zeichnen();
+      if (this.ansicht === 'start') this.schalterStart();
     }
     verstecken() { this.sichtbar = false; this.wurzel.style.display = 'none'; }
 
     /** Ganz raus aus dem Online-Modus (zurück ins Hauptmenü). */
     schliessen() {
       if (this.phase) this.rennenAbbauen();
+      clearInterval(this.schalterTimer); this.schalterTimer = null; this.schalter = null;
       if (this.verb) { this.verb.senden({ t: 'verlassen' }); const v = this.verb; this.verb = null; setTimeout(() => v.schliessen(), 50); }
       this.lobby = null;
       this.einstellungenZurueck();
@@ -179,10 +188,16 @@
     }
 
     // ---------- Verbindung ----------
-    async verbindung() {
-      if (this.verb && this.verb.offen) return this.verb;
+    verbindung() {
+      if (this.verb && this.verb.offen) return Promise.resolve(this.verb);
+      if (!this._verbP) this._verbP = this._verbinden().finally(() => { this._verbP = null; });   // nie zwei Verbindungen gleichzeitig (Schalter-Abfrage + Raum erstellen)
+      return this._verbP;
+    }
+    async _verbinden() {
       const v = new R.NetzVerbindung();
       v.bei('raum', (m) => { this.istHost = !!m.host; this.ichId = m.du; this.raumCode = m.code; });
+      v.bei('hallo', (m) => { if (m.v >= 3) v.senden({ t: 'schalterFrage' }); });          // Protokoll 3: Internet-Schalter (alter Server → keine Abfrage)
+      v.bei('schalter', (m) => this.schalterEmpfangen(m));
       v.bei('lobby', (m) => this.lobbyEmpfangen(m));
       v.bei('fehler', (m) => this.fehlerEmpfangen(m));
       v.bei('raumZu', () => this.raumZu('Der Raum wurde geschlossen – der Host ist gegangen.'));
@@ -265,6 +280,67 @@
       this.zeichnen();
     }
 
+// ---------- Internet-Schalter (Protokoll 3) ----------
+    /** Beim Öffnen der Startansicht: Verbindung aufbauen (wird später für den Raum weiterverwendet) und den Schalter-Status abfragen. */
+    schalterStart() {
+      if (!verfuegbar()) return;
+      this.verbindung().catch(() => { /* ohne Server: kein Schalter, Fehler zeigt „Raum erstellen“ */ });
+      if (!this.schalterTimer) {
+        this.schalterTimer = setInterval(() => {
+          if (this.sichtbar && this.ansicht === 'start' && this.verb && this.verb.offen) this.verb.senden({ t: 'schalterFrage' });
+        }, 5000);
+      }
+    }
+    schalterEmpfangen(m) {
+      const vorher = !!this.schalter;
+      this.schalter = m && m.recht === true ? Object.assign({ empfangen: performance.now() }, m) : null;
+      if (m && m.fehler === 'zuSchnell') this.schalterHinweis = 'Nicht so schnell – gleich nochmal 😉';
+      else if (m && m.fehler) this.schalterHinweis = 'Das hat nicht geklappt 😕';
+      else this.schalterHinweis = '';
+      if (this.schalter && this.schalter.wartet) setTimeout(() => { if (this.verb && this.verb.offen && this.ansicht === 'start') this.verb.senden({ t: 'schalterFrage' }); }, 2000);
+      if (this.sichtbar && this.ansicht === 'start') {
+        const el = this.wurzel.querySelector('.on-schalter-box');
+        if (el && vorher === !!this.schalter) el.innerHTML = this.schalterHtml();
+        else this.zeichnen();
+      }
+    }
+    /** „noch 3:42 h“ / „noch 42 min“ aus den Rest-Sekunden. */
+    static restText(sek) {
+      if (sek === null || sek === undefined) return '';
+      if (sek >= 3600) return 'noch ' + Math.floor(sek / 3600) + ':' + String(Math.floor(sek % 3600 / 60)).padStart(2, '0') + ' h';
+      if (sek >= 60) return 'noch ' + Math.floor(sek / 60) + ' min';
+      return 'gleich aus';
+    }
+    /** Inhalt der Schalter-Zeile (leer, wenn der Server dieser Verbindung kein Recht gibt). */
+    schalterHtml() {
+      const s = this.schalter;
+      if (!s) return '';
+      const rest = s.rest === null || s.rest === undefined ? null : Math.max(0, s.rest - (performance.now() - s.empfangen) / 1000);
+      const sicher = performance.now() - this.schalterSicher < 5000 && this.schalterSicher > 0;
+      let text, knopf = '';
+      if (s.funnel === 'unbekannt') text = '❔ Internet für Freunde: der Schalter-Helfer antwortet gerade nicht';
+      else if (s.wartet) text = '⏳ Internet für Freunde: wird umgeschaltet …';
+      else if (s.funnel === 'an') {
+        text = `🌐 Internet für Freunde: <b class="an">AN</b> (${esc(OnlineBildschirm.restText(rest))})`;
+        knopf = `<div class="knopf klein" data-a="schalter">🔒 Ausschalten <kbd>I</kbd></div>`;
+      } else {
+        text = `🔒 Internet für Freunde: <b class="aus">AUS</b>`;
+        knopf = sicher
+          ? `<div class="knopf klein warn" data-a="schalter">⚠️ Sicher? Dann kann jeder mit dem Link mitspielen – nochmal tippen</div>`
+          : `<div class="knopf klein gruen" data-a="schalter">🌐 Einschalten <kbd>I</kbd></div>`;
+      }
+      const hin = this.schalterHinweis ? ` <span class="on-hinweis" style="margin:0">${esc(this.schalterHinweis)}</span>` : '';
+      return `<span>${text}</span>${knopf}${hin}`;
+    }
+    schalterUmschalten() {
+      const s = this.schalter;
+      if (!s || s.wartet || s.funnel === 'unbekannt' || !this.verb || !this.verb.offen) return;
+      if (s.funnel === 'an') { this.schalterSicher = 0; this.verb.senden({ t: 'schalterUmschalten', an: false }); }
+      else if (performance.now() - this.schalterSicher < 5000 && this.schalterSicher > 0) { this.schalterSicher = 0; this.verb.senden({ t: 'schalterUmschalten', an: true }); }
+      else { this.schalterSicher = performance.now(); setTimeout(() => { if (this.ansicht === 'start') this.schalterEmpfangen(this.schalter); }, 5100); }   // erster Tipp: nachfragen
+      this.schalterEmpfangen(this.schalter);
+    }
+
     // ---------- Eingabe ----------
     codeZeichen(z) {
       if (!N.codeZeichenOk(z)) { this.hinweis = '„' + z + '“ gibt es im Code nicht (kein 0, O, 1, I)'; this.zeichnen(); return; }
@@ -289,6 +365,7 @@
       const ok = T.bestaetigen.includes(code);
       if (this.ansicht === 'start') {
         if (code === T.pause) return this.schliessen();
+        if (code === 'KeyI' && this.schalter) { this.schalterUmschalten(); return true; }
         if (dx) { this.wahl = (this.wahl + dx + 2) % 2; this.zeichnen(); }
         if (ok) this.aktion(this.wahl === 0 ? 'erstellen' : 'beitretenAnsicht');
         return true;
@@ -324,6 +401,7 @@
       const [art, p1, p2] = a.split(':');
       if (R.Audio && R.Audio.menueKlick) R.Audio.menueKlick();
       if (art === 'zurueck') return this.schliessen();
+      if (art === 'schalter') return this.schalterUmschalten();
       if (art === 'erstellen') return this.erstellen();
       if (art === 'beitretenAnsicht') { this.ansicht = 'code'; this.hinweis = ''; return this.zeichnen(); }
       if (art === 'zumStart') { this.ansicht = 'start'; this.hinweis = ''; return this.zeichnen(); }
@@ -480,9 +558,11 @@
           `<div class="karten-sub">Du bist der Host und bekommst einen Code für die anderen</div></div>` +
           `<div class="karte gross${this.wahl === 1 ? ' gewaehlt' : ''}" data-a="beitretenAnsicht"><div class="emoji">🔑</div><div class="karten-name">Raum beitreten</div>` +
           `<div class="karten-sub">Gib den Code ein, den du bekommen hast</div></div></div>${hw}` +
+          `<div class="on-schalter-box on-schalter"${this.schalter ? '' : ' style="display:none"'}>${this.schalterHtml()}</div>` +
+          (this.schalter ? `<div class="on-info">🌐 Freunde ohne Tailscale können mitspielen, solange der Internet-Schalter AN ist. Nach 4 Stunden geht er von selbst aus.</div>` : '') +
           `<div class="on-info">👻 Online fahren die Autos meist durcheinander durch (Geister), der Host kann 💥 Rempeln einschalten · Schaden ist online aus · kein Chat</div>`;
         fuss = `<div class="knopf klein" data-a="zurueck">◀ Zurück</div>`;
-        hinweis = '<kbd>←</kbd><kbd>→</kbd> auswählen · <kbd>Enter</kbd> weiter · <kbd>Esc</kbd> zurück';
+        hinweis = '<kbd>←</kbd><kbd>→</kbd> auswählen · <kbd>Enter</kbd> weiter · <kbd>Esc</kbd> zurück' + (this.schalter ? ' · <kbd>I</kbd> Internet für Freunde' : '');
       } else if (this.ansicht === 'code') {
         const cur = this.code.findIndex(c => !c);
         inhalt = `<h1>Raumcode eingeben</h1><div class="on-codefelder">` +

@@ -2,7 +2,8 @@
 // ============================================================
 // W5-1 Mehrspieler-Server für „Jonas Hot Steering Wheel“ (Node ≥ 18, CommonJS, einzige Abhängigkeit: ws).
 //
-//   node server/server.js [--port 8443] [--host 0.0.0.0]     (oder PORT=… node server/server.js)
+//   node server/server.js [--port 8443] [--host 0.0.0.0] [--oeffentlich https://…/] [--steuerung <Ordner>]   (oder PORT=… node server/server.js)
+//   --steuerung: Internet-Schalter im Spiel (nur Wunsch-Datei schreiben/Status lesen, s. u.) – ohne = Funktion aus
 //
 // - Liefert das Spiel per HTTP aus (nur Autorennen.html, src/, vendor/ – kein Verzeichnis-Listing, kein `..`).
 //   „/“ = Autorennen.html. Funktioniert hinter einem HTTPS-Reverse-Proxy (Tailscale Funnel, cloudflared):
@@ -40,6 +41,66 @@ function zufallsCode(belegt) {
     if (!belegt.has(c)) return c;
   }
   return null;
+}
+
+// ------------------------------------------------------------------ Internet-Schalter (v19, Protokoll 3)
+// Der Spielserver läuft als unprivilegierter Benutzer und führt NIE Befehle aus. Er schreibt nur eine Wunsch-Datei
+// (<steuerung>/wunsch.json) und liest die Status-Datei (<steuerung>/status.json) des root-Helfers
+// (server/autostart/internet-schalter.sh). Ohne `--steuerung <Ordner>` ist die ganze Funktion aus.
+//
+// WER DARF SCHALTEN? Nur wer über das eigene Tailnet kommt (Tailscale Serve). Annahmen (Tailscale-Dokumentation „Serve“,
+// geprüft 14.10.2026; auf dem Mac mini praktisch nachprüfen, siehe README):
+//  1. Serve hängt bei Tailnet-Anfragen die Header `Tailscale-User-Login` / `-Name` an und ENTFERNT dabei vom Client
+//     mitgeschickte Header gleichen Namens (Schutz vor Fälschung). Tagged Devices bekommen keine Header → kein Recht.
+//  2. Über Funnel (öffentlich) kommen KEINE Identitäts-Header; zusätzlich setzt Funnel `Tailscale-Funnel-Request: ?1`.
+//     Wir verlangen darum: Identitäts-Header da UND `Tailscale-Funnel-Request` fehlt.
+//  3. Serve/Funnel verbinden sich von 127.0.0.1 (bzw. ::1) mit dem Server. Jede andere Quelladresse (WLAN, LAN) könnte die
+//     Header selbst setzen → dort NIE Recht. Lokale Prozesse auf dem Mac könnten Header fälschen (der Server hört auch auf
+//     dem Heimnetz; lokale Fälscher hätten aber ohnehin Zugriff auf den Mac) – darum nur Wunsch-Datei, keine Rechte.
+//  4. Zusätzlich (Tiefenschutz): ist `X-Forwarded-For` gesetzt (Serve setzt die Tailnet-IP), muss jede Adresse darin eine
+//     Tailscale-Adresse sein (100.64.0.0/10 oder fd7a:115c:a1e0::/48); eine öffentliche IP (Funnel) → kein Recht.
+//  5. Schutz gegen fremde Webseiten (Cross-Site-WebSocket): Ein Browser im Tailnet schickt die Identität automatisch mit, auch
+//     wenn eine fremde Webseite die Verbindung öffnet. Darum muss der `Origin` (falls vorhanden – Browser senden ihn immer)
+//     zu Host / X-Forwarded-Host / `--oeffentlich` passen. Fehlt Origin, ist es kein Browser (z. B. curl) → erlaubt.
+// Das Recht wird einmal beim Verbindungsaufbau entschieden. Die Identität selbst wird weder gespeichert noch protokolliert.
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+function tailnetIP(a) {
+  a = String(a || '').trim().replace(/^\[|\]$/g, '').replace(/^::ffff:/i, '');
+  const m = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(a);
+  if (m) return +m[1] === 100 && +m[2] >= 64 && +m[2] <= 127;
+  return /^fd7a:115c:a1e0:/i.test(a);
+}
+/** Darf diese WebSocket-Verbindung (Upgrade-Request) den Internet-Schalter bedienen? req: { socket:{remoteAddress}, headers }. */
+function schalterRecht(req, oeffentlichHost) {
+  try {
+    const h = (req && req.headers) || {};
+    if (!req || !req.socket || !LOOPBACK.has(req.socket.remoteAddress)) return false;           // 3
+    if (h['tailscale-funnel-request'] !== undefined) return false;                                // 2
+    const login = h['tailscale-user-login'];
+    if (typeof login !== 'string' || !/^[^\s,<>"'\\]{1,200}$/.test(login)) return false;          // 1 (leer/doppelt/seltsam → nein)
+    const xff = h['x-forwarded-for'];
+    if (xff !== undefined && !String(xff).split(',').every(tailnetIP)) return false;               // 4
+    const origin = h['origin'];
+    if (origin !== undefined) {                                                                    // 5
+      let oh;
+      try { const u = new URL(origin); oh = u.host.toLowerCase(); if (!/^https?:$/.test(u.protocol)) return false; } catch (e) { return false; }
+      const ok = [h['host'], h['x-forwarded-host'], oeffentlichHost].some(x => typeof x === 'string' && x.toLowerCase() === oh);
+      if (!ok) return false;
+    }
+    return true;
+  } catch (e) { return false; }
+}
+
+/** status.json des Helfers streng lesen → { funnel:'an'|'aus'|'unbekannt', bis:ms|null } (alt/kaputt/fehlt → unbekannt). */
+function statusLesen(ordner, jetzt) {
+  try {
+    const f = path.join(ordner, 'status.json');
+    const st = fs.lstatSync(f);
+    if (!st.isFile() || st.size > 200) return { funnel: 'unbekannt', bis: null };
+    const m = /^\{"funnel":"(an|aus)","bis":(\d{1,16}|null),"zeit":(\d{1,16})\}\s*$/.exec(fs.readFileSync(f, 'utf8'));
+    if (!m || jetzt - +m[3] > 30000) return { funnel: 'unbekannt', bis: null };                   // Helfer schreibt alle ~5 s
+    return { funnel: m[1], bis: m[2] === 'null' ? null : +m[2] };
+  } catch (e) { return { funnel: 'unbekannt', bis: null }; }
 }
 
 // ------------------------------------------------------------------ statische Dateien
@@ -80,10 +141,15 @@ function httpAntwort(req, res) {
  */
 function starten(opt) {
   // tempo: Zeitraffer NUR für Tests (tests/test_netz.js), 1 = Echtzeit
-  opt = Object.assign({ port: 8443, host: '0.0.0.0', leise: false, ladenMaxMs: 20000, tempo: 1, oeffentlich: '' }, opt);
+  opt = Object.assign({ port: 8443, host: '0.0.0.0', leise: false, ladenMaxMs: 20000, tempo: 1, oeffentlich: '', steuerung: '' }, opt);
   // öffentliche Adresse (Tailscale Funnel), damit Link/QR in der Lobby auch stimmen, wenn der Host das Spiel über
   // http://localhost:8443 geöffnet hat. Nur https-Adressen ohne Pfad-Tricks.
   const oeffentlich = /^https:\/\/[a-z0-9.-]+(:\d{1,5})?\/?$/i.test(opt.oeffentlich || '') ? opt.oeffentlich.replace(/\/?$/, '/') : '';
+  // Internet-Schalter: Ordner mit wunsch.json (wir schreiben) und status.json (Helfer schreibt); '' = Funktion aus
+  const steuerung = typeof opt.steuerung === 'string' && opt.steuerung ? path.resolve(opt.steuerung) : '';
+  let oeffentlichHost = '';
+  try { if (oeffentlich) oeffentlichHost = new URL(oeffentlich).host.toLowerCase(); } catch (e) { /* egal */ }
+  let letzterWunsch = { art: '', zeit: 0 };                       // Rate-Limit: 1 Umschaltung / 5 s (für alle zusammen)
   const maxSchritte = Math.ceil(6 * opt.tempo);
   const log = (...a) => { if (!opt.leise) console.log(new Date().toISOString().slice(11, 19), ...a); };
   const raeume = new Map();
@@ -98,7 +164,8 @@ function starten(opt) {
     let pfad = '';
     try { pfad = new URL(req.url, 'http://x').pathname; } catch (e) { /* ungültig */ }
     if (pfad !== N.PFAD || verbindungen >= 80) { socket.write('HTTP/1.1 404 Not Found\r\n\r\n'); socket.destroy(); return; }
-    wss.handleUpgrade(req, socket, kopf, (ws) => wss.emit('connection', ws, req));
+    const recht = steuerung ? schalterRecht(req, oeffentlichHost) : false;
+    wss.handleUpgrade(req, socket, kopf, (ws) => wss.emit('connection', ws, req, recht));
   });
 
   const senden = (ws, obj) => { if (ws.readyState === 1) ws.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); };
@@ -177,6 +244,31 @@ function starten(opt) {
     log('Raum ' + raum.code + ': Rennen fertig');
   }
 
+  /** Antwort auf schalterFrage/schalterUmschalten. Ohne Recht (oder Funktion aus) immer dieselbe Antwort – verrät nichts. */
+  function schalterAntwort(c, extra) {
+    if (!steuerung || !c.schalter) return senden(c.ws, { t: 'schalter', recht: false });
+    const jetzt = Date.now();
+    const st = statusLesen(steuerung, jetzt);
+    let wartet = false;
+    if (letzterWunsch.art && st.funnel !== 'unbekannt' && letzterWunsch.art !== st.funnel && jetzt - letzterWunsch.zeit < 20000) wartet = true;
+    senden(c.ws, Object.assign({ t: 'schalter', recht: true, funnel: st.funnel, wartet,
+      rest: st.funnel === 'an' && st.bis ? Math.max(0, Math.round((st.bis - jetzt) / 1000)) : null }, extra || {}));
+  }
+
+  function schalterUmschalten(c, an) {
+    if (!steuerung || !c.schalter) return schalterAntwort(c);
+    const jetzt = Date.now();
+    if (jetzt - letzterWunsch.zeit < 5000) return schalterAntwort(c, { fehler: 'zuSchnell' });
+    const art = an === true ? 'an' : 'aus';
+    try {
+      // feste Form, nur zwei mögliche Werte + Zeit; der Helfer prüft sie noch einmal streng
+      fs.writeFileSync(path.join(steuerung, 'wunsch.json'), JSON.stringify({ funnel: art, seit: jetzt }), { mode: 0o644 });
+    } catch (e) { return schalterAntwort(c, { fehler: 'schreiben' }); }
+    letzterWunsch = { art, zeit: jetzt };
+    log('Internet-Schalter: ' + art + ' gewünscht');
+    schalterAntwort(c);
+  }
+
   // --- Nachrichten ---
   function nachricht(c, m) {
     const raum = c.raum;
@@ -187,6 +279,10 @@ function starten(opt) {
       case 'ping':
         senden(c.ws, { t: 'pong', z: typeof m.z === 'number' ? m.z : 0, k: raum && raum.sim ? raum.sim.tick : 0 });
         return;
+      case 'schalterFrage':
+        return schalterAntwort(c);
+      case 'schalterUmschalten':
+        return schalterUmschalten(c, m.an);
       case 'raumErstellen': {
         if (raum) verlassen(c, 'neuer Raum');
         if (raeume.size >= 30) return fehler(c.ws, 'voll', 'Zu viele Räume – später nochmal');
@@ -288,9 +384,9 @@ function starten(opt) {
     }
   }
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req, recht) => {
     verbindungen++;
-    const c = { ws, id: crypto.randomBytes(4).toString('hex'), raum: null, lebt: true, eingaben: [], simNr: -1, letzteN: -1, ack: -1,
+    const c = { ws, schalter: recht === true, id: crypto.randomBytes(4).toString('hex'), raum: null, lebt: true, eingaben: [], simNr: -1, letzteN: -1, ack: -1,
       zaehler: 0, zaehlerSeit: Date.now() };
     ws.on('pong', () => { c.lebt = true; });
     ws.on('message', (daten, binaer) => {
@@ -397,7 +493,7 @@ function starten(opt) {
   });
 }
 
-module.exports = { starten, dateiFuer };
+module.exports = { starten, dateiFuer, schalterRecht };
 
 // ------------------------------------------------------------------ Start von der Kommandozeile
 if (require.main === module) {
@@ -405,7 +501,8 @@ if (require.main === module) {
   const port = +(arg('port') || process.env.PORT || 8443);
   const host = arg('host') || process.env.HOST || '0.0.0.0';
   const oeffentlich = arg('oeffentlich') || process.env.OEFFENTLICH || '';
-  starten({ port, host, oeffentlich }).then((s) => {
+  const steuerung = arg('steuerung') || '';       // Ordner für den Internet-Schalter (wunsch.json / status.json); ohne = aus
+  starten({ port, host, oeffentlich, steuerung }).then((s) => {
     const netz = [];
     for (const liste of Object.values(require('os').networkInterfaces())) {
       for (const a of liste || []) if (a.family === 'IPv4' && !a.internal) netz.push(a.address);
@@ -415,6 +512,7 @@ if (require.main === module) {
     console.log('   Auf diesem Mac:        http://localhost:' + s.port);
     netz.forEach(ip => console.log('   Im Heimnetz (WLAN):    http://' + ip + ':' + s.port));
     console.log('   Übers Internet:        /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --https=' + s.port + ' ' + s.port + '   (siehe server/README.md)');
+    if (steuerung) console.log('   Internet-Schalter:     an (Ordner ' + steuerung + ')');
     if (oeffentlich) console.log('   Öffentliche Adresse:   ' + oeffentlich + '   (Link/QR in der Lobby)');
     console.log('   Beenden: Ctrl+C (oder Fenster schließen)');
     console.log('');

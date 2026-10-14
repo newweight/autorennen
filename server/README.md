@@ -37,7 +37,40 @@ cd ~/Desktop/Spiele/Autorennen            # bzw. der Ordner der Version
 # zweites Terminal-Fenster:
 /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --https=8443 8443
 ```
-Optionen: `--port` (Standard 8443), `--host` (Standard 0.0.0.0), `--oeffentlich <https-Adresse>` (für Link/QR).
+Optionen: `--port` (Standard 8443), `--host` (Standard 0.0.0.0), `--oeffentlich <https-Adresse>` (für Link/QR), `--steuerung <Ordner>` (Internet-Schalter, Standard aus).
+
+## 🌐 Internet-Schalter im Spiel (v19)
+
+Im Spiel (Menü 🌐 Online) erscheint für **jedes Gerät im eigenen Tailscale-Netz** die Zeile „🌐 Internet für Freunde: AN (noch 3:42 h) / AUS“ mit Knopf
+(Taste **I**). AN = Tailscale Funnel für Freunde ohne Tailscale, geht nach 4 Stunden von selbst aus. Wer nicht über das Tailnet kommt (Freunde über Funnel,
+Heimnetz/WLAN, `localhost`) sieht die Zeile nicht und kann nichts schalten.
+
+**Sicherheitsdesign** (Details und Nachrichten: `PROTOKOLL.md`, Kopf von `server.js` und `autostart/internet-schalter.sh`):
+- Der Spielserver (Benutzer „autorennen“, kein Admin) führt **nie** Befehle aus. Mit `--steuerung /Users/Shared/autorennen-steuerung` schreibt er nur
+  `wunsch.json` und liest `status.json`. Ohne die Option ist alles aus (lokale Starts/Tests unverändert).
+- Ein kleiner **root-Helfer** (`autostart/internet-schalter.sh`, LaunchDaemon `de.newweight.autorennen.schalter`, alle 5 s, installiert nach
+  `/Library/PrivilegedHelperTools/de.newweight.autorennen.schalter`) liest die Wunsch-Datei streng (Eigentümer autorennen, ≤ 200 Byte, feste Form, nur `an`/`aus`,
+  Zeit ±120 s, jeden Wunsch nur einmal, nie in Befehle eingesetzt), ruft Tailscale mit festen Argumenten auf, merkt sich das Auto-Aus (4 h) in
+  `/var/db/autorennen-schalter` (root) und schreibt `status.json`. Der Ordner gehört root (755): autorennen darf nur den Inhalt von `wunsch.json` ändern – so kann
+  er root keinen Link unterschieben.
+- **Doppelklick-Dateien** „🌐 Internet-Zugang AN/AUS.command“ rufen denselben Helfer (`sudo … an|aus`) → gleiches Auto-Aus, kein Widerspruch. Ohne installierten Helfer (alte Installation) fallen sie auf das bisherige Verhalten zurück.
+
+**Annahmen, die du auf dem Mac einmal prüfen solltest** (ich konnte hier kein Tailscale testen):
+1. *Header:* Tailscale Serve setzt über das Tailnet `Tailscale-User-Login` (+ `-Name`) und entfernt gleichnamige Header des Clients; über Funnel kommen keine
+   Identitäts-Header. Quelle: Tailscale-Dokumentation „Serve“ (Abschnitt Identity headers). `Tailscale-Funnel-Request: ?1` und `X-Forwarded-For` (Tailnet-IP bei Serve) sind
+   nur aus der Praxis/Dokumentation Dritter bekannt – der Code fordert sie nicht, sondern lehnt nur ab, wenn sie „Funnel/öffentlich“ zeigen. Fehlen die Header
+   auf dem Mac mini wider Erwarten, **erscheint der Schalter einfach nicht** (sicherer Ausfall). Prüfen: Spiel über die Tailnet-Adresse öffnen → 🌐 Online → Zeile da?
+   Dann dieselbe Adresse über Handy-Mobilfunk **ohne** Tailscale (nur bei Funnel AN): Zeile darf nicht da sein.
+2. *Origin:* Der Browser-Origin muss zu `Host`, `X-Forwarded-Host` oder `--oeffentlich` passen (der Installer setzt `--oeffentlich` auf die Tailnet-Adresse). Sonst kein Recht.
+3. *root + Tailscale-CLI:* Die CLI der GUI-App (`/Applications/Tailscale.app/Contents/MacOS/Tailscale`) spricht mit dem lokalen Dienst; als root sollte das gehen.
+   Der Installer prüft es (`sudo Tailscale status`). Geht es nicht: Fallback = Helfer als **LaunchAgent des Admin-Benutzers** (statt LaunchDaemon, gleiche Datei,
+   `~/Library/LaunchAgents/…plist`, Steuerungs-Ordner dann dem Admin gehören lassen) – bei Bedarf an Claude melden.
+4. Der Server hört weiter auf 0.0.0.0 (Heimnetz-Spiel). Lokale Prozesse auf dem Mac (nicht aus dem WLAN!) könnten Tailnet-Header fälschen – sie könnten
+   dadurch nur den Funnel für ≤ 4 h an/aus wünschen, mehr nicht.
+
+Notfall von Hand: `sudo /Library/PrivilegedHelperTools/de.newweight.autorennen.schalter aus` · Protokoll: `/var/log/autorennen-schalter.log` ·
+Zustand: `cat /Users/Shared/autorennen-steuerung/status.json` · `…/Tailscale funnel status`.
+Tests: `bash tests/test_schalter.sh` (Helfer gegen Stub-Tailscale, bösartige Dateien), `node tests/test_netz.js` (Block J), `python3 tests/schalter_ui_test.py` (Browser, Tailscale-Attrappe `tests/tailscale_proxy_stub.js`).
 
 ## Beenden
 

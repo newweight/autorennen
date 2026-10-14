@@ -138,6 +138,10 @@ ist die Karte „🌐 Online“ grau („Online geht nur über ‚Mehrspieler st
   merkt sich nichts. **Ende:** im Terminal-Fenster Ctrl+C oder Fenster schließen – damit ist auch der Internet-Zugang wieder zu.
 - Technik und Probleme: `server/README.md`.
 
+**🌐 Internet für Freunde im Spiel an/aus (nur auf dem Mac mini mit dem Autostart-Dienst):** Menü → 🌐 Online → Zeile „Internet für Freunde“ → *Einschalten* (zweimal tippen)
+oder Taste **I**. Das sieht und kann nur, wer im eigenen Tailscale-Netz ist (Papas/Mamas Handy, Laptop). Nach 4 Stunden geht es von selbst aus. Freunde ohne Tailscale
+können nur mitspielen, solange es AN ist. Einrichtung/Prüfung: `server/README.md` (Abschnitt Internet-Schalter).
+
 ## 📱 Auf Handy/Tablet spielen
 Gäste öffnen den Einladungs-Link (oder den QR-Code aus der Online-Lobby) im Browser – am besten **quer** halten (im Hochformat steht „Bitte Handy quer halten 🔄“).
 - **Rennen:** links ◀ ▶ lenken (gedrückt halten), rechts ▲ Gas und ▼ Bremse/Rückwärts. Mehrere Finger gehen gleichzeitig (Gas + Lenken); mit dem Finger von ◀ nach ▶ wischen schaltet um.
