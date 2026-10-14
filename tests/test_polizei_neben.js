@@ -116,7 +116,9 @@ for (const seite of [-1, 1]) for (const v0 of [0, 20, 40]) for (const hz of [0, 
   const gap = SP.kapselAbstand({ x: p.x, z: p.z, heading: p.heading, laenge: p.daten.laenge, breite: p.daten.breite }, { x: z.x, z: z.z, heading: z.heading, laenge: z.daten.laenge, breite: z.daten.breite });
   pruefe('Server-Kontext: Einparken bitgleich zum Client-Kontext', Math.abs(gap - a.gap) < 1e-12, gap.toFixed(6) + ' / ' + a.gap.toFixed(6));
   const sim = new Simulation({ einstellungen: { streckeId: 'wiese', gegner: 6, runden: 1, polizei: true }, spieler: [{ fahrer: 'Jonas', auto: 'bmw-m4' }], seed: 3 });
-  pruefe('Server-Simulation: keine Polizei online (wie bisher, spiel.polizei = null)', sim.sim.polizei === null && !sim.sim.fahrzeuge.some(x => x.polizei));
+  pruefe('Server-Simulation (v21): Polizei online nur mit Einstellung, Streifenwagen hinter den Teilnehmern', !!sim.sim.polizei && sim.sim.fahrzeuge.some(x => x.polizei));
+  const sim0 = new Simulation({ einstellungen: { streckeId: 'wiese', gegner: 6, runden: 1 }, spieler: [{ fahrer: 'Jonas', auto: 'bmw-m4' }], seed: 3 });
+  pruefe('Server-Simulation ohne Polizei-Einstellung: spiel.polizei = null', sim0.sim.polizei === null && !sim0.sim.fahrzeuge.some(x => x.polizei));
   const ids = sim.teilnehmerInfo.filter(t => !t.mensch).map(t => t.autoId);
   const erlaubt = ['passat', 'multivan', 'porsche-911', 'troc-cabrio'];
   pruefe('Server-Computerfüller: nur die 4 Modelle', ids.length === 6 && ids.every(i => erlaubt.includes(i)), ids.join(','));

@@ -1,0 +1,112 @@
+/* 4 Gewinnt – Browser-Port der Swift-App (VierGewinnt.swift v2.1). Farben/Maße wie im Swift-Code (NSColor-Werte in rgb umgerechnet). */
+:root {
+  --fenster-hell: rgb(247, 247, 247);          /* NSColor(white: 0.97) */
+  --fenster-dunkel: rgb(18, 18, 38);           /* (0.07, 0.07, 0.15) */
+  --akzent: rgb(217, 97, 26);                  /* accentOrange (0.85, 0.38, 0.10) */
+  --rot: rgb(230, 38, 26);                     /* chipRed */
+  --gelb: rgb(255, 204, 0);                    /* chipYellow */
+  --rand-karte: rgb(224, 224, 224);            /* white 0.88 */
+  --schrift: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; min-height: 100%; }
+body { font-family: var(--schrift); background: var(--fenster-hell); color: #1a1a1a; -webkit-font-smoothing: antialiased; }
+body.ansicht-spiel { background: var(--fenster-dunkel); overflow: hidden; }
+button { font-family: inherit; }
+.hidden { display: none !important; }
+
+/* ---------------------------------------------------------------- Hauptmenü (hell) */
+.seite { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; justify-content: center; align-items: center;
+  padding: max(30px, env(safe-area-inset-top)) 24px max(30px, env(safe-area-inset-bottom)); }
+.spalte { width: 100%; max-width: 460px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.spalte > .block { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+
+.titel { font-size: 48px; font-weight: 800; line-height: 62px; height: 62px; text-align: center; white-space: nowrap;
+  background: linear-gradient(to top, rgb(217, 38, 26), rgb(191, 102, 13)); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
+.titel.klein { font-size: 36px; line-height: 46px; height: 46px; }
+#mini { width: 280px; height: 120px; display: block; }
+
+.karte { width: 100%; background: #fff; border: 1.5px solid var(--rand-karte); border-radius: 14px; box-shadow: 0 2px 8px rgba(0, 0, 0, .06); position: relative; }
+.karte.hervor { border: 2px solid var(--akzent); }
+.karte.knopfkarte { height: 72px; display: flex; align-items: center; padding: 0 16px 0 18px; gap: 14px; cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.karte.knopfkarte:hover { background: #fcfcfc; }
+.karte.knopfkarte:active { background: #f3f3f3; }
+.karte .symbol { width: 28px; height: 28px; flex: none; color: rgb(77, 77, 77); }
+.karte .texte { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.karte-titel { font-size: 15px; font-weight: 600; color: rgb(26, 26, 26); }
+.karte-sub { font-size: 12px; color: rgb(128, 128, 128); }
+.karte .pfeil { width: 12px; height: 12px; color: rgb(166, 166, 166); flex: none; }
+.karte.innen { padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.karte.innen .kopf { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+
+.trenner { width: 100%; display: flex; align-items: center; gap: 10px; }
+.trenner i { flex: 1; height: 1px; background: rgb(199, 199, 199); }
+.trenner span { font-size: 12px; color: rgb(153, 153, 153); }
+
+.staerke-zeile { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; }
+.staerke-zeile .links { font-size: 13px; font-weight: 500; color: rgb(51, 51, 51); }
+.staerke-zeile .rechts { font-size: 13px; font-weight: 600; color: var(--akzent); }
+input[type=range] { width: 100%; margin: 2px 0 0; accent-color: #1a7cf5; height: 24px; }
+.start { margin-top: 8px; height: 48px; width: 100%; border: 0; border-radius: 12px; background: var(--akzent); color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; }
+.start:hover { filter: brightness(1.06); } .start:active { filter: brightness(.92); }
+.start:disabled { opacity: .5; cursor: default; }
+
+.klein-link { font-size: 12px; color: rgb(150, 150, 150); text-decoration: none; margin-top: -4px; }
+.klein-link:hover { color: rgb(90, 90, 90); text-decoration: underline; }
+.zeile-oben { width: 100%; display: flex; justify-content: flex-start; }
+.hell-knopf { font-size: 13px; background: #fff; color: #1a1a1a; border: 1px solid rgb(200, 200, 200); border-radius: 6px; padding: 5px 12px; cursor: pointer; box-shadow: 0 .5px 1px rgba(0,0,0,.15); }
+.hell-knopf:hover { background: #f6f6f6; }
+
+/* ---------------------------------------------------------------- Online-Bildschirme (Stil der Menükarten) */
+.karte.innen h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.karte.innen .hilfe { font-size: 12px; color: rgb(128, 128, 128); margin: 0 0 6px; }
+.pillen { display: flex; flex-wrap: wrap; gap: 6px; }
+.pille { font-size: 13px; padding: 6px 11px; border-radius: 999px; border: 1.5px solid var(--rand-karte); background: #fff; color: #1a1a1a; cursor: pointer; }
+.pille.an { border-color: var(--akzent); background: rgb(253, 240, 232); color: rgb(150, 60, 10); font-weight: 600; }
+.codefeld { width: 100%; font-size: 28px; font-weight: 700; letter-spacing: .35em; text-align: center; text-transform: uppercase; padding: 8px 6px; border: 1.5px solid rgb(200, 200, 200); border-radius: 10px; background: #fff; color: #1a1a1a; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.codefeld:focus { outline: none; border-color: var(--akzent); }
+.reihe { display: flex; gap: 8px; width: 100%; }
+.reihe > * { flex: 1; }
+.start.grau { background: rgb(120, 120, 128); }
+.hinweis { min-height: 18px; font-size: 13px; text-align: center; color: rgb(110, 110, 110); }
+.hinweis.fehler { color: rgb(200, 40, 30); }
+.codegross { font-size: 64px; font-weight: 800; letter-spacing: .18em; padding-left: .18em; background: linear-gradient(to top, rgb(217, 38, 26), rgb(191, 102, 13)); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; line-height: 1.1; }
+.qr { background: #fff; padding: 8px; border-radius: 12px; border: 1.5px solid var(--rand-karte); line-height: 0; }
+.qr svg { width: 168px; height: 168px; display: block; }
+.linktext { font-size: 12px; color: rgb(110, 110, 110); word-break: break-all; text-align: center; }
+.mitspieler { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; min-height: 28px; }
+.mitspieler span { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: #fff; border: 1.5px solid var(--rand-karte); }
+.mitspieler span.weg { opacity: .45; }
+.punkte::after { content: ''; animation: punkte 1.2s steps(4, end) infinite; }
+@keyframes punkte { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+/* ---------------------------------------------------------------- Spielfenster (dunkel) */
+.spiel { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; background: var(--fenster-dunkel); color: #fff;
+  padding: max(14px, env(safe-area-inset-top)) 0 max(14px, env(safe-area-inset-bottom)); }
+.modus { font-size: 11px; color: rgba(255, 255, 255, .4); text-align: center; line-height: 1.3; padding: 0 12px; }
+.spieler-zeile { font-size: 11px; color: rgba(255, 255, 255, .55); text-align: center; margin-top: 2px; padding: 0 12px; }
+.spieler-zeile b { color: rgba(255, 255, 255, .9); }
+.spieler-zeile .weg { opacity: .45; }
+.banner { margin-top: 6px; font-size: 12px; background: rgba(255, 190, 0, .18); color: rgb(255, 214, 90); border-radius: 6px; padding: 3px 10px; }
+.status { font-size: 17px; font-weight: 600; text-align: center; margin-top: 6px; line-height: 1.25; padding: 0 12px; min-height: 1.25em; }
+.brettbox { flex: 1; min-height: 0; width: 100%; margin-top: 10px; padding: 0 12px; position: relative; }
+#brett { width: 100%; height: 100%; display: block; touch-action: manipulation; cursor: pointer; }
+.knoepfe { display: flex; gap: 12px; margin-top: 10px; }
+.ns-knopf { font-size: 13px; background: #fff; color: #1a1a1a; border: 0; border-radius: 6px; padding: 4px 14px; min-height: 24px; cursor: pointer; box-shadow: 0 .5px 1.5px rgba(0, 0, 0, .5), inset 0 0 0 .5px rgba(0, 0, 0, .12); }
+.ns-knopf:hover { background: #f4f4f4; } .ns-knopf:active { background: #dcdcdc; }
+.ns-knopf:disabled { opacity: .5; cursor: default; }
+@media (pointer: coarse) { .ns-knopf { min-height: 34px; padding: 6px 16px; } }
+
+/* ---------------------------------------------------------------- Dialog (wie NSAlert) */
+.alarm-hinten { position: fixed; inset: 0; background: rgba(0, 0, 0, .28); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
+.alarm { width: 100%; max-width: 330px; background: rgb(236, 236, 236); color: #1a1a1a; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .45), 0 0 0 .5px rgba(0, 0, 0, .3); padding: 20px 20px 16px; display: flex; gap: 14px; }
+.alarm .bild { width: 52px; height: 52px; flex: none; border-radius: 12px; background: var(--fenster-dunkel); position: relative; box-shadow: inset 0 0 0 3px rgb(20, 71, 184); }
+.alarm .bild i { position: absolute; width: 16px; height: 16px; border-radius: 50%; }
+.alarm .inhalt { flex: 1; min-width: 0; }
+.alarm h2 { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+.alarm p { margin: 0 0 14px; font-size: 12px; line-height: 1.4; white-space: pre-line; }
+.alarm .tasten { display: flex; flex-direction: row-reverse; gap: 8px; flex-wrap: wrap; }
+.alarm .taste { font-size: 13px; padding: 4px 14px; min-height: 24px; border-radius: 6px; border: 0; background: #fff; color: #1a1a1a; cursor: pointer; box-shadow: 0 .5px 1.5px rgba(0, 0, 0, .4); }
+.alarm .taste.std { background: linear-gradient(#4a9bff, #0a6cf0); color: #fff; box-shadow: 0 .5px 1.5px rgba(0, 0, 0, .5); }
+.alarm .taste:disabled { opacity: .5; cursor: default; }
+@media (pointer: coarse) { .alarm .taste { min-height: 36px; } }

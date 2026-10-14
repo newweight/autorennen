@@ -58,6 +58,7 @@
       this.offen = [];             // [{ n, s, cd, ziel }] unbestätigte Eingaben
       this.fk = [1, 1];            // Turbo × Start-Boost (vom Server)
       this.gasSperre = false;
+      this.polizeiRest = 0;        // v4: Rest der Polizei-Anhaltung (s), vom Server in ich.ps
       this.sonder = false;         // Server rechnet gerade allein (Looping, Flug, …)
       this.korr = { x: 0, z: 0, y: 0, h: 0, w: 0 };   // w = Looping-Winkel (rad), nur mit Looping-Vorhersage
       // v16: Sonderzustände lokal mitrechnen (opt.sonderVorhersage: false = v15 | true = Standard | { kleber, anlauf, flug, looping })
@@ -102,7 +103,9 @@
       const v = this.vp, st = this.strecke, dt = R.config.physik.schritt;
       const kz = this.kz, az = this.az, fz = this.fz, lp = this.lp;
       let s = e.s;
-      if (e.ziel) s = { gas: 0, bremse: 0.6, lenkung: 0 };
+      // v4 (14.10.): von der Polizei angehalten → wie main.js polizei.haltSteuerung (Vorrang vor allem anderen): nur Bremse bis zum Stillstand
+      if (this.polizeiRest > 0) s = { gas: 0, bremse: v.vLaengs > 0.3 ? 1 : 0, lenkung: 0 };
+      else if (e.ziel) s = { gas: 0, bremse: 0.6, lenkung: 0 };
       if (e.cd || this.gasSperre) s = { gas: 0, bremse: s.bremse, lenkung: s.lenkung };
       if (kz && R.Kleber.gesperrt(kz)) s = NULL_S;                      // festgeklebt: Eingabe ignorieren (wie main.js)
       if (lp && (lp.aktiv || lp.fallen)) {
@@ -121,6 +124,8 @@
       if (this.kollisionen && this._ref) this._autoAuto(e, live);
       if (R.Kollisionen.pflanzen) R.Kollisionen.pflanzen(this._liste, st, { dt, countdown: e.cd });
       if (!v.imLooping) v.y = fz ? R.Schanzen.hoehe(fz, v, st, this.idx) : st.hoeheAn(v.x, v.z, this.idx);
+      // Polizei-Anhaltung zählt wie im Server (world/polizei.js schritt) nach jedem Schritt um dt herunter
+      if (this.polizeiRest > 0) { this.polizeiRest -= dt; if (this.polizeiRest <= 1e-9) this.polizeiRest = 0; }
     }
 
     /** Looping-Ergebnis: nach dem Herunterfallen verliert das Auto den Streckenindex (wie main.js _loopingEreignis). */
@@ -281,6 +286,7 @@
       this.offen = this.offen.filter(e => e.n > ich.ack);
       this.fk = ich.fk || [1, 1];
       this.gasSperre = !!ich.gs;
+      this.polizeiRest = ich.ps > 0 ? ich.ps : 0;
       // Looping-Anzeigewinkel vor dem Abgleich merken (für den weichen Übergang)
       const lpAlt = this.lp && this.lp.aktiv && !warSonder ? { L: this.lp.looping, w: this.lp.winkel + this.korr.w } : null;
       this.sonder = this._sonderLaden(ich);

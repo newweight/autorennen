@@ -116,6 +116,9 @@ kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1
   text-shadow: 0 .07em 0 #d6381f, 0 .14em 0 #8f2412, 0 .22em .25em rgba(0,0,0,.5); }
 .m-untertitel { margin-top: .35em; font-size: 1em; font-weight: 900; letter-spacing: .5em; text-transform: uppercase; color: #fff;
   text-shadow: 0 .1em .2em rgba(0,0,0,.6); padding-left: .2em; }
+.weitere-spiele { display: inline-block; margin-top: .5em; padding: .15em .8em; border-radius: 1em; background: rgba(255,255,255,.18); color: #fff;
+  font-size: .8em; text-decoration: none; pointer-events: auto; cursor: pointer; letter-spacing: 0; text-transform: none; }
+.weitere-spiele:hover { background: var(--gelb); color: #1a2550; }
 .m-schritte { display: flex; align-items: center; gap: .3em; }
 .m-schritt { padding: .25em .8em; border-radius: 1em; background: rgba(255,255,255,.18); cursor: pointer; opacity: .8; }
 .m-schritt b { display: inline-block; width: 1.4em; height: 1.4em; line-height: 1.4em; text-align: center; border-radius: 50%; background: rgba(255,255,255,.3); margin-right: .2em; }

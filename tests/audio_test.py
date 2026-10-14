@@ -11,6 +11,7 @@ html_pfad = os.path.join(out, 'audio_test.html')
 with open(html_pfad, 'w', encoding='utf-8') as f:
     f.write('''<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Audio-Test</title></head><body>
 <script src="../../src/config.js"></script>
+<script src="../../src/audio/motorProfile.js"></script>
 <script src="../../src/audio/engine.js"></script>
 </body></html>''')
 url = 'file://' + html_pfad
@@ -42,7 +43,7 @@ UPDATES = '''(() => { const A = Rennspiel.Audio, vMax = 42, d = {}, spur = [], i
     });
     const info = A.motorInfo('p1');
     maxGang = Math.max(maxGang, info.gang);
-    if (info.grundton < letzt - 8) abfaelle++;           // Schaltpunkt: Grundton fällt
+    if (info.grundton < letzt - 2) abfaelle++;           // Schaltpunkt: Zündfrequenz fällt (>2 Hz je Bild)
     letzt = info.grundton; fMin = Math.min(fMin, info.grundton); fMax = Math.max(fMax, info.grundton);
   }
   return { maxGang, abfaelle, fMin, fMax }; })()'''
@@ -76,12 +77,12 @@ with sync_playwright() as p:
     nachher = page.evaluate('Rennspiel.Audio.statistik()')
     pruefe('Nodes konstant nach 200 Updates', vorher['aktiv'] == nachher['aktiv'] and vorher['erzeugt'] == nachher['erzeugt'],
            f"aktiv {vorher['aktiv']} -> {nachher['aktiv']}, erzeugt {vorher['erzeugt']} -> {nachher['erzeugt']}")
-    pruefe('Motor-Slots: höchstens 3 KI + 2 Spieler', nachher['slots'] <= 5 and nachher['kiAktiv'] <= 3,
+    pruefe('Motor-Slots: höchstens 2 KI + 2 Spieler', nachher['slots'] <= 4 and nachher['kiAktiv'] <= 2,
            f"slots {nachher['slots']}, kiAktiv {nachher['kiAktiv']}")
-    pruefe('nur die 3 nächsten KI hörbar', page.evaluate('''(() => { const A = Rennspiel.Audio;
-      return ['k1', 'k2', 'k3'].every(i => A.motorInfo(i).hatSlot) && !A.motorInfo('k4').hatSlot; })()'''))
-    pruefe('4 Gänge, Drehzahl fällt beim Schalten', r['maxGang'] == 4 and r['abfaelle'] >= 3, r)
-    pruefe('Grundton im Bereich 55–400 Hz', 55 <= r['fMin'] and r['fMax'] <= 400, f"{r['fMin']:.0f}–{r['fMax']:.0f} Hz")
+    pruefe('nur die 2 nächsten KI hörbar', page.evaluate('''(() => { const A = Rennspiel.Audio;
+      return ['k1', 'k2'].every(i => A.motorInfo(i).hatSlot) && !A.motorInfo('k3').hatSlot && !A.motorInfo('k4').hatSlot; })()'''))
+    pruefe('Passat-Profil (ohne Auto-Angabe): 7 Gänge, Drehzahl fällt beim Schalten', r['maxGang'] == 7 and r['abfaelle'] >= 4, r)
+    pruefe('Zündfrequenz im Bereich 25–200 Hz (4-Zyl.-Diesel)', 25 <= r['fMin'] and r['fMax'] <= 200, f"{r['fMin']:.0f}–{r['fMax']:.0f} Hz")
 
     # KI weit weg → Slot wird frei
     page.evaluate('''(() => { const A = Rennspiel.Audio; A.motorUpdate('k1', { tempo: 10, vMax: 42, gas: 1, abstand: 200 }); })()''')

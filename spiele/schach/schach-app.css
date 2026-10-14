@@ -1,0 +1,199 @@
+/* Schach – Browser-Port der Mac-App (SchachSpiel.swift v3.1). Farben/Maße wie im Swift-Code (NSColor-Werte → rgb), Layout siehe PORTIERUNG.md. */
+:root {
+  --menu-bg: rgb(250, 247, 242);                /* NSColor.menuBg (0.98, 0.97, 0.95) */
+  --karte-rand: rgb(219, 214, 204);             /* cardBorder (0.86, 0.84, 0.80) */
+  --karte-hell: rgb(56, 133, 77);               /* cardHighlight (0.22, 0.52, 0.30) */
+  --braun: rgb(92, 56, 23);                     /* chessBrown */
+  --gold: rgb(184, 133, 20);                    /* chessGold */
+  --gruen: rgb(41, 107, 64);                    /* chessGreen */
+  --blau3d: rgb(56, 107, 191);                  /* color3D */
+  --spiel-bg: rgb(31, 26, 20);                  /* (0.12, 0.10, 0.08) */
+  --leiste-bg: rgb(46, 36, 26);                 /* (0.18, 0.14, 0.10) */
+  --coach-bg: rgb(20, 56, 97);                  /* (0.08, 0.22, 0.38) */
+  --analyse-bg: rgb(26, 26, 36);                /* (0.10, 0.10, 0.14) */
+  --aus: rgb(82, 82, 82);                       /* NSColor(white: 0.32) */
+  --schrift: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, "Segoe UI", Roboto, sans-serif;
+  --exp-h: 150px; --ana-h: 140px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; min-height: 100%; }
+body { font-family: var(--schrift); background: var(--menu-bg); color: #1a1a1a; -webkit-font-smoothing: antialiased; }
+body.ansicht-spiel { background: var(--spiel-bg); overflow: hidden; }
+button { font-family: inherit; }
+.hidden { display: none !important; }
+
+/* ---------------------------------------------------------------- Hauptmenü / Akademie (hell) */
+.seite { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; padding: max(36px, env(safe-area-inset-top)) 24px max(18px, env(safe-area-inset-bottom)); }
+.spalte { width: 100%; max-width: 460px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.spalte.akad { padding-top: 0; }
+.titel { font-size: 52px; font-weight: 800; line-height: 68px; height: 68px; text-align: center; white-space: nowrap;
+  background: linear-gradient(to top, rgb(64, 36, 15), rgb(173, 122, 15)); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
+.untertitel { font-size: 14px; color: rgb(140, 140, 140); }
+#mini { width: 180px; height: 180px; display: block; margin: 2px 0; }
+.karte { width: 100%; background: #fff; border: 1.5px solid var(--karte-rand); border-radius: 14px; box-shadow: 0 2px 8px rgba(0, 0, 0, .06); position: relative; }
+.karte.hervor { border: 2px solid var(--karte-hell); }
+.karte.knopfkarte { min-height: 58px; display: flex; align-items: center; padding: 16px 18px; gap: 14px; cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.karte.knopfkarte:hover { background: #fcfcfc; } .karte.knopfkarte:active { background: #f3f3f3; }
+.karte .symbol { width: 26px; height: 26px; flex: none; color: rgb(64, 64, 64); }
+.karte .texte { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.karte-titel { font-size: 15px; font-weight: 600; color: rgb(26, 26, 26); }
+.karte-sub { font-size: 12px; color: rgb(128, 128, 128); }
+.karte .pfeil { width: 12px; height: 12px; color: rgb(166, 166, 166); flex: none; }
+.karte.innen { padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.karte.innen .kopf { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.karte.innen .kopf .symbol { width: 28px; height: 28px; }
+.trenner { width: 100%; display: flex; align-items: center; gap: 10px; }
+.trenner i { flex: 1; height: 1px; background: rgb(199, 199, 199); }
+.trenner span { font-size: 12px; color: rgb(153, 153, 153); }
+.staerke-zeile { display: flex; align-items: baseline; gap: 4px; margin-top: 4px; }
+.staerke-zeile .links { font-size: 13px; font-weight: 500; color: rgb(51, 51, 51); }
+.staerke-zeile .rechts { font-size: 13px; font-weight: 600; color: var(--gruen); }
+input[type=range] { width: 100%; margin: 2px 0 0; accent-color: #1a7cf5; height: 24px; }
+.start { margin-top: 8px; height: 48px; width: 100%; border: 0; border-radius: 12px; background: var(--gruen); color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; }
+.start:hover { filter: brightness(1.08); } .start:active { filter: brightness(.9); } .start:disabled { opacity: .5; cursor: default; }
+.start.grau { background: rgb(120, 120, 128); }
+.figuren-legende { font-size: 13px; color: rgb(115, 115, 115); text-align: center; line-height: 1.5; }
+.klein-link { font-size: 12px; color: rgb(150, 150, 150); text-decoration: none; }
+.klein-link:hover { color: rgb(90, 90, 90); text-decoration: underline; }
+.akad-titel { font-size: 30px; font-weight: 800; color: var(--braun); text-align: center; }
+.akad-titel.klein { font-size: 24px; } .akad-titel.kl2 { font-size: 22px; }
+.akad-sub { font-size: 13px; color: rgb(115, 115, 115); text-align: center; }
+.akad-sub.k { font-size: 12px; }
+.akad-info { font-size: 11px; color: rgb(128, 128, 128); text-align: center; line-height: 1.4; white-space: pre-line; }
+.stufe-karte { width: 100%; background: #fff; border: 1.5px solid var(--karte-rand); border-radius: 14px; box-shadow: 0 2px 8px rgba(0, 0, 0, .06); padding: 10px 16px; display: flex; flex-direction: column; gap: 2px; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.stufe-karte.hervor { border: 2px solid var(--karte-hell); }
+.stufe-karte.gesperrt { cursor: default; }
+.stufe-karte:not(.gesperrt):hover { background: #fcfcfc; }
+.stufe-karte .t { font-size: 14px; font-weight: 600; color: rgb(26, 26, 26); }
+.stufe-karte.gesperrt .t { color: rgb(140, 140, 140); }
+.stufe-karte .s { font-size: 11px; color: rgb(128, 128, 128); }
+.stufe-karte .st { font-size: 11px; font-weight: 500; color: var(--gruen); }
+.stufe-karte.gesperrt .st { color: rgb(140, 140, 140); }
+.profil-wahl, .name-feld { width: 100%; font: inherit; font-size: 14px; padding: 6px 8px; border: 1px solid rgb(200, 200, 200); border-radius: 6px; background: #fff; color: #1a1a1a; }
+.name-feld::placeholder { color: rgb(150, 150, 150); }
+.wer-lernt { font-size: 16px; font-weight: 600; color: rgb(38, 38, 38); }
+
+/* macOS-artige Knöpfe */
+.ns-knopf { font-size: 13px; background: #fff; color: #1a1a1a; border: 0; border-radius: 6px; padding: 4px 14px; min-height: 24px; cursor: pointer; box-shadow: 0 .5px 1.5px rgba(0, 0, 0, .5), inset 0 0 0 .5px rgba(0, 0, 0, .12); }
+.ns-knopf:hover { background: #f4f4f4; } .ns-knopf:active { background: #dcdcdc; } .ns-knopf:disabled { opacity: .5; cursor: default; }
+@media (pointer: coarse) { .ns-knopf { min-height: 34px; padding: 6px 16px; } }
+
+/* ---------------------------------------------------------------- Online-Bildschirme (Stil der Menükarten) */
+.karte.innen h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.karte.innen .hilfe { font-size: 12px; color: rgb(128, 128, 128); margin: 0 0 6px; }
+.pillen { display: flex; flex-wrap: wrap; gap: 6px; }
+.pille { font-size: 13px; padding: 6px 11px; border-radius: 999px; border: 1.5px solid var(--karte-rand); background: #fff; color: #1a1a1a; cursor: pointer; }
+.pille.an { border-color: var(--karte-hell); background: rgb(234, 246, 238); color: var(--gruen); font-weight: 600; }
+.codefeld { width: 100%; font-size: 28px; font-weight: 700; letter-spacing: .35em; text-align: center; text-transform: uppercase; padding: 8px 6px; border: 1.5px solid rgb(200, 200, 200); border-radius: 10px; background: #fff; color: #1a1a1a; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.codefeld:focus { outline: none; border-color: var(--karte-hell); }
+.reihe { display: flex; gap: 8px; width: 100%; } .reihe > * { flex: 1; }
+.hinweis { min-height: 18px; font-size: 13px; text-align: center; color: rgb(110, 110, 110); }
+.hinweis.fehler { color: rgb(200, 40, 30); }
+.codegross { font-size: 64px; font-weight: 800; letter-spacing: .18em; padding-left: .18em; line-height: 1.1; background: linear-gradient(to top, rgb(64, 36, 15), rgb(173, 122, 15)); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
+.qr { background: #fff; padding: 8px; border-radius: 12px; border: 1.5px solid var(--karte-rand); line-height: 0; }
+.qr svg { width: 168px; height: 168px; display: block; }
+.linktext { font-size: 12px; color: rgb(110, 110, 110); word-break: break-all; text-align: center; }
+.mitspieler { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; min-height: 28px; }
+.mitspieler span { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: #fff; border: 1.5px solid var(--karte-rand); }
+.mitspieler span.weg { opacity: .45; }
+.zeile-oben { width: 100%; display: flex; justify-content: flex-start; }
+.punkte::after { content: ''; animation: punkte 1.2s steps(4, end) infinite; }
+@keyframes punkte { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+/* ---------------------------------------------------------------- Spielfenster (dunkel) */
+.spiel { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--spiel-bg); color: #fff; }
+.leiste { background: var(--leiste-bg); padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 8px max(10px, env(safe-area-inset-left)); display: grid; gap: 6px; flex: none;
+  grid-template-columns: auto auto 1fr auto; grid-template-areas: "zur menu status mat" "tog tog tog tog"; align-items: center; position: relative; z-index: 30; }
+.leiste .zur { grid-area: zur; } .leiste .menuknopf { grid-area: menu; }
+.status { grid-area: status; font-size: 14px; font-weight: 600; text-align: center; line-height: 1.2; min-height: 36px; display: flex; align-items: center; justify-content: center; padding: 0 4px; overflow: hidden; }
+.material { grid-area: mat; width: 160px; font: 500 11px/1.5 ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.material .w { color: rgba(255, 255, 255, .85); display: block; } .material .b { color: rgba(255, 255, 255, .75); display: block; }
+.schalter { grid-area: tog; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.schalter .rechts { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.bt { height: 34px; padding: 0 10px; border: 0; border-radius: 9px; background: var(--aus); color: #fff; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.bt:hover { filter: brightness(1.12); } .bt:active { filter: brightness(.9); } .bt:disabled { opacity: .5; cursor: default; }
+.bt.an { background: var(--an, var(--gruen)); }
+.bt.braun { background: var(--braun); }
+.bt.b100 { min-width: 100px; } .bt.b80 { min-width: 80px; } .bt.b84 { min-width: 84px; } .bt.b98 { min-width: 98px; } .bt.b88 { min-width: 88px; } .bt.b92 { min-width: 92px; } .bt.b70 { min-width: 70px; }
+.macknopf { height: 32px; min-width: 84px; padding: 0 12px; font-size: 13px; background: #fff; color: #1a1a1a; border: 0; border-radius: 6px; cursor: pointer; box-shadow: 0 .5px 1.5px rgba(0, 0, 0, .5), inset 0 0 0 .5px rgba(0, 0, 0, .12); }
+.macknopf:hover { background: #f4f4f4; } .macknopf:active { background: #dcdcdc; }
+.macknopf.menuknopf { min-width: 36px; padding: 0 10px; font-size: 15px; }
+.zugliste { flex: none; background: rgb(38, 30, 22); font: 11px/1.2 ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace; color: rgba(255, 255, 255, .6); padding: 4px 10px; white-space: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.zugliste b { color: rgba(255, 255, 255, .85); font-weight: 600; } .zugliste i { font-style: normal; color: rgba(255, 255, 255, .35); margin-left: 6px; }
+.zugliste .neu { color: var(--gold); }
+.flaeche { flex: 1; min-height: 140px; position: relative; overflow: hidden; }
+.b3d { position: absolute; inset: 0; }
+.b3d canvas { display: block; }
+.b2dwrap { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.brett2d-canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; touch-action: manipulation; cursor: pointer; }
+.flaeche.m3d .b2dwrap { display: none; } .flaeche.m2d .b3d { display: none; }
+.blase { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(640px, calc(100% - 40px)); max-height: 55%; background: rgba(20, 56, 97, .95); border: 1.5px solid rgba(128, 217, 255, .6);
+  border-radius: 12px; padding: 10px 40px 10px 14px; font-size: 12.5px; line-height: 1.4; white-space: pre-wrap; overflow: auto; z-index: 10; }
+.blase .zu { position: absolute; right: 6px; top: 4px; background: none; border: 0; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; padding: 4px 6px; }
+.unten { flex: none; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); }
+.unten.nebeneinander { flex-direction: row; }
+.unten.nebeneinander > .erkl { flex: 0 0 55%; } .unten.nebeneinander > .analyse { flex: 1; }
+.erkl { background: var(--coach-bg); height: var(--exp-h); position: relative; display: flex; gap: 8px; padding: 6px 10px 6px 12px; flex: none; }
+.erkl .ikon { font-size: 18px; line-height: 24px; flex: none; width: 28px; }
+.erkl .text { flex: 1; min-width: 0; overflow-y: auto; font-size: 12.5px; line-height: 1.38; white-space: pre-wrap; user-select: text; padding-right: 2px; }
+.erkl .knoepfe { flex: none; width: 66px; display: flex; flex-direction: column; gap: 6px; }
+.mini-bt { height: 30px; border: 0; border-radius: 7px; background: rgb(89, 89, 89); color: #fff; font-size: 10px; font-weight: 600; cursor: pointer; }
+.mini-bt.gruen { background: var(--gruen); } .mini-bt:hover { filter: brightness(1.12); }
+.analyse { background: var(--analyse-bg); height: var(--ana-h); display: flex; gap: 8px; padding: 6px; flex: none; }
+.analyse canvas { width: 22px; height: 100%; flex: none; display: block; }
+.analyse .k { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.analyse .atitel { font-size: 12px; font-weight: 700; color: var(--gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; padding-bottom: 2px; }
+.analyse .atext { flex: 1; overflow-y: auto; font-size: 12px; line-height: 1.38; color: rgba(255, 255, 255, .85); white-space: pre-wrap; user-select: text; }
+@media (max-height: 820px) { :root { --exp-h: 116px; --ana-h: 110px; } }
+@media (max-height: 640px) { :root { --exp-h: 84px; --ana-h: 84px; } }
+body.akademie-spiel { --exp-h: 108px; }
+@media (max-height: 820px) { body.akademie-spiel { --exp-h: 100px; } }
+
+/* Menü-Knopf (ersetzt die Mac-Menüleiste) */
+.dropdown { position: absolute; left: 10px; top: 100%; margin-top: 2px; min-width: 270px; max-width: calc(100vw - 20px); max-height: calc(100dvh - 130px); overflow: auto; background: rgb(236, 236, 236); color: #1a1a1a; border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .5), 0 0 0 .5px rgba(0, 0, 0, .35); padding: 5px; font-size: 13px; z-index: 40; }
+.dropdown .gruppe { font-size: 11px; font-weight: 600; color: rgb(110, 110, 110); padding: 6px 10px 2px; }
+.dropdown button { display: flex; width: 100%; align-items: center; gap: 8px; text-align: left; background: none; border: 0; padding: 5px 10px; border-radius: 5px; font: inherit; color: inherit; cursor: pointer; }
+.dropdown button:hover:not(:disabled) { background: rgb(10, 100, 235); color: #fff; }
+.dropdown button:disabled { color: rgb(150, 150, 150); cursor: default; }
+.dropdown button .h { width: 14px; flex: none; text-align: center; }
+.dropdown button .t { flex: 1; } .dropdown button .k { font-size: 12px; opacity: .6; font-family: ui-monospace, Menlo, monospace; }
+.dropdown hr { border: 0; border-top: 1px solid rgba(0, 0, 0, .12); margin: 4px 6px; }
+
+/* ---------------------------------------------------------------- Dialog (wie NSAlert) */
+.alarm-hinten { position: fixed; inset: 0; background: rgba(0, 0, 0, .28); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
+.alarm { width: 100%; max-width: 380px; max-height: calc(100dvh - 40px); overflow: auto; background: rgb(236, 236, 236); color: #1a1a1a; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .45), 0 0 0 .5px rgba(0, 0, 0, .3); padding: 20px 20px 16px; display: flex; gap: 14px; }
+.alarm .bild { width: 52px; height: 52px; flex: none; border-radius: 12px; background: var(--braun); color: #fff; font-size: 34px; line-height: 52px; text-align: center; box-shadow: inset 0 0 0 3px var(--gruen); }
+.alarm .inhalt { flex: 1; min-width: 0; }
+.alarm h2 { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+.alarm p { margin: 0 0 12px; font-size: 12px; line-height: 1.4; white-space: pre-line; }
+.alarm .tasten { display: flex; flex-direction: row-reverse; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.alarm .tasten.senkrecht { flex-direction: column; }
+.alarm .taste { font-size: 13px; padding: 4px 14px; min-height: 24px; border-radius: 6px; border: 0; background: #fff; color: #1a1a1a; cursor: pointer; box-shadow: 0 .5px 1.5px rgba(0, 0, 0, .4); display: flex; align-items: center; justify-content: center; gap: 8px; }
+.alarm .taste.std { background: linear-gradient(#4a9bff, #0a6cf0); color: #fff; box-shadow: 0 .5px 1.5px rgba(0, 0, 0, .5); }
+.alarm .taste:disabled { opacity: .5; cursor: default; }
+.alarm .taste img { width: 22px; height: 22px; }
+.alarm .namenzeile { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; }
+.alarm .namenzeile label { font-size: 12px; font-weight: 600; width: 58px; flex: none; }
+.alarm .namenzeile input, .alarm .namenzeile select { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid rgb(190, 190, 190); border-radius: 5px; background: #fff; min-width: 0; }
+.alarm .namenzeile input { flex: 1; } .alarm .namenzeile select { width: 104px; flex: none; }
+@media (pointer: coarse) { .alarm .taste { min-height: 36px; } }
+
+/* ---------------------------------------------------------------- schmale Bildschirme (Handy) */
+@media (max-width: 720px) {
+  .leiste { grid-template-columns: auto auto 1fr; grid-template-areas: "zur menu mat" "status status status" "tog tog tog"; gap: 4px 6px; padding-bottom: 6px; }
+  .material { width: auto; text-align: right; font-size: 10.5px; line-height: 1.35; }
+  .status { min-height: 30px; }
+  .bt { height: 32px; padding: 0 7px; font-size: 10.5px; min-width: 0 !important; }
+  .schalter { gap: 4px; }
+  .schalter .rechts { margin-left: 0; width: auto; }
+  .macknopf { min-width: 0; height: 30px; padding: 0 10px; }
+  .erkl .text, .analyse .atext { font-size: 11.5px; }
+  .seite { padding-left: 16px; padding-right: 16px; }
+  .titel { font-size: 46px; }
+}
+
+/* ---- Online-Infostreifen unter der Kopfleiste (Zusatz) ---- */
+.onlineinfo { flex: none; background: rgb(38, 30, 22); font: 600 12px/1.3 var(--ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif); color: rgba(255, 255, 255, .78); padding: 4px 10px; white-space: nowrap; overflow-x: auto; scrollbar-width: none; border-top: 1px solid rgba(255, 255, 255, .06); }
+.onlineinfo .weg { opacity: .45; } .onlineinfo b { color: #fff; }
+.onlineinfo .banner { margin-left: 10px; padding: 1px 8px; border-radius: 9px; background: rgb(217, 89, 26); color: #fff; }

@@ -409,6 +409,7 @@
       f.vehicle.y = st.hoeheAn(pose.x, pose.z, idx);
       if (sp._vorherAngleichen) sp._vorherAngleichen(f);
       f.index = idx; f.stehZeit = 0;
+      f.netReset = (f.netReset || 0) + 1;      // v21: online springen die Clients dann statt zu interpolieren
       f.polizeiFahrer.zurueckgesetzt(idx);
     }
 

@@ -17,6 +17,9 @@
 
   const SPALTEN = 3;                       // Auto-Raster
   const FAHRER_SPALTEN = { solo: 6, zwei: 3 };   // Fahrer-Raster (12 Karten: 6×2 bzw. je Spieler 3×4)
+  // Link zu den Brettspielen (4 gewinnt, Schach) – nur wenn das Spiel vom Server kommt (http/https), nicht von file://
+  const WEITERE_SPIELE = typeof location !== 'undefined' && /^https?:$/.test(location.protocol)
+    ? '<a class="weitere-spiele" href="spiele/">🎲 Weitere Spiele</a>' : '';
   const SCHRITTE = [
     { id: 'modus', name: 'Modus' },
     { id: 'strecke', name: 'Strecke' },
@@ -500,7 +503,7 @@
         (this.schritt < SCHRITTE.length - 1 ? '<div class="knopf klein gruen" data-a="weiter">Weiter ▶</div>' : '<span></span>');
       this.wurzel.innerHTML =
         `<div class="m-kopf"><div class="m-logo"><div class="m-titel">🔥 ${R.config.titel} 🏎️</div>` +
-        `<div class="m-untertitel">${R.config.untertitel}</div></div><div class="m-schritte">${kopf}</div></div>` +
+        `<div class="m-untertitel">${R.config.untertitel}</div>${WEITERE_SPIELE}</div><div class="m-schritte">${kopf}</div></div>` +
         `<div class="m-inhalt">${id === 'start' && this.tafelOffen ? '' : `<h1>${titel}</h1>`}${inhalt}</div>` +
         `<div class="m-fuss"><div class="m-nav">${nav}</div><div class="m-hinweis">${hinweis}</div></div>`;
       if (id === 'auto') this.buehnenBinden();

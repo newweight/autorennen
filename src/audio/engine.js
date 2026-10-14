@@ -5,7 +5,10 @@
 //   start()                       AudioContext anlegen/fortsetzen (nach erster Nutzer-Eingabe)
 //   an / setzeAn(b) / schalten()  Ton ein/aus (localStorage 'rennspiel.ton')
 //   setzeLautstaerke(0..1)
-//   motorAnlegen(id, {spieler}) / motorUpdate(id, {tempo, vMax, gas, untergrund, abstand, dt})
+//   motorAnlegen(id, {spieler, auto}) / motorUpdate(id, {tempo, vMax, gas, untergrund, abstand, dt, drehzahl})
+//        auto = Auto-Objekt (mit .id) oder id-String → Klangprofil aus src/audio/motorProfile.js (Zylinder, Drehzahlbereich, Gänge,
+//        Diesel-Nageln, Boxer-Sägen, Turbo, Knallen …); ohne auto → Passat-Profil. Zündfrequenz = Drehzahl/60 × Zylinder/2.
+//   offlineStarten(OfflineAudioContext)   Test: Motor in einen OfflineAudioContext rendern (Zeit setzt der Test über _zeitTest)
 //   motorEntfernen(id) / motorAlleEntfernen() / motorStumm(bool)
 //   countdown(n) kollision(staerke) bande() runde() ziel(platz) menueKlick() bremsen(an)
 //   schadenTreffer(stufe) liegengeblieben() abschleppen()   (Runde 4, Schaden-System)
@@ -14,8 +17,8 @@
 //   dinoBruellen(laut, art) grollen(dauer) pfeifen(dauer, laut) einschlag(laut) flugsaurierSchrei(laut) baerBrummen(laut)  (Runde 6, W2-C)  rehRuf(laut) (W2-C2)
 //   statistik()                   Zähler (aktive Nodes usw.) für Tests
 //
-// Aufbau: Motor-Stimmen (Sägezahn + Rechteck → Tiefpass) liegen in einem festen
-// Pool von höchstens 5 Slots (2 Spieler + 3 KI). Oszillatoren laufen dauerhaft und
+// Aufbau: Motor-Stimmen (Zündimpuls-Oszillatoren, halbe Ordnung, Nagel-Rauschen, Turbo → Formant + Tiefpass) liegen in einem festen
+// Pool von höchstens 4 Slots (2 Spieler + 2 KI, config.sound.motor.maxKi). Oszillatoren laufen dauerhaft und
 // werden nur umgestimmt – pro Frame entstehen keine neuen Nodes. Kurze Effekte
 // erzeugen Nodes, die sich nach dem Ende selbst abbauen.
 // Fehlt der AudioContext oder ist er "suspended", tut jede Methode einfach nichts.
@@ -26,19 +29,26 @@
   const K = {
     speicher: 'rennspiel.ton',
     lautstaerke: 0.7,
-    maxKi: 3,              // so viele KI-Motoren gleichzeitig hörbar
-    maxStimmen: 5,         // 2 Spieler + 3 KI
-    hoerweite: 60,         // m: weiter entfernte KI-Autos sind stumm (Slot frei, kein Update)
+    maxKi: 2,              // so viele KI-Motoren gleichzeitig hörbar (14.10.: 3 → 2, jeder Motor hat jetzt mehr Nodes; config.sound.motor.maxKi)
+    maxStimmen: 4,         // 2 Spieler + 2 KI
+    hoerweite: 60,         // m: weiter entfernte KI-Autos sind stumm (Slot frei, kein Update); config.sound.motor.hoerweite
     tauschPuffer: 5,       // m: ein näheres KI-Auto verdrängt erst ab so viel Vorsprung
-    fMin: 62, fMax: 380,   // Hz Grundton (Leerlauf ≈ 87 Hz)
-    leerlauf: 0.08,        // Drehzahl (0..1) im Stand
   };
-  // Gänge: Geschwindigkeitsanteil (an vMax), in dem der Gang gefahren wird
-  const GANG_VON = [0.0, 0.22, 0.45, 0.70];
-  const GANG_BIS = [0.25, 0.50, 0.75, 1.01];
-  const GANG_RPM_MIN = [K.leerlauf, 0.40, 0.40, 0.40];   // Drehzahl direkt nach dem Schalten
-
   const klemme = (x, lo, hi) => (x < lo ? lo : (x > hi ? hi : x));
+  /** Notprofil, falls motorProfile.js fehlt. */
+  const NOTPROFIL = {
+    id: 'standard', zyl: 4, leerlauf: 800, rpmMax: 4600, rpmVmax: 3700, startRpm: 2000, hoch: 2200, hochVoll: 3900, runter: 1300,
+    gaenge: [3.9, 2.9, 2.1, 1.5, 1.1, 0.8, 0.62], schaltZeit: 0.16, steigK: 9, fallK: 6,
+    wave: { slope: 1.15, odd: 1, bump: [4, 2.5, 1.0] }, halb: 0.4, beat: 0.004, wobble: 7, klopf: 0.5, klopfHz: 1700, klopfQ: 0.9, klopfDuty: 0.12,
+    formant: { hz: 380, db: 4, q: 1 }, cut0: 520, cut1: 900, cutGas: 500, turbo: 0, knallen: 0, pegel: 1,
+  };
+  /** Drehzahl im Gang g (0-basiert); ohne Closure/Allokation (läuft je Frame und Auto). */
+  function rpmGang(p, g, tempo, vMax) {
+    const n = p.gaenge.length;
+    return p.rpmVmax * Math.min(1.25, tempo / vMax) * p.gaenge[g] / p.gaenge[n - 1];
+  }
+  /** Ist der neue Wert merklich anders (> abs bzw. 0,5 %)? */
+  function anders(a, b, abs) { return Math.abs(a - b) > Math.max(abs, Math.abs(b) * 0.005); }
 
   class Ton {
     constructor() {
@@ -60,6 +70,7 @@
       this._suspendTimer = null;
       this._horcher = null;
       this._wetterTon = {};           // Runde 4: art → { quellen, gain }
+      this._zeitTest = null; this._offline = false; this._wellen = null;
     }
 
     // ---------- Zustand ----------
@@ -67,7 +78,23 @@
     set an(b) { this.setzeAn(b); }
 
     /** Läuft der AudioContext und ist der Ton an? */
-    _bereit() { return !!this._ctx && this._ctx.state === 'running' && this._an; }
+    _bereit() { return !!this._ctx && (this._ctx.state === 'running' || this._offline) && this._an; }
+
+    /** Aktuelle Audiozeit (Test: _zeitTest überschreibt, damit ein OfflineAudioContext Frame für Frame „gespielt“ werden kann). */
+    _jetzt() { return this._zeitTest !== null && this._zeitTest !== undefined ? this._zeitTest : this._ctx.currentTime; }
+
+    /** Test: statt Echtzeit-AudioContext einen OfflineAudioContext benutzen (Motor-Rendering ohne Lautsprecher). */
+    offlineStarten(ctx) {
+      this._ctx = ctx; this._offline = true; this._zeitTest = 0;
+      this._aufbauen();
+      return true;
+    }
+
+    /** Hörweite der KI-Motoren (m). */
+    _hoerweite() {
+      const s = R.config && R.config.sound && R.config.sound.motor;
+      return s && s.hoerweite > 0 ? s.hoerweite : K.hoerweite;
+    }
 
     /** Zähler für Tests. aktiv = lebende Nodes (Dauer-Nodes + laufende Effekte). */
     statistik() {
@@ -86,7 +113,8 @@
     motorInfo(id) {
       const v = this._stimmen.get(id);
       if (!v) return null;
-      return { gang: v.gang + 1, rpm: v.rpm, rpmZiel: v.rpmZiel, grundton: v.grundton, hatSlot: !!v.slot, abstand: v.abstand, spieler: v.spieler };
+      return { gang: v.gang + 1, rpm: v.rpm, rpmZiel: v.rpmZiel, grundton: v.grundton, hatSlot: !!v.slot, abstand: v.abstand, spieler: v.spieler,
+        profil: v.profil.id, zylinder: v.profil.zyl, gaenge: v.profil.gaenge.length, boost: v.boost };
     }
 
     // ---------- Start ----------
@@ -207,18 +235,25 @@
     motorAnlegen(id, opt) {
       let v = this._stimmen.get(id);
       const spieler = !!(opt && opt.spieler);
+      const profil = this._profilFuer(opt && opt.auto);
       if (!v) {
         v = {
-          id, spieler, gang: 0, rpm: K.leerlauf, rpmZiel: K.leerlauf, grundton: K.fMin + K.leerlauf * (K.fMax - K.fMin),
-          dip: 0, abstand: 0, slot: null, zeit: 0, neu: true, ug: '',
-          lf: 0, lc: 0, ll: -1, lr: -1,     // zuletzt geplante Werte (Frequenz, Filter, Lautstärke, Rauschen)
-          stimmung: 1 + ((this._zaehler++ % 5) - 2) * 0.015,
+          id, spieler, gang: 0, profil, rpm: profil.leerlauf, rpmZiel: profil.leerlauf, grundton: profil.leerlauf / 60 * profil.zyl / 2,
+          dip: 0, blip: 0, sperre: 0, gasG: 0, schubG: 0, volllast: 0, boost: 0, letztesKnallen: -9,
+          abstand: 0, slot: null, zeit: 0, neu: true, ug: '',
+          lf: 0, lc: 0, ll: -1, lr: -1, lk: -1, lt: -1, ltf: 0,     // zuletzt geplante Werte (Frequenz, Filter, Lautstärke, Rauschen, Nageln, Turbo)
+          stimmung: 1,
         };
         this._stimmen.set(id, v);
-      } else if (v.spieler !== spieler) {
-        if (v.slot) this._slotLoesen(v);
-        v.spieler = spieler;
+      } else {
+        if (v.profil !== profil) { v.profil = profil; v.gang = 0; v.rpm = v.rpmZiel = profil.leerlauf; }
+        if (v.spieler !== spieler) {
+          if (v.slot) this._slotLoesen(v);
+          v.spieler = spieler;
+        }
       }
+      // Spieler exakt gestimmt (Zündfrequenz = Formel); KI leicht gegeneinander verstimmt, damit mehrere gleiche Autos nicht verschmelzen
+      v.stimmung = spieler ? 1 : 1 + ((this._zaehler++ % 5) - 2) * 0.012;
       this._spielerZaehlen();
       return id;
     }
@@ -243,25 +278,76 @@
       this._spielerStimmen = 0;
     }
 
-    /** Ein Slot = fertige Motor-Signalkette (9 Nodes), die dauerhaft läuft. */
+    // ---------- Motor (14.10. (v21): Klang je Auto, siehe src/audio/motorProfile.js) ----------
+    /** Profil zu einem Auto holen (Fallback ohne motorProfile.js: schlichtes Diesel-4-Zylinder-Profil). */
+    _profilFuer(auto) {
+      if (R.MotorProfile) return R.MotorProfile.fuer(auto);
+      return NOTPROFIL;
+    }
+
+    /** PeriodicWave (Zündimpuls-Obertöne) je Profil, einmal je AudioContext. */
+    _welle(p) {
+      const c = this._ctx;
+      this._wellen = this._wellen || {};
+      let w = this._wellen[p.id];
+      if (w) return w;
+      const N = 48, re = new Float32Array(N + 1), im = new Float32Array(N + 1), s = p.wave;
+      for (let h = 1; h <= N; h++) {
+        let a = Math.pow(h, -s.slope) * ((h & 1) ? 1 : 1 / Math.max(0.2, s.odd));
+        if (s.bump) a *= 1 + s.bump[2] * Math.exp(-Math.pow((h - s.bump[0]) / s.bump[1], 2));
+        im[h] = a;
+      }
+      w = { ton: c.createPeriodicWave(re, im), puls: null };
+      // Nagel-Puls: schmaler Rechteckpuls (Breite klopfDuty), Cosinus-Reihe
+      const pr = new Float32Array(N + 1), pi = new Float32Array(N + 1), dty = Math.max(0.03, Math.min(0.5, p.klopfDuty || 0.15));
+      for (let h = 1; h <= N; h++) pr[h] = Math.sin(Math.PI * h * dty) / (Math.PI * h);
+      w.puls = c.createPeriodicWave(pr, pi);
+      this._wellen[p.id] = w;
+      return w;
+    }
+
+    /** Zweig der Slot-Kette ein-/ausschalten (nicht angeschlossene Nodes rechnet der Browser nicht → spart CPU). */
+    _zweig(k, name, von, nach, an) {
+      if (k.zw[name] === an) return;
+      k.zw[name] = an;
+      try { if (an) von.connect(nach); else von.disconnect(nach); } catch (e) { /* egal */ }
+    }
+
+    /** Ein Slot = fertige Motor-Signalkette, die dauerhaft läuft (nur Umstimmen, keine neuen Nodes im Betrieb). */
     _slotBauen() {
       const c = this._ctx;
       const k = {
-        out: this._gain(0), filter: this._n(c.createBiquadFilter()),
-        oscS: this._n(c.createOscillator()), oscQ: this._n(c.createOscillator()),
-        gS: this._gain(0.5), gQ: this._gain(0.32),
+        out: this._gain(0), filter: this._n(c.createBiquadFilter()), formant: this._n(c.createBiquadFilter()),
+        oscA: this._n(c.createOscillator()), oscB: this._n(c.createOscillator()), oscH: this._n(c.createOscillator()),
+        gA: this._gain(0.5), gB: this._gain(0.2), gH: this._gain(0.2),
+        nz: this._n(c.createBufferSource()), nzBP: this._n(c.createBiquadFilter()), nzAM: this._gain(0),
+        oscK: this._n(c.createOscillator()), kTiefe: this._gain(0),
+        turb: this._n(c.createOscillator()), turbG: this._gain(0),
         rausch: this._n(c.createBufferSource()), rFilter: this._n(c.createBiquadFilter()), rGain: this._gain(0),
       };
-      k.filter.type = 'lowpass'; k.filter.frequency.value = 400; k.filter.Q.value = 1.2;
-      k.oscS.type = 'sawtooth'; k.oscS.detune.value = -6; k.oscS.frequency.value = 90;
-      k.oscQ.type = 'square'; k.oscQ.detune.value = 9; k.oscQ.frequency.value = 45;
-      k.oscS.connect(k.gS); k.oscQ.connect(k.gQ); k.gS.connect(k.filter); k.gQ.connect(k.filter);
-      k.filter.connect(k.out); k.out.connect(this._motorBus);
+      k.filter.type = 'lowpass'; k.filter.frequency.value = 400; k.filter.Q.value = 0.9;
+      k.formant.type = 'peaking'; k.formant.frequency.value = 600; k.formant.Q.value = 1; k.formant.gain.value = 0;
+      k.oscA.frequency.value = 60; k.oscB.frequency.value = 60; k.oscH.frequency.value = 30; k.oscH.type = 'sine';
+      k.oscA.connect(k.gA); k.oscB.connect(k.gB); k.oscH.connect(k.gH);
+      k.gA.connect(k.formant); k.gB.connect(k.formant); k.gH.connect(k.formant);
+      k.formant.connect(k.filter); k.filter.connect(k.out); k.out.connect(this._motorBus);
+      // Nageln/Ticken: Rauschen, vom Puls (Zündfrequenz) zerhackt
+      k.nz.buffer = this._rausch; k.nz.loop = true;
+      k.nzBP.type = 'bandpass'; k.nzBP.frequency.value = 1700; k.nzBP.Q.value = 0.9;
+      k.nz.connect(k.nzBP); k.nzBP.connect(k.nzAM); k.nzAM.connect(k.out);
+      k.oscK.frequency.value = 60; k.oscK.connect(k.kTiefe); k.kTiefe.connect(k.nzAM.gain);
+      // Turbo-Pfeifen
+      k.turb.type = 'sine'; k.turb.frequency.value = 3000; k.turb.connect(k.turbG); k.turbG.connect(k.out);
+      // Rauschen auf Gras/Sand
       k.rausch.buffer = this._rausch; k.rausch.loop = true;
       k.rFilter.type = 'bandpass'; k.rFilter.Q.value = 0.8; k.rFilter.frequency.value = 700;
       k.rausch.connect(k.rFilter); k.rFilter.connect(k.rGain); k.rGain.connect(k.out);
-      k.oscS.start(); k.oscQ.start(); k.rausch.start(0, Math.random() * 1.5);
-      return { k, besitzer: null };
+      const z = Math.random() * 1.5;
+      k.oscA.start(); k.oscB.start(); k.oscH.start(); k.oscK.start(); k.turb.start();
+      k.nz.start(0, z); k.rausch.start(0, z + 0.4);
+      k.zw = { nz: true, turb: true, gB: true, gH: true, rausch: true, bus: true };    // alle Zweige beim Bauen angeschlossen
+      k.rZaehl = 0; k.zeitFrei = 0;
+      return { k, besitzer: null, profil: null };
     }
 
     _weitesterKi() {
@@ -275,7 +361,7 @@
 
     _slotNehmen(v) {
       let slot = null;
-      if (!v.spieler && this._kiAktiv >= K.maxKi) {
+      if (!v.spieler && this._kiAktiv >= this._maxKi()) {
         const w = this._weitesterKi();
         if (!w || w.besitzer.abstand <= v.abstand + K.tauschPuffer) return false;
         this._slotLoesen(w.besitzer); slot = w;
@@ -289,8 +375,16 @@
         if (!slot) return false;
       }
       slot.besitzer = v; v.slot = slot; v.neu = true; v.dip = 0; v.ug = '';
+      slot.k.zeitFrei++;                                  // laufende Abbau-Timer des Slots ungültig machen
+      this._zweig(slot.k, 'bus', slot.k.out, this._motorBus, true);
       if (!v.spieler) this._kiAktiv++;
       return true;
+    }
+
+    /** Höchstzahl hörbarer KI-Motoren (config.sound.motor.maxKi, Standard K.maxKi). */
+    _maxKi() {
+      const s = R.config && R.config.sound && R.config.sound.motor;
+      return s && s.maxKi >= 0 ? s.maxKi : K.maxKi;
     }
 
     _slotLoesen(v) {
@@ -298,80 +392,177 @@
       if (!v.spieler) this._kiAktiv--;
       s.besitzer = null; v.slot = null;
       if (this._ctx) {
-        const t = this._ctx.currentTime;
+        const t = this._jetzt();
         try { s.k.out.gain.setTargetAtTime(0, t, 0.03); s.k.rGain.gain.setTargetAtTime(0, t, 0.03); } catch (e) { /* egal */ }
+        // freier Slot: nach dem Ausblenden vom Bus trennen, damit er keine CPU braucht
+        if (typeof setTimeout === 'function' && !this._offline) {
+          const k = s.k, nr = ++k.zeitFrei;
+          setTimeout(() => { if (!s.besitzer && k.zeitFrei === nr) this._zweig(k, 'bus', k.out, this._motorBus, false); }, 400);
+        }
       }
     }
 
     /**
-     * Pro Frame aufrufen. d = { tempo (m/s), vMax (m/s), gas 0..1, untergrund, abstand (m, nur KI), dt (s, optional) }
+     * Pro Frame aufrufen. d = { tempo (m/s), vMax (m/s), gas 0..1, untergrund, abstand (m, nur KI), dt (s, optional),
+     *                           drehzahl (U/min, optional: überschreibt die berechnete Drehzahl, z. B. für Tests) }
      * Das Objekt d darf wiederverwendet werden.
      */
     motorUpdate(id, d) {
       const v = this._stimmen.get(id);
       if (!v || !d || !this._bereit()) return;
       v.abstand = v.spieler ? 0 : (d.abstand > 0 ? d.abstand : 0);
-      if (!v.spieler && v.abstand >= K.hoerweite) { if (v.slot) this._slotLoesen(v); return; }
+      if (!v.spieler && v.abstand >= this._hoerweite()) { if (v.slot) this._slotLoesen(v); return; }
       if (!v.slot && !this._slotNehmen(v)) return;
-      const k = v.slot.k, c = this._ctx, t = c.currentTime;
+      const k = v.slot.k, c = this._ctx, t = this._jetzt();
+      const p = v.profil, sl = v.slot;
 
       let dt = d.dt > 0 ? d.dt : t - v.zeit;
       v.zeit = t;
       dt = klemme(dt, 0.001, 0.1);
 
-      // --- Gang und Drehzahl ---
+      // --- Profil im Slot einstellen (nur bei Wechsel des Profils) ---
+      if (sl.profil !== p) {
+        sl.profil = p;
+        const w = this._welle(p);
+        k.oscA.setPeriodicWave(w.ton); k.oscB.setPeriodicWave(w.ton); k.oscK.setPeriodicWave(w.puls);
+        k.gA.gain.value = 0.5; k.gB.gain.value = 0.32; k.gH.gain.value = 0.5 * p.halb;
+        this._zweig(k, 'gB', k.gB, k.formant, p.beat > 0);
+        this._zweig(k, 'gH', k.gH, k.formant, p.halb >= 0.05);
+        this._zweig(k, 'nz', k.nzAM, k.out, p.klopf >= 0.1);
+        k.zw.turbCfg = null;
+        k.nzBP.frequency.value = p.klopfHz; k.nzBP.Q.value = p.klopfQ;
+        k.formant.frequency.value = p.formant.hz; k.formant.Q.value = p.formant.q; k.formant.gain.value = p.formant.db;
+        k.out.gain.cancelScheduledValues(t); k.out.gain.setValueAtTime(0, t);
+        v.neu = true;
+      }
+
+      // --- Gas, Schub, Gang und Drehzahl ---
       const vMax = d.vMax > 1 ? d.vMax : 40;
       const tempo = d.tempo > 0 ? d.tempo : 0;
-      const r = Math.min(1, tempo / vMax);
       const gas = klemme(+d.gas || 0, 0, 1);
+      v.gasG += (gas - v.gasG) * Math.min(1, dt * 5);
+      const n = p.gaenge.length;
       let g = v.gang;
-      while (g < 3 && r > GANG_BIS[g]) g++;
-      while (g > 0 && r < GANG_VON[g] - 0.04) g--;
-      if (g !== v.gang) { if (g > v.gang) v.dip = 0.14; v.gang = g; }   // beim Hochschalten kurz Gas weg
-      let x = klemme((r - GANG_VON[g]) / (GANG_BIS[g] - GANG_VON[g]), 0, 1);
-      if (g === 0) x = Math.max(x, gas * 0.4 * Math.max(0, 1 - r * 10));   // im Stand hochdrehen
-      const lo = GANG_RPM_MIN[g];
-      v.rpmZiel = Math.min(1, lo + (1 - lo) * x + 0.07 * gas);
-      v.rpm += (v.rpmZiel - v.rpm) * Math.min(1, dt * 10);
+      v.sperre -= dt;
+      if (tempo < 0.8 && gas < 0.3) g = 0;
+      else if (v.sperre <= 0) {
+        const hoch = p.hoch + (p.hochVoll - p.hoch) * v.gasG;
+        if (g < n - 1 && rpmGang(p, g, tempo, vMax) > hoch) g++;
+        else if (g > 0 && rpmGang(p, g, tempo, vMax) < p.runter) g--;
+      }
+      if (g !== v.gang) {
+        v.sperre = p.schaltZeit + 0.35;
+        if (g > v.gang) v.dip = p.schaltZeit; else v.blip = 0.1;     // Hochschalten: kurz Zugkraft weg · Runterschalten: Zwischengas
+        v.gang = g;
+      }
+      const rpmG = rpmGang(p, g, tempo, vMax);
+      let ziel = rpmG;
+      if (g === 0 || rpmG < p.startRpm) {      // Anfahren: Kupplung schleift, Drehzahl folgt dem Gas
+        const schl = p.leerlauf + (p.startRpm - p.leerlauf) * gas * (g === 0 ? 1 : 0.4);
+        if (schl > ziel) ziel = schl;
+      }
+      if (ziel < p.leerlauf) ziel = p.leerlauf;
+      if (v.blip > 0) { v.blip -= dt; ziel += (p.rpmMax - ziel) * 0.12; }
+      if (ziel > p.rpmMax * 0.995) ziel = p.rpmMax * 0.995;
+      v.rpmZiel = ziel;
+      if (d.drehzahl > 0) { v.rpm = ziel = v.rpmZiel = d.drehzahl; }
+      else v.rpm += (ziel - v.rpm) * Math.min(1, dt * (ziel > v.rpm ? p.steigK : p.fallK));
       const rpm = v.rpm;
+      const rpmN = klemme((rpm - p.leerlauf) / (p.rpmMax - p.leerlauf), 0, 1);
       let dipF = 1;
-      if (v.dip > 0) { v.dip -= dt; dipF = 0.55; }
+      if (v.dip > 0) { v.dip -= dt; dipF = 0.5; }
+      const schub = gas < 0.1 && tempo > 3 ? 1 : 0;          // Gas weg, Auto rollt: Motor bremst, leiser und dumpfer
+      v.schubG += (schub - v.schubG) * Math.min(1, dt * 8);
+
+      // --- Gas-Weg-Ereignisse: Knallen (911, AMG, …) und Turbo-Ablassen ---
+      if (gas > 0.6) v.volllast += dt;
+      else if (gas < 0.12) {
+        if (v.volllast > 0.5 && rpmN > 0.4 && tempo > 8 && v.spieler) this._gasWeg(p, v, rpmN, t);
+        v.volllast = 0;
+      }
 
       // --- Pegel (KI: nach Entfernung leiser und dumpfer) ---
-      let pegel = 1, dumpf = 1;
-      if (v.spieler) { if (this._spielerStimmen > 1) pegel = 0.75; }
-      else { const nah = 1 - v.abstand / K.hoerweite; pegel = nah * nah * 0.6; dumpf = 0.5 + 0.5 * nah; }
+      const sound = R.config && R.config.sound && R.config.sound.motor;
+      let pegel = (sound && sound.lautstaerke > 0 ? sound.lautstaerke : 1) * p.pegel, dumpf = 1;
+      if (v.spieler) { if (this._spielerStimmen > 1) pegel *= 0.75; }
+      else { const nah = 1 - v.abstand / this._hoerweite(); pegel *= nah * nah * 0.5; dumpf = 0.5 + 0.5 * nah; }
 
-      const f = (K.fMin + rpm * (K.fMax - K.fMin)) * v.stimmung;
-      v.grundton = f;
-      const cutoff = (280 + rpm * 850 + gas * 350) * dumpf;
-      const laut = (0.14 + 0.45 * gas * (0.4 + 0.6 * rpm) + 0.12 * rpm) * dipF * pegel;
+      // --- Klangwerte ---
+      // Zündfrequenz; dazu leichtes Tonhöhen-Zittern (wobble in Cent, zwei langsame Schwingungen) – im JS gerechnet, nicht als
+      // Audio-Rate-Modulation (die macht jeden Oszillator mehrfach teurer)
+      v.grundton = rpm / 60 * p.zyl / 2 * v.stimmung;
+      const f = v.grundton * (1 + p.wobble * 0.000578 * (0.6 * Math.sin(6.2832 * 4.3 * t + v.stimmung * 40) + 0.4 * Math.sin(6.2832 * 9.1 * t)));
+      const last = 0.35 + 0.65 * v.gasG;
+      const cutoff = (p.cut0 + p.cut1 * rpmN + p.cutGas * v.gasG) * dumpf * (1 - 0.3 * v.schubG);
+      const laut = (0.10 + 0.40 * last * (0.4 + 0.6 * rpmN) + 0.10 * rpmN) * dipF * pegel * (1 - 0.5 * v.schubG);
+      const klopf = p.klopf * (0.25 + 0.75 * last) * (1 - 0.6 * v.schubG) * (v.spieler ? 1 : 0.7) * laut * 1.4;
+      // Turbo: Ladedruck baut sich mit Verzögerung auf
+      let turboG = 0, turboF = 3000;
+      const turboAn = !(sound && sound.turbo === false);
+      this._zweig(k, 'turb', k.turbG, k.out, p.turbo > 0 && turboAn);
+      if (p.turbo > 0 && turboAn) {
+        const bz = klemme(v.gasG * (rpmN * 1.4 - 0.15), 0, 1);
+        v.boost += (bz - v.boost) * Math.min(1, dt * (bz > v.boost ? 2.2 : 5));
+        turboG = p.turbo * 0.045 * v.boost * pegel * (v.spieler ? 1 : 0.5);
+        turboF = 2300 + 2600 * v.boost + 1800 * rpmN;
+      }
 
       // --- Rauschen auf Gras/Sand ---
       const ug = d.untergrund;
       let rausch = 0;
       if (ug === 'gras') rausch = 0.10; else if (ug === 'sand') rausch = 0.13; else if (ug === 'rand') rausch = 0.03;
-      rausch *= Math.min(1, tempo / 12) * pegel;
+      rausch *= Math.min(1, tempo / 12) * Math.min(1, pegel);
+      if (rausch > 0.0005) { k.rZaehl = 0; this._zweig(k, 'rausch', k.rGain, k.out, true); }
+      else if (k.zw.rausch && (k.rZaehl += dt) > 1) this._zweig(k, 'rausch', k.rGain, k.out, false);
 
       // Nur neu planen, wenn sich ein Wert merklich ändert (> 0,5 % bzw. kleiner Absolutwert):
       // spart AudioParam-Ereignisse – im Leerlauf/bei Vollgas fast keine Aufrufe je Frame.
-      const anders = (a, b, abs) => Math.abs(a - b) > Math.max(abs, Math.abs(b) * 0.005);
       if (v.neu) {
         // frisch zugeteilt: Frequenzen sofort setzen (Pegel blendet weich ein)
-        k.oscS.frequency.cancelScheduledValues(t); k.oscS.frequency.setValueAtTime(f, t);
-        k.oscQ.frequency.cancelScheduledValues(t); k.oscQ.frequency.setValueAtTime(f * 0.5, t);
+        const fb = f * (1 + p.beat);
+        k.oscA.frequency.cancelScheduledValues(t); k.oscA.frequency.setValueAtTime(f, t);
+        k.oscB.frequency.cancelScheduledValues(t); k.oscB.frequency.setValueAtTime(fb, t);
+        k.oscH.frequency.cancelScheduledValues(t); k.oscH.frequency.setValueAtTime(f * 0.5, t);
+        k.oscK.frequency.cancelScheduledValues(t); k.oscK.frequency.setValueAtTime(f, t);
         k.filter.frequency.cancelScheduledValues(t); k.filter.frequency.setValueAtTime(cutoff, t);
-        v.lf = f; v.lc = cutoff; v.ll = -1; v.lr = -1;
+        k.turb.frequency.cancelScheduledValues(t); k.turb.frequency.setValueAtTime(turboF, t);
+        v.lf = f; v.lc = cutoff; v.ll = -1; v.lr = -1; v.lk = -1; v.lt = -1; v.ltf = turboF;
         v.neu = false;
       } else {
-        if (anders(f, v.lf, 0.3)) { v.lf = f; k.oscS.frequency.setTargetAtTime(f, t, 0.03); k.oscQ.frequency.setTargetAtTime(f * 0.5, t, 0.03); }
+        if (anders(f, v.lf, 0.3)) {
+          v.lf = f;
+          k.oscA.frequency.setTargetAtTime(f, t, 0.03); k.oscB.frequency.setTargetAtTime(f * (1 + p.beat), t, 0.03);
+          k.oscH.frequency.setTargetAtTime(f * 0.5, t, 0.03); k.oscK.frequency.setTargetAtTime(f, t, 0.03);
+        }
         if (anders(cutoff, v.lc, 2)) { v.lc = cutoff; k.filter.frequency.setTargetAtTime(cutoff, t, 0.04); }
+        if (turboG > 0 && anders(turboF, v.ltf, 20)) { v.ltf = turboF; k.turb.frequency.setTargetAtTime(turboF, t, 0.05); }
       }
       if (anders(laut, v.ll, 0.002)) { v.ll = laut; k.out.gain.setTargetAtTime(laut, t, 0.04); }
+      if (anders(klopf, v.lk, 0.002)) { v.lk = klopf; k.kTiefe.gain.setTargetAtTime(klopf, t, 0.03); }
+      if (anders(turboG, v.lt, 0.0005)) { v.lt = turboG; k.turbG.gain.setTargetAtTime(turboG, t, 0.06); }
       if (anders(rausch, v.lr, 0.002)) { v.lr = rausch; k.rGain.gain.setTargetAtTime(rausch, t, 0.08); }
       if (ug !== v.ug) {
         v.ug = ug;
         k.rFilter.frequency.setTargetAtTime(ug === 'sand' ? 1100 : 650, t, 0.05);
+      }
+    }
+
+    /** Gas weg nach Volllast: dezentes Knallen/Blubbern (profilabhängig) und Ablassen des Turbos („Pssht“). */
+    _gasWeg(p, v, rpmN, t) {
+      const sound = R.config && R.config.sound && R.config.sound.motor;
+      if (t - (v.letztesKnallen || -9) < 1.2) return;
+      v.letztesKnallen = t;
+      if (p.knallen > 0 && !(sound && sound.knallen === false)) {
+        const anz = 2 + (Math.random() < 0.5 ? 1 : 0);
+        let off = 0.05;
+        for (let i = 0; i < anz; i++) {
+          this._stoss(0.06, 0.20 * p.knallen * (0.6 + 0.4 * rpmN), 'lowpass', 1500, 280, 1.2, off);
+          this._ton(110, 58, 0.08, 'sine', 0.16 * p.knallen, off);
+          off += 0.07 + Math.random() * 0.09;
+        }
+      }
+      if (p.turbo > 0.3 && v.boost > 0.5 && !(sound && sound.turbo === false)) {
+        this._stoss(0.28, 0.06 * p.turbo, 'bandpass', 3800, 1900, 1.0, 0.04);
       }
     }
 
@@ -386,7 +577,7 @@
 
     /** Ein Ton: Frequenz f0 → f1, Hüllkurve schnell hoch, dann ausklingend. */
     _ton(f0, f1, dauer, typ, pegel, versatz) {
-      const c = this._ctx, t = c.currentTime + (versatz || 0);
+      const c = this._ctx, t = this._jetzt() + (versatz || 0);
       const o = this._n(c.createOscillator()), g = this._n(c.createGain());
       o.type = typ;
       o.frequency.setValueAtTime(f0, t);
@@ -401,7 +592,7 @@
 
     /** Rauschstoß durch einen Filter, dessen Frequenz von f0 nach f1 läuft. */
     _stoss(dauer, pegel, filterTyp, f0, f1, q, versatz) {
-      const c = this._ctx, t = c.currentTime + (versatz || 0);
+      const c = this._ctx, t = this._jetzt() + (versatz || 0);
       const s = this._n(c.createBufferSource()), fl = this._n(c.createBiquadFilter()), g = this._n(c.createGain());
       s.buffer = this._rausch;
       fl.type = filterTyp; fl.Q.value = q;

@@ -224,7 +224,7 @@
         const e = this.spiel.einstellungen;
         v.senden(Object.assign({ t: 'raumErstellen', einstellungen: { streckeId: e.streckeId, welt: e.welt, variante: e.variante, runden: e.runden,
           gegner: e.gegner, schwierigkeit: e.schwierigkeit, tempoKlasse: e.tempoKlasse, jahreszeit: e.jahreszeit, wetter: e.wetter,
-          tageszeit: e.tageszeit, kollisionen: e.kollisionen === true, hindernisMenge: e.hindernisMenge } }, this.meineWahl()));   // Stufe 2: zuletzt gewählt (Standard Geister)
+          tageszeit: e.tageszeit, kollisionen: e.kollisionen === true, hindernisMenge: e.hindernisMenge, polizei: e.polizei === true } }, this.meineWahl()));   // Stufe 2: zuletzt gewählt (Standard Geister)
       } catch (err) { this.ansicht = 'start'; this.hinweis = 'Keine Verbindung zum Server 😕'; this.zeichnen(); }
     }
 
@@ -437,7 +437,7 @@
         z.push('strecke', 'welt');
         if (this.variantenListe().length) z.push('variante');
         z.push('hindernisMenge');      // 12.10.: Viele / Sehr viele Hindernisse (nur wirksam in Welten mit Hindernissen)
-        z.push('runden', 'gegner', 'schwierigkeit', 'tempoKlasse', 'jahreszeit', 'wetter', 'tageszeit', 'kollisionen');
+        z.push('runden', 'gegner', 'schwierigkeit', 'tempoKlasse', 'jahreszeit', 'wetter', 'tageszeit', 'kollisionen', 'polizei');
       }
       return z;
     }
@@ -505,6 +505,7 @@
         return { wert: e.wetter, liste: l };
       }
       if (zeile === 'kollisionen') return { wert: e.kollisionen ? 'an' : 'aus', liste: [{ k: 'aus', text: '👻 Geister' }, { k: 'an', text: '💥 Rempeln' }] };
+      if (zeile === 'polizei') return { wert: e.polizei ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '🚨 An' }] };   // v4 (14.10.)
       if (zeile === 'tageszeit') return { wert: e.tageszeit, liste: [{ k: 'tag', text: '☀️ Tag' }, { k: 'daemmerung', text: '🌇 Dämmerung' }, { k: 'nacht', text: '🌙 Nacht' }] };
       return { wert: null, liste: [] };
     }
@@ -539,6 +540,12 @@
         // zuletzt gewählten Wert merken (nächster „Raum erstellen“ startet damit)
         const lok = this.basis || this.spiel.einstellungen;
         lok.kollisionen = e.kollisionen;
+        if (!this.basis) this.spiel.einstellungenSpeichern();
+      }
+      else if (zeile === 'polizei') {
+        e.polizei = k === 'an';
+        const lok = this.basis || this.spiel.einstellungen;     // zuletzt gewählten Wert merken (wie Rempeln)
+        lok.polizei = e.polizei;
         if (!this.basis) this.spiel.einstellungenSpeichern();
       }
       else e[zeile] = k;
@@ -615,7 +622,7 @@
           (this.variantenListe().length ? zeile('variante', '📏 Variante') : '') +
           zeile('hindernisMenge', this.hindernisMengeAktiv() ? '🚧 Hindernisse' : '🚧 Hindernisse <small>(erst ab Welt „Hindernisse“)</small>') + zeile('runden', '🔁 Runden') +
           zeile('gegner', '🤖 Computer-Gegner') + zeile('schwierigkeit', '🎚️ Computer-Stärke') + zeile('tempoKlasse', '🏎️ Tempo') +
-          zeile('jahreszeit', '🍂 Jahreszeit') + zeile('wetter', '🌦️ Wetter') + zeile('tageszeit', '🌗 Tageszeit') +
+          zeile('jahreszeit', '🍂 Jahreszeit') + zeile('wetter', '🌦️ Wetter') + zeile('tageszeit', '🌗 Tageszeit') + zeile('polizei', '🚨 Polizei') +
           `<div class="on-fest">💥 Schaden: aus (online) · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister: Autos fahren durcheinander durch'}</div>`;
       } else {
         const wi = (R.weltInfo || {})[e.welt || daten.weltStandard] || {};
@@ -625,7 +632,7 @@
           `🗺️ ${esc(daten.name)} · ${wi.emoji || '🌍'} ${esc(wi.name || e.welt || '')}${e.variante ? ' · 📏 XL' : ''}<br>` +
           `🔁 ${e.runden} Runden · 🤖 ${e.gegner} Computer (${esc(S.name || e.schwierigkeit)})<br>` +
           (e.hindernisMenge && e.hindernisMenge !== 'normal' && this.hindernisMengeAktiv() ? `🚧 Hindernisse: ${esc(((c.hindernisMenge.stufen[e.hindernisMenge]) || {}).name || e.hindernisMenge)}<br>` : '') +
-          `🏎️ ${e.tempoKlasse === 'schnell' ? 'Schnell' : 'Normal'} · ${J ? J.emoji + ' ' + J.name : '🎲'} · ${W ? (W.emoji || '☀️') + ' ' + W.name : '🎲'} · ${T[e.tageszeit] || ''}<br>` +
+          `🏎️ ${e.tempoKlasse === 'schnell' ? 'Schnell' : 'Normal'} · ${J ? J.emoji + ' ' + J.name : '🎲'} · ${W ? (W.emoji || '☀️') + ' ' + W.name : '🎲'} · ${T[e.tageszeit] || ''}${e.polizei ? ' · 🚨 Polizei' : ''}<br>` +
           `💥 Schaden: aus (online) · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister'}</div>`;
       }
       return `<div class="on-lobby">` +
@@ -659,7 +666,7 @@
       spiel.einstellungen = Object.assign({}, this.basis, {
         streckeId: e.streckeId, welt: e.welt, variante: e.variante, jahreszeit: e.jahreszeit, wetter: e.wetter, windStaerke: e.windStaerke,
         windRichtung: e.windRichtung, tageszeit: e.tageszeit, hindernisMenge: e.hindernisMenge, tempoKlasse: e.tempoKlasse, runden: e.runden, gegner: e.gegner,
-        schaden: false, polizei: false, rempeln: 'sanft', modus: 'solo', spielart: 'rennen',
+        schaden: false, polizei: e.polizei === true, rempeln: 'sanft', modus: 'solo', spielart: 'rennen',
       });
       if (spiel.menue) spiel.menue.verstecken();
       spiel.ergebnisAnzeige.verstecken(); spiel.pauseAnzeige.verstecken();
@@ -690,6 +697,13 @@
       const rennen = new R.RaceManager(strecke, tl, { runden: e.runden, countdown: m.countdown });
       spiel.rennen = rennen;
       spiel.startBoost = null; spiel.schaden = null; spiel.polizei = null; spiel.muenzen = null;
+      this.nT = m.teilnehmer.length;                    // Teilnehmer = fahrzeuge[0 … nT−1]; dahinter ggf. die Streifenwagen
+      // v4 (14.10.): Polizei online – der Server rechnet, hier nur Streifenwagen (Mesh + Blaulicht + Sirene) und die Anzeige (HUD-Countdown, Minimap)
+      if (e.polizei === true && R.Polizei) {
+        spiel.polizei = new R.Polizei(spiel);
+        spiel.polizei.einsetzen(strecke, this.nT, e.gegner);
+        try { spiel.polizei.vorkompilieren(spiel.renderer, spiel.szene, spiel.menueKamera); } catch (err) { /* nur Optik */ }
+      }
       const mein = spiel.fahrzeuge[du];
       spiel.kameraHinzufuegen(mein);
       const hud = new R.Hud(spiel.hudWurzel, { rennen, teilnehmer: rennen.teilnehmer[du], fahrzeug: mein, nr: 0, split: false });
@@ -697,7 +711,7 @@
       if (spiel.wetter) { spiel.wetter.partikelBauen(1); if (hud.wetterSetzen) hud.wetterSetzen(spiel.wetter); }
       if (hud.schadenSetzen) hud.schadenSetzen(null, du);
       if (hud.itemSetzen) hud.itemSetzen(spiel.pickups, du, 0);
-      if (hud.polizeiSetzen) hud.polizeiSetzen(null, 0);
+      if (hud.polizeiSetzen) hud.polizeiSetzen(spiel.polizei, du);
       if (hud.muenzenSetzen) hud.muenzenSetzen(null);
       // Ping + 🌐 in der Namens-Karte oben links
       const links = hud.el.querySelector('.hud-links');
@@ -705,7 +719,7 @@
       this.pingEl.textContent = '🌐 … ms';
       if (R.Audio) {
         const A = R.Audio; spiel._tonCd = -1;
-        spiel.fahrzeuge.forEach((f, i) => A.motorAnlegen(i, { spieler: f.istSpieler }));
+        spiel.fahrzeuge.forEach((f, i) => A.motorAnlegen(i, { spieler: f.istSpieler, auto: f.auto }));   // 14.10. (v21): Klangprofil je Auto
       }
       // Netz-Zustand
       this.du = du;
@@ -720,7 +734,7 @@
       if (this.verb) this.verb.uhrNeu();
       this.n = 0; this.t0 = null; this.empfangen = false; this._letzteS = null; this.itemFlag = false; this.resetFlag = false;
       this.startTick = null; this.dynTick = 0; this._gestartet = false; this.warSonder = false;
-      this.schattenListe = spiel.fahrzeuge.map(f => ({ vehicle: f.schatten, istSpieler: false }));
+      this.schattenListe = spiel.fahrzeuge.slice(0, this.nT).map(f => ({ vehicle: f.schatten, istSpieler: false }));
       this._pingZeit = 0;
       this.dialog = false; this.dialogEl.style.display = 'none';
       this.phase = 'rennen';
@@ -732,6 +746,7 @@
       spiel._physikZeit = 0;
       if (spiel.tunnelLichter) spiel._tunnelLichterVorkompilieren();
       spiel.groesse();
+      try { if (spiel._vorwaermen) spiel._vorwaermen(); } catch (e) { }
       if (this.verb) this.verb.senden({ t: 'geladen' });
     }
 
@@ -825,6 +840,7 @@
         if (a[6] & 16) t.imZiel = true;
       }
       r.rangliste = r.teilnehmer.slice().sort((x, y) => x.platz - y.platz);
+      this._polizeiZustand(z);
       // eigener Wagen
       if (z.ich) {
         const ich = z.ich, f = spiel.fahrzeuge[this.du], t = r.teilnehmer[this.du];
@@ -851,6 +867,19 @@
           if ((a[6] & 64) && !(s.platzt > 0)) s.platzt = 0.4;
         });
       }
+    }
+
+    /** v4: Anhaltungen (z.ps, für den eigenen Wagen ich.ps genauer) und Ziele der Streifenwagen in die Anzeige-Logik übernehmen. */
+    _polizeiZustand(z) {
+      const po = this.spiel.polizei;
+      if (!po) return;
+      const L = po.logik, du = this.du;
+      const warDu = L.gesperrt(du);
+      for (let i = 0; i < this.nT; i++) L._a(i).stopp = 0;
+      (z.ps || []).forEach((p) => { if (p[0] < this.nT) L._a(p[0]).stopp = p[1]; });
+      if (z.ich) L._a(du).stopp = z.ich.ps > 0 ? z.ich.ps : 0;
+      (z.pz || []).forEach((zi, k) => { L._s(k).ziel = zi; });
+      if (!warDu && L.gesperrt(du) && R.Audio && R.Audio.polizeiStopp) R.Audio.polizeiStopp();
     }
 
     _start(k) {
@@ -993,7 +1022,7 @@
       if (tick !== null) {
         const um = this.puffer.um(tick - N.INTERP_VERZUG / DT);
         if (um) {
-          for (let i = 0; i < fz.length; i++) {
+          for (let i = 0; i < this.nT; i++) {
             if (i === this.du) continue;
             const f = fz[i], a0 = um.a.a[i], a1 = um.b.a[i];
             if (!a0 || !a1) continue;
@@ -1003,8 +1032,22 @@
             this._looping(f, lp);
             this._flags(f, a1);
           }
+          // v4: Streifenwagen (po) – gleiche Interpolation wie die anderen Autos
+          const po = spiel.polizei;
+          if (po && um.a.po && um.b.po) {
+            for (let k = 0; k < po.idx.length; k++) {
+              const f = fz[po.idx[k]], a0 = um.a.po[k], a1 = um.b.po[k];
+              if (!f || !a0 || !a1) continue;
+              R.NetzPuffer.interpolieren(a0, a1, um.t, f.vehicle);
+              const rs = um.t > 0.5 ? a1[13] : a0[13];
+              if (f.netRs !== rs) { f.netRs = rs; spiel._vorherAngleichen(f); }
+              f.bremst = !!(a1[6] & 1);
+            }
+          }
         }
       }
+      // Anhaltung zwischen den Zuständen herunterzählen (HUD „Anhalten… N s")
+      if (spiel.polizei) { const L = spiel.polizei.logik; for (let i = 0; i < this.nT; i++) { const a = L.autos[i]; if (a && a.stopp > 0) a.stopp = Math.max(0, a.stopp - dt); } }
       // Streckenindex/Nähe (Kamera-Höhe, Scheinwerfer im Tunnel)
       for (let i = 0; i < fz.length; i++) {
         const f = fz[i];
@@ -1048,7 +1091,7 @@
     /** Dynamik (Bälle, Strohballen, Dinos …) im Takt des Servers rechnen, Pylonen umfahren lassen – nur Anzeige. */
     _weltOptik(tick, dt) {
       const spiel = this.spiel, r = spiel.rennen, fz = spiel.fahrzeuge, st = spiel.strecke;
-      for (let i = 0; i < fz.length; i++) {
+      for (let i = 0; i < this.nT; i++) {
         const v = fz[i].vehicle, s = fz[i].schatten;
         s.x = v.x; s.z = v.z; s.y = v.y; s.heading = v.heading; s.vLaengs = v.vLaengs; s.vQuer = 0; s.imLooping = !!v.imLooping; s.imFlug = !!v.imFlug;
         s.huepfer = 0;
@@ -1061,8 +1104,8 @@
       const autos = this._dynAutos || (this._dynAutos = []);
       while (this.dynTick < ziel && n < 6) {
         let fuehrend = null;
-        autos.length = fz.length;
-        for (let i = 0; i < fz.length; i++) {
+        autos.length = this.nT;
+        for (let i = 0; i < this.nT; i++) {
           const t = r.teilnehmer[i];
           autos[i] = { vehicle: fz[i].schatten, istSpieler: !!t.istSpieler, fortschritt: t.fortschritt };
           if (t.istSpieler && (fuehrend === null || t.fortschritt > fuehrend)) fuehrend = t.fortschritt;

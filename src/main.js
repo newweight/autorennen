@@ -443,7 +443,7 @@
       // Ton: Motoren je Auto, Ereignisse
       if (R.Audio) {
         const A = R.Audio; this._tonCd = -1;
-        this.fahrzeuge.forEach((f, i) => A.motorAnlegen(i, { spieler: f.istSpieler }));
+        this.fahrzeuge.forEach((f, i) => A.motorAnlegen(i, { spieler: f.istSpieler, auto: f.auto }));   // 14.10. (v21): Klangprofil je Auto (src/audio/motorProfile.js)
         this.rennen.bei('start', () => A.countdown(0));
         this.rennen.bei('runde', (t) => { if (t.istSpieler && t.runde < this.rennen.runden) A.runde(); });
         this.rennen.bei('ziel', (t) => { if (t.istSpieler) A.ziel(t.zielPlatz); });
@@ -453,6 +453,33 @@
       this.qualitaet.stufe = 0; this.qualitaet.unten = this.qualitaet.oben = 0; this.qualitaet.fpsGlatt = 60;
       this._hudZeit = -1e9;
       this.groesse();
+      this._vorwaermen();      // 14.10. (v21): Ruckeln – alles schon vor dem Countdown zur GPU schicken
+    }
+
+    /**
+     * 14.10. (v21) Ruckeln mitten im Rennen: three.js übersetzt Shader und lädt Geometrie/Texturen erst, wenn ein Objekt zum ERSTEN Mal gezeichnet wird.
+     * Alles, was beim Start nicht im Bild ist (Brücke, Gabelung, Bremslicht eines Gegners, Deko weiter hinten an der Strecke …), kostete deshalb später
+     * mitten in der Fahrt einen Ruckler. Hier wird einmal alles gezeichnet – ohne Sichtkegel-Test, aber nur auf ein einziges Pixel (Scissor) – direkt
+     * nach dem Aufbau, vor dem Countdown. Kosten: ein Frame beim Rennstart. config.grafik.vorwaermen = false schaltet es ab.
+     * @returns {number|null} Dauer in ms
+     */
+    _vorwaermen() {
+      const G = R.config.grafik || {}, r = this.renderer;
+      if (G.vorwaermen === false || !r || !this.szene) return null;
+      const kam = this.kameras[0] ? this.kameras[0].kamera : this.menueKamera;
+      if (!kam) return null;
+      const t0 = performance.now(), gemerkt = [];
+      try {
+        this.szene.traverse((o) => { if (o.frustumCulled) { o.frustumCulled = false; gemerkt.push(o); } });
+        this.szene.matrixWorldAutoUpdate = false;
+        this.szene.updateMatrixWorld();
+        if (r.compile) r.compile(this.szene, kam);
+        r.setScissorTest(true); r.setScissor(0, 0, 1, 1);
+        r.render(this.szene, kam);
+        r.setScissorTest(false);
+      } catch (e) { /* nur Optik: im Zweifel ohne Vorwärmen weiter */ } finally { gemerkt.forEach((o) => { o.frustumCulled = true; }); }
+      this.vorwaermMs = performance.now() - t0;
+      return this.vorwaermMs;
     }
 
     /** Alle Spieler im Ziel: Ergebnis einfrieren (KI-Platzierungen ändern sich danach nicht mehr). */
@@ -1657,6 +1684,7 @@
         r.setScissorTest(false);
         r.setViewport(0, 0, w, h);
         r.render(this.szene, ks.length ? ks[0].kamera : this.menueKamera);
+        if (ks.length && R.rueckspiegel) R.rueckspiegel.zeichnen(this, 0, 0, w, h);   // 14.10. (v21): Rückspiegel
         return;
       }
       // Split-Screen: eine Szene, zwei Kameras, je eine Bildhälfte (links Spieler 1, rechts Spieler 2)
@@ -1668,6 +1696,7 @@
         r.setScissor(x, 0, breite, h);
         this._tunnelDimmen(i);
         r.render(this.szene, k.kamera);
+        if (R.rueckspiegel) R.rueckspiegel.zeichnen(this, i, x, breite, h);   // 14.10. (v21): Rückspiegel (Zweispieler nur wenn config.cockpit.spiegel.zweispieler = 'an')
       });
       r.setScissorTest(false);
     }

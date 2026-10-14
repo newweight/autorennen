@@ -144,6 +144,15 @@ ist die Karte „🌐 Online“ grau („Online geht nur über ‚Mehrspieler st
 oder Taste **I**. Das sieht und kann nur, wer im eigenen Tailscale-Netz ist (Papas/Mamas Handy, Laptop). Nach 4 Stunden geht es von selbst aus. Freunde ohne Tailscale
 können nur mitspielen, solange es AN ist. Einrichtung/Prüfung: `server/README.md` (Abschnitt Internet-Schalter).
 
+## 🎲 Weitere Spiele (4 gewinnt, Schach)
+
+Im Hauptmenü oben unter dem Titel: **„🎲 Weitere Spiele“** (nur wenn das Spiel vom Server kommt, nicht von der Festplatte). Oder direkt: `…/spiele/`.
+
+- **4 gewinnt** und **Schach**: zu zweit am selben Gerät, gegen den Computer (😊 leicht · 🙂 mittel · 😎 schwer) oder **online** mit einem Freund.
+- Online: Tier-Namen aussuchen, **„Raum erstellen“** → Code (4 Zeichen) oder QR-Code zeigen; der Freund öffnet den Link oder tippt den Code. Zuschauen geht auch. Nach dem Spiel: **Revanche** (Farben tauschen). Bricht das Netz ab, wartet der Platz 10 Minuten.
+- **Schach** ist jetzt die Oberfläche der Mac-App deines Vaters: Menü mit **Spieler vs Computer** (Stärke 1–10), **Spieler vs Spieler**, **Schach-Akademie 🎓** und **Training mit Coach**; Knöpfe 💬 Zugwert · 🎨 Farben · 🐶 Hunde · 🧊 3D-Brett · 💥 Kampf · 🔄 Wenden · 💡 Tipp (2 Stufen). Oben links **☰** = alle Befehle mit Tasten (Z = Zug zurück, T = Tipp, 3 = 3D …). Figur antippen → Punkte zeigen die Ziele. **Online** gibt es als vierte Karte; dort sind Tipp und Zugwert aus (fair). 4 gewinnt: Spalte antippen oder Taste **1–7**.
+- Alles Weitere (Dateien, Farben/Texte ändern, Tests): `spiele/README.md`. Server-Protokoll: `server/PROTOKOLL.md`, Abschnitt „/ws-brett“.
+
 ## 📱 Auf Handy/Tablet spielen
 Gäste öffnen den Einladungs-Link (oder den QR-Code aus der Online-Lobby) im Browser – am besten **quer** halten (im Hochformat steht „Bitte Handy quer halten 🔄“).
 - **Rennen:** links ◀ ▶ lenken (gedrückt halten), rechts ▲ Gas und ▼ Bremse/Rückwärts. Mehrere Finger gehen gleichzeitig (Gas + Lenken); mit dem Finger von ◀ nach ▶ wischen schaltet um.
@@ -176,6 +185,19 @@ In **Schnell** fahren die Autos **220 bis 270 km/h** (Multivan 220 … Porsche 2
     Wer blinkt, hat Vorfahrt …? Nein: **Schau nach links und rechts!** Lieber kurz vom Gas gehen, als quer erwischt zu werden.
     Die Computer-Autos lassen den Querverkehr vorbei (wer später an der Kreuzung ankommt, wartet) – du musst selbst aufpassen.
     Auf der Kreuzung darfst du **nicht abbiegen** (die Runde geht geradeaus weiter): Du kannst zwar auf die andere Straße fahren, es gibt aber keine Abkürzung – „↩️ Falsch abgebogen!“, es zählt kein Checkpoint, und wer nicht in etwa 4 Sekunden zur Kreuzung zurückfährt, wird zum letzten Checkpoint zurückgesetzt; **R** setzt dich jederzeit auf deine eigene Straße zurück.
+
+## 🕹️ Cockpit, Rückspiegel, Wischer (Positionen selbst ändern)
+- **Instrumente unten in der Mitte**: Passat, Polizei-Passat, Multivan und T-Roc Cabrio haben das VW „Digital Cockpit Pro“ (links Drehzahl, rechts km/h, in der Mitte Platz und Runde). Der Porsche 911 hat die fünf Rundinstrumente (Mitte großer Drehzahlmesser mit Digital-Tacho, links Gang und Runde, rechts Platz und Öl). Alle anderen Autos behalten den Tacho rechts unten.
+- **Rückspiegel** über den Instrumenten (echtes Bild nach hinten, links/rechts wie im Auto). Im Zweispieler-Modus aus (spart Leistung).
+- **Scheibenwischer** nur bei Regen, Schnee und Hagel, nur in der Fahrersicht (Taste **C** drücken, bis man im Auto sitzt; Zweispieler: Spieler 2 hat eine eigene Taste).
+- **Alles ändern in `src/config.js`, Abschnitt `cockpit`.** Jede Position ist eine einfache Zahl in Prozent der Ansicht (Zweispieler: pro Hälfte): `x` = Mitte von links (0) nach rechts (100), `y` = Mitte von oben (0) nach unten (100), `b` = Breite in % der Ansichtsbreite, `h` = Höhe in % der Ansichtshöhe (ohne `h`: quadratisch). Beispiele:
+  - Spiegel höher/tiefer: `cockpit.spiegel.y` (kleiner = weiter oben); größer: `b` und `h` erhöhen; Spiegel ganz aus: `cockpit.spiegel.an: false`.
+  - Tacho nach links: `cockpit.vw.tacho.x` kleiner; Drehzahlmesser größer: `cockpit.vw.drehzahl.b`. Porsche: `cockpit.porsche.drehzahl`, `linksAussen`, `linksInnen`, `rechtsInnen`, `rechtsAussen`, `tafel` (dunkle Fläche dahinter).
+  - Welches Auto welches Cockpit: `cockpit.stile` (`'vw'`, `'porsche'` oder `'standard'` = alter Tacho).
+  - Instrumente nur in der Fahrersicht: `cockpit.modi: ['cockpit']`; Wischer auch in der Verfolgersicht: `cockpit.wischer.modi: ['cockpit', 'verfolger', 'weit']`; Wischerfeld höher/tiefer: `cockpit.wischer.unten`/`hoehe`; alles aus: `cockpit.an: false`, `cockpit.spiegel.an: false`, `cockpit.wischer.an: false`.
+  - Spiegel im Zweispieler-Modus einschalten: `cockpit.spiegel.zweispieler: 'an'` (kostet Leistung).
+  - Spiegel schärfer: `cockpit.spiegel.aufloesung` (288 → 400), flüssiger: `takt: 1`.
+- Nach jeder Änderung die Seite neu laden. Die Zahlen am besten in kleinen Schritten (±2) ändern.
 
 ## Tipps
 - Eine Runde dauert ungefähr 2 Minuten (Fantasie kürzer). Für Kleine: 1–2 Runden, Fahrhilfe „viel", Computer „leicht".

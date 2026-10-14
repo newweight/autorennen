@@ -10,7 +10,7 @@ const S = require('../server/simulation.js');
 const nurId = process.argv.slice(2).find((a) => !a.startsWith('--'));
 const mitDeko = process.argv.includes('--deko');
 const mods = S.MODULE.slice(0, -1);               // ohne main.js
-mods.push('src/world/schilder.js');
+if (!mods.includes('src/world/schilder.js')) mods.push('src/world/schilder.js');
 const R = S.kontextLaden(mods);
 let fehler = 0, geprueft = 0;
 function pruefe(name, ok, info) { geprueft++; if (!ok) { fehler++; console.log('FEHL ' + name + (info ? '  (' + info + ')' : '')); } else if (process.argv.includes('--v')) console.log('OK   ' + name + (info ? '  (' + info + ')' : '')); }

@@ -1,8 +1,16 @@
-# Mehrspieler-Protokoll (W5, Version 3)
+# Mehrspieler-Protokoll (W5, Version 4)
 
 WebSocket unter **`/ws`** (gleiche Adresse wie das Spiel; `wss:` hinter HTTPS/Tailscale Funnel, `ws:` lokal).
 Jede Nachricht ist **ein JSON-Objekt** mit dem Typ in `t`. Gemeinsame Konstanten/Helfer: `src/net/protokoll.js`
 (`Rennspiel.Netz`, wird von Browser **und** Server geladen).
+
+**Version 4 (14.10., v21)** ist zu Version 3 rein *additiv* (Polizei online + Schild-Masten):
+- `einstellungen.polizei` (bool, Standard false; Lobby-Zeile „Polizei“). Der Server simuliert dann autoritativ `R.Polizei` (gleiche Logik wie offline; Stopp 4 s, Passat-Streifenwagen neben dem Auto). Die Streifenwagen sind zusätzliche Einträge hinter den Teilnehmern.
+- `zustand.po`: Streifenwagen, je ein Eintrag im Format von `a` (14 Zahlen). `zustand.pz`: Ziel (Auto-Nr.) je Streifenwagen. `zustand.ps`: `[[Auto-Nr., Rest-s]]` angehaltener Autos (Rest auf 2 Stellen). `a` enthält weiterhin nur die Teilnehmer.
+- `ich.ps`: genauer Stopp-Rest (s) des eigenen Autos, solange > 0. Die Vorhersage ersetzt dann die Eingabe durch Halten (Gas 0, bremsen) und zählt den Rest pro Schritt herunter.
+- Fehlen `po`/`pz`/`ps` (Server ohne Polizei oder Version 3), verhält sich der Browser wie vorher. Ein Version-3-Browser ignoriert die neuen Felder.
+- Schild-Masten: Server und Browser bauen sie gleich (`Kurvenschilder.einbauen(strecke, tempoKlasse)`) als dünne Säulen (r 0,12 m) in `strecke.saeulen`; keine neuen Nachrichten. Ein Version-3-Browser hätte sie nicht (Vorhersage-Abweichung nur am Mast).
+`hallo.v` meldet 4.
 
 **Version 3 (14.10., v19)** ist zu Version 2 rein *additiv*: drei neue Nachrichten für den **Internet-Schalter** (s. u. „Internet-Schalter“). Ein Version-2-Server
 antwortet auf `schalterFrage` mit `fehler`; darum fragt der Browser nur, wenn `hallo.v ≥ 3` ist. Ein Version-2-Browser kennt die Nachrichten nicht und ignoriert `schalter`.
@@ -152,3 +160,34 @@ Die Identität wird weder gespeichert noch protokolliert.
 `wartet:true` = Wunsch ist raus, Helfer hat den Status noch nicht angepasst (bis 20 s). Rate-Limit: 1 Umschaltung je 5 s für alle Verbindungen zusammen
 (`fehler:'zuSchnell'`); `fehler:'schreiben'` = Wunsch-Datei nicht beschreibbar.
 Browser: Zeile erscheint nur bei `recht:true`; Einschalten verlangt einen zweiten Tipp (5 s, „Sicher? …“), Ausschalten sofort; Taste **I**.
+
+---
+
+# Brettspiele: WebSocket `/ws-brett` (4 gewinnt, Schach)
+
+Eigener Pfad (`wss:` hinter HTTPS), eigenes Protokoll – das Autorennen-Protokoll `/ws` bleibt unverändert. Code: `server/brettspiele.js`,
+Regeln: `spiele/gemeinsam/{vier,schach}-regeln.js` (UMD, im Browser und per `require`). JSON-Text, Nachricht ≤ 512 Byte, `t` = Typ.
+Nur Zahlen/feste Wörter: kein Chat, kein Freitext (Name = Eintrag aus `NAMEN` in `spiele/gemeinsam/konstanten.js`). Plätze: `w` = Weiß bzw. Rot (beginnt), `b` = Schwarz bzw. Gelb; `z` = Zuschauer.
+
+**Client → Server**
+
+| `t` | Felder | Wirkung |
+|---|---|---|
+| `hallo` | – | → `hallo` `{ v, spiele }` |
+| `ping` | `z` | → `pong` `{ z }` |
+| `raumErstellen` | `spiel` (`vier`\|`schach`), `name` (Tier-Id), `farbe` (`w`\|`b`, sonst Zufall) | → `raum` + `stand` |
+| `raumBeitreten` | `code`, `spiel`, `name`, `zuschauer` (bool) | → `raum` + `stand` an alle; Fehler `unbekannt` / `voll` / `anderesSpiel` |
+| `wiederverbinden` | `code`, `token` | → `raum` `{ wieder:true }` + `stand`, sonst `wiederNein` |
+| `zug` | Schach: `z` = `"e2e4"` / `"e7e8q"`; 4 gewinnt: `z` = Spalte 0–6 | prüft Platz, Reihenfolge, Legalität → `stand` an alle, sonst `fehler` (`nichtDran`, `unlegal`, `zuschauer`, `nichtAktiv`) |
+| `aufgeben` | – | Gegner gewinnt (`ergebnis.art = 'aufgegeben'`) |
+| `revanche` | `an` (bool, Standard true) | wollen beide → neue Partie, Farben getauscht (`raum` `{ neu:true }`, dann `stand`) |
+| `verlassen` | – | Spieler: Raum wird geschlossen (andere bekommen `raumZu`); Zuschauer: nur er geht |
+
+**Server → Client**: `raum` `{ code, rolle, token, spiel }` (Token für Wiederverbinden, nur Spielern), `stand`, `fehler` `{ grund, text }`, `raumZu` `{ grund }`, `wiederNein`, `verlassen`, `pong`.
+
+`stand` (vollständig bei jeder Änderung): `{ spiel, code, du:{ rolle, name }, spieler:[Weiß/Rot, Schwarz/Gelb] (je `{ farbe, name, online }` oder `null`), zuschauer (Anzahl), zustand: 'warten'|'spiel'|'ende',
+am: 'w'|'b', zuege: [...] (Schach: Text-Züge; 4 gewinnt: Spalten), ergebnis?: { art, sieger: 'w'|'b'|null, reihe? }, schach?: bool, revanche:{ w, b }, runde }`.
+`ergebnis.art`: Schach `matt`, `patt`, `fuenfzig`, `wiederholung`, `material`, `aufgegeben`; 4 gewinnt `reihe` (mit `reihe` = Feld-Indizes zeile*7+spalte), `voll`, `aufgegeben`.
+
+**Wiederverbinden**: Verliert ein Spieler die Verbindung, behält er seinen Platz (`online:false` im `stand`). Mit `wiederverbinden` + Token kommt er zurück (die Seite merkt sich `code`/`token` im `sessionStorage`, auch über „Neu laden“). Ein Raum ohne verbundene Leute wird nach 10 Minuten gelöscht, ein Raum ohne Nachricht nach 3 h.
+**Limits**: 40 Räume, 60 Verbindungen, > 30 Nachrichten/s ignoriert, > 300/s getrennt, max. 8 Zuschauer, Nachrichten > 512 Byte trennen (Code 1009). Der Server schreibt keine Dateien, die Konsole nennt nur Raumcodes.

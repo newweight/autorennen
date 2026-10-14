@@ -111,6 +111,7 @@ Rennspiel.config = {
     fovSplitScreen: 74,        // Runde 5: 70 → 74 (halbe Breite: Kurven früher sichtbar)
     // Adaptive Qualität: fps über `sekunden` unter fpsUnten → eine Stufe runter
     // (pixelRatio nächster Wert, Nebel-Sichtweite −20 %); über fpsOben → wieder hoch.
+    vorwaermen: true,          // 14.10. (v21): beim Rennstart einmal ALLES zeichnen (1 Pixel, ohne Sichtkegel) → Shader/Geometrie/Texturen sind vor dem Countdown auf der GPU (kein Ruckeln später)
     adaptiv: true,
     qualitaetsStufen: [1.5, 1.25, 1.0, 0.8],   // pixelRatio-Stufen (nie über devicePixelRatio)
     fpsUnten: 45,
@@ -367,6 +368,8 @@ Rennspiel.config = {
     startFreiVor: 70, startFreiNach: 30,   // m vor/nach Start/Ziel ohne Schilder
     sperre: 30,                // m Abstand zu Brücke, Tunnel, Überführung, Kreuzung, Gabelung, Looping, Schanze
     haarnadelWinkel: 130, haarnadelKmh: 80, leitpfeilAbstand: 24,
+    mastKollision: true,       // 14.10. (v21): der dünne Mast ist ein festes Hindernis (strecke.saeulen, auch im Server); nur der Mast, nicht das Schild
+    mastRadius: 0.12,          // m
   },
 
   // --- Runde 6 (W1-A3/A4/A5): Kollisionen Auto↔Auto, Rempeln, Pflanzen (Logik: src/physics/collisions.js) ---
@@ -687,6 +690,73 @@ Rennspiel.config = {
     weit:      { abstand: 16.0, abstandSchnell: 18.0, hoehe: 7.0, hoeheSchnell: 7.8, vorausblick: 6.0, vorausblickSchnell: 10.0,
                  weichheit: 3.5, blickWeichheit: 6.0, lenkVorgriff: 0.10 },
     cockpit:   { hoehe: 1.15, vor: 0.4, blickWeite: 30, blickWeiteSchnell: 45, lenkVorgriff: 0.08 },
+  },
+
+  // --- 14.10. (v21): Motorsound je Auto (src/audio/motorProfile.js, src/audio/engine.js) ---
+  // Jedes Auto klingt nach seinem Motor (Zylinderzahl, Diesel/Benziner, Turbo, Gänge). Die Daten stehen mit Quellen in motorProfile.js.
+  sound: {
+    motor: {
+      lautstaerke: 1,       // Motor-Gesamtlautstärke relativ (0.5 = halb so laut; die Master-Lautstärke/Aus im Menü bleibt)
+      maxKi: 2,             // so viele Computer-Motoren gleichzeitig hörbar (spart CPU; Spieler sind immer hörbar)
+      hoerweite: 60,        // m: weiter entfernte Computer-Autos sind stumm
+      knallen: true,        // dezentes Knallen/Blubbern beim Gas-Wegnehmen (911, AMG, M4, RS6)
+      turbo: true,          // leises Turbo-Pfeifen und Ablassen
+    },
+  },
+  // --- 14.10. (v21): Cockpit-Anzeigen, Rückspiegel, Scheibenwischer (src/ui/cockpit.js, src/ui/rueckspiegel.js, src/render/wischer.js) ---
+  // ALLE Positionen und Größen sind einfache Zahlen in PROZENT der Ansicht (Einzelspieler = ganzer Bildschirm, Zweispieler = jede Hälfte):
+  //   x = Mitte von links (0) bis rechts (100) · y = Mitte von oben (0) bis unten (100) · b = Breite (% der Ansichtsbreite)
+  //   h = Höhe (% der Ansichtshöhe); fehlt h, ist das Element quadratisch (Höhe = Breite in Pixeln).
+  // Einfach die Zahl ändern und die Seite neu laden. Erklärung: ANLEITUNG.md, Abschnitt „Cockpit, Rückspiegel, Wischer“.
+  cockpit: {
+    an: true,                                   // false = alte Anzeige (Tacho rechts unten) bei allen Autos
+    modi: ['cockpit', 'verfolger', 'weit'],     // in welchen Kamera-Ansichten die Instrumente zu sehen sind
+    zeichenrate: 30,                            // höchstens so oft pro Sekunde neu zeichnen (Hz)
+    zweispielerFaktor: 1.25,                    // Zweispieler: Instrumente (Größe + Abstände vom unteren Mittelpunkt) mal diesen Faktor (Hälfte ist schmal)
+    // welches Auto welche Instrumente hat ('vw' | 'porsche' | 'standard' = alte Anzeige); nicht genannte Autos: 'standard'
+    stile: { 'passat': 'vw', 'polizei': 'vw', 'multivan': 'vw', 'troc-cabrio': 'vw', 'porsche-911': 'porsche' },
+    // VW „Digital Cockpit Pro“ (10,25 Zoll; Passat Variant, Multivan T7, T-Roc Cabrio): links Drehzahl, rechts km/h, Mitte Platz/Runde
+    vw: {
+      tafel:    { x: 50,   y: 90.5, b: 35, h: 20, farbe: '#05080d' },     // dunkle Anzeigefläche hinter den Instrumenten
+      drehzahl: { x: 38.2, y: 90.5, b: 11.4 },
+      tacho:    { x: 61.8, y: 90.5, b: 11.4 },
+      mitte:    { x: 50,   y: 90.5, b: 9.5, h: 14 },
+    },
+    // Porsche 911 (992), „Classic“-Anzeige mit fünf Rundinstrumenten: Mitte großer Drehzahlmesser mit Digital-Tacho, außen je zwei kleine
+    porsche: {
+      zweispielerFaktor: 1.0,                 // (optional) eigener Zweispieler-Faktor für diesen Stil (breit → sonst Überdeckung der Minimap)
+      tafel:   { x: 50,   y: 90,   b: 43, h: 21, farbe: '#030303' },
+      drehzahl: { x: 50,  y: 89.5, b: 13.2 },
+      linksAussen:  { x: 31.8, y: 91, b: 6.6 },     // Gang
+      linksInnen:   { x: 40.6, y: 91, b: 7.4 },     // Runde
+      rechtsInnen:  { x: 59.4, y: 91, b: 7.4 },     // Platz
+      rechtsAussen: { x: 68.2, y: 91, b: 6.6 },     // Öl-Temperatur
+    },
+    // Rückspiegel: zweite Kamera nach hinten, wird in ein kleines Bild gerendert (jedes 2. Bild), links/rechts vertauscht wie ein echter Spiegel
+    spiegel: {
+      an: true,
+      modi: ['cockpit', 'verfolger', 'weit'],
+      x: 50, y: 71.5, b: 25, h: 8.5,           // Position/Größe (siehe oben)
+      aufloesung: 288,                         // Breite des Spiegelbilds in Pixeln (Höhe folgt dem Seitenverhältnis): klein = schnell
+      takt: 2,                                 // Spiegelbild nur bei jedem N-ten Bild neu rendern
+      blickWinkel: 80,                         // waagerechter Blickwinkel (Grad)
+      hoehe: 1.3,                              // Kamerahöhe über dem Auto (m)
+      sicht: 220,                              // Sichtweite nach hinten (m)
+      deko: true,                              // Bäume/Büsche/Zäune im Spiegel (schöner; false = ca. halbe Spiegel-Kosten). Bei langsamem Spiel schaltet die adaptive Qualität selbst ab: Stufe 1 ohne Deko, 2 halber Takt, 3 kein Spiegel
+      zweispieler: 'aus',                      // Zweispieler: 'aus' (kein Spiegel) | 'an' (je Hälfte, Takt dann ×1,5)
+    },
+    // Scheibenwischer + Tropfen/Flocken bei Regen, Schnee, Hagel (nur bei Niederschlag, sonst kostenlos)
+    wischer: {
+      an: true,
+      modi: ['cockpit'],                       // nur in der Fahrersicht (Kamera-Taste); ['cockpit', 'verfolger', 'weit'] = in allen Ansichten
+      unten: 35, hoehe: 34,                    // Wischerfeld: Unterkante (% der Ansichtshöhe vom unteren Rand = Fuß der Windschutzscheibe) und Höhe
+      armX: [31, 69], armLaenge: 36,           // Drehpunkte der Arme (x in %) und Länge (% der Ansichtsbreite)
+      armWinkel: 128,                          // Schwenkbereich (Grad)
+      takt: { regen: 1.5, schnee: 2.4, hagel: 1.1 },   // Sekunden je Wisch-Hin-und-Zurück (Windstärke macht es bis zu 30 % schneller)
+      tropfen: { regen: 150, schnee: 90, hagel: 70 },  // höchstens so viele Tropfen/Flocken gleichzeitig
+      rate: { regen: 70, schnee: 35, hagel: 40 },      // neue Tropfen/Flocken pro Sekunde
+      aufloesung: 0.6,                         // Zeichenauflösung des Felds (1 = Bildschirm-Pixel; kleiner = schneller)
+    },
   },
 
   // --- Runde 6 (W3-F): Pokal-Serie (D1) und „Letzter fliegt raus" (D7), src/race/pokal.js ---

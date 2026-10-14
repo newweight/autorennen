@@ -210,6 +210,7 @@
         background: 'linear-gradient(90deg, rgba(255,90,170,.9), rgba(150,110,255,.9))', border: '.08em solid #fff',
         opacity: '0', transition: 'opacity .18s, transform .25s cubic-bezier(.3,1.6,.6,1)', pointerEvents: 'none' });
       this.eKmh = q('.kmh b'); this.eBalken = q('.balken i');
+      this.cockpit = R.cockpit ? R.cockpit.fuerHud(this, el) : null;   // 14.10. (v21): Instrumente, Rückspiegel-Rahmen, Wischer (src/ui/cockpit.js)
       this.eWetter = q('.hud-wetter'); this.eWSymbol = q('.w-symbol'); this.eWind = q('.w-wind');
       this.eWPfeil = q('.w-pfeil'); this.eWStufe = q('.w-wind b');
       this.wetter = null;
@@ -462,6 +463,7 @@
     /** Schriftgröße an die Größe der Ansicht anpassen. */
     groesse(w, h) {
       this.el.style.fontSize = Math.max(11, Math.min(w / 40, h / 36)) + 'px';
+      if (this.cockpit) this.cockpit.groesse(w, h);
     }
 
     update() {
@@ -519,10 +521,12 @@
       if (this.polizei && this.ePolizei) this._polizeiAnzeigen();
       if (this.pickups && this.eItem) this._itemAnzeigen();
       if (this.minimap) this.minimap.zeichnen(r.teilnehmer, t, this.polizei ? this.polizei.minimapPunkte() : null);
+      if (this.cockpit) this.cockpit.update();
     }
 
     zerstoeren() {
       clearTimeout(this.bannerTimer); clearTimeout(this.meldungTimer);
+      if (this.cockpit) this.cockpit.zerstoeren();
       if (this.el.parentNode) this.el.parentNode.removeChild(this.el);
     }
   }

@@ -1,0 +1,143 @@
+/* Brettspiele – gemeinsamer Stil. Farben kommen aus konstanten.js (rahmen.js setzt --c-…); die Werte hier sind nur Rückfall. */
+:root {
+  --c-hintergrund1: #18224d; --c-hintergrund2: #0c1230; --c-text: #fff; --c-gelb: #ffd23f; --c-gruen: #3ccf6e; --c-rot: #e63946;
+  --c-knopf: #2f6bff; --c-knopfText: #fff; --c-karte: rgba(255,255,255,.1);
+  --c-vierBrett: #1d4ed8; --c-vierBrettRand: #143ba8; --c-vierRot: #e63946; --c-vierGelb: #ffd23f; --c-vierGewinn: #fff;
+  --c-schachHell: #f0d9b5; --c-schachDunkel: #b58863; --c-schachAuswahl: #7ccf5a; --c-schachZug: rgba(30,120,40,.55);
+  --c-schachLetzter: rgba(255,220,60,.55); --c-schachSchach: #ff4d4d; --c-schachWeiss: #fff; --c-schachSchwarz: #2a2a35;
+  --c-schachWeissRand: #3a2a1a; --c-schachSchwarzRand: #f2e6d0;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; min-height: 100%; }
+body { min-height: 100dvh; color: var(--c-text); background: radial-gradient(ellipse at 50% 20%, var(--c-hintergrund1), var(--c-hintergrund2) 80%) fixed;
+  font-family: "Arial Rounded MT Bold", "Avenir Next", -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-weight: 700;
+  -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+a { color: inherit; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.hidden { display: none !important; }
+#app { max-width: 980px; margin: 0 auto; padding: 12px 16px 24px; min-height: 100dvh; display: flex; flex-direction: column; }
+
+.bildschirm { display: flex; flex-direction: column; align-items: center; gap: 14px; flex: 1; }
+.kopfzeile { align-self: stretch; display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 40px; }
+.zurueck, .knopf-klein { background: rgba(255,255,255,.14); border: 0; border-radius: 999px; padding: 8px 16px; text-decoration: none; font-size: 16px; display: inline-flex; align-items: center; gap: 6px; }
+.zurueck:hover, .knopf-klein:hover { background: rgba(255,255,255,.25); }
+h1 { margin: 0; font-size: clamp(34px, 8vw, 58px); color: var(--c-gelb); text-align: center; text-shadow: 0 3px 0 #d6381f, 0 6px 0 #8f2412, 0 10px 14px rgba(0,0,0,.5); }
+h2 { margin: 0; font-size: clamp(24px, 5vw, 34px); text-align: center; }
+.unter { margin: 0; text-align: center; opacity: .9; font-size: 18px; }
+.regeln { max-width: 560px; text-align: center; opacity: .85; font-size: 16px; line-height: 1.4; margin: 6px 0 0; }
+
+.karten { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; width: 100%; max-width: 860px; }
+.karte { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 20px 14px; border: 3px solid transparent; border-radius: 22px;
+  background: var(--c-karte); text-decoration: none; text-align: center; transition: transform .12s, background .12s, border-color .12s; }
+.karte:hover, .karte:focus-visible { transform: translateY(-3px); background: rgba(255,255,255,.2); border-color: var(--c-gelb); outline: none; }
+.karte .em { font-size: 54px; line-height: 1.1; }
+.karte b { font-size: 24px; }
+.karte small { font-size: 15px; opacity: .8; font-weight: 600; }
+.karte.aus { opacity: .5; pointer-events: none; }
+
+.knopf { background: var(--c-knopf); color: var(--c-knopfText); border: 0; border-radius: 18px; padding: 14px 26px; font-size: 22px; box-shadow: 0 5px 0 rgba(0,0,0,.35); }
+.knopf:hover { filter: brightness(1.12); }
+.knopf:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(0,0,0,.35); }
+.knopf.gruen { background: var(--c-gruen); color: #0b2a14; }
+.knopf.gelb { background: var(--c-gelb); color: #3a2a00; }
+.knopf.rot { background: var(--c-rot); }
+.knopf.gross { font-size: 28px; padding: 16px 38px; }
+.knopf[disabled] { opacity: .45; pointer-events: none; }
+.gruppe { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.gruppe > .etikett { font-size: 17px; opacity: .85; }
+.chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.chip { background: var(--c-karte); border: 3px solid transparent; border-radius: 16px; padding: 8px 16px; font-size: 20px; }
+.chip.an { border-color: var(--c-gelb); background: rgba(255,210,63,.22); }
+.chip.tier { font-size: 18px; padding: 6px 12px; }
+.reihe { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: center; }
+.hinweis { min-height: 1.4em; text-align: center; font-size: 17px; color: var(--c-gelb); }
+.hinweis.fehler { color: #ff9b9b; }
+
+input.code { width: 6.2em; font: inherit; font-size: 36px; letter-spacing: .18em; text-transform: uppercase; text-align: center; padding: 6px 8px 6px 18px;
+  border-radius: 16px; border: 3px solid rgba(255,255,255,.4); background: rgba(0,0,0,.3); color: #fff; user-select: text; -webkit-user-select: text; }
+input.code:focus { outline: none; border-color: var(--c-gelb); }
+.codegross { font-size: clamp(46px, 14vw, 84px); letter-spacing: .15em; padding-left: .15em; color: var(--c-gelb); text-shadow: 0 4px 0 rgba(0,0,0,.4); line-height: 1.1; }
+.link { max-width: 100%; word-break: break-all; font-size: 15px; background: rgba(0,0,0,.3); padding: 6px 12px; border-radius: 10px; user-select: text; -webkit-user-select: text; }
+.qr { background: #fff; border-radius: 14px; padding: 6px; line-height: 0; }
+.qr svg { width: 168px; height: 168px; }
+.punkte::after { content: ''; animation: punkte 1.4s steps(4, end) infinite; }
+@keyframes punkte { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+/* Spielfenster */
+.spielkopf { align-self: stretch; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: space-between; }
+.spielerleiste { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; flex: 1; }
+.spieler { display: flex; align-items: center; gap: 8px; background: var(--c-karte); border-radius: 999px; padding: 6px 16px; border: 3px solid transparent; font-size: 18px; transition: border-color .15s, background .15s; }
+.spieler.aktiv { border-color: var(--c-gelb); background: rgba(255,210,63,.2); }
+.spieler.weg { opacity: .55; }
+.statuszeile { font-size: clamp(20px, 4.5vw, 28px); text-align: center; min-height: 1.5em; transition: color .2s; }
+.statuszeile.gut { color: var(--c-gruen); }
+.statuszeile.warn { color: var(--c-gelb); }
+.statuszeile.schlecht { color: #ff9b9b; }
+.banner { align-self: stretch; text-align: center; background: #b3261e; padding: 8px; border-radius: 12px; font-size: 16px; }
+.host { display: flex; justify-content: center; width: 100%; }
+.aktionen { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+.roomtag { font-size: 15px; opacity: .85; background: rgba(255,255,255,.12); padding: 6px 12px; border-radius: 999px; }
+
+.overlay { position: fixed; inset: 0; background: rgba(5,8,25,.72); display: flex; align-items: center; justify-content: center; z-index: 20; padding: 16px; animation: einblenden .25s; }
+.overlay .tafel { background: linear-gradient(160deg, #26357a, #121a45); border: 4px solid var(--c-gelb); border-radius: 28px; padding: 26px 30px; text-align: center; max-width: 440px; display: flex; flex-direction: column; gap: 14px; align-items: center; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+.overlay .gross { font-size: 76px; line-height: 1; }
+.overlay .text { font-size: clamp(24px, 6vw, 32px); }
+.overlay .klein { font-size: 16px; opacity: .85; font-weight: 600; }
+@keyframes einblenden { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 520px) { #app { padding: 8px 10px 18px; } .karte .em { font-size: 44px; } .knopf { font-size: 19px; padding: 12px 20px; } }
+@media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* ---------- 4 gewinnt ---------- */
+.v-wrap { --z: min(calc((100vw - 40px) / 7), calc((100dvh - 255px) / 7.3), 92px); width: calc(var(--z) * 7); padding-top: 4px; }
+.v-brett { position: relative; width: calc(var(--z) * 7); height: calc(var(--z) * 7); }
+.v-geist { position: absolute; left: 0; top: 0; width: 100%; height: var(--z); pointer-events: none; }
+.v-stein { position: absolute; width: var(--z); height: var(--z); }
+.v-stein::before { content: ''; position: absolute; inset: 7%; border-radius: 50%; background: var(--farbe); box-shadow: inset 0 calc(var(--z) * -.07) 0 rgba(0,0,0,.22), inset 0 calc(var(--z) * .05) calc(var(--z) * .06) rgba(255,255,255,.4); }
+.v-stein::after { content: ''; position: absolute; inset: 24%; border-radius: 50%; border: calc(var(--z) * .05) solid rgba(0,0,0,.14); }
+.v-stein.rot { --farbe: var(--c-vierRot); } .v-stein.gelb { --farbe: var(--c-vierGelb); }
+.v-geist .v-stein { opacity: .6; transition: left .08s; }
+.v-feld { position: absolute; left: 0; top: var(--z); width: 100%; height: calc(var(--z) * 6); background: #0a0f2a; border-radius: calc(var(--z) * .2); overflow: hidden; }
+.v-steine { position: absolute; inset: 0; }
+.v-steine .v-stein { animation: fall calc(.14s + .07s * var(--fall)) cubic-bezier(.5, 0, 1, .6) both; }
+.v-steine .v-stein.still { animation: none; }
+@keyframes fall { 0% { transform: translateY(calc(var(--fall) * var(--z) * -1)); } 78% { transform: translateY(0); animation-timing-function: ease-out; } 88% { transform: translateY(calc(var(--z) * -.09)); animation-timing-function: ease-in; } 100% { transform: translateY(0); } }
+.v-gitter { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(6, 1fr); pointer-events: none; }
+.v-gitter i { background: radial-gradient(circle at 50% 50%, transparent 0 41%, var(--c-vierBrett) 42.5%); box-shadow: inset 0 0 0 .5px var(--c-vierBrettRand); }
+.v-spalten { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: grid; grid-template-columns: repeat(7, 1fr); }
+.v-spalten div { cursor: pointer; }
+.v-spalten div.cursor { background: linear-gradient(rgba(255,255,255,.14), rgba(255,255,255,0) 60%); }
+.v-spalten.aus div { cursor: default; }
+.v-steine.gewonnen .v-stein:not(.gewinn) { opacity: .4; transition: opacity .4s; }
+.v-steine .v-stein.gewinn::before { box-shadow: 0 0 0 calc(var(--z) * .06) var(--c-vierGewinn), 0 0 calc(var(--z) * .3) var(--c-vierGewinn); animation: puls .7s ease-in-out infinite alternate; }
+@keyframes puls { to { transform: scale(1.1); } }
+.v-fuss { height: calc(var(--z) * .3); width: 108%; margin-left: -4%; background: var(--c-vierBrettRand); border-radius: 0 0 calc(var(--z) * .2) calc(var(--z) * .2); margin-top: calc(var(--z) * -.02); }
+
+/* ---------- Schach ---------- */
+.s-wrap { --f: min(calc((100vw - 36px) / 8), calc((100dvh - 245px) / 8), 84px); width: calc(var(--f) * 8 + 8px); }
+.s-brett { position: relative; display: grid; grid-template-columns: repeat(8, var(--f)); grid-template-rows: repeat(8, var(--f)); border: 4px solid #5a3b22; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+.s-feld { position: relative; width: var(--f); height: var(--f); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.s-feld.hell { background: var(--c-schachHell); } .s-feld.dunkel { background: var(--c-schachDunkel); }
+.s-feld.letzter::before { content: ''; position: absolute; inset: 0; background: var(--c-schachLetzter); }
+.s-feld.gewaehlt { background: var(--c-schachAuswahl); }
+.s-feld.schach { background: radial-gradient(circle, var(--c-schachSchach) 0 45%, transparent 75%), var(--bg, var(--c-schachHell)); }
+.s-feld.schach.dunkel { --bg: var(--c-schachDunkel); } .s-feld.schach.hell { --bg: var(--c-schachHell); }
+.s-feld.ziel::after { content: ''; position: absolute; width: 30%; height: 30%; border-radius: 50%; background: var(--c-schachZug); }
+.s-feld.ziel.schlag::after { width: 88%; height: 88%; background: none; border: calc(var(--f) * .09) solid var(--c-schachZug); }
+.s-feld.cursor { outline: 4px solid var(--c-gelb); outline-offset: -4px; z-index: 2; }
+.s-feld .koord { position: absolute; font-size: calc(var(--f) * .17); line-height: 1; opacity: .7; pointer-events: none; color: #3a2a1a; }
+.s-feld .koord.l { left: 3%; bottom: 3%; } .s-feld .koord.r { right: 4%; top: 3%; }
+.s-fig { font-size: calc(var(--f) * .84); line-height: 1; position: relative; z-index: 1; pointer-events: none; transition: transform .22s ease-out;
+  font-family: "Segoe UI Symbol", "Apple Symbols", "DejaVu Sans", "Noto Sans Symbols 2", "Arial Unicode MS", sans-serif; font-weight: 400; }
+.s-fig.w { color: var(--c-schachWeiss); text-shadow: 1px 0 var(--c-schachWeissRand), -1px 0 var(--c-schachWeissRand), 0 1px var(--c-schachWeissRand), 0 -1px var(--c-schachWeissRand), 1px 1px var(--c-schachWeissRand), -1px -1px var(--c-schachWeissRand), 1px -1px var(--c-schachWeissRand), -1px 1px var(--c-schachWeissRand), 0 2px 3px rgba(0,0,0,.4); }
+.s-fig.b { color: var(--c-schachSchwarz); text-shadow: 0 0 1px var(--c-schachSchwarzRand), 0 0 1px var(--c-schachSchwarzRand), 0 1px 2px rgba(0,0,0,.3); }
+.s-umw { position: absolute; inset: 0; z-index: 5; background: rgba(8,12,35,.82); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; border-radius: 6px; }
+.s-umw .reihe button { width: calc(var(--f) * 1.5); height: calc(var(--f) * 1.5); max-width: 110px; max-height: 110px; background: var(--c-schachHell); border: 4px solid transparent; border-radius: 16px; padding: 0; display: flex; align-items: center; justify-content: center; }
+.s-umw .reihe button:hover, .s-umw .reihe button:focus-visible { border-color: var(--c-gelb); outline: none; }
+.s-umw .s-fig { font-size: calc(var(--f) * 1.05); pointer-events: none; }
+.s-umw .t { font-size: 20px; text-align: center; padding: 0 10px; }
+.s-denkt { position: absolute; top: -2px; right: -2px; }
+
+/* Menü-Bildschirme: Inhalt mittig, Kopfzeile oben */
+.bildschirm.mitte > .kopfzeile { margin-bottom: auto; }
+.bildschirm.mitte > :last-child { margin-bottom: auto; }

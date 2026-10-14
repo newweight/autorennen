@@ -31,7 +31,7 @@ const DT = R.config.physik.schritt;
 // „Browser“ ohne DOM: dieselben Dateien, die Autorennen.html für Physik/Vorhersage lädt
 const C = kontextLaden(['vendor/three.min.js', 'src/config.js', 'src/physics/vehicle.js', 'src/physics/collisions.js', 'src/cars/carCatalog.js',
   'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/looping.js', 'src/track/schanze.js', 'src/track/anlauf.js',
-  'src/world/themes.js', 'src/world/wetter.js', 'src/world/kleber.js', 'src/net/protokoll.js', 'src/net/vorhersage.js']);   // v16: + Schanze/Anlauf/Kleber (wie Autorennen.html)
+  'src/world/themes.js', 'src/world/schilder.js', 'src/world/wetter.js', 'src/world/kleber.js', 'src/world/polizei.js', 'src/net/protokoll.js', 'src/net/vorhersage.js']);   // v16: + Schanze/Anlauf/Kleber (wie Autorennen.html)
 
 /** Strecke wie im Browser (main.js streckeSzeneBauen, Physik-Teile) aus den Start-Einstellungen. */
 function clientStrecke(e) {
@@ -39,6 +39,7 @@ function clientStrecke(e) {
   const st = new C.Strecke(daten, { welt: C.Strecke.weltName(daten, e.welt), variante: e.variante, hindernisMenge: e.hindernisMenge });
   const w = new C.Wetter(null, { jahreszeit: e.jahreszeit, wetter: e.wetter, wind: { staerke: e.windStaerke, richtung: e.windRichtung },
     thema: daten.thema, seed: 1, strecke: st, tageszeit: e.tageszeit });
+  C.Kurvenschilder.einbauen(st, e.tempoKlasse);          // v21: Schild-Masten (strecke.bauen() im Browser)
   C.Kollisionen.pflanzenSammeln(st, C.themes.dekoBauen(daten.thema, st, w.jahreszeit));
   C.Kollisionen.wracksEinbauen(st);
   const th = C.themes[daten.thema];

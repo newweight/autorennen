@@ -90,7 +90,7 @@ localhost-Link – Gäste können aber auch einfach die trycloudflare-Adresse ö
 
 ## Sicherheit / Kinder
 
-- Ausgeliefert werden nur `Autorennen.html`, `src/` und `vendor/` – nicht `server/`, `tests/`, Dokumente,
+- Ausgeliefert werden nur `Autorennen.html`, `src/`, `vendor/` und `spiele/` (Brettspiele, eigener WebSocket `/ws-brett`, Code in `server/brettspiele.js`) – nicht `server/`, `tests/`, Dokumente,
   versteckte Dateien; kein Verzeichnis-Listing, `..` und `\` werden abgewiesen, nur GET/HEAD.
 - Kein Chat, keine Freitexteingabe außer dem Raumcode; Namen nur aus der Fahrerliste; max. 6 Spieler je Raum.
 - Raum verschwindet, sobald der Host geht (Gäste landen mit Hinweis im Online-Menü). Codes sind 4 Zeichen

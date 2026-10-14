@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Schach 3D Demo</title>
+<style>
+  :root { --bg:#17120e; --kachel:#241b14; --rand:#4a3826; --text:#f3e7d3; --gruen:#2a6b40; --akzent:#e0a63a; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); font:15px/1.4 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; }
+  body { padding: 12px 16px 28px; max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 4px 0 10px; }
+  h2 { font-size: 15px; margin: 18px 0 8px; color: var(--akzent); }
+  .leiste { display:flex; flex-wrap:wrap; gap:8px; margin: 8px 0; align-items:center; }
+  button, select { font: inherit; color: var(--text); background: var(--kachel); border: 1px solid var(--rand); border-radius: 9px; padding: 8px 12px; cursor: pointer; }
+  button:hover { border-color: var(--akzent); }
+  button.an { background: var(--gruen); border-color: #5fb27b; }
+  #buehne { position: relative; width: 100%; height: min(72vh, 680px); min-height: 320px; border-radius: 14px; overflow: hidden; border: 1px solid var(--rand); background:#120e0b; }
+  #status { font-size: 13px; opacity: .85; min-height: 20px; margin: 6px 0; }
+  #zweid { display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start; }
+  #brett2d { position: relative; width: min(384px, 100%); aspect-ratio: 1; height: auto; display:grid; grid-template-columns: repeat(8, 1fr); border: 3px solid #6b4a2b; border-radius: 4px; flex: 0 0 auto; touch-action: manipulation; }
+  .feld { display:flex; align-items:center; justify-content:center; font-size: min(36px, 9vw); line-height: 1; cursor: pointer; font-family: 'Apple Symbols','Segoe UI Symbol','DejaVu Sans',sans-serif; user-select:none; }
+  .feld.h { background:#efd9b5; } .feld.d { background:#a06e45; }
+  .feld.sel { outline: 3px solid #4a90ff; outline-offset: -3px; }
+  .feld .w { color:#fff; text-shadow: 0 0 2px #333, 0 0 2px #333, 1px 1px 2px #000; }
+  .feld .s { color:#161616; text-shadow: 0 0 1px #aaa; }
+  .feld .weg { visibility:hidden; }
+  small { opacity:.7; }
+</style>
+</head>
+<body>
+<h1>Schach 3D &ndash; Testseite</h1>
+<div class="leiste">
+  <button id="bWenden">Wenden</button>
+  <button id="bAuto">Auto-Wenden</button>
+  <button id="bHunde">Hunde-Team</button>
+  <button id="bKampf" class="an">Kampf an</button>
+  <button id="bReset">Kamera zurück</button>
+  <button id="bNeu">Startstellung</button>
+  <select id="sThema" title="Brett-Thema"></select>
+  <select id="sQ" title="Qualität"><option value="auto">Qualität: auto</option><option value="hoch">hoch</option><option value="mittel">mittel</option><option value="niedrig">niedrig</option></select>
+</div>
+<div class="leiste">
+  <small>Kampfszene vorführen:</small>
+  <button data-k="knight">Springer</button><button data-k="rook">Turm</button><button data-k="bishop">Läufer</button>
+  <button data-k="queen">Dame</button><button data-k="pawn">Bauer</button><button data-k="king">König</button>
+  <button id="bRochade">Rochade</button><button id="bUmw">Umwandlung</button><button id="bSchild">Namensschild</button>
+</div>
+<div id="buehne"></div>
+<div id="status">Klick auf eine Figur wählt sie, Klick auf ein Feld zieht (ohne Regeln). Ziehen = drehen/neigen, Rad/Pinch = Zoom.</div>
+
+<h2>2D-Zuganimation (animation2d.js)</h2>
+<div id="zweid">
+  <div id="brett2d"></div>
+  <div>
+    <div class="leiste"><button id="b2Show">Show-Modus (Hunde)</button><button id="b2Neu">Neu</button></div>
+    <small>Figur antippen, dann Zielfeld: gleiten, beim Schlagen Kampf.</small>
+  </div>
+</div>
+
+<script src="/vendor/three.min.js"></script>
+<script src="aktionen.js"></script>
+<script src="figuren3d.js"></script>
+<script src="schach3d.js"></script>
+<script src="kampf3d.js"></script>
+<script src="animation2d.js"></script>
+<script>
+(function () {
+  'use strict';
+  const q = new URLSearchParams(location.search);
+  const $ = id => document.getElementById(id);
+  const status = t => { $('status').textContent = t; };
+  const FOLGE = ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'];
+  function start() {
+    const g = Array.from({ length: 8 }, () => Array(8).fill(null));
+    for (let c = 0; c < 8; c++) {
+      g[0][c] = { color: 'black', type: FOLGE[c] }; g[1][c] = { color: 'black', type: 'pawn' };
+      g[6][c] = { color: 'white', type: 'pawn' }; g[7][c] = { color: 'white', type: FOLGE[c] };
+    }
+    return g;
+  }
+
+  const s3 = new Schach3D($('buehne'), {
+    qualitaet: q.get('q') || 'auto', manuell: q.has('manuell'), hunde: q.has('hunde'), thema: +(q.get('thema') || 0),
+    ansichtVonSchwarz: q.has('schwarz'),
+  });
+  window.s3 = s3;
+  let grid = start();
+  s3.setzeStellung(grid);
+
+  // ---- Knöpfe
+  const sT = $('sThema'); Schach3D.THEMEN.forEach((t, i) => sT.add(new Option(t.name, i)));
+  sT.value = q.get('thema') || 0; sT.onchange = () => s3.setzeThema(+sT.value);
+  $('sQ').value = q.get('q') || 'auto'; $('sQ').onchange = () => { const v = $('sQ').value; if (v === 'auto') location.search = '?q=auto'; else s3.qualitaet(v); };
+  const toggle = (id, an, f, text) => { const b = $(id); b.onclick = () => { an = !an; b.classList.toggle('an', an); f(an); if (text) b.textContent = text(an); }; b.classList.toggle('an', an); };
+  $('bWenden').onclick = () => s3.wenden();
+  toggle('bAuto', false, v => s3.autoWenden(v));
+  toggle('bHunde', q.has('hunde'), v => s3.hunde(v));
+  toggle('bKampf', true, v => s3.kampf(v), v => v ? 'Kampf an' : 'Kampf aus');
+  $('bReset').onclick = () => s3.kameraZuruecksetzen();
+  $('bNeu').onclick = () => { grid = start(); s3.setzeStellung(grid); s3.markiere([], []); sel = null; };
+
+  // ---- Klick-Züge ohne Regeln
+  let sel = null;
+  function kopie(g) { return g.map(r => r.slice()); }
+  function zieh(zug) {
+    const p = grid[zug.from.row][zug.from.col];
+    zug.capturedPiece = grid[zug.to.row][zug.to.col] || zug.capturedPiece || null;
+    if (p && p.type === 'king' && Math.abs(zug.to.col - zug.from.col) === 2) zug.isCastling = true;
+    if (p && p.type === 'pawn' && (zug.to.row === 0 || zug.to.row === 7)) zug.promotion = 'queen';
+    const wartet = s3.animiereZug(zug);
+    // Wahrheit der Regel-Engine: Stellung nach dem Zug (hier nachgebaut)
+    const n = kopie(grid); n[zug.to.row][zug.to.col] = zug.promotion ? { color: p.color, type: zug.promotion } : p; n[zug.from.row][zug.from.col] = null;
+    if (zug.isCastling) { const rf = zug.to.col === 6 ? 7 : 0, rt = zug.to.col === 6 ? 5 : 3; n[zug.from.row][rt] = n[zug.from.row][rf]; n[zug.from.row][rf] = null; }
+    grid = n;
+    return wartet;
+  }
+  s3.onFeldKlick((r, c) => {
+    const p = grid[r][c];
+    if (sel && !(p && p.color === grid[sel.row][sel.col].color)) {
+      const von = sel; sel = null; s3.markiere([], []);
+      status('Zug ' + von.row + ',' + von.col + ' → ' + r + ',' + c);
+      zieh({ from: von, to: { row: r, col: c } }).then(() => status('Zug fertig.'));
+      return;
+    }
+    if (p) {
+      sel = { row: r, col: c };
+      const ziele = [], schlaege = [];
+      for (let rr = 0; rr < 8; rr++) for (let cc = 0; cc < 8; cc++) {
+        if (Math.max(Math.abs(rr - r), Math.abs(cc - c)) > 2 || (rr === r && cc === c)) continue;
+        const o = grid[rr][cc]; if (!o) ziele.push({ row: rr, col: cc }); else if (o.color !== p.color) schlaege.push({ row: rr, col: cc });
+      }
+      s3.markiere(ziele, schlaege, { ausgewaehlt: sel });
+      status('Gewählt: ' + p.color + ' ' + p.type);
+    }
+  });
+
+  // ---- Kampfszenen vorführen
+  const AUFBAU = {   // Angreifer (weiß) / Opfer (schwarz)
+    knight: { a: [5, 5], v: [3, 4], vt: 'bishop' }, rook: { a: [4, 1], v: [4, 5], vt: 'knight' }, bishop: { a: [5, 2], v: [3, 4], vt: 'knight' },
+    queen: { a: [5, 3], v: [3, 5], vt: 'knight' }, pawn: { a: [4, 3], v: [3, 4], vt: 'bishop' }, king: { a: [4, 4], v: [3, 4], vt: 'pawn' },
+  };
+  function kampfAufbau(typ) {
+    const g = start(), A = AUFBAU[typ];
+    g[A.a[0]][A.a[1]] = { color: 'white', type: typ };
+    g[A.v[0]][A.v[1]] = { color: 'black', type: A.vt };
+    return g;
+  }
+  window.kampfAufbau = kampfAufbau;
+  window.kampfStart = function (typ) {
+    const A = AUFBAU[typ]; grid = kampfAufbau(typ); sel = null; s3.markiere([], []);
+    s3.setzeStellung(grid);
+    return s3.animiereZug({ from: { row: A.a[0], col: A.a[1] }, to: { row: A.v[0], col: A.v[1] }, capturedPiece: grid[A.v[0]][A.v[1]] });
+  };
+  document.querySelectorAll('[data-k]').forEach(b => { b.onclick = () => { status('Kampf: ' + b.textContent); window.kampfStart(b.dataset.k).then(() => status('Kampf fertig.')); }; });
+  $('bRochade').onclick = () => {
+    const g = start(); g[7][5] = null; g[7][6] = null; grid = g; s3.setzeStellung(g);
+    zieh({ from: { row: 7, col: 4 }, to: { row: 7, col: 6 } });
+  };
+  $('bUmw').onclick = () => {
+    const g = start(); g[1][4] = null; g[0][4] = null; g[0][3] = null; g[1][3] = null; g[1][0] = null; g[6][4] = null; g[1][4] = { color: 'white', type: 'pawn' }; grid = g; s3.setzeStellung(g);
+    zieh({ from: { row: 1, col: 4 }, to: { row: 0, col: 4 } });
+  };
+  let schild = false;
+  $('bSchild').onclick = () => { schild = !schild; s3.namensschild({ row: 7, col: 1 }, schild ? 'Falko' : ''); s3.namensschild({ row: 0, col: 3 }, schild ? 'Dame Luna' : ''); };
+
+  // ---- 2D-Brett mit Animation2D
+  const GL = { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟' };
+  const b2 = $('brett2d'); let g2 = start(), sel2 = null, show = false;
+  const an2 = new Animation2D(b2); window.an2 = an2;
+  const felder = [];
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const f = document.createElement('div'); f.className = 'feld ' + ((r + c) % 2 ? 'd' : 'h');
+    f.onclick = () => klick2(r, c); b2.insertBefore(f, an2.canvas); felder.push(f);
+  }
+  function zeichne2(weg) {
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+      const f = felder[r * 8 + c], p = g2[r][c];
+      f.classList.toggle('sel', !!(sel2 && sel2.row === r && sel2.col === c));
+      f.innerHTML = p ? '<span class="' + (p.color === 'white' ? 'w' : 's') + (weg && weg.some(w => w[0] === r && w[1] === c) ? ' weg' : '') + '">' + GL[p.type] + '</span>' : '';
+    }
+  }
+  function klick2(r, c) {
+    const p = g2[r][c];
+    if (sel2 && !(p && p.color === g2[sel2.row][sel2.col].color)) {
+      const v = sel2, m = g2[v.row][v.col], opfer = p; sel2 = null;
+      const cell = b2.clientWidth / 8;
+      zeichne2([[v.row, v.col], [r, c]]);
+      an2.animiere({ typ: m.type, weiss: m.color === 'white', schlag: opfer ? { typ: opfer.type, weiss: opfer.color === 'white' } : null,
+        von: { x: (v.col + 0.5) * cell, y: (v.row + 0.5) * cell }, nach: { x: (c + 0.5) * cell, y: (r + 0.5) * cell }, zelle: cell, hunde: show })
+        .then(() => { g2[r][c] = m; g2[v.row][v.col] = null; zeichne2(); });
+      return;
+    }
+    if (p) { sel2 = { row: r, col: c }; zeichne2(); }
+  }
+  $('b2Show').onclick = () => { show = !show; $('b2Show').classList.toggle('an', show); };
+  $('b2Neu').onclick = () => { an2.abbrechen(); g2 = start(); sel2 = null; zeichne2(); };
+  zeichne2();
+  window.klick2 = klick2;
+
+  // ---- Test-Hilfen
+  window.demo = { s3, schritt(sek, dt) { s3.vorspulen(sek, dt); }, start, stats: () => s3.statistik() };
+  window.addEventListener('error', e => { status('Fehler: ' + e.message); });
+})();
+</script>
+</body>
+</html>

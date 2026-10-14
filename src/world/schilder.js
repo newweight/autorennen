@@ -166,6 +166,34 @@
     return liste;
   }
 
+  /** Blickrichtung eines Schildes: zur Fahrbahnmitte ca. 70 m vor dem Mast (Einheitsvektor x, z). */
+  function blickRichtung(st, s, x, z) {
+    const p = st.spline.punktBei(s - 70);
+    let fx = p.x - x, fz = p.z - z; const l = Math.hypot(fx, fz) || 1;
+    return [fx / l, fz / l];
+  }
+
+  /**
+   * 14.10. (v21) Schilder berechnen UND ihre Masten als feste Säulen { x, z, r, art: 'schildmast' } in strecke.saeulen eintragen
+   * (nur der dünne Mast, Radius config.kurvenschilder.mastRadius ≈ 0,12 m – nicht das Schild). Läuft auch im Server (Physik identisch).
+   * Idempotent: ein zweiter Aufruf ersetzt Liste und Säulen. bauen() nutzt die Liste weiter, wenn sie zur Tempo-Klasse passt.
+   */
+  function einbauen(st, tempoKlasse) {
+    const C = cfg(), klasse = tempoKlasse || st.tempoKlasse || R.config.tempoKlasseStandard || 'normal';
+    if (st._schildSaeulen) st.saeulen = (st.saeulen || []).filter((q) => st._schildSaeulen.indexOf(q) < 0);
+    st._schildSaeulen = null;
+    const liste = berechnen(st, klasse);
+    st.kurvenschilder = liste; st._schildKlasse = klasse;
+    const m = C.massstab || 2, r = C.mastRadius !== undefined ? C.mastRadius : 0.12, sa = [];
+    if (C.mastKollision !== false && r > 0) {
+      const mast = (s, x, z) => { const f = blickRichtung(st, s, x, z); sa.push({ x: x - f[0] * 0.06 * m, z: z - f[1] * 0.06 * m, r, art: 'schildmast' }); };
+      liste.forEach((sc) => { mast(sc.s, sc.x, sc.z); sc.leitpfeile.forEach((l) => mast(l.s, l.x, l.z)); });
+    }
+    st._schildSaeulen = sa;
+    if (sa.length) st.saeulen = (st.saeulen || []).concat(sa);
+    return liste;
+  }
+
   // ------------------------------------------------------------------ Grafik
 
   const ZELLE = 128;
@@ -187,11 +215,11 @@
     g.strokeStyle = '#111'; g.fillStyle = '#111'; g.lineWidth = 13; g.lineCap = 'butt'; g.lineJoin = 'miter';
     g.beginPath();
     if (art === 'doppel') {
-      // S-förmiger Pfeil: erst rechts, dann links
-      g.moveTo(52, 100); g.lineTo(52, 84); g.bezierCurveTo(52, 70, 74, 70, 74, 56); g.lineTo(74, 44);
+      // Z 105: Pfeil mit zwei Bögen – erst in Richtung der ersten Kurve (hier: rechts), dann zurück nach links; Spitze oben
+      g.moveTo(44, 104); g.lineTo(44, 92); g.bezierCurveTo(44, 74, 76, 80, 76, 62);
+      g.bezierCurveTo(76, 52, 66, 50, 66, 42);
       g.stroke();
-      g.beginPath(); g.moveTo(74, 28); g.lineTo(62, 48); g.lineTo(86, 48); g.closePath(); g.fill();
-      // zweiter Bogen (nach links, dünn angedeutet über den Kopf nicht nötig – S-Form genügt)
+      g.beginPath(); g.moveTo(66, 24); g.lineTo(53, 46); g.lineTo(79, 46); g.closePath(); g.fill();
     } else {
       // Pfeil: gerade hoch, dann Bogen nach rechts oben
       g.moveTo(48, 102); g.lineTo(48, 74); g.bezierCurveTo(48, 58, 56, 50, 74, 44);
@@ -207,8 +235,10 @@
     g.fillStyle = '#ffffff'; g.beginPath(); g.arc(64, 64, 42, 0, Math.PI * 2); g.fill();
     const t = String(kmh);
     g.fillStyle = '#111'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.font = 'bold ' + (t.length >= 3 ? 40 : 54) + 'px Arial, Helvetica, sans-serif';
-    g.fillText(t, 64, 67);
+    g.font = 'bold ' + (t.length >= 3 ? 38 : 50) + 'px Arial, Helvetica, sans-serif';
+    g.fillText(t, 64, 53);
+    g.font = 'bold 19px Arial, Helvetica, sans-serif';   // „km/h“ klein unter der Zahl
+    g.fillText('km/h', 64, 93);
   }
 
   /** Zeichen 625 (Leitpfeil-Tafel): rot-weiß schräg gestreifter Rand, weißes Feld, großer roter Pfeil. */
@@ -258,8 +288,8 @@
   /** Das Schilder-Mesh der Strecke (oder null, wenn keine Schilder). */
   function bauen(st, tempoKlasse) {
     const C = cfg();
-    const liste = berechnen(st, tempoKlasse);
-    st.kurvenschilder = liste;
+    const klasse = tempoKlasse || st.tempoKlasse || R.config.tempoKlasseStandard || 'normal';
+    const liste = (st.kurvenschilder && st._schildKlasse === klasse) ? st.kurvenschilder : einbauen(st, klasse);
     if (!liste.length) return null;
     const m = C.massstab || 2;
 
@@ -306,12 +336,7 @@
         idx.push(i, i + 2, i + 1, i, i + 3, i + 2);
       }
     };
-    /** Blickrichtung: Mast schaut zur Fahrbahnmitte ca. 70 m vor ihm. */
-    const blick = (s, x, z) => {
-      const p = st.spline.punktBei(s - 70);
-      let fx = p.x - x, fz = p.z - z; const l = Math.hypot(fx, fz) || 1;
-      return [fx / l, fz / l];
-    };
+    const blick = (s, x, z) => blickRichtung(st, s, x, z);
 
     liste.forEach((sc) => {
       const f2 = blick(sc.s, sc.x, sc.z), f = [f2[0], 0, f2[1]];
@@ -347,5 +372,5 @@
     return mesh;
   }
 
-  R.Kurvenschilder = { berechnen, bauen, klassenTop, frei, kurvenSuchen };
+  R.Kurvenschilder = { berechnen, einbauen, bauen, klassenTop, frei, kurvenSuchen };
 })();

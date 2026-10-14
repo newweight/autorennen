@@ -23,8 +23,8 @@ const MODULE = [
   'vendor/three.min.js',
   'src/config.js', 'src/physics/vehicle.js', 'src/physics/collisions.js', 'src/physics/schaden.js', 'src/cars/carCatalog.js',
   'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/looping.js', 'src/track/schanze.js',
-  'src/track/anlauf.js', 'src/world/themes.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
-  'src/world/kleber.js', 'src/race/raceManager.js', 'src/race/startBoost.js', 'src/ai/driver.js', 'src/net/protokoll.js',
+  'src/track/anlauf.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
+  'src/world/kleber.js', 'src/world/polizei.js', 'src/race/raceManager.js', 'src/race/startBoost.js', 'src/ai/driver.js', 'src/net/protokoll.js',
   'src/main.js',
 ];
 
@@ -96,6 +96,7 @@ function einstellungenPruefen(roh, spielerAnzahl) {
     tageszeit: c.tageszeit && c.tageszeit[r.tageszeit] ? r.tageszeit : 'tag',
     schaden: false,                       // Stufe 1: online immer aus
     kollisionen: r.kollisionen === true,  // Stufe 2 (nicht im Menü): Auto↔Auto an
+    polizei: r.polizei === true,          // v4 (14.10.): Streifenwagen (nur ein echtes true schaltet ihn an)
     // 12.10. Hindernis-Menge: nur 'normal' | 'viele' | 'sehrViele' (unbekannt, Zahl, null … → 'normal'); alle Browser bauen dieselbe Strecke
     hindernisMenge: c.hindernisMenge && c.hindernisMenge.stufen && typeof r.hindernisMenge === 'string' &&
       Object.prototype.hasOwnProperty.call(c.hindernisMenge.stufen, r.hindernisMenge) ? r.hindernisMenge : ((c.hindernisMenge && c.hindernisMenge.standard) || 'normal'),
@@ -126,6 +127,8 @@ class Simulation {
       thema: daten.thema, seed, strecke, tageszeit: e.tageszeit });
     // Physik-relevante Teile von main.js streckeSzeneBauen (ohne Grafik): Pflanzen-Kollider aus der Deko,
     // Wracks in die Hindernisliste (hindernisseBauen), nachts Laternenmasten als Säulen
+    strecke.tempoKlasse = e.tempoKlasse;
+    if (R.Kurvenschilder) R.Kurvenschilder.einbauen(strecke, e.tempoKlasse);   // 14.10. (v21): Schild-Masten als feste Säulen (wie im Browser)
     R.Kollisionen.pflanzenSammeln(strecke, R.themes.dekoBauen(daten.thema, strecke, wetter.jahreszeit));
     if (R.Kollisionen.wracksEinbauen) R.Kollisionen.wracksEinbauen(strecke);
     const tz = wetter.tz, thema = R.themes[daten.thema] || R.themes.wiese;
@@ -196,6 +199,24 @@ class Simulation {
     rennen.bei('start', () => this.ereignisse.push({ an: null, art: 'start' }));
     rennen.bei('fertig', () => { this.fertig = true; });
     sim.fahrzeuge.forEach((f) => { if (f.driver && f.driver.hindernisseSetzen) f.driver.hindernisseSetzen(strecke.hindernisse); });
+    // 14.10. (v21) Polizei online: der Server simuliert die Streifenwagen autoritativ (dieselbe Logik wie offline, src/world/polizei.js).
+    // Sie sind Einträge hinter den Teilnehmern in sim.fahrzeuge (f.polizei = true); zustand() meldet sie getrennt (`po`, `ps`, `pz`).
+    this.nT = teilnehmer.length;
+    sim.polizei = null;
+    if (e.polizei && R.Polizei) {
+      sim.fahrzeugHinzufuegen = function (auto, x, z, heading) {     // kopflos: kein Mesh, keine Szene
+        const vehicle = new R.Vehicle(auto.fahrwerte, { tempoKlasse: e.tempoKlasse });
+        vehicle.setzen(x, z, heading);
+        const vorher = { x, y: 0, z, heading, nicken: 0, neigung: 0 };
+        const eintrag = { vehicle, mesh: null, auto, radwinkel: 0, looping: R.Looping ? R.Looping.zustand() : null, flug: R.Schanzen ? R.Schanzen.zustand() : null,
+          vorher, anzeige: vorher, netReset: 0 };
+        this.fahrzeuge.push(eintrag);
+        return eintrag;
+      };
+      sim.polizei = new R.Polizei(sim);
+      sim.polizei.einsetzen(strecke, teilnehmer.length, G);
+      sim.polizei.idx.forEach((i) => { sim.fahrzeuge[i].netReset = 0; });
+    }
     // Reset-Zähler (Clients interpolieren nicht über einen Sprung hinweg)
     const zurueck = sim.zuruecksetzen, zurAnlauf = sim._zurAnlauf;
     sim.zuruecksetzen = function (i) { const f = this.fahrzeuge[i]; if (f) f.netReset++; return zurueck.call(this, i); };
@@ -259,7 +280,7 @@ class Simulation {
    */
   zustand() {
     const sim = this.sim, r = sim.rennen, N = this.R.Netz, rd = N.rund, pu = sim.pickups;
-    const autos = sim.fahrzeuge.map((f, i) => {
+    const autos = sim.fahrzeuge.slice(0, this.nT).map((f, i) => {
       const v = f.vehicle, t = r.teilnehmer[i], lp = f.looping, fz = f.flug;
       let flags = 0;
       if (f.bremst) flags |= 1;
@@ -277,6 +298,19 @@ class Simulation {
       return a;
     });
     const z = { t: 'zustand', k: this.tick, rz: r.zustand, cd: rd(r.countdown, 3), zt: rd(r.zeit, 3), a: autos };
+    // v4 (14.10.): Polizei. po[k] = Streifenwagen k im Format von `a` (x, z, y, richtung, tempo, lenkung, flags, nicken, neigung, 0, 0, 0, 0, resetZaehler),
+    // ps = [[Teilnehmer-Nr, Rest der Anhaltung in s]] (nur wer gerade angehalten ist), pz = Ziel (Teilnehmer-Nr oder −1) je Streifenwagen
+    const po = sim.polizei;
+    if (po) {
+      z.po = po.idx.map((fi) => {
+        const f = sim.fahrzeuge[fi], v = f.vehicle;
+        return [rd(v.x, 3), rd(v.z, 3), rd(v.y, 3), rd(v.heading, 4), rd(v.vLaengs, 2), rd(v.lenkung, 3), f.bremst ? 1 : 0, rd(v.nicken, 3), rd(v.neigung, 3), 0, 0, 0, 0, f.netReset || 0];
+      });
+      z.pz = po.idx.map((fi, k) => po.logik.zielVon(k));
+      const ps = [];
+      for (let i = 0; i < this.nT; i++) { const rest = po.logik.rest(i); if (rest > 0) ps.push([i, rd(rest, 2)]); }
+      if (ps.length) z.ps = ps;
+    }
     if (pu) {
       z.pu = {
         k: pu.kugeln.map(k => (k.da ? 1 : 0)).join(''), f: pu.faesser.map(k => (k.da ? 1 : 0)).join(''),
@@ -310,6 +344,8 @@ class Simulation {
       rs: t.rundenStart, rzn: t.rundenzeiten.map(x => R.Netz.rund(x, 3)), bz: t.bestzeit, zz: t.zielZeit, zp: t.zielPlatz || 0,
     };
     if (sz) erg.sz = sz;
+    // v4: Rest der Polizei-Anhaltung (ungerundet: die Vorhersage zählt ihn im selben Takt herunter und ersetzt die Eingabe durch Bremsen)
+    if (sim.polizei) { const rest = sim.polizei.logik.rest(i); if (rest > 0) erg.ps = rest; }
     return erg;
   }
 

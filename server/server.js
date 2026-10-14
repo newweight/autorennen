@@ -20,9 +20,10 @@ const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const { laden, Simulation, einstellungenPruefen } = require('./simulation');
+const Brett = require('./brettspiele');            // Brettspiele (4 gewinnt, Schach): eigener WebSocket-Pfad /ws-brett, eigene Datei
 
 const WURZEL = path.resolve(__dirname, '..');
-const ERLAUBT = ['src', 'vendor'];               // Ordner, die ausgeliefert werden (dazu Autorennen.html)
+const ERLAUBT = ['src', 'vendor', 'spiele'];        // Ordner, die ausgeliefert werden (dazu Autorennen.html); spiele/ = Brettspiele
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.mp3': 'audio/mpeg',
@@ -110,6 +111,7 @@ function dateiFuer(urlPfad) {
   try { p = decodeURIComponent(urlPfad.split('?')[0].split('#')[0]); } catch (e) { return null; }
   if (p.includes('\0') || p.includes('\\')) return null;
   if (p === '/' || p === '') p = '/Autorennen.html';
+  else if (p.endsWith('/')) p += 'index.html';        // Brettspiele: /spiele/ → spiele/index.html
   const teile = p.split('/').filter(Boolean);
   if (!teile.length || teile.some(t => t === '..' || t === '.' || t.startsWith('.'))) return null;
   if (!(teile.length === 1 && teile[0] === 'Autorennen.html') && !ERLAUBT.includes(teile[0])) return null;
@@ -121,6 +123,10 @@ function dateiFuer(urlPfad) {
 function httpAntwort(req, res) {
   const ende = (code, text) => { res.writeHead(code, { 'Content-Type': 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff' }); res.end(req.method === 'HEAD' ? undefined : text); };
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.setHeader('Allow', 'GET, HEAD'); return ende(405, 'Nicht erlaubt'); }
+  if (/^\/spiele(\/(vier-gewinnt|schach))?(\?.*)?$/.test(req.url || '')) {      // ohne Schrägstrich → relative Links würden brechen
+    const q = (req.url.match(/\?.*$/) || [''])[0], n = req.url.replace(/\?.*$/, '').split('/').pop();
+    res.writeHead(301, { Location: n + '/' + q }); return res.end();
+  }
   const datei = dateiFuer(req.url || '/');
   if (!datei) return ende(404, 'Nicht gefunden');
   fs.stat(datei, (err, st) => {
@@ -153,6 +159,7 @@ function starten(opt) {
   const maxSchritte = Math.ceil(6 * opt.tempo);
   const log = (...a) => { if (!opt.leise) console.log(new Date().toISOString().slice(11, 19), ...a); };
   const raeume = new Map();
+  const brett = Brett.erzeugen(Object.assign({ leise: opt.leise }, opt.brett || {}));
   const fahrerNamen = R.config.fahrer.map(f => f.name);
   const autoIds = R.carCatalog.waehlbare().map(a => a.id);
   const hilfen = Object.keys(R.config.fahrhilfen);
@@ -163,6 +170,7 @@ function starten(opt) {
   srv.on('upgrade', (req, socket, kopf) => {
     let pfad = '';
     try { pfad = new URL(req.url, 'http://x').pathname; } catch (e) { /* ungültig */ }
+    if (pfad === Brett.PFAD) return brett.upgrade(req, socket, kopf);       // Brettspiele (eigenes Protokoll, eigene Limits)
     if (pfad !== N.PFAD || verbindungen >= 80) { socket.write('HTTP/1.1 404 Not Found\r\n\r\n'); socket.destroy(); return; }
     const recht = steuerung ? schalterRecht(req, oeffentlichHost) : false;
     wss.handleUpgrade(req, socket, kopf, (ws) => wss.emit('connection', ws, req, recht));
@@ -481,9 +489,9 @@ function starten(opt) {
     srv.listen(opt.port, opt.host, () => {
       const port = srv.address().port;
       ok({
-        port, http: srv, wss, raeume,
+        port, http: srv, wss, raeume, brett,
         schliessen: () => new Promise((fertig) => {
-          clearInterval(schleife);
+          clearInterval(schleife); brett.schliessen();
           for (const ws of wss.clients) ws.terminate();
           wss.close();
           srv.close(() => fertig());

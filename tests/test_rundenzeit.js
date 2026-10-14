@@ -27,8 +27,10 @@ if (!process.env.TEMPO_KLASSE) {
 const KLASSE = process.env.TEMPO_KLASSE;
 const { ladeModule } = require('./lade');
 const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/track/spline.js',
-  'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/looping.js', 'src/race/raceManager.js', 'src/physics/collisions.js', 'src/ai/driver.js']);
+  'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/looping.js', 'src/race/raceManager.js', 'src/physics/collisions.js', 'src/ai/driver.js', 'src/world/schilder.js']);
 R.Vehicle.klasseStandard = KLASSE;   // Runde 5: alle new R.Vehicle({}) dieses Laufs in dieser Tempo-Klasse
+// 14.10. (v21): jede Strecke bekommt ihre Schild-Masten als feste Säulen (wie im Spiel/Server) – KI darf an ihnen nicht hängen bleiben
+{ const Basis = R.Strecke; R.Strecke = class extends Basis { constructor(d, o) { super(d, o); R.Kurvenschilder.einbauen(this, KLASSE || undefined); } }; }
 // Loopings (Fantasie): Fahrzeugschritt über Looping.fahrzeugSchritt (wie main.js, ohne Fahrhilfe)
 const LP = R.Looping;
 // Erwartungen je Strecke (Spanne leicht – unschlagbar je Runde); Fantasie ist kurz (1,4 km)
