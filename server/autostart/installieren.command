@@ -27,7 +27,7 @@ id "$U" >/dev/null 2>&1 || { echo "❌ Benutzer konnte nicht angelegt werden."; 
 echo "⏳ Lade $V aus iCloud …"; brctl download "$P/$V" 2>/dev/null; sleep 3
 sudo launchctl bootout "system/$LABEL" 2>/dev/null
 sudo launchctl bootout "system/$SLABEL" 2>/dev/null
-# alte, von Hand gestartete Server (Port 8443) beenden
+# alte, von Hand gestartete Autorennen-Server (früher Port 8443) beenden – nur Prozesse mit server/server.js
 pkill -f "server/server.js --port 8443" 2>/dev/null; sleep 1
 sudo rm -rf "$UH/spiel"; sudo cp -R "$P/$V" "$UH/spiel"
 sudo xattr -dr com.apple.quarantine "$UH/spiel" 2>/dev/null
@@ -63,7 +63,7 @@ else
   STEUARG=""; echo "⚠️  Helfer-Skript nicht gefunden/fehlerhaft ($HSRC) – Internet-Schalter im Spiel bleibt aus (Doppelklick-Dateien gehen weiter)."
 fi
 NAME=$("$TS" status --json 2>/dev/null | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null)
-ADRESSE="https://${NAME:-mac-mini-von-sebastian.tail39c1c2.ts.net}:8443/"
+ADRESSE="https://${NAME:-mac-mini-von-sebastian.tail39c1c2.ts.net}:10000/"
 sudo tee /Library/LaunchDaemons/$LABEL.plist >/dev/null <<EOP
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -82,10 +82,30 @@ EOP
 sudo chown root:wheel /Library/LaunchDaemons/$LABEL.plist; sudo chmod 644 /Library/LaunchDaemons/$LABEL.plist
 sudo launchctl bootstrap system /Library/LaunchDaemons/$LABEL.plist
 [ -n "$STEUARG" ] && sudo launchctl bootstrap system /Library/LaunchDaemons/$SLABEL.plist
-# Server intern auf 8444 (8443 gehört Tailscale), Tailscale leitet :8443 → 127.0.0.1:8444
+# Server intern auf 8444, Tailscale leitet :10000 → 127.0.0.1:8444 (seit 14.10.: Port 8443 gehört einem anderen Projekt!)
+# Umzug: alte Autorennen-Freigabe auf :8443 entfernen – NUR wenn sie nachweislich auf 127.0.0.1:8444 (= Autorennen) zeigt.
+ALT=$("$TS" serve status --json 2>/dev/null | /usr/bin/python3 -c '
+import sys, json
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+web = d.get("Web") or {}
+for host, cfg in web.items():
+    if host.endswith(":8443"):
+        for pfad, h in (cfg.get("Handlers") or {}).items():
+            if "127.0.0.1:8444" in str(h.get("Proxy", "")):
+                print("ja")
+' 2>/dev/null)
+if [ "$ALT" = "ja" ]; then
+  "$TS" funnel --https=8443 off >/dev/null 2>&1; "$TS" serve --https=8443 off >/dev/null 2>&1
+  echo "🔁 Alte Autorennen-Freigabe auf Port 8443 entfernt (Port 8443 ist jetzt frei für das andere Projekt)."
+else
+  echo "ℹ️  Port 8443 nicht angefasst (gehört nicht dem Autorennen)."
+fi
 # Tailscale: Internet (Funnel) AUS, nur eigenes Tailnet (Serve) AN
-"$TS" funnel --https=8443 off >/dev/null 2>&1
-"$TS" serve --bg --https=8443 http://127.0.0.1:8444 >/dev/null 2>&1 && echo "🔒 Zugang nur im eigenen Tailscale-Netz." || echo "⚠️ tailscale serve fehlgeschlagen"
+"$TS" funnel --https=10000 off >/dev/null 2>&1
+"$TS" serve --bg --https=10000 http://127.0.0.1:8444 >/dev/null 2>&1 && echo "🔒 Zugang nur im eigenen Tailscale-Netz." || echo "⚠️ tailscale serve fehlgeschlagen"
 for i in $(seq 1 30); do curl -s -o /dev/null http://localhost:8444/ && break; sleep 1; done
 echo ""
 if curl -s -o /dev/null http://localhost:8444/; then

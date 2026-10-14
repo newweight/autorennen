@@ -6,9 +6,9 @@ NAME=$("$TS" status --json 2>/dev/null | /usr/bin/python3 -c 'import sys,json;pr
 if [ -f "$H" ]; then
   sudo /bin/bash "$H" an || { echo "❌ Funnel ging nicht an."; read -r -p "Enter …" _; exit 1; }
 else   # alte Installation ohne Helfer: wie bisher
-  "$TS" funnel --bg --https=8443 http://127.0.0.1:8444 >/dev/null 2>&1 || { echo "❌ Funnel ging nicht an."; read -r -p "Enter …" _; exit 1; }
-  nohup /bin/bash -c "sleep 14400; '$TS' funnel --https=8443 off; '$TS' serve --bg --https=8443 http://127.0.0.1:8444" >/dev/null 2>&1 &
+  "$TS" funnel --bg --https=10000 http://127.0.0.1:8444 >/dev/null 2>&1 || { echo "❌ Funnel ging nicht an."; read -r -p "Enter …" _; exit 1; }
+  nohup /bin/bash -c "sleep 14400; '$TS' funnel --https=10000 off; '$TS' serve --bg --https=10000 http://127.0.0.1:8444" >/dev/null 2>&1 &
 fi
-echo "🌐 Internet-Zugang AN für 4 Stunden: https://${NAME:-mac-mini-von-sebastian.tail39c1c2.ts.net}:8443/"
+echo "🌐 Internet-Zugang AN für 4 Stunden: https://${NAME:-mac-mini-von-sebastian.tail39c1c2.ts.net}:10000/"
 echo "   Früher aus: im Spiel (🌐 Online) oder „🔒 Internet-Zugang AUS.command“"
 read -r -p "Enter zum Schließen … " _

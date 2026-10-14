@@ -2,15 +2,24 @@
 # ============================================================
 # Jonas Hot Steering Wheel – Mehrspieler-Server starten (Doppelklick im Finder)
 #
-# Startet server/server.js auf Port 8443 (Spiel + WebSocket /ws) und öffnet http://localhost:8443.
+# Startet server/server.js auf Port 8444 (Spiel + WebSocket /ws) und öffnet http://localhost:8444.
 # Übers Internet erst, wenn zusätzlich Tailscale Funnel läuft (Befehl wird unten angezeigt) –
 # oder gleich „Mehrspieler im Internet starten.command“ nehmen.
 # Beenden: Ctrl+C oder das Terminal-Fenster schließen.
 # ============================================================
 cd "$(dirname "$0")" || exit 1
-PORT=8443
+# Läuft der Autostart-Server (installieren.command)? Dann nicht doppelt starten.
+if launchctl print system/de.newweight.autorennen >/dev/null 2>&1 || curl -s -o /dev/null --max-time 2 http://127.0.0.1:8444/; then
+  echo "ℹ️  Der Autorennen-Server läuft schon automatisch (Autostart)."
+  echo "   Spielen: https://mac-mini-von-sebastian.tail39c1c2.ts.net:10000/  (oder hier: http://localhost:8444/)"
+  open "http://localhost:8444/" 2>/dev/null
+  read -r -p "Enter zum Schließen … " _; exit 0
+fi
+
+PORT=8444
+HTTPS_PORT=10000   # Tailscale-Port (8443 gehört seit 14.10. einem anderen Projekt)
 TS="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
-ADRESSE="https://mac-mini-von-sebastian.tail39c1c2.ts.net:$PORT/"
+ADRESSE="https://mac-mini-von-sebastian.tail39c1c2.ts.net:$HTTPS_PORT/"
 
 # --- Node: aus dem PATH (ab Version 18), sonst die mitgelieferte Datei ---
 NODE=""
@@ -28,7 +37,7 @@ fi
 # --- öffentliche Adresse aus Tailscale lesen (falls vorhanden) ---
 if [ -x "$TS" ]; then
   NAME=$("$TS" status --json 2>/dev/null | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const n=JSON.parse(s).Self.DNSName.replace(/\.$/,"");if(n)console.log(n)}catch(e){}})' 2>/dev/null)
-  [ -n "$NAME" ] && ADRESSE="https://$NAME:$PORT/"
+  [ -n "$NAME" ] && ADRESSE="https://$NAME:$HTTPS_PORT/"
 fi
 
 # --- läuft schon ein Server? ---
@@ -71,8 +80,8 @@ if [ -d "/Applications/Google Chrome.app" ]; then open -a "Google Chrome" "http:
 
 echo ""
 echo "🌐 Damit Gäste übers Internet mitspielen können, in einem ZWEITEN Terminal-Fenster:"
-echo "   $TS funnel --https=$PORT $PORT"
+echo "   $TS funnel --https=$HTTPS_PORT $PORT"
 echo "   Öffentliche Adresse für die Gäste:  $ADRESSE"
-echo "   (Funnel danach wieder aus: $TS funnel --https=$PORT off)"
+echo "   (Funnel danach wieder aus: $TS funnel --https=$HTTPS_PORT off)"
 echo ""
 wait "$SERVER"

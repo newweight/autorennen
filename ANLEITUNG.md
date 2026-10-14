@@ -116,7 +116,7 @@ ist die Karte „🌐 Online“ grau („Online geht nur über ‚Mehrspieler st
 2. Menü → Modus-Schritt → Karte **🌐 Online** (mit → hinter „Letzter fliegt raus“) → **🏠 Raum erstellen**.
 3. Die **Lobby** zeigt den **Raumcode** (4 Zeichen, groß), den **Link** und einen **QR-Code**. Gäste
    - scannen den QR-Code mit dem Handy, **oder** öffnen den Link (z. B. per Nachricht geschickt), **oder**
-   - öffnen die Adresse **https://mac-mini-von-sebastian.tail39c1c2.ts.net:8443/**, wählen 🌐 Online → **🔑 Raum beitreten** und tippen den Code ein
+   - öffnen die Adresse **https://mac-mini-von-sebastian.tail39c1c2.ts.net:10000/**, wählen 🌐 Online → **🔑 Raum beitreten** und tippen den Code ein
      (nur Buchstaben/Ziffern, es gibt kein 0, O, 1 oder I).
 4. In der Lobby wählt jeder **Fahrer, Auto und Fahrhilfe** (↑↓ Zeile, ←→ ändern oder anklicken; ein Fahrer nur einmal je Raum)
    und drückt **Leertaste = ✋ Bereit**. Der Host stellt **Strecke, Welt, Hindernisse (Normal/Viele/Sehr viele), Runden, Computer-Gegner, Stärke, Tempo, Jahreszeit, Wetter,

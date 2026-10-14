@@ -921,7 +921,7 @@ if (process.env.NETZ_NUR_SYNC) { console.log(`\n${ok} OK, ${fehler} FEHL (nur di
       cp.spawnSync('bash', [path.join(T, 'h.sh')]);
       const log = fs.existsSync(path.join(T, 'log')) ? fs.readFileSync(path.join(T, 'log'), 'utf8') : '';
       const st = fs.readFileSync(path.join(ordner, 'status.json'), 'utf8');
-      pruefe('J10 Helfer (Testkopie) nimmt die Wunsch-Datei des Servers an: Funnel-Befehl + status.json „an“', log.trim() === 'funnel --bg --https=8443 http://127.0.0.1:8444' && /"funnel":"an","bis":\d+/.test(st), log.trim() + ' | ' + st);
+      pruefe('J10 Helfer (Testkopie) nimmt die Wunsch-Datei des Servers an: Funnel-Befehl + status.json „an“', log.trim() === 'funnel --bg --https=10000 http://127.0.0.1:8444' && /"funnel":"an","bis":\d+/.test(st), log.trim() + ' | ' + st);
       a = await kk.frage({ t: 'schalterFrage' });
       pruefe('J10b Server liest den Status des Helfers: an, Rest ≈ 4 h', a && a.funnel === 'an' && a.wartet === false && a.rest > 14390 && a.rest <= 14400, JSON.stringify(a));
       kk.ws.terminate();

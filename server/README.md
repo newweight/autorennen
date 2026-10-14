@@ -7,11 +7,11 @@ Gäste brauchen nur einen Browser (auch Handy/Tablet) – kein Tailscale, keine 
 
 | Doppelklick | Was passiert |
 |---|---|
-| **`Mehrspieler starten.command`** | Server auf Port **8443**, öffnet `http://localhost:8443`. Zeigt den Funnel-Befehl und die öffentliche Adresse an (Funnel startet **nicht** automatisch → nur Heimnetz/dieser Mac). |
-| **`Mehrspieler im Internet starten.command`** | wie oben **plus** Tailscale Funnel (`funnel --https=8443 8443`). Beim Beenden wird der Funnel wieder ausgeschaltet. |
+| **`Mehrspieler starten.command`** | Server auf Port **8444**, öffnet `http://localhost:8444`. Zeigt den Funnel-Befehl und die öffentliche Adresse an (Funnel startet **nicht** automatisch → nur Heimnetz/dieser Mac). |
+| **`Mehrspieler im Internet starten.command`** | wie oben **plus** Tailscale Funnel (`funnel --https=10000 http://127.0.0.1:8444`). Beim Beenden wird der Funnel wieder ausgeschaltet. |
 
-Öffentliche Adresse: **https://mac-mini-von-sebastian.tail39c1c2.ts.net:8443/**
-(die Skripte lesen den Namen aus `tailscale status`; Port 443 ist auf dem Mac mini schon belegt → immer **8443**).
+Öffentliche Adresse: **https://mac-mini-von-sebastian.tail39c1c2.ts.net:10000/**
+(die Skripte lesen den Namen aus `tailscale status`; Port 443 (NWES) und 8443 (anderes Projekt, seit 14.10.) sind auf dem Mac mini belegt → Tailscale-Port immer **10000**, Server intern **8444**).
 
 Im Spiel: Menü → **🌐 Online** → *Raum erstellen* → Code, Link und QR-Code an die Gäste geben.
 Link/QR zeigen automatisch die öffentliche Adresse, auch wenn du selbst über `localhost` spielst.
@@ -33,11 +33,11 @@ aus `node-v24.21.0-darwin-arm64.tar.gz`). Einzige Bibliothek: `ws` (liegt in `se
 
 ```bash
 cd ~/Desktop/Spiele/Autorennen            # bzw. der Ordner der Version
-./server/bin/node-macos-arm64 server/server.js --port 8443 --oeffentlich https://mac-mini-von-sebastian.tail39c1c2.ts.net:8443/
+./server/bin/node-macos-arm64 server/server.js --port 8444 --oeffentlich https://mac-mini-von-sebastian.tail39c1c2.ts.net:10000/
 # zweites Terminal-Fenster:
-/Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --https=8443 8443
+/Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --https=10000 http://127.0.0.1:8444
 ```
-Optionen: `--port` (Standard 8443), `--host` (Standard 0.0.0.0), `--oeffentlich <https-Adresse>` (für Link/QR), `--steuerung <Ordner>` (Internet-Schalter, Standard aus).
+Optionen: `--port` (Standard 8444), `--host` (Standard 0.0.0.0), `--oeffentlich <https-Adresse>` (für Link/QR), `--steuerung <Ordner>` (Internet-Schalter, Standard aus).
 
 ## 🌐 Internet-Schalter im Spiel (v19)
 
@@ -75,7 +75,7 @@ Tests: `bash tests/test_schalter.sh` (Helfer gegen Stub-Tailscale, bösartige Da
 ## Beenden
 
 `Ctrl+C` im Terminal-Fenster oder das Fenster schließen. Funnel von Hand abschalten:
-`/Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --https=8443 off` ·
+`/Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --https=10000 off` ·
 Kontrolle: `/Applications/Tailscale.app/Contents/MacOS/Tailscale funnel status`.
 **Tunnel nur während des Spielens offen lassen.**
 
@@ -83,7 +83,7 @@ Kontrolle: `/Applications/Tailscale.app/Contents/MacOS/Tailscale funnel status`.
 
 ```bash
 brew install cloudflared                          # einmalig
-cloudflared tunnel --url http://localhost:8443     # zeigt https://<zufall>.trycloudflare.com
+cloudflared tunnel --url http://localhost:8444     # zeigt https://<zufall>.trycloudflare.com
 ```
 Server dann mit `--oeffentlich https://<zufall>.trycloudflare.com/` starten (sonst zeigt die Lobby den
 localhost-Link – Gäste können aber auch einfach die trycloudflare-Adresse öffnen und den Code eingeben).
@@ -99,8 +99,8 @@ localhost-Link – Gäste können aber auch einfach die trycloudflare-Adresse ö
 
 ## Probleme
 
-- „Port 8443 ist schon belegt“ → läuft der Server schon in einem anderen Fenster? `lsof -nP -iTCP:8443 -sTCP:LISTEN`
-- Gäste sehen „Keine Verbindung zum Server“ → Funnel läuft? (`funnel status`), Adresse mit `:8443`?
+- „Port 8444 ist schon belegt“ → läuft der Server schon in einem anderen Fenster? `lsof -nP -iTCP:8444 -sTCP:LISTEN`
+- Gäste sehen „Keine Verbindung zum Server“ → Funnel läuft? (`funnel status`), Adresse mit `:10000`?
 - Ruckeln beim Gast → Ping-Anzeige 🌐 im HUD oben links; über Mobilfunk sind 40–120 ms normal. Bei hohem Ping lieber 👻 Geister statt 💥 Rempeln.
 
 Technik: `server/PROTOKOLL.md` (Nachrichten), `ERWEITERN.md` (Abschnitt Mehrspieler), Tests:

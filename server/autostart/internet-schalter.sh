@@ -35,7 +35,7 @@ ORDNER_EIGNER="root"                                        #TEST
 JETZT_S_BEFEHL="date +%s"                                   #TEST
 AUTO_AUS_S=14400                                            # 4 Stunden
 LOKAL="http://127.0.0.1:8444"
-PORT_HTTPS="8443"
+PORT_HTTPS="10000"
 
 OS=$(uname)
 st_eigner() { if [ "$OS" = Darwin ]; then stat -f '%Su' "$1"; else stat -c '%U' "$1"; fi; }

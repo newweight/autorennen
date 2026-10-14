@@ -2,7 +2,7 @@
 // ============================================================
 // W5-1 Mehrspieler-Server für „Jonas Hot Steering Wheel“ (Node ≥ 18, CommonJS, einzige Abhängigkeit: ws).
 //
-//   node server/server.js [--port 8443] [--host 0.0.0.0] [--oeffentlich https://…/] [--steuerung <Ordner>]   (oder PORT=… node server/server.js)
+//   node server/server.js [--port 8444] [--host 0.0.0.0] [--oeffentlich https://…/] [--steuerung <Ordner>]   (oder PORT=… node server/server.js)
 //   --steuerung: Internet-Schalter im Spiel (nur Wunsch-Datei schreiben/Status lesen, s. u.) – ohne = Funktion aus
 //
 // - Liefert das Spiel per HTTP aus (nur Autorennen.html, src/, vendor/ – kein Verzeichnis-Listing, kein `..`).
@@ -141,9 +141,9 @@ function httpAntwort(req, res) {
  */
 function starten(opt) {
   // tempo: Zeitraffer NUR für Tests (tests/test_netz.js), 1 = Echtzeit
-  opt = Object.assign({ port: 8443, host: '0.0.0.0', leise: false, ladenMaxMs: 20000, tempo: 1, oeffentlich: '', steuerung: '' }, opt);
+  opt = Object.assign({ port: 8444, host: '0.0.0.0', leise: false, ladenMaxMs: 20000, tempo: 1, oeffentlich: '', steuerung: '' }, opt);
   // öffentliche Adresse (Tailscale Funnel), damit Link/QR in der Lobby auch stimmen, wenn der Host das Spiel über
-  // http://localhost:8443 geöffnet hat. Nur https-Adressen ohne Pfad-Tricks.
+  // http://localhost:8444 geöffnet hat. Nur https-Adressen ohne Pfad-Tricks.
   const oeffentlich = /^https:\/\/[a-z0-9.-]+(:\d{1,5})?\/?$/i.test(opt.oeffentlich || '') ? opt.oeffentlich.replace(/\/?$/, '/') : '';
   // Internet-Schalter: Ordner mit wunsch.json (wir schreiben) und status.json (Helfer schreibt); '' = Funktion aus
   const steuerung = typeof opt.steuerung === 'string' && opt.steuerung ? path.resolve(opt.steuerung) : '';
@@ -498,7 +498,7 @@ module.exports = { starten, dateiFuer, schalterRecht };
 // ------------------------------------------------------------------ Start von der Kommandozeile
 if (require.main === module) {
   const arg = (name) => { const i = process.argv.indexOf('--' + name); return i >= 0 ? process.argv[i + 1] : undefined; };
-  const port = +(arg('port') || process.env.PORT || 8443);
+  const port = +(arg('port') || process.env.PORT || 8444);
   const host = arg('host') || process.env.HOST || '0.0.0.0';
   const oeffentlich = arg('oeffentlich') || process.env.OEFFENTLICH || '';
   const steuerung = arg('steuerung') || '';       // Ordner für den Internet-Schalter (wunsch.json / status.json); ohne = aus

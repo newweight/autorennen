@@ -3,14 +3,23 @@
 # Jonas Hot Steering Wheel – Mehrspieler-Server + Tailscale Funnel (Doppelklick im Finder)
 #
 # Wie „Mehrspieler starten.command“, startet zusätzlich den öffentlichen Zugang:
-#   Tailscale funnel --https=8443 8443  →  https://<mac>.<tailnet>.ts.net:8443/
+#   Tailscale funnel --https=10000 8444  →  https://<mac>.<tailnet>.ts.net:10000/
 # Beim Beenden (Ctrl+C oder Fenster schließen) wird der Funnel wieder abgeschaltet
-# (funnel --https=8443 off) – das Spiel ist dann nicht mehr aus dem Internet erreichbar.
+# (funnel --https=10000 off) – das Spiel ist dann nicht mehr aus dem Internet erreichbar.
 # ============================================================
 cd "$(dirname "$0")" || exit 1
-PORT=8443
+# Läuft der Autostart-Server (installieren.command)? Dann nicht doppelt starten.
+if launchctl print system/de.newweight.autorennen >/dev/null 2>&1 || curl -s -o /dev/null --max-time 2 http://127.0.0.1:8444/; then
+  echo "ℹ️  Der Autorennen-Server läuft schon automatisch (Autostart)."
+  echo "   Spielen: https://mac-mini-von-sebastian.tail39c1c2.ts.net:10000/  (oder hier: http://localhost:8444/)"
+  open "http://localhost:8444/" 2>/dev/null
+  read -r -p "Enter zum Schließen … " _; exit 0
+fi
+
+PORT=8444
+HTTPS_PORT=10000   # Tailscale-Port (8443 gehört seit 14.10. einem anderen Projekt)
 TS="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
-ADRESSE="https://mac-mini-von-sebastian.tail39c1c2.ts.net:$PORT/"
+ADRESSE="https://mac-mini-von-sebastian.tail39c1c2.ts.net:$HTTPS_PORT/"
 
 NODE=""
 if command -v node >/dev/null 2>&1 && node -e 'process.exit(+process.versions.node.split(".")[0] >= 18 ? 0 : 1)' 2>/dev/null; then
@@ -30,7 +39,7 @@ if [ ! -x "$TS" ]; then
   read -r -p "Enter zum Schließen … " _; exit 1
 fi
 NAME=$("$TS" status --json 2>/dev/null | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const n=JSON.parse(s).Self.DNSName.replace(/\.$/,"");if(n)console.log(n)}catch(e){}})' 2>/dev/null)
-[ -n "$NAME" ] && ADRESSE="https://$NAME:$PORT/"
+[ -n "$NAME" ] && ADRESSE="https://$NAME:$HTTPS_PORT/"
 
 if lsof -nP -iTCP:$PORT -sTCP:LISTEN >/dev/null 2>&1; then
   echo "❌ Port $PORT ist schon belegt – läuft der Server schon in einem anderen Fenster? Dort beenden und nochmal starten."
@@ -39,7 +48,7 @@ fi
 
 "$NODE" server/server.js --port $PORT --oeffentlich "$ADRESSE" &
 SERVER=$!
-"$TS" funnel --https=$PORT $PORT &
+"$TS" funnel --https=$HTTPS_PORT $PORT &
 FUNNEL=$!
 
 aufraeumen() {
@@ -47,7 +56,7 @@ aufraeumen() {
   echo ""
   echo "⏹  Beende Funnel und Server …"
   kill "$FUNNEL" 2>/dev/null
-  "$TS" funnel --https=$PORT off >/dev/null 2>&1
+  "$TS" funnel --https=$HTTPS_PORT off >/dev/null 2>&1
   kill "$SERVER" 2>/dev/null
   wait 2>/dev/null
   echo "👋 Fertig – das Spiel ist nicht mehr aus dem Internet erreichbar."
@@ -65,7 +74,7 @@ while [ $((SECONDS - START)) -lt 60 ]; do
     trap - INT TERM HUP
     echo "⏹  Schalte Funnel wieder ab …"
     kill "$FUNNEL" 2>/dev/null
-    "$TS" funnel --https=$PORT off >/dev/null 2>&1
+    "$TS" funnel --https=$HTTPS_PORT off >/dev/null 2>&1
     wait 2>/dev/null
     echo "   Funnel ist aus – das Spiel ist nicht mehr aus dem Internet erreichbar."
     read -r -p "Enter zum Schließen … " _; exit 1

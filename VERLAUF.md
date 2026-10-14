@@ -997,3 +997,12 @@ Arbeitsordner v16 (Ausgangsstand v15_fertig, Sicherungen unberührt). Zwei Aufga
 - Geändert: `server/server.js`, `src/net/protokoll.js`, `src/net/online.js`, `server/autostart/{installieren,ausschalten}.command`, die zwei Doppelklick-Dateien, `server/{PROTOKOLL,README}.md`, `ANLEITUNG.md`, Tests. Neu: `server/autostart/internet-schalter.sh`, `tests/test_schalter.sh`, `tests/schalter_ui_test.py`, `tests/tailscale_proxy_stub.js`. Alter Stand: `tests/sicherung_internet_schalter_alt/`.
 - Tests: `bash tests/test_schalter.sh` 34 OK (Stub-Tailscale; gültig/ungültig/bösartig „an; rm -rf /“, `$(…)`, riesige Datei, Symlink, falscher Eigentümer, zu alt/Zukunft, Oktal-Zahl, Auto-Aus 3:59:59/4:00, kein Wiederabspielen, AUS-Wiederholung, Ordner 777, status.json-Symlink, Sperre, Argument-Prüfung); `node tests/test_netz.js` Block J (J1–J12, 120 OK gesamt, 0 FEHL); `python3 tests/schalter_ui_test.py` 13/13; `bash -n` aller Skripte.
 - Nicht getestet (kein Tailscale/macOS hier): echte Tailscale-Header, `launchctl`, root-Zugriff der GUI-App-CLI, `stat -f`-Zweig des Helfers (nur der GNU-Zweig lief).
+
+## 14.10. Port-Umzug 8443 → 10000 (v19b, Hauptmodell)
+Anlass: Ein anderes Projekt auf dem mini braucht Tailscale-Port 8443 (Sebastian: „das andere ist wichtiger“). Funnel geht nur auf 443/8443/10000; 443 = NWES.
+- Tailscale außen jetzt **:10000** → intern weiter 127.0.0.1:8444. Adresse: https://mac-mini-von-sebastian.tail39c1c2.ts.net:10000/
+- installieren.command: entfernt die alte Autorennen-Freigabe auf :8443 NUR, wenn sie nachweislich auf 127.0.0.1:8444 zeigt
+  (serve status --json), sonst „Port 8443 nicht angefasst“. ausschalten/AN/AUS/internet-schalter.sh berühren nur noch :10000.
+- Handstarter (Mehrspieler starten / im Internet starten): Server-Port 8444, Funnel :10000; wenn Autostart läuft → Hinweis + Browser, kein Doppelstart.
+- server.js Standardport 8443 → 8444. Doku angepasst.
+- Tests: test_schalter.sh 34 OK, test_netz.js 120 OK. Mac-seitig (Tailscale/launchctl) ungetestet.
