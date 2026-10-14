@@ -114,6 +114,7 @@ function dateiFuer(urlPfad) {
   else if (p.endsWith('/')) p += 'index.html';        // Brettspiele: /spiele/ → spiele/index.html
   const teile = p.split('/').filter(Boolean);
   if (!teile.length || teile.some(t => t === '..' || t === '.' || t.startsWith('.'))) return null;
+  if (teile.some(t => t === 'vorlage_swift' || t.startsWith('_'))) return null;      // Entwicklungsdateien (_werkzeug, _alt_…, Swift-Vorlage) nie ausliefern
   if (!(teile.length === 1 && teile[0] === 'Autorennen.html') && !ERLAUBT.includes(teile[0])) return null;
   const voll = path.resolve(WURZEL, ...teile);
   if (!voll.startsWith(WURZEL + path.sep)) return null;

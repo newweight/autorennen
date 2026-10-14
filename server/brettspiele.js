@@ -9,7 +9,7 @@
 //   Konsole nennt nur Raumcodes. Raumcode: 4 Zeichen ohne 0/O/1/I.
 // - Raum: zwei Plätze (Farbe w = Weiß bzw. Rot, beginnt · b = Schwarz bzw. Gelb) + Zuschauer. Wer die Verbindung verliert, behält den
 //   Platz (Token, Wiederverbinden mit { t:'wiederverbinden', code, token }); ein Raum ohne verbundene Leute verschwindet nach RAUM_MINUTEN.
-// - Limits: max. 40 Räume, 60 Verbindungen, Nachrichten ≤ 512 Byte, > 30/s ignoriert, > 300/s getrennt.
+// - Limits: max. 40 Räume, 60 Verbindungen (8 je Adresse), Nachrichten ≤ 512 Byte, > 30/s ignoriert, > 300/s getrennt.
 // Protokoll: server/PROTOKOLL.md, Abschnitt „/ws-brett“.
 // ============================================================
 const crypto = require('crypto');
@@ -20,12 +20,14 @@ const Schach = require('../spiele/gemeinsam/schach-regeln.js');
 
 const NAMEN = new Map(K.NAMEN.map(n => [n.id, n]));
 const MAX_VERBINDUNGEN = 60;
+const MAX_PRO_IP = 8;   // pro Adresse (X-Forwarded-For von Serve/Funnel); lokale Verbindungen ohne Header zählen nicht
 
 function erzeugen(opt) {
   opt = Object.assign({ leise: false, raumMs: K.RAUM_MINUTEN * 60000, aufraeumenMs: 15000, maxRaeume: K.MAX_RAEUME }, opt);
   const log = (...a) => { if (!opt.leise) console.log(new Date().toISOString().slice(11, 19), '[brett]', ...a); };
   const raeume = new Map();
   let verbindungen = 0;
+  const proIp = new Map();
   const wss = new WebSocketServer({ noServer: true, maxPayload: 512, perMessageDeflate: false, clientTracking: true });
 
   const senden = (ws, obj) => { if (ws && ws.readyState === 1) ws.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); };
@@ -119,6 +121,15 @@ function erzeugen(opt) {
     c.raum = null;
   }
 
+  /** Raumwechsel: Saß der Wechselnde ALLEIN im Raum (Gegenplatz nie besetzt), Raum sofort schließen – sonst bliebe er 10 min als Leiche (Räume-Flut). */
+  function raumVerlassen(c) {
+    const raum = c.raum;
+    if (!raum) return;
+    const andere = c.platz ? (c.platz === 'w' ? 'b' : 'w') : null;
+    if (c.platz && !raum.plaetze[andere] && raum.zuschauer.size === 0) raumLoeschen(raum, 'weg', c.ws);
+    else getrennt(c);
+  }
+
   // ---------------------------------------------------------------- Nachrichten
   function nachricht(c, m) {
     const ws = c.ws, raum = c.raum;
@@ -127,7 +138,7 @@ function erzeugen(opt) {
       case 'ping': return senden(ws, { t: 'pong', z: typeof m.z === 'number' ? m.z : 0 });
       case 'raumErstellen': {
         if (!K.SPIELE.includes(m.spiel)) return fehler(ws, 'ungueltig', 'Unbekanntes Spiel');
-        if (raum) getrennt(c);
+        if (raum) raumVerlassen(c);
         if (raeume.size >= opt.maxRaeume) return fehler(ws, 'voll', 'Zu viele Räume – später nochmal');
         const code = zufallsCode();
         if (!code) return fehler(ws, 'voll', 'Zu viele Räume – später nochmal');
@@ -150,12 +161,12 @@ function erzeugen(opt) {
         if (m.zuschauer === true || !frei.length) {
           if (!frei.length && m.zuschauer !== true) return fehler(ws, 'voll', 'Der Raum ist voll – du kannst zuschauen');
           if (ziel.zuschauer.size >= K.MAX_ZUSCHAUER) return fehler(ws, 'voll', 'Zu viele Zuschauer');
-          if (raum) getrennt(c);
+          if (raum) raumVerlassen(c);
           ziel.zuschauer.add(ws); c.raum = ziel; c.platz = null; c.zuschauer = true;
           senden(ws, { t: 'raum', code: ziel.code, rolle: 'z', spiel: ziel.spiel });
           return alleSenden(ziel);
         }
-        if (raum) getrennt(c);
+        if (raum) raumVerlassen(c);
         const token = platzNehmen(ziel, c, frei[0], nameVergeben(ziel, m.name));
         if (ziel.plaetze.w && ziel.plaetze.b && ziel.zustand === 'warten') ziel.zustand = 'spiel';
         ziel.aktiv = Date.now();
@@ -241,7 +252,7 @@ function erzeugen(opt) {
       if (!m || typeof m !== 'object' || Array.isArray(m) || typeof m.t !== 'string') return fehler(ws, 'json', 'Ungültige Nachricht');
       try { nachricht(c, m); } catch (e) { console.error('[brett] Fehler bei', m.t, e && e.stack); fehler(ws, 'intern', 'Interner Fehler'); }
     });
-    ws.on('close', () => { verbindungen--; clearInterval(c.herz); getrennt(c); });
+    ws.on('close', () => { verbindungen--; if (ws.ipKey) { const n = (proIp.get(ws.ipKey) || 1) - 1; if (n > 0) proIp.set(ws.ipKey, n); else proIp.delete(ws.ipKey); } clearInterval(c.herz); getrennt(c); });
     ws.on('error', () => {});
     c.herz = setInterval(() => {
       if (!c.lebt) { ws.terminate(); return; }
@@ -267,7 +278,14 @@ function erzeugen(opt) {
     /** Aus server.js: Upgrade-Anfrage auf PFAD annehmen oder abweisen. */
     upgrade(req, socket, kopf) {
       if (verbindungen >= MAX_VERBINDUNGEN) { socket.write('HTTP/1.1 503 Service Unavailable\r\n\r\n'); socket.destroy(); return; }
-      wss.handleUpgrade(req, socket, kopf, (ws) => wss.emit('connection', ws, req));
+      let key = null;
+      const xff = req.headers && req.headers['x-forwarded-for'];
+      if (typeof xff === 'string' && xff.trim()) key = xff.split(',')[0].trim().slice(0, 64);
+      if (key && (proIp.get(key) || 0) >= MAX_PRO_IP) { socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n'); socket.destroy(); return; }
+      wss.handleUpgrade(req, socket, kopf, (ws) => {
+        if (key) { ws.ipKey = key; proIp.set(key, (proIp.get(key) || 0) + 1); }
+        wss.emit('connection', ws, req);
+      });
     },
     schliessen() { clearInterval(aufraeumen); for (const ws of wss.clients) ws.terminate(); wss.close(); },
   };

@@ -84,6 +84,12 @@ ln -s "$T/ziel" "$T/steu/status.json"; Z=$((Z+5)); echo $Z > "$T/zeit"; lauf; [ 
 : > "$T/log"; Z=$((Z+5)); echo $Z > "$T/zeit"; lauf an; grep -q 'funnel --bg' "$T/log"; ok "Handaufruf 'an'" $?
 lauf aus; grep -q 'funnel --https=10000 off' "$T/log"; ok "Handaufruf 'aus'" $?
 n=$(zeilen); lauf 'an; touch '"$T/pwn" 2>/dev/null; r=$?; [ "$r" = 2 ] && [ ! -e "$T/pwn" ] && [ "$(zeilen)" = "$n" ]; ok "Handaufruf mit anderem Argument: Fehler 2, nichts passiert" $?
+# 16b Exit-Codes Handaufruf
+: > "$T/log"; Z=$((Z+5)); echo $Z > "$T/zeit"; lauf aus >/dev/null 2>&1; lauf an >/dev/null 2>&1; r=$?; [ "$r" = 0 ]; ok "Handaufruf an: Exit 0 bei Erfolg" $?
+Z=$((Z+5)); echo $Z > "$T/zeit"; touch "$T/fail"; lauf aus >/dev/null 2>&1; r=$?; rm "$T/fail"; [ "$r" = 1 ]; ok "Handaufruf aus bei Fehlschlag: Exit 1" $?
+Z=$((Z+5)); echo $Z > "$T/zeit"; lauf aus >/dev/null 2>&1; lauf aus >/dev/null 2>&1; r=$?; [ "$r" = 0 ]; ok "Handaufruf aus bei Erfolg: Exit 0" $?
+Z=$((Z+5)); echo $Z > "$T/zeit"; touch "$T/fail"; lauf an >/dev/null 2>&1; r=$?; rm "$T/fail"; [ "$r" = 1 ]; ok "Handaufruf an bei Fehlschlag: Exit 1" $?
+mkdir "$T/state/sperre"; lauf an >/dev/null 2>&1; r=$?; lauf >/dev/null 2>&1; r2=$?; rmdir "$T/state/sperre"; [ "$r" = 3 ] && [ "$r2" = 0 ]; ok "Sperre belegt: Handaufruf Exit 3, Dienst-Modus Exit 0" $?
 # 17 Sperre
 mkdir "$T/state/sperre"; n=$(zeilen); lauf an; [ "$(zeilen)" = "$n" ]; ok "aktive Sperre: zweiter Lauf tut nichts" $?; rmdir "$T/state/sperre"
 # 18 Syntax

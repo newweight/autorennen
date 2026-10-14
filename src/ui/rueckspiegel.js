@@ -94,19 +94,22 @@
         const alt = r.getRenderTarget(), sz = spiel.szene, schatten = r.shadowMap.autoUpdate;
         const scissor = r.getScissorTest(), vp = r.getViewport(_vp), sc = r.getScissor(_sc);
         const sichtbarAlt = fz ? fz.mesh.visible : true;
-        if (fz) fz.mesh.visible = false;                                           // eigenes Auto nicht im Spiegel
-        // Deko (Bäume, Büsche, Zäune: bei Wald ~350 000 Dreiecke) im kleinen Spiegel weglassen – spart rund die Hälfte der Spiegel-Kosten
         let dekoAlt = null;
-        if (!deko) { dekoAlt = sz.children.filter((c) => c.visible && c.name && c.name.indexOf('Deko') === 0); dekoAlt.forEach((c) => { c.visible = false; }); }
-        r.shadowMap.autoUpdate = false;                                            // Schatten-Karte nicht noch einmal berechnen
-        r.setScissorTest(false);
-        r.setRenderTarget(rt);
-        r.render(sz, kam);
-        r.setRenderTarget(alt);
-        if (dekoAlt) dekoAlt.forEach((c) => { c.visible = true; });
-        r.shadowMap.autoUpdate = schatten;
-        if (fz) fz.mesh.visible = sichtbarAlt;
-        r.setViewport(vp); r.setScissor(sc); r.setScissorTest(scissor);
+        try {   // try/finally: wirft render (Kontextverlust, Shader-Fehler), wird der Zustand trotzdem zurückgesetzt
+          if (fz) fz.mesh.visible = false;                                           // eigenes Auto nicht im Spiegel
+          // Deko (Bäume, Büsche, Zäune: bei Wald ~350 000 Dreiecke) im kleinen Spiegel weglassen – spart rund die Hälfte der Spiegel-Kosten
+          if (!deko) { dekoAlt = sz.children.filter((c) => c.visible && c.name && c.name.indexOf('Deko') === 0); dekoAlt.forEach((c) => { c.visible = false; }); }
+          r.shadowMap.autoUpdate = false;                                            // Schatten-Karte nicht noch einmal berechnen
+          r.setScissorTest(false);
+          r.setRenderTarget(rt);
+          r.render(sz, kam);
+        } finally {
+          r.setRenderTarget(alt);
+          if (dekoAlt) dekoAlt.forEach((c) => { c.visible = true; });
+          r.shadowMap.autoUpdate = schatten;
+          if (fz) fz.mesh.visible = sichtbarAlt;
+          r.setViewport(vp); r.setScissor(sc); r.setScissorTest(scissor);
+        }
       }
     }
 

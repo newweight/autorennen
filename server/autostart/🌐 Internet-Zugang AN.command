@@ -5,10 +5,15 @@
 TS=""; for _k in /opt/homebrew/bin/tailscale /usr/local/bin/tailscale /Applications/Tailscale.app/Contents/MacOS/Tailscale; do [ -x "$_k" ] && { TS="$_k"; break; }; done; [ -n "$TS" ] || TS="/opt/homebrew/bin/tailscale"; H="/Library/PrivilegedHelperTools/de.newweight.autorennen.schalter"
 NAME=$(sudo "$TS" status --json 2>/dev/null | /usr/bin/python3 -c 'import sys,json;print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null)
 if [ -f "$H" ]; then
-  sudo /bin/bash "$H" an || { echo "❌ Funnel ging nicht an."; read -r -p "Enter …" _; exit 1; }
-else   # alte Installation ohne Helfer: wie bisher
-  sudo "$TS" funnel --bg --https=10000 http://127.0.0.1:8444 >/dev/null 2>&1 || { echo "❌ Funnel ging nicht an."; read -r -p "Enter …" _; exit 1; }
-  nohup /bin/bash -c "sleep 14400; '$TS' funnel --https=10000 off; '$TS' serve --bg --https=10000 http://127.0.0.1:8444" >/dev/null 2>&1 &
+  sudo /bin/bash "$H" an; r=$?
+  if [ $r -ne 0 ]; then
+    if [ $r -eq 3 ]; then echo "⏳ Der Schalter ist gerade beschäftigt. Bitte in ein paar Sekunden nochmal doppelklicken."
+    else echo "❌ Funnel ging nicht an (Tailscale-Freigabe für Funnel prüfen)."; fi
+    read -r -p "Enter …" _; exit 1
+  fi
+else   # alte Installation ohne Helfer: kein sicheres Auto-Aus möglich (Tailscale-Änderungen brauchen root) – darum nicht einschalten
+  echo "❌ Der Internet-Schalter ist noch nicht installiert. Bitte erst „installieren.command“ ausführen (Ordner server/autostart)."
+  read -r -p "Enter …" _; exit 1
 fi
 echo "🌐 Internet-Zugang AN für 4 Stunden: https://${NAME:-mac-mini-von-sebastian.tail39c1c2.ts.net}:10000/"
 echo "   Früher aus: im Spiel (🌐 Online) oder „🔒 Internet-Zugang AUS.command“"

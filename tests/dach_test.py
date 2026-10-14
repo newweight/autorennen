@@ -83,10 +83,27 @@ with sync_playwright() as pw:
     # ---------- in Fahrt ----------
     page.evaluate("() => { const v = Rennspiel.spiel.fahrzeuge[0].vehicle; v.vLaengs = 12; }")
     page.keyboard.down("ArrowUp"); page.wait_for_timeout(100); page.keyboard.down("ArrowDown"); page.wait_for_timeout(500)
+    # Meldung erst nach ≥ 0,3 s SPIELZEIT gemeinsamem Halten (Headless läuft langsamer als die Wanduhr) → auf die Meldung warten, Tasten bleiben gehalten
+    try: page.wait_for_function("() => Array.from(document.querySelectorAll('.hud-meldung')).some(e => e.textContent.indexOf('Erst anhalten') >= 0)", timeout=10000)
+    except Exception: pass
     m = page.evaluate(MELDUNG); tempo = page.evaluate("() => Math.abs(Rennspiel.spiel.fahrzeuge[0].vehicle.vLaengs)")
     page.keyboard.up('ArrowDown'); page.keyboard.up('ArrowUp')
     pruefe('in Fahrt: Dach bleibt offen', page.evaluate(ZUSTAND, 0) == 'offen', f'Tempo {tempo:.1f} m/s')
     pruefe('in Fahrt: Meldung „Erst anhalten!“', 'Erst anhalten' in m, m)
+
+    # F6: kurzes Gas+Bremse-Tippen in Fahrt (< 0,3 s Spielzeit) nervt nicht und schaltet nichts
+    page.evaluate("() => { const f = Rennspiel.spiel.fahrzeuge[0]; f.vehicle.vLaengs = 12; f._dachSperre = 0; f._dachHalt = 0; Array.from(document.querySelectorAll('.hud-meldung')).forEach(e => e.remove()); }")
+    page.keyboard.down("ArrowUp"); page.keyboard.down("ArrowDown"); page.keyboard.up("ArrowDown"); page.keyboard.up("ArrowUp")
+    page.wait_for_timeout(600)
+    pruefe('in Fahrt: kurzes Gas+Bremse-Tippen: keine Meldung, Dach unverändert', 'Erst anhalten' not in page.evaluate(MELDUNG) and page.evaluate(ZUSTAND, 0) == 'offen')
+    # F6: ↑+↓ während der Pause im Stand: nach „Weiter“ passiert nichts
+    page.evaluate("() => { Rennspiel.spiel.fahrzeuge.forEach(f => { f.vehicle.vLaengs = 0; }); Rennspiel.spiel.pausiert = true; }")
+    page.wait_for_timeout(300)
+    page.keyboard.down("ArrowUp"); page.keyboard.down("ArrowDown"); page.keyboard.up("ArrowDown"); page.keyboard.up("ArrowUp")
+    page.evaluate("() => new Promise(r => { let n = 0; (function f() { if (++n >= 6) r(); else requestAnimationFrame(f); })(); })")   # ein paar Bilder IN der Pause laufen lassen (unter Last langsam)
+    page.evaluate("() => { Rennspiel.spiel.pausiert = false; Rennspiel.spiel.fahrzeuge.forEach(f => { f.vehicle.vLaengs = 0; }); }")
+    page.wait_for_timeout(1500)
+    pruefe('Pause: ↑+↓ im Pausenmenü löst nach „Weiter“ nichts aus', page.evaluate(ZUSTAND, 0) == 'offen', page.evaluate(ZUSTAND, 0))
 
     # ---------- Zu zweit ----------
     page.evaluate("() => Rennspiel.spiel.rennenStarten({ modus: 'zwei', streckeId: 'wiese', autoIds: ['troc-cabrio', 'troc-cabrio'], runden: 3, gegner: 1, schwierigkeit: 'mittel', fahrhilfe: ['wenig', 'wenig'] })")

@@ -47,17 +47,22 @@ if lsof -nP -iTCP:$PORT -sTCP:LISTEN >/dev/null 2>&1; then
   read -r -p "Enter zum Schließen … " _; exit 1
 fi
 
+# Tailscale-Änderungen (Funnel an/aus) darf nur root (Homebrew-tailscaled) → einmal Passwort, gilt dann auch für das Abschalten
+echo "🔑 Gleich kommt eine Passwort-Abfrage (Mac-Anmeldepasswort): Tailscale erlaubt das Öffnen/Schließen des Internet-Zugangs nur mit Administrator-Rechten."
+sudo -v || { echo "❌ Ohne Passwort kein Internet-Zugang. Abbruch."; read -r -p "Enter zum Schließen … " _; exit 1; }
+
 "$NODE" server/server.js --port $PORT --oeffentlich "$ADRESSE" &
 SERVER=$!
-"$TS" funnel --https=$HTTPS_PORT $PORT &
+sudo "$TS" funnel --https=$HTTPS_PORT $PORT &
 FUNNEL=$!
+( sleep 3; kill -0 "$FUNNEL" 2>/dev/null || echo "⚠️  Der Funnel hat sich sofort beendet – Internet-Zugang vermutlich NICHT aktiv. Meldung oben lesen." ) &
 
 aufraeumen() {
   trap - INT TERM HUP
   echo ""
   echo "⏹  Beende Funnel und Server …"
   kill "$FUNNEL" 2>/dev/null
-  "$TS" funnel --https=$HTTPS_PORT off >/dev/null 2>&1
+  sudo "$TS" funnel --https=$HTTPS_PORT off >/dev/null 2>&1
   kill "$SERVER" 2>/dev/null
   wait 2>/dev/null
   echo "👋 Fertig – das Spiel ist nicht mehr aus dem Internet erreichbar."
@@ -75,7 +80,7 @@ while [ $((SECONDS - START)) -lt 60 ]; do
     trap - INT TERM HUP
     echo "⏹  Schalte Funnel wieder ab …"
     kill "$FUNNEL" 2>/dev/null
-    "$TS" funnel --https=$HTTPS_PORT off >/dev/null 2>&1
+    sudo "$TS" funnel --https=$HTTPS_PORT off >/dev/null 2>&1
     wait 2>/dev/null
     echo "   Funnel ist aus – das Spiel ist nicht mehr aus dem Internet erreichbar."
     read -r -p "Enter zum Schließen … " _; exit 1

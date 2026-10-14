@@ -5,7 +5,7 @@
 // (|Geschwindigkeit| < R.dach.STAND = 0,5 m/s); in Fahrt erscheint die Meldung „Erst anhalten!“. Keine Wirkung auf die Fahrphysik
 // (reine Optik: Mesh-Gruppe 'dachGruppe', Überrollbügel nur bei offenem Dach).
 //
-// Tasten (Prüfung in src/input.js → Input.dachGeste(spielerNr); beide Tasten GLEICHZEITIG, nur die Flanke „beide neu gedrückt“ zählt):
+// Tasten (Prüfung in src/input.js → Input.dachGeste(spielerNr); beide Tasten GLEICHZEITIG, nur die Flanke „beide neu gedrückt“ UND Stand zählt; „Erst anhalten!“ erst nach ≥ 0,3 s gemeinsamem Halten, höchstens 1× je 10 s):
 //   Einzelspieler  Spieler 1 (Pfeile):  ↑ + ↓            (Touch: ▲ + ▼ gleichzeitig – steuerung(0) enthält die Touch-Tasten)
 //   Zu zweit       Spieler 1 (Pfeile):  ↑ + ↓  oder  ← + →
 //                  Spieler 2 (WASD):    W + S  oder  A + D      („Gegentasten“ = die beiden entgegengesetzten Tasten)
@@ -78,20 +78,30 @@
       const f = spiel.fahrzeuge[i], mesh = f && f.mesh;
       if (!info(mesh)) continue;
       D.schritt(mesh, dt);
-      if (!imRennen || spiel.pausiert || !f.istSpieler || !(f.spielerNr >= 0) || f.autopilot || !spiel.input || !spiel.input.dachGeste) continue;
+      if (!imRennen || !f.istSpieler || !(f.spielerNr >= 0) || f.autopilot || !spiel.input || !spiel.input.dachGeste) continue;
+      const zuZweit = spiel.huds ? spiel.huds.length > 1 : false;
+      const geste = spiel.input.dachGeste(f.spielerNr, zuZweit);
+      const flanke = spiel.input.dachFlanke(f.spielerNr, zuZweit);   // IMMER abholen (auch kurze Tastendrucke zwischen zwei Bildern bei niedrigen fps)
+      if (spiel.pausiert) { f._dachGeste = geste; f._dachHalt = 0; continue; }   // Pause: Flanke verworfen, nach „Weiter“ löst nichts aus
       // einmaliger Hinweis zu Rennbeginn
       if (!f._dachHinweis && spiel.huds && spiel.huds[f.spielerNr] && spiel._meldung) {
         f._dachHinweis = true;
         spiel._meldung(i, hinweisText(f.spielerNr), 4500);
       }
-      const zuZweit = spiel.huds ? spiel.huds.length > 1 : false;
-      const geste = spiel.input.dachGeste(f.spielerNr, zuZweit);
-      const flanke = spiel.input.dachFlanke(f.spielerNr, zuZweit);   // auch kurze Tastendrucke zwischen zwei Bildern (niedrige fps)
-      if (flanke || (geste && !f._dachGeste)) {
-        const v = f.vehicle;
-        const tempo = v ? Math.abs(v.vLaengs !== undefined ? v.vLaengs : 0) : 0;
-        if (tempo < D.STAND) D.umschalten(mesh);
-        else if (spiel._meldung && D.zustand(mesh) !== 'faehrt') spiel._meldung(i, 'Erst anhalten! ✋', 1400);
+      const v = f.vehicle;
+      const tempo = v ? Math.abs(v.vLaengs !== undefined ? v.vLaengs : 0) : 0;
+      f._dachSperre = Math.max(0, (f._dachSperre || 0) - dt);
+      if (tempo < D.STAND) {
+        // Umschalten NUR im Stand und nur bei neu entstandener Geste (Flanke; Touch: Geste neu gehalten)
+        if (flanke || (geste && !f._dachGeste)) D.umschalten(mesh);
+        f._dachHalt = geste ? (f._dachHalt || 0) + dt : 0;
+      } else {
+        // In Fahrt nie umschalten. „Erst anhalten!“ nur, wenn beide Tasten wirklich ≥ 0,3 s zusammen gehalten werden – und höchstens 1× je 10 s
+        f._dachHalt = geste ? (f._dachHalt || 0) + dt : 0;
+        if (f._dachHalt >= 0.3 && f._dachSperre <= 0 && spiel._meldung && D.zustand(mesh) !== 'faehrt') {
+          spiel._meldung(i, 'Erst anhalten! ✋', 1400);
+          f._dachSperre = 10;
+        }
       }
       f._dachGeste = geste;
     }

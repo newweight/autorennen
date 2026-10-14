@@ -167,6 +167,24 @@ function get(port, url, opt) {
   for (let i = 0; i < 400; i++) J.senden({ t: 'ping' });
   await warte(300); pruefe('> 300 Nachrichten/s → getrennt', J.zu);
   const nach = await client(port); nach.senden({ t: 'hallo' }); pruefe('Server läuft weiter', !!(await nach.warten(m => m.t === 'hallo')));
+  // F5: Raumwechsel aus einem Raum, in dem man allein war, schließt den alten Raum sofort (keine Räume-Flut)
+  const alt = C[0].nachr.find(m => m.t === 'raum'); const vorher = srv.brett.raeume.size;
+  for (let i = 0; i < 5; i++) { C[0].senden({ t: 'raumErstellen', spiel: 'vier', name: 'igel' }); await warte(40); }
+  pruefe('Raumwechsel allein: alter Raum sofort zu, Anzahl wächst nicht', !!alt && !srv.brett.raeume.has(alt.code) && srv.brett.raeume.size === vorher, srv.brett.raeume.size + '/' + vorher);
+  pruefe('Raumwechsel allein: 5× Erstellen ergibt keinen "voll"-Fehler', !C[0].nachr.some(m => m.t === 'fehler' && m.grund === 'voll'));
+  // F5: höchstens 8 Verbindungen je Adresse (X-Forwarded-For)
+  const ips = []; let abgelehnt = 0;
+  for (let i = 0; i < 10; i++) {
+    await new Promise(res => { const w = new WebSocket('ws://127.0.0.1:' + port + '/ws-brett', { headers: { 'x-forwarded-for': '203.0.113.7' } }); w.on('open', () => { ips.push(w); res(); }); w.on('error', () => { abgelehnt++; res(); }); });
+  }
+  pruefe('max. 8 Verbindungen je Adresse (9. und 10. abgewiesen)', ips.length === 8 && abgelehnt === 2, ips.length + '/' + abgelehnt);
+  ips.forEach(w => w.close()); await warte(100);
+  const wieder = await new Promise(res => { const w = new WebSocket('ws://127.0.0.1:' + port + '/ws-brett', { headers: { 'x-forwarded-for': '203.0.113.7' } }); w.on('open', () => { w.close(); res(true); }); w.on('error', () => res(false)); });
+  pruefe('nach dem Schließen sind wieder Verbindungen von dieser Adresse möglich', wieder);
+  // F8: Entwicklungsdateien (_…, vorlage_swift) nie ausliefern
+  for (const u of ['/spiele/schach/kern/_werkzeug/buendeln.js', '/spiele/schach/kern/_alt_standardregeln/x.js', '/spiele/vorlage_swift/x.js', '/spiele/vorlage_swift/']) {
+    r = await get(port, u); pruefe('HTTP gesperrt (Entwicklungsdatei): ' + u, r.status === 404, r.status);
+  }
   await srv.schliessen();
   console.log('\n' + ok + ' OK, ' + fehl + ' FEHL');
   process.exit(fehl ? 1 : 0);

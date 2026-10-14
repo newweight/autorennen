@@ -69,10 +69,13 @@ BIS=$(lies_wort "$STATE/bis" '^[0-9]{1,12}$' 0); BIS=$((10#$BIS))   # Auto-Aus (
 LETZTE=$(lies_wort "$STATE/seit" '^[0-9]{1,16}$' 0)       # zuletzt verarbeitetes „seit“
 
 # --- Sperre gegen gleichzeitige Läufe (launchd + Handaufruf) ---
+ARG="${1:-}"
 SPERRE="$STATE/sperre"
+# Dienst-Modus (ohne Argument): still beenden. Handaufruf (mit Argument): Exit 3, damit die .command-Datei es melden kann.
+sperre_belegt() { if [ -n "$ARG" ]; then echo "Sperre belegt (anderer Lauf aktiv) – bitte in ein paar Sekunden nochmal." >&2; exit 3; fi; exit 0; }
 if ! mkdir "$SPERRE" 2>/dev/null; then
   # veraltete Sperre (> 2 min) wegräumen
-  if [ -n "$(find "$SPERRE" -maxdepth 0 -mmin +2 2>/dev/null)" ]; then rmdir "$SPERRE" 2>/dev/null; mkdir "$SPERRE" 2>/dev/null || exit 0; else exit 0; fi
+  if [ -n "$(find "$SPERRE" -maxdepth 0 -mmin +2 2>/dev/null)" ]; then rmdir "$SPERRE" 2>/dev/null; mkdir "$SPERRE" 2>/dev/null || sperre_belegt; else sperre_belegt; fi
 fi
 trap 'rmdir "$SPERRE" 2>/dev/null' EXIT
 
@@ -143,4 +146,6 @@ if [ -d "$STEU" ] && [ ! -L "$STEU" ] && [ "$(st_eigner "$STEU")" = "$ORDNER_EIG
     protokoll "Ordner $STEU ist für andere beschreibbar – kein Status geschrieben"
   fi
 fi
+# Handaufruf mit Argument: Exit ≠ 0, wenn der Zielzustand nicht erreicht wurde (Dienst-Modus bleibt immer 0)
+if [ -n "$ARG" ] && [ "$ZUSTAND" != "$neu" ]; then protokoll "Zielzustand $neu nicht erreicht (ist: $ZUSTAND)"; exit 1; fi
 exit 0
