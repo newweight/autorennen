@@ -117,8 +117,8 @@ window.Rennspiel = window.Rennspiel || {};
       // Tornadolinie, Chrom-Schwellerleiste, Front mit LED-Leiste zwischen schmalen Scheinwerfern + Chromgrill + VW-Emblem,
       // Einlässe mit Chromrahmen, geteilte Rückleuchten, PASSAT-Schriftzug, 2 trapezförmige Endrohre, 10-Speichen-Alu
       form: {
-        sill: 0.135, nase: 0.50, haubeH: 0.585, guertel: 0.655, deck: 0.70, heckH: 0.69, dachHoehe: 0.97,
-        scheibeUnten: 0.305, dachVorn: 0.44, dachHinten: 0.885, heckscheibeEnde: 0.985, heckTyp: 'steil', dachAbfall: 0.06,
+        sill: 0.135, nase: 0.545, haubeH: 0.645, guertel: 0.655, deck: 0.70, heckH: 0.69, dachHoehe: 0.97,
+        scheibeUnten: 0.305, dachVorn: 0.47, scheibeWoelb: 0.08, dachHinten: 0.885, heckscheibeEnde: 0.985, heckTyp: 'steil', dachAbfall: 0.06,
         frontNeigung: 0.15, heckNeigung: 0.15, eckVorn: 0.27, eckHinten: 0.30, kotfluegel: 0.05, tumble: 0.16, tornado: true,
         leistenSeg: 0.2, fensterleiste: 'chrom', fensterRahmen: 'chrom', schwellerLeiste: true, spiegelBlinker: true,
         fenster: [[0.318, 0.527], [0.549, 0.712], [0.732, 0.925]], felgeFarbe: 0xcfd3d8, felgeSpeichen: 10,

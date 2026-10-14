@@ -678,7 +678,7 @@
     const f = M.f;
     if (z <= M.zDV) {
       const u = clamp((z - M.zWS) / (M.zDV - M.zWS), 0, 1);
-      return lerp(yb, M.Htop, u + 0.25 * u * (1 - u));
+      return lerp(yb, M.Htop, u + (f.scheibeWoelb !== undefined ? f.scheibeWoelb : 0.25) * u * (1 - u));   // optional: scheibeWoelb = Wölbung der Frontscheibe (Standard 0,25)
     }
     const dachHinten = M.Htop - f.dachAbfall * M.H;
     if (z <= M.zDH) {

@@ -361,7 +361,9 @@ for (const daten of R.trackCatalog) {
       if (JSON.stringify([s2.hindernisse, s2.wracks, s2.strohballen]) !== JSON.stringify([st.hindernisse, st.wracks, st.strohballen]) ||
           JSON.stringify([s3.hindernisse, s3.wracks, s3.strohballen]) !== JSON.stringify([st.hindernisse, st.wracks, st.strohballen])) gleichOpt = false;
     }
-    pruefe('Menge normal: bitgleich zum Stand vor der Funktion (' + n + ' Strecken × Welten × Varianten, Fingerabdruck)', fnv(alles) === '90c5e661', fnv(alles));
+    // Fingerabdruck-Verlauf: 90c5e661 (bis v16) → da0dd781 (v17: Wrack-Maße kommen aus src/cars/carCatalog.js, neue Autos Passat/Multivan/911 ändern wiese/wald/wueste/dino/alpen)
+    // → 2982b25d (14.10. v18: gewollte Katalog-Verschiebungen der Gabelung, nur wiese + wueste; Rest unverändert, je Strecke gemessen).
+    pruefe('Menge normal: bitgleich zum Stand vor der Funktion (' + n + ' Strecken × Welten × Varianten, Fingerabdruck)', fnv(alles) === '2982b25d', fnv(alles));
     pruefe('Menge: ohne Option = „normal“ = unbekannter Wert (→ Standard)', gleichOpt);
     pruefe('Menge: Gültigkeit (unbekannt, Zahl, null, Objekt → normal; die drei Namen bleiben)', R.Strecke.hindernisMengeGueltig('viele') === 'viele' && R.Strecke.hindernisMengeGueltig('sehrViele') === 'sehrViele' &&
       R.Strecke.hindernisMengeGueltig('normal') === 'normal' && [undefined, null, 5, {}, ['viele'], 'constructor', '__proto__', ''].every(x => R.Strecke.hindernisMengeGueltig(x) === 'normal'));
