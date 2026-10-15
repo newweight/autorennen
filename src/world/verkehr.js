@@ -23,7 +23,7 @@
 //   steuerung(i, dt, rennen)                Steuerung des Verkehrswagens an Fahrzeug-Index i (Spline-Folgen, Tempo, Bremsen vor Hindernissen)
 //   andereFuer(liste) / anhaengen(liste)    aktive Verkehrswagen als „andere“ für die KI (sie überholt ohne Hängen)
 //   schritt(dt, laeuft)                     Auftritte (erscheinen/verschwinden), Spurwechsel, Hupe-/Lichthupe-Zustand je Physikschritt
-//   animieren(zeit)                         Blaulicht, Rundumleuchte, Lichthupe; Blau-PointLights nur ≤ lichtAbstand an einer Spieler-Kamera
+//   animieren(zeit)                         Blaulicht, Rundumleuchte, Lichthupe; Blau-Licht kommt aus dem festen Licht-Pool (v26c, blaulichtQuellen)
 //   ton(stumm)                              Sirene des Krankenwagens, Hupe der Geisterfahrer
 //   warnung(i)                              HUD: { text, abstand } für Teilnehmer i oder null
 //   schadenFaktor(stoss)                    Faktor für den Schaden eines Auto-Stoßes (Krankenwagen: 3, sonst 1)
@@ -58,7 +58,7 @@
   }
   const klemme = (x, a, b) => (x < a ? a : x > b ? b : x);
   const glatt = (t) => { t = klemme(t, 0, 1); return t * t * (3 - 2 * t); };
-  function winkelNorm(w) { while (w > Math.PI) w -= 2 * Math.PI; while (w < -Math.PI) w += 2 * Math.PI; return w; }
+  function winkelNorm(w) { if (w !== w) return w; if (!(Math.abs(w) < 1e3)) w = Number.isFinite(w) ? w % (2 * Math.PI) : 0; while (w > Math.PI) w -= 2 * Math.PI; while (w < -Math.PI) w += 2 * Math.PI; return w; }   // v26b: Obergrenze gegen Infinity/riesige Werte
   function mulberry32(seed) {
     let a = seed >>> 0;
     return function () {
@@ -84,7 +84,7 @@
       const a2 = ((a % L) + L) % L, e = a2 + (b - a);
       if (e <= L) roh.push([a2, e]); else { roh.push([a2, L]); roh.push([0, e - L]); }
     };
-    const laenge = (s0, s1) => { let d = s1 - s0; while (d < 0) d += L; return d; };
+    const laenge = (s0, s1) => { let d = s1 - s0; if (!(L > 0) || !Number.isFinite(d)) return 0; if (d < 0) d += Math.ceil(-d / L) * L; return d; };   // v26b: ohne Schleife (L = 0 / Infinity → früher Endlosschleife)
     const bereich = (b, vor, nach) => { if (b && b.s0 !== undefined && b.s1 !== undefined) add(b.s0 - vor, b.s0 + laenge(b.s0, b.s1) + nach); };
     // Start/Ziel: Startaufstellung und Zielgerade
     add(-c.zielFrei, c.startFrei);
@@ -285,7 +285,7 @@
       this.nurAnzeige = false;    // Online-Client: nichts rechnen, nur zeigen
       this.statistik = { auftritte: 0, geister: 0, kranken: 0, abschlepp: 0, verschwunden: 0, haengen: 0, haengenAlleine: 0, warnungen: 0 };
       this.zonen = []; this.frei = []; this.routen = [];
-      this._eigen = []; this._lichter = []; this._phase = -1; this._mm = [];
+      this._eigen = []; this._lichter = []; this._farben = [0x2a5cff, 0x9fb8ff]; this._phase = -1; this._mm = [];
       this._rr = 0;               // Rundlauf: nächster Spieler für Krankenwagen/Abschleppwagen
       this._tn = [];              // Teilnehmerdaten (wiederverwendet)
       this._andere = [];
@@ -730,29 +730,20 @@
         const bl = mesh.userData && mesh.userData.blaulicht;
         if (bl && bl.length >= 2) bl.forEach((m) => { if (m.material && !m.userData.verkehrKopie) { m.material = m.material.clone(); m.userData.verkehrKopie = true; this._eigen.push(m.material); } });
         const h = (e.f.auto && e.f.auto.abmessungen && e.f.auto.abmessungen.hoehe) || 2.1;
-        const L = [0x2a5cff, 0x2a5cff].map((farbe, j) => {
-          const l = new THREE.PointLight(farbe, 26, 13, 1.6);
-          l.position.set(j ? 0.45 : -0.45, h + 0.35, 0.6);
-          l.visible = false; l.name = 'Blaulicht-RTW';
-          mesh.add(l);
-          return l;
-        });
-        this._lichter[e.nummer] = L;
+        // v26c: kein eigenes PointLight je Krankenwagen (Lichtzahl muss nach dem Rennstart konstant bleiben); nur die Lage merken, das Licht kommt aus dem Licht-Pool
+        e.blauLokal = [[-0.45, h + 0.35, 0.6], [0.45, h + 0.35, 0.6]];
       }
       void c;
     }
 
     _lichtAus(e) {
-      const L = this._lichter[e.nummer];
-      if (L) L.forEach((l) => { l.visible = false; });
+      void e;      // v26c: das Blaulicht-Licht gehört dem Licht-Pool (er schaltet über die Intensität), hier nichts mehr zu tun
     }
 
-    /** Blaulicht (blau/blau abwechselnd), Rundumleuchte (orange abwechselnd), Lichthupe (Fahrlicht blinkt); PointLights nur beim nächsten Krankenwagen nah an einer Kamera. */
+    /** Blaulicht (blau/blau abwechselnd), Rundumleuchte (orange abwechselnd), Lichthupe (Fahrlicht blinkt); das PointLight dazu kommt aus dem Licht-Pool (v26c). */
     animieren(zeit) {
       if (typeof THREE === 'undefined' || !this.eintraege.length) return;
       const c = this.c, phase = Math.floor(zeit * c.blinkHz * 2) % 2, hupPhase = Math.floor(zeit * 4) % 2;
-      const kams = this.spiel.zustand === 'menue' ? [] : (this.spiel.kameras || []);
-      let naechster = null, dMin = c.lichtAbstand * c.lichtAbstand;
       for (const e of this.eintraege) {
         const f = e.f, mesh = f.mesh;
         if (!mesh) continue;
@@ -760,11 +751,6 @@
         if (!mesh.visible) mesh.visible = true;
         if (e.art === 'krankenwagen') {
           if (phase !== e._phase) { e._phase = phase; R.carBuilder.setzeBlaulicht(mesh, phase ? 1 : 2); }
-          const d = f.anzeige || f.vehicle;
-          for (let j = 0; j < kams.length; j++) {
-            const p = kams[j].kamera.position, q = (p.x - d.x) ** 2 + (p.z - d.z) ** 2;
-            if (q <= dMin) { dMin = q; naechster = e; }
-          }
         } else if (e.art === 'abschleppwagen') {
           const r = mesh.userData.rundum;
           if (r && r.length >= 2 && phase !== e._phase) { e._phase = phase; r[0].color.setHex(phase ? 0xffa21a : 0x5a3200); r[1].color.setHex(phase ? 0x5a3200 : 0xffa21a); }
@@ -773,32 +759,26 @@
           if (an !== e._licht) { e._licht = an; R.carBuilder.setzeLicht(mesh, an); }
         }
       }
-      for (const e of this.eintraege) {
-        const L = this._lichter[e.nummer];
-        if (!L) continue;
-        const an = e === naechster;
-        if (L[0].visible !== an) { L[0].visible = an; L[1].visible = an; }
-        if (an) {
-          const fl = phase ? 0x2a5cff : 0x9fb8ff, fr = phase ? 0x9fb8ff : 0x2a5cff;
-          L[0].color.setHex(fl); L[1].color.setHex(fr);
-        }
-      }
+      this._farben[0] = phase ? 0x2a5cff : 0x9fb8ff; this._farben[1] = phase ? 0x9fb8ff : 0x2a5cff;
       this._phase = phase;
     }
 
-    /** Shader mit eingeschalteten Blaulicht-Lichtern einmal übersetzen (kein Ruckler beim ersten Annähern). */
-    vorkompilieren(renderer, szene, kamera) {
-      if (!renderer || !renderer.compile) return;
-      const alle = [];
-      this._lichter.forEach((L) => { if (L) L.forEach((l) => alle.push(l)); });
-      if (!alle.length) return;
-      const sicht = this.eintraege.map((e) => e.f.mesh && e.f.mesh.visible);
-      this.eintraege.forEach((e) => { if (e.f.mesh) e.f.mesh.visible = true; });
-      alle.forEach((l) => { l.visible = true; });
-      try { renderer.compile(szene, kamera); } catch (err) { /* egal */ }
-      alle.forEach((l) => { l.visible = false; });
-      this.eintraege.forEach((e, i) => { if (e.f.mesh) e.f.mesh.visible = !!sicht[i]; });
+    /**
+     * v26c: Blaulicht-Quellen für den Licht-Pool (src/world/lichtPool.js): aktive Krankenwagen mit Mesh, Lage der zwei Lichter, Farben, Stärke, Reichweite, Abstand.
+     * @param {Array} out wird nur gefüllt (nicht geleert)
+     */
+    blaulichtQuellen(out) {
+      for (const e of this.eintraege) {
+        if (e.art !== 'krankenwagen' || !e.aktiv || !e.blauLokal || !e.f.mesh) continue;
+        out.push({ f: e.f, mesh: e.f.mesh, lokal: e.blauLokal, farben: this._farben, staerke: 26, reichweite: 13, abstand: this.c.lichtAbstand });
+      }
     }
+
+    /** v26c: gibt es Krankenwagen (= Blaulicht-Quellen für den Pool)? */
+    hatBlaulicht() { return this.eintraege.some((e) => e.art === 'krankenwagen' && !!e.blauLokal); }
+
+    /** v26c: leer – die Lichtzahl ändert sich im Rennen nicht mehr (Main._vorwaermen übersetzt alles mit der endgültigen Lichtlage). */
+    vorkompilieren() { }
 
     // ---------- Ton ----------
     /** Sirene des nächsten aktiven Krankenwagens (Lautstärke nach Abstand zum nächsten Spieler), Hupe der Geisterfahrer. */
@@ -863,7 +843,6 @@
 
     zerstoeren() {
       this._sirene(false, 0);
-      this._lichter.forEach((L) => L && L.forEach((l) => { if (l.parent) l.parent.remove(l); if (l.dispose) l.dispose(); }));
       this._eigen.forEach((x) => { if (x && x.dispose) x.dispose(); });
       this._lichter = []; this._eigen = [];
       this.eintraege.forEach((e) => { if (e.f) e.f.verkehr = null; });

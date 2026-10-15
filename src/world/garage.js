@@ -335,6 +335,7 @@
         // Pure Pursuit wie driver.js / test_reset_anlauf
         const dx = w.x - v.x, dz = w.z - v.z, dist = Math.hypot(dx, dz) || 1;
         let diff = Math.atan2(-dx, -dz) - v.heading;      // heading: Vorwärts = (−sin h, −cos h)
+        if (!(Math.abs(diff) < 1e3)) diff = Number.isFinite(diff) ? diff % (2 * Math.PI) : 0;   // v26b: harte Grenze (Infinity/riesig)
         while (diff > Math.PI) diff -= 2 * Math.PI;
         while (diff < -Math.PI) diff += 2 * Math.PI;
         const vl = Math.max(3, vor0);

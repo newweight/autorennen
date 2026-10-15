@@ -21,7 +21,7 @@ STARTEN = '''([pol, gegner, runden]) => { const s = Rennspiel.spiel;
   s.autopilot(0);
   return { fz: s.fahrzeuge.length, tn: s.rennen.teilnehmer.length, polizei: s.fahrzeuge.filter(f => f.polizei).length,
     sys: !!s.polizei, idx: s.polizei ? s.polizei.idx : null, auto: s.fahrzeuge.filter(f => f.polizei).map(f => f.auto.id),
-    lichter: (() => { let n = 0; s.szene.traverse(o => { if (o.isPointLight && o.name === 'Blaulicht') n++; }); return n; })() }; }'''
+    lichter: (() => { let n = 0; s.szene.traverse(o => { if (o.isPointLight && o.name === 'Blaulicht-Pool') n++; }); return n; })() }; }'''
 
 ZUSTAND = '''() => { const s = Rennspiel.spiel, p = s.polizei, f = s.fahrzeuge[0], t = s.rennen.teilnehmer[0], hud = document.querySelector('.hud-polizei');
   const pf = p ? s.fahrzeuge[p.idx[0]] : null;
@@ -52,7 +52,7 @@ with sync_playwright() as p:
 
     # --- 6 Gegner → 2 Streifenwagen ---
     st = page.evaluate(STARTEN, [True, 6, 2])
-    pruefe('6 Gegner → 2 Streifenwagen, Teilnehmer 7, Fahrzeuge 9, 4 Blaulicht-Lichter', st['polizei'] == 2 and st['tn'] == 7 and st['fz'] == 9 and st['lichter'] == 4, st)
+    pruefe('6 Gegner → 2 Streifenwagen, Teilnehmer 7, Fahrzeuge 9, fester Licht-Pool mit 2 Blaulicht-Lichtern (v26c: nicht mehr je Streifenwagen)', st['polizei'] == 2 and st['tn'] == 7 and st['fz'] == 9 and st['lichter'] == 2, st)
 
     # --- Hauptlauf ---
     st = page.evaluate(STARTEN, [True, 3, 2])
@@ -117,11 +117,11 @@ with sync_playwright() as p:
     # Nochmal + Abbau
     page.evaluate('() => Rennspiel.spiel.rennenStarten()')
     page.wait_for_timeout(300)
-    n = page.evaluate('''() => { let n = 0; Rennspiel.spiel.szene.traverse(o => { if (o.isPointLight && o.name === 'Blaulicht') n++; }); return [n, Rennspiel.spiel.fahrzeuge.filter(f => f.polizei).length]; }''')
-    pruefe('Nochmal: genau 2 Blaulicht-Lichter, 1 Streifenwagen', n == [2, 1], n)
+    n = page.evaluate('''() => { let n = 0; Rennspiel.spiel.szene.traverse(o => { if (o.isPointLight && o.name === 'Blaulicht-Pool') n++; }); return [n, Rennspiel.spiel.fahrzeuge.filter(f => f.polizei).length]; }''')
+    pruefe('Nochmal: genau 2 Licht-Pool-Lichter, 1 Streifenwagen', n == [2, 1], n)
     page.evaluate('() => Rennspiel.spiel.zumMenue()')
     page.wait_for_timeout(300)
-    n = page.evaluate('''() => { let n = 0; Rennspiel.spiel.szene.traverse(o => { if (o.isPointLight && o.name === 'Blaulicht') n++; }); return [n, !!Rennspiel.spiel.polizei]; }''')
+    n = page.evaluate('''() => { let n = 0; Rennspiel.spiel.szene.traverse(o => { if (o.isPointLight && o.name === 'Blaulicht-Pool') n++; }); return [n, !!Rennspiel.spiel.polizei]; }''')
     pruefe('Menü: Polizei abgebaut (keine Lichter, kein System)', n == [0, False], n)
     pruefe('keine JS-Fehler', not fehler, fehler[:3])
     browser.close()

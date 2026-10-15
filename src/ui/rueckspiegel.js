@@ -132,5 +132,23 @@
     r.setScissorTest(scissor);
   };
 
+  /**
+   * v26c: Spiegel-Shader vorwärmen. Das Spiegelbild wird in ein RenderTarget gezeichnet; dafür baut three.js eigene Shader-Varianten (anderer Farbraum-Schlüssel
+   * als beim Zeichnen aufs Canvas). Ohne Vorwärmen entstehen sie erst im Rennen, wenn z. B. eine Brücke zum ersten Mal im Spiegel auftaucht (Ruckler/Hänger).
+   * Aufruf aus Main._vorwaermen (alles sichtbar), nur compile, kein Zeichnen.
+   */
+  S.vorwaermen = function (spiel) {
+    if (typeof THREE === 'undefined' || !spiel || !spiel.kameras) return;
+    const r = spiel.renderer, w = window.innerWidth, h = window.innerHeight, split = spiel.kameras.length > 1;
+    for (let i = 0; i < spiel.kameras.length; i++) {
+      if (!S.sichtbar(spiel, i)) continue;
+      const vw = split ? (i === 0 ? Math.floor(w / 2) : w - Math.floor(w / 2)) : w, rc = S.rechteck(vw, h, split);
+      if (rc.b < 8 || rc.h < 4) continue;
+      vorbereiten(i, rc.b, rc.h);
+      const alt = r.getRenderTarget();
+      try { r.setRenderTarget(rts[i]); r.compile(spiel.szene, kam); } finally { r.setRenderTarget(alt); }
+    }
+  };
+
   S.zuruecksetzen = function () { zaehler = [0, 0]; geladen = [false, false]; };
 })();

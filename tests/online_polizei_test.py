@@ -35,7 +35,7 @@ LAGE = """() => { const s = Rennspiel.spiel, o = s.online, p = s.polizei;
   const f = s.fahrzeuge[o.du], hud = s.huds[0], el = hud.ePolizei;
   const pf = p ? s.fahrzeuge[p.idx[0]] : null;
   return { n: s.fahrzeuge.length, polizei: !!p, streifen: pf ? { polizei: !!pf.polizei, mesh: !!pf.mesh, sichtbar: pf.mesh && pf.mesh.visible, x: pf.vehicle.x, z: pf.vehicle.z, v: pf.vehicle.vLaengs,
-      lampen: !!(pf.mesh && pf.mesh.userData.blaulicht && pf.mesh.userData.blaulicht.length), lichter: p.lichter.length } : null,
+      lampen: !!(pf.mesh && pf.mesh.userData.blaulicht && pf.mesh.userData.blaulicht.length), lichter: s.lichtPool ? s.lichtPool.lichter.length : 0 } : null,
     ich: { x: f.vehicle.x, z: f.vehicle.z, v: f.vehicle.vLaengs }, rest: o.vorhersage.polizeiRest, text: el ? el.textContent : null, anzeige: el ? el.style.display : null,
     gesperrt: p ? p.logik.gesperrt(o.du) : null, rz: s.rennen.zustand }; }"""
 
@@ -64,7 +64,7 @@ try:
         pg.keyboard.press('Enter')
         pg.wait_for_function("Rennspiel.spiel.zustand === 'online' && Rennspiel.spiel.online && Rennspiel.spiel.online.empfangen", timeout=60000, polling=200)
         l0 = pg.evaluate(LAGE)
-        pruefe('Spiel: Polizei-Objekt und Streifenwagen (2 Fahrzeuge: Auto + Streifenwagen) mit Mesh und Blaulicht', l0['polizei'] and l0['n'] == 2 and l0['streifen'] and l0['streifen']['polizei'] and l0['streifen']['mesh'] and l0['streifen']['lampen'] and l0['streifen']['lichter'] == 1, l0['streifen'])
+        pruefe('Spiel: Polizei-Objekt und Streifenwagen (2 Fahrzeuge: Auto + Streifenwagen) mit Mesh und Blaulicht', l0['polizei'] and l0['n'] == 2 and l0['streifen'] and l0['streifen']['polizei'] and l0['streifen']['mesh'] and l0['streifen']['lampen'] and l0['streifen']['lichter'] == 2, l0['streifen'])
         pg.evaluate(LANGSAM)
         pg.wait_for_function("Rennspiel.spiel.rennen.zustand === 'laeuft'", timeout=60000, polling=200)
         x0 = l0['streifen']['x']; z0 = l0['streifen']['z']

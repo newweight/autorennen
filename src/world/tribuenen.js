@@ -202,9 +202,9 @@
     });
     // 3) Rest auf Geraden verteilen: immer in die größte Lücke
     bereiche.forEach((b, bi) => {
-      let fehl = 0;
+      let fehl = 0, durchlaeufe = 0;
       const sperrLuecken = [];
-      while (fehl < 40) {
+      while (fehl < 40 && durchlaeufe++ < 400) {     // v26b: harte Obergrenze (auch wenn eine Platzierung nicht zum Bereich zählt)
         const meine = gewaehlt.filter((o) => bereichVon(o.s) === bi);
         if (meine.length >= soll[bi]) break;
         // Lücken im Bereich

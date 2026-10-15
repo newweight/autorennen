@@ -2305,7 +2305,7 @@
         let s = g.s0 + g.P * 0.55;
         const erg = [];
         const bis = g.s1 - g.P * 0.55;
-        while (s < bis) {
+        for (let durchlauf = 0; s < bis && durchlauf < 5000; durchlauf++) {     // v26b: harte Obergrenze (abst ≤ 0 / NaN → sonst Endlosschleife)
           const w = this.gabelBei(s), frei = (w.c - w.h) - rb - 0.25 - 0.45;     // halbe freie Inselbreite (bis zur Leitplanke)
           const r = rMax * (0.7 + 0.5 * rnd());
           if (frei > r + 0.5) {

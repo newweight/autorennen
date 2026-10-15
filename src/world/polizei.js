@@ -25,10 +25,10 @@
 //   steuerung(i, dt, rennen)       Steuerung eines Streifenwagens (Jagd mit R.Driver bzw. Parken neben dem Ziel)
 //   andereFuer(tn)                 Teilnehmer + Streifenwagen (KI weicht auch der Polizei aus)
 //   schritt(dt, laeuft)            Logik je Physikschritt (Meldungen, Ton, Schild)
-//   animieren(zeit)                Blaulicht 4 Hz blau/rot, 2 PointLights nur ≤ 40 m an einer Spieler-Kamera
+//   animieren(zeit)                Blaulicht 4 Hz blau/rot (emissive Lampen); das Licht dazu kommt aus dem festen Licht-Pool (v26c, blaulichtQuellen)
 //   ton(stumm)                     Sirene (Lautstärke nach Abstand zum nächsten Spieler)
 //   anzeige(i) / minimapPunkte()   für das HUD
-//   vorkompilieren(renderer, szene, kamera)  Shader mit eingeschalteten Lichtern übersetzen (kein Ruckler)
+//   vorkompilieren(renderer, szene, kamera)  v26c: leer (Lichtzahl bleibt konstant, Main._vorwaermen übersetzt alles)
 //   zerstoeren()                   Lichter, eigene Geometrien/Materialien, Sirene
 // ============================================================
 (function () {
@@ -41,7 +41,7 @@
   };
   function cfg() { return Object.assign({}, STANDARD, (R.config && R.config.polizei) || {}); }
   const klemme = (x, a, b) => (x < a ? a : x > b ? b : x);
-  function winkelNorm(w) { while (w > Math.PI) w -= 2 * Math.PI; while (w < -Math.PI) w += 2 * Math.PI; return w; }
+  function winkelNorm(w) { if (w !== w) return w; if (!(Math.abs(w) < 1e3)) w = Number.isFinite(w) ? w % (2 * Math.PI) : 0; while (w > Math.PI) w -= 2 * Math.PI; while (w < -Math.PI) w += 2 * Math.PI; return w; }   // v26b: Obergrenze gegen Infinity/riesige Werte
 
   /** Kürzester Abstand zweier Strecken p1–q1 und p2–q2 (2D, x/z). */
   function segAbstand(ax, az, bx, bz, cx, cz, dx, dz) {
@@ -313,7 +313,8 @@
       this.idx = [];              // Fahrzeug-Indizes der Streifenwagen
       this.n = 0;                 // Anzahl Teilnehmer (Indizes 0..n-1)
       this.seite = [];            // Park-Seite je Streifenwagen
-      this.lichter = [];          // je Streifenwagen [PointLight, PointLight]
+      this.blauLokal = [];        // v26c: je Streifenwagen [[x,y,z],[x,y,z]] Lage der zwei Blaulicht-Quellen am Auto (das Licht selbst kommt aus dem festen Licht-Pool, src/world/lichtPool.js)
+      this._farben = [0x2a5cff, 0xff2a2a];
       this.lampen = [];           // je Streifenwagen [meshL, meshR]
       this._eigen = [];           // eigene Geometrien/Materialien (dispose)
       this._andere = [];
@@ -542,14 +543,9 @@
       } else lampen = this._ersatzOptik(f);
       this.lampen[k] = lampen;
       const h = this._dachHoehe(f);
-      const L = [0x2a5cff, 0xff2a2a].map((farbe, j) => {
-        const l = new THREE.PointLight(farbe, this.c.lichtStaerke, this.c.lichtReichweite, 1.6);
-        l.position.set(j ? 0.5 : -0.5, h + 0.35, 0);
-        l.visible = false; l.name = 'Blaulicht';
-        mesh.add(l);
-        return l;
-      });
-      this.lichter[k] = L;
+      // v26c: KEINE eigenen PointLights je Streifenwagen mehr (Lichtzahl in der Szene muss nach dem Rennstart konstant bleiben, sonst übersetzt
+      // three.js alle beleuchteten Shader neu). Nur die Lage merken; das Blaulicht-Licht kommt aus dem festen Licht-Pool (LichtPool).
+      this.blauLokal[k] = [[-0.5, h + 0.35, 0], [0.5, h + 0.35, 0]];
     }
 
     _dachHoehe(f) {
@@ -581,44 +577,41 @@
       return [l, r];
     }
 
-    /** Blaulicht blinken (blau/rot wechselnd, blinkHz), PointLights nur nah an einer Spieler-Kamera. */
+    /** Blaulicht blinken (blau/rot wechselnd, blinkHz): Lampen-Material (emissive). v26c: das PointLight kommt aus dem Licht-Pool (blaulichtQuellen). */
     animieren(zeit) {
       if (typeof THREE === 'undefined') return;
       const phase = Math.floor(zeit * this.c.blinkHz * 2) % 2;
-      const fz = this.spiel.fahrzeuge, kams = this.spiel.zustand === 'menue' ? [] : this.spiel.kameras;
+      const fz = this.spiel.fahrzeuge;
       const BLAU = 0x2a5cff, ROT = 0xff2a2a;
+      const fl = phase ? ROT : BLAU, fr = phase ? BLAU : ROT;
+      this._farben[0] = fl; this._farben[1] = fr;
       for (let k = 0; k < this.idx.length; k++) {
-        const f = fz[this.idx[k]], la = this.lampen[k], li = this.lichter[k];
+        const f = fz[this.idx[k]], la = this.lampen[k];
         if (!f) continue;
         if (la && phase !== this._phase) {
-          const fl = phase ? ROT : BLAU, fr = phase ? BLAU : ROT;
           if (la[0].material && la[0].material.color) la[0].material.color.setHex(fl);
           if (la[1].material && la[1].material.color) la[1].material.color.setHex(fr);
           if (la[0].material && la[0].material.emissive) la[0].material.emissive.setHex(fl);
           if (la[1].material && la[1].material.emissive) la[1].material.emissive.setHex(fr);
-          if (li) { li[0].color.setHex(fl); li[1].color.setHex(fr); }
-        }
-        if (li) {
-          let nah = false;
-          const d = f.anzeige || f.vehicle;
-          for (let j = 0; j < kams.length && !nah; j++) {
-            const p = kams[j].kamera.position;
-            if ((p.x - d.x) ** 2 + (p.z - d.z) ** 2 <= this.c.lichtAbstand * this.c.lichtAbstand) nah = true;
-          }
-          li[0].visible = nah; li[1].visible = nah;
         }
       }
       this._phase = phase;
     }
 
-    /** Shader mit eingeschalteten Blaulicht-Lichtern einmal übersetzen (kein Ruckler beim ersten Annähern). */
-    vorkompilieren(renderer, szene, kamera) {
-      if (!renderer || !renderer.compile || !this.lichter.length) return;
-      const alle = [].concat.apply([], this.lichter);
-      alle.forEach(l => { l.visible = true; });
-      try { renderer.compile(szene, kamera); } catch (e) { /* egal */ }
-      alle.forEach(l => { l.visible = false; });
+    /**
+     * v26c: Blaulicht-Quellen für den Licht-Pool (src/world/lichtPool.js): je Streifenwagen Mesh, Lage der zwei Lichter am Auto, aktuelle Farben, Stärke, Reichweite, Abstand.
+     * @param {Array} out wird nur gefüllt (nicht geleert)
+     */
+    blaulichtQuellen(out) {
+      for (let k = 0; k < this.idx.length; k++) {
+        const f = this.spiel.fahrzeuge[this.idx[k]];
+        if (!f || !f.mesh || !this.blauLokal[k]) continue;
+        out.push({ f, mesh: f.mesh, lokal: this.blauLokal[k], farben: this._farben, staerke: this.c.lichtStaerke, reichweite: this.c.lichtReichweite, abstand: this.c.lichtAbstand });
+      }
     }
+
+    /** v26c: Es gibt nichts mehr vorzukompilieren (die Lichtzahl ändert sich im Rennen nicht; Main._vorwaermen übersetzt alles mit der endgültigen Lichtlage). Bleibt als leere Hülle. */
+    vorkompilieren() { }
 
     /** Sirene: an, solange das Rennen läuft; Lautstärke nach Abstand zum nächsten Spielerauto. */
     ton(stumm) {
@@ -644,10 +637,9 @@
 
     zerstoeren() {
       if (R.Audio && R.Audio.sirene) R.Audio.sirene(false);
-      this.lichter.forEach(L => L && L.forEach(l => { if (l.parent) l.parent.remove(l); if (l.dispose) l.dispose(); }));
       (this._ersatzTeile || []).forEach(m => { if (m.parent) m.parent.remove(m); });
       this._eigen.forEach(x => { if (x && x.dispose) x.dispose(); });
-      this.lichter = []; this.lampen = []; this._eigen = []; this._ersatzTeile = [];
+      this.blauLokal = []; this.lampen = []; this._eigen = []; this._ersatzTeile = [];
     }
   }
 

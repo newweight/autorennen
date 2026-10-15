@@ -773,6 +773,7 @@
         spiel.verkehr.einsetzen(strecke, this.nT, { geister: e.geisterfahrer === true, stufe: e.verkehr || 'aus' });
         try { spiel.verkehr.vorkompilieren(spiel.renderer, spiel.szene, spiel.menueKamera); } catch (err) { /* nur Optik */ }
       }
+      spiel._blauPoolAnlegen(1);      // v26c: fester Blaulicht-Licht-Pool (Lichtzahl bleibt nach dem Rennstart konstant)
       const mein = spiel.fahrzeuge[du];
       spiel.kameraHinzufuegen(mein);
       const hud = new R.Hud(spiel.hudWurzel, { rennen, teilnehmer: rennen.teilnehmer[du], fahrzeug: mein, nr: 0, split: false });
@@ -1168,6 +1169,10 @@
       // Streckenindex/Nähe (Kamera-Höhe, Scheinwerfer im Tunnel)
       for (let i = 0; i < fz.length; i++) {
         const f = fz[i];
+        // v26c: GEPARKTE Verkehrswagen (Krankenwagen/Geisterfahrer/Abschleppwagen warten bei x = 100000 + 60·n, z = 100000) NICHT abfragen: ohne gültigen Index
+        // suchte naechster() global über ein riesiges Raster (~4000 Ringe × Umfang, je Wagen, je Physikschritt) → Sekunden bis Minuten Stillstand
+        // („Seite reagiert nicht“), vor allem online mit Verkehr „viel“. Wie offline (Verkehr._parken): nah = null, index = −1.
+        if (f.verkehr && !f.verkehr.aktiv) { f.nah = null; f.index = -1; continue; }
         const n = st.spline.naechster(f.vehicle.x, f.vehicle.z, f.index >= 0 ? f.index : undefined);
         if (i !== this.du || V.sonder) f.index = n.index;
         f.nah = n;

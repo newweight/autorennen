@@ -271,6 +271,7 @@
       if (this.schaden) { this.schaden.zerstoeren(); this.schaden = null; }
       if (this.polizei) { this.polizei.zerstoeren(); this.polizei = null; }   // Runde 5b: Blaulicht-Lichter, Sirene
       if (this.verkehr) { this.verkehr.zerstoeren(); this.verkehr = null; }    // 15.10. (v25)
+      if (this.lichtPool) { this.lichtPool.zerstoeren(); this.lichtPool = null; }    // v26c: fester Blaulicht-Licht-Pool
       this.huds.forEach(h => h.zerstoeren());
       this.huds = [];
       const autoMeshes = new Set(this.fahrzeuge.map(f => f.mesh));
@@ -418,6 +419,7 @@
      * Mit Argument: wird mit den bisherigen Einstellungen zusammengeführt und gespeichert.
      */
     rennenStarten(einst, opt) {
+      const _startT0 = performance.now();      // v26b: Diagnose „Seite reagiert nicht“ – Startdauer merken (s. Ende der Funktion)
       if (einst) this.einstellungen = einstellungenPruefen(Object.assign({}, this.einstellungen, einst));
       if (opt && opt.temporaer) this.fahrhilfeStufe = this.einstellungen.fahrhilfe[0];   // W3-F: Pokal-Rennen nicht speichern
       else this.einstellungenSpeichern();
@@ -471,6 +473,14 @@
       this._hudZeit = -1e9;
       this.groesse();
       this._vorwaermen();      // 14.10. (v21): Ruckeln – alles schon vor dem Countdown zur GPU schicken
+      // v26b: Diagnose – dauert der Start > 3 s (z. B. Shader-Übersetzung nachts mit vielen Lichtern auf einer langsamen GPU), Zahlen merken:
+      // Rennspiel.spiel.startMs / .vorwaermMs in der Konsole, bei > 3 s zusätzlich Warnung + localStorage 'jhsw_langsamerStart'
+      this.startMs = performance.now() - _startT0;
+      if (this.startMs > 3000) {
+        const info = { ms: Math.round(this.startMs), vorwaermMs: Math.round(this.vorwaermMs || 0), strecke: e.streckeId, tageszeit: e.tageszeit, wetter: e.wetter, verkehr: e.verkehr, geister: !!e.geisterfahrer, schaden: !!e.schaden, gegner: e.gegner, modus: e.modus, wann: new Date().toISOString() };
+        try { console.warn('Langsamer Rennstart', info); } catch (err) { /* egal */ }
+        try { localStorage.setItem('jhsw_langsamerStart', JSON.stringify(info)); } catch (err) { /* egal */ }
+      }
     }
 
     /**
@@ -485,16 +495,27 @@
       if (G.vorwaermen === false || !r || !this.szene) return null;
       const kam = this.kameras[0] ? this.kameras[0].kamera : this.menueKamera;
       if (!kam) return null;
-      const t0 = performance.now(), gemerkt = [];
+      const t0 = performance.now(), gemerkt = [], versteckt = [], lichtWar = [];
       try {
         this.szene.traverse((o) => { if (o.frustumCulled) { o.frustumCulled = false; gemerkt.push(o); } });
+        // v26c: auch GERADE UNSICHTBARE Teile (Scheinwerfer-/Bremslicht-/Fahrlichtkegel der Autos, abgestellte Krankenwagen, Tunnelhöfe …) einmal mit übersetzen,
+        // sonst entsteht ihr Shader erst mitten im Rennen, wenn sie zum ersten Mal sichtbar werden (z. B. Licht an beim Einfahren in einen Tunnel). Lichter NIE
+        // (ihre Zahl muss konstant bleiben); danach genau den alten Zustand wiederherstellen.
+        this.szene.traverse((o) => { if (o.visible === false && !o.isLight) { o.visible = true; versteckt.push(o); } });
+        // v26c: Fahrlicht-Teile der Autos (Lichtkegel-Mesh, Scheinwerfer-/Bremslicht-Material) entstehen erst bei setzeLicht(an) → einmal für alle Autos an, danach wie vorher
+        if (R.carBuilder && R.carBuilder.setzeLicht) {
+          this.fahrzeuge.forEach((f) => { if (f.mesh && f.mesh.userData && !f.mesh.userData.lichtAn) { try { R.carBuilder.setzeLicht(f.mesh, true); lichtWar.push(f); } catch (err) { /* nur Optik */ } } });
+        }
         this.szene.matrixWorldAutoUpdate = false;
         this.szene.updateMatrixWorld();
         if (r.compile) r.compile(this.szene, kam);
         r.setScissorTest(true); r.setScissor(0, 0, 1, 1);
         r.render(this.szene, kam);
         r.setScissorTest(false);
-      } catch (e) { /* nur Optik: im Zweifel ohne Vorwärmen weiter */ } finally { gemerkt.forEach((o) => { o.frustumCulled = true; }); }
+        if (R.rueckspiegel && R.rueckspiegel.vorwaermen) R.rueckspiegel.vorwaermen(this);      // v26c: Spiegel-Variante der Shader (RenderTarget-Farbraum) auch schon vor dem Start
+      } catch (e) { /* nur Optik: im Zweifel ohne Vorwärmen weiter */ } finally { gemerkt.forEach((o) => { o.frustumCulled = true; }); versteckt.forEach((o) => { o.visible = false; });
+        lichtWar.forEach((f) => { try { R.carBuilder.setzeLicht(f.mesh, false); } catch (err) { /* nur Optik */ } });
+      }
       this.vorwaermMs = performance.now() - t0;
       return this.vorwaermMs;
     }
@@ -749,6 +770,7 @@
         this.verkehr.einsetzen(strecke, opt.spieler + opt.gegner, { geister: opt.geisterfahrer === true, stufe: opt.verkehr || 'aus' });
         this.verkehr.vorkompilieren(this.renderer, this.szene, this.menueKamera);
       }
+      this._blauPoolAnlegen(opt.spieler || 1);      // v26c: fester Licht-Pool für Streifen-/Krankenwagen (Lichtzahl bleibt nach dem Rennstart konstant)
       // Runde 6 (W3-G): Münzen auf der Fahrbahn (nur im Rennen, jede Welt; keine Physik – nur Einsammeln)
       this.muenzen = null;
       if (R.Muenzen && opt.muenzen !== false) {
@@ -925,6 +947,7 @@
       if (this.strecke && this.strecke.tribuenen && this.strecke.tribuenen.length && R.Tribuenen) R.Tribuenen.animieren(this.strecke, this._physikZeit || 0, this.pausiert ? 0 : dt);   // 15.10. (v25): Zuschauer wippen/jubeln, Fahnen wehen
       if (this.polizei) this.polizei.animieren(this._physikZeit || 0);   // Runde 5b: Blaulicht
       if (this.verkehr) this.verkehr.animieren(this._physikZeit || 0);   // 15.10. (v25): Blaulicht Krankenwagen, Rundumleuchte, Lichthupe
+      if (this.lichtPool) this.lichtPool.aktualisieren();                // v26c: Blaulicht-Pool dem nächsten Blaulicht-Wagen zuordnen (nur intensity/Position)
       if (this.tunnelLichter) this._tunnelLichterAktualisieren();
       const t2 = performance.now();
       if (R.Audio) this.tonAktualisieren(dt);
@@ -1827,6 +1850,19 @@
       r.setScissorTest(false);
     }
 
+    /**
+     * v26c: festen Blaulicht-Licht-Pool anlegen, wenn es Blaulicht-Fahrzeuge gibt (Polizei oder Krankenwagen). Offline am Ende von streckeAufbauen,
+     * online in online.js nach dem Anlegen von Polizei/Verkehr – beides VOR dem Vorwärmen (`_vorwaermen`).
+     * @param {number} paare Zahl der Spieler-Kameras (1 oder 2): je Kamera ein Paar PointLights
+     */
+    _blauPoolAnlegen(paare) {
+      if (this.lichtPool) { this.lichtPool.zerstoeren(); this.lichtPool = null; }
+      const polizei = !!(this.polizei && this.polizei.idx && this.polizei.idx.length), rtw = !!(this.verkehr && this.verkehr.hatBlaulicht && this.verkehr.hatBlaulicht());
+      if (!(polizei || rtw) || !R.LichtPool) return null;
+      this.lichtPool = new R.LichtPool(this, paare).anlegen();
+      return this.lichtPool;
+    }
+
     // ---------- Tunnel: Licht ----------
     /**
      * Tunnel-Lichter (nur auf Strecken mit Tunnel): 3 Punktlichter (an den 3 Deckenlampen, die einer
@@ -1854,25 +1890,20 @@
       const tz = this.tageszeitDaten;
       L.nacht = !!(tz && tz.echteScheinwerfer);
       L.laterne = L.nacht ? Object.assign({ farbe: 0xffd08a, licht: 70, reichweite: 28, abfall: 1.5, punktlichter: 3 }, tz.laterne) : null;
-      if (L.nacht) L.punkte.concat(L.spots).forEach((l) => { l.userData.basis = l.intensity; l.visible = true; l.intensity = 0; });
+      // v26c: IMMER (auch tagsüber, Dämmerung, ohne Nacht) dauerhaft sichtbar und über die Intensität geschaltet – jedes visible-Umschalten ändert die
+      // Lichtzahl, three.js übersetzt dann alle beleuchteten Shader neu (Mac-GPU: Sekunden-Hänger, vor allem beim Einfahren in einen Tunnel).
+      L.punkte.concat(L.spots).forEach((l) => { l.userData.basis = l.intensity; l.visible = true; l.intensity = 0; });
       this.tunnelLichter = L;
     }
 
-    /** Runde 6: Licht schalten – tagsüber visible, nachts immer sichtbar und über die Intensität (0 = aus). */
+    /** Licht schalten – immer sichtbar, nur über die Intensität (0 = aus). v26c: auch tagsüber (vorher nur nachts; Tag schaltete visible → Shader-Neubau). */
     _lichtSchalten(l, an) {
-      if (!this.tunnelLichter.nacht) { l.visible = an; return; }
       l.visible = true;
       l.intensity = an ? l.userData.basis : 0;
     }
 
-    /** Shader einmal mit eingeschalteten Tunnel-Lichtern übersetzen (kein Ruckler bei der ersten Einfahrt). */
-    _tunnelLichterVorkompilieren() {
-      const L = this.tunnelLichter;
-      if (!L || !this.renderer.compile) return;
-      L.punkte.concat(L.spots).forEach(l => { l.visible = true; });
-      try { this.renderer.compile(this.szene, this.kameras[0] ? this.kameras[0].kamera : this.menueKamera); } catch (e) { /* egal */ }
-      L.punkte.concat(L.spots).forEach(l => { l.visible = !!L.nacht; });     // Runde 6: nachts bleiben sie sichtbar
-    }
+    /** v26c: leer – die Tunnel-Lichter sind von Anfang an sichtbar (Intensität 0); `_vorwaermen` übersetzt alles mit der endgültigen Lichtlage. */
+    _tunnelLichterVorkompilieren() { }
 
     /** Je Frame: Spots an die Spielerautos, Punktlichter an die nächsten Lampen, Dunkel-Faktor je Kamera. */
     _tunnelLichterAktualisieren() {

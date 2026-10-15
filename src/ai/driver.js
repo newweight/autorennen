@@ -149,6 +149,8 @@
 
   /** Winkel auf -π..π bringen. */
   function winkelNorm(w) {
+    if (w !== w) return w;                               // NaN bleibt NaN (wie bisher)
+    if (!(Math.abs(w) < 1e3)) w = Number.isFinite(w) ? w % (2 * Math.PI) : 0;   // v26b: Infinity/riesig → sonst Endlosschleife (w -= 2π ändert nichts mehr)
     while (w > Math.PI) w -= 2 * Math.PI;
     while (w < -Math.PI) w += 2 * Math.PI;
     return w;

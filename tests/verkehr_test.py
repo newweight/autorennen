@@ -41,7 +41,7 @@ KURVE = '''([a, b]) => { const sp = Rennspiel.spiel.strecke.spline; let best = {
 STAND = '''() => { const s = Rennspiel.spiel, vk = s.verkehr, hud = document.querySelector('.hud-geisterfahrer');
   return { zeit: +s._physikZeit.toFixed(1), aktiv: vk ? vk.eintraege.map(e => e.aktiv ? e.art[0] + Math.round(e.f.nah.s) : '-') : [], warn: hud && hud.style.display !== 'none' ? hud.textContent : '',
     stat: vk ? vk.statistik : null, nan: s.fahrzeuge.some(g => [g.vehicle.x, g.vehicle.z, g.vehicle.heading].some(x => !isFinite(x))),
-    calls: s.renderer.info.render.calls, tris: s.renderer.info.render.triangles, licht: (() => { let n = 0; s.szene.traverse(o => { if (o.isPointLight && o.visible) n++; }); return n; })() }; }'''
+    calls: s.renderer.info.render.calls, tris: s.renderer.info.render.triangles, licht: (() => { let n = 0; s.szene.traverse(o => { if (o.isPointLight && o.visible && o.intensity > 0) n++; }); return n; })() }; }'''
 
 ABSTAND = '''([art, k]) => { const s = Rennspiel.spiel, e = s.verkehr.eintraege.find(x => x.art === art && x.k === k), f = s.fahrzeuge[0], c = s.kameras[0].kamera.position, w = e.f.vehicle;
   return { spielerWagen: +Math.hypot(f.vehicle.x - w.x, f.vehicle.z - w.z).toFixed(1), kameraWagen: +Math.hypot(c.x - w.x, c.z - w.z).toFixed(1), aktiv: e.aktiv, sichtbar: e.f.mesh.visible, v: +w.vLaengs.toFixed(1) }; }'''
@@ -91,7 +91,7 @@ with sync_playwright() as p:
     d = page.evaluate(ABSTAND, ['krankenwagen', 0])
     pruefe('Krankenwagen im Bild (Kamera < 45 m, sichtbar)', d['aktiv'] and d['sichtbar'] and d['kameraWagen'] < 45, d)
     z = page.evaluate(STAND)
-    pruefe('Krankenwagen aktiv, Blaulicht-Lichter an (2 PointLights)', 'k' in ''.join(z['aktiv']) and z['licht'] >= 2, z['licht'])
+    pruefe('Krankenwagen aktiv, Blaulicht-Licht an (Licht-Pool, Intensität > 0)', 'k' in ''.join(z['aktiv']) and z['licht'] >= 2, z['licht'])
     pl = page.evaluate(PLATZIEREN, ['krankenwagen', 0, 900, 0.28, 0, 888, 0.28, False])
     vor(page, 0.2)
     foto(page, 'krankenwagen_heck' + suffix + '.png', 400)
@@ -134,7 +134,7 @@ with sync_playwright() as p:
 
     # --- Abbau / Neustart ohne Verkehr ---
     st = page.evaluate(STARTEN, [False, 'aus', 'tag', 3, None])
-    ll = page.evaluate("() => { let n = 0; Rennspiel.spiel.szene.traverse(o => { if (o.isPointLight && o.name === 'Blaulicht-RTW') n++; }); return n; }")
+    ll = page.evaluate("() => { let n = 0; Rennspiel.spiel.szene.traverse(o => { if (o.isPointLight && o.name === 'Blaulicht-Pool') n++; }); return n; }")
     pruefe('Nach Neustart ohne Verkehr: kein System, keine übrigen Blaulicht-Lichter', not st['sys'] and ll == 0, ll)
 
     # --- Megastrecke / Gabelung (Stichprobe): Aufbau ohne Fehler ---

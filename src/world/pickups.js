@@ -265,7 +265,7 @@
       const v = a.v;
       if (v.imLooping || v.imFlug) return null;
       const r = v.richtung ? v.richtung() : { x: -Math.sin(v.heading), z: -Math.cos(v.heading) }, ab = wert(co.abstand, 8);
-      while (this.oel.length >= wert(co.max, 6)) this.oel.shift();         // der älteste weicht
+      for (let g = 0; this.oel.length >= Math.max(1, wert(co.max, 6)) && g < 1000; g++) this.oel.shift();         // der älteste weicht
       const o = { x: v.x - r.x * ab, z: v.z - r.z * ab, heading: v.heading, alter: 0, owner: i, geschuetzt: new Set(),
         index: a.index >= 0 ? a.index : undefined };   // W4-I: Streckenindex → richtige Ebene an einer Überführung
       this.oel.push(o);
