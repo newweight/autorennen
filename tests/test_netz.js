@@ -832,7 +832,7 @@ if (process.env.NETZ_NUR_SYNC) { console.log(`\n${ok} OK, ${fehler} FEHL (nur di
     const sA = await starten({ port: 0, host: '127.0.0.1', leise: true });
     let k = await mitHeadern(sA.port, TAIL);
     let a = await k.frage({ t: 'schalterFrage' });
-    pruefe('J1 ohne --steuerung: Schalter aus (recht:false), auch mit Tailnet-Header', a && a.recht === false && Object.keys(a).length === 2, JSON.stringify(a));
+    pruefe('J1 ohne --steuerung: Schalter aus (recht:false), auch mit Tailnet-Header; v26: Tailnet-Gerät bekommt Grund „ohneSteuerung“ (Spiel erklärt es)', a && a.recht === false && a.grund === 'ohneSteuerung' && Object.keys(a).length === 3, JSON.stringify(a));
     a = await k.frage({ t: 'schalterUmschalten', an: true });
     pruefe('J1b ohne --steuerung: Umschalten wirkungslos', a && a.recht === false && !fs.existsSync(wunschDatei));
     k.ws.terminate(); await sA.schliessen();
@@ -841,14 +841,14 @@ if (process.env.NETZ_NUR_SYNC) { console.log(`\n${ok} OK, ${fehler} FEHL (nur di
     const s = await starten({ port: 0, host: '127.0.0.1', leise: true, steuerung: ordner, oeffentlich: 'https://mac-mini.tail1.ts.net:8443/' });
     k = await mitHeadern(s.port, {});
     a = await k.frage({ t: 'schalterFrage' });
-    pruefe('J2 ohne Tailnet-Header: kein Recht, Antwort verrät nichts', a && a.recht === false && Object.keys(a).length === 2, JSON.stringify(a));
+    pruefe('J2 ohne Tailnet-Header: kein Recht; v26: lokale/Heimnetz-Verbindung bekommt nur den Grund „keinTailnet“ (sonst nichts)', a && a.recht === false && a.grund === 'keinTailnet' && Object.keys(a).length === 3, JSON.stringify(a));
     a = await k.frage({ t: 'schalterUmschalten', an: true });
     pruefe('J2b ohne Recht: Umschalten schreibt keine Wunsch-Datei', a && a.recht === false && !fs.existsSync(wunschDatei));
     k.ws.terminate();
 
     k = await mitHeadern(s.port, Object.assign({ 'tailscale-funnel-request': '?1' }, TAIL));
     a = await k.frage({ t: 'schalterFrage' });
-    pruefe('J3 Funnel-Header (auch mit Login): kein Recht', a && a.recht === false);
+    pruefe('J3 Funnel-Header (auch mit Login): kein Recht, Antwort verrät nichts (nur recht:false)', a && a.recht === false && Object.keys(a).length === 2, JSON.stringify(a));
     a = await k.frage({ t: 'schalterUmschalten', an: true });
     pruefe('J3b Funnel: Umschalten wirkungslos', a && a.recht === false && !fs.existsSync(wunschDatei));
     k.ws.terminate();

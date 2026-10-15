@@ -71,37 +71,65 @@ function tailnetIP(a) {
   if (m) return +m[1] === 100 && +m[2] >= 64 && +m[2] <= 127;
   return /^fd7a:115c:a1e0:/i.test(a);
 }
-/** Darf diese WebSocket-Verbindung (Upgrade-Request) den Internet-Schalter bedienen? req: { socket:{remoteAddress}, headers }. */
-function schalterRecht(req, oeffentlichHost) {
+/**
+ * v26: Bewertung einer WebSocket-Verbindung für den Internet-Schalter → { recht, grund, weg }.
+ *   grund (Diagnose/Anzeige): 'ok' | 'oeffentlich' (Funnel/fremde IP/Cloudflare/falscher Origin – wird dem Client NIE erklärt)
+ *                             | 'keinTailnet' (lokal/Heimnetz/ohne Tailscale-Merkmale – darf erklärt werden)
+ *   weg: womit das Recht begründet wurde – 'identitaet' (Tailscale-User-Login) oder 'xff' (nur Tailnet-Quelladresse, s. u.).
+ * Ablauf: Funnel-Header = nein → Cloudflare-/Real-IP-Header = nein → X-Forwarded-For nur Tailnet-Adressen → nur 127.0.0.1
+ *   → Identität ODER Tailnet-Adresse in X-Forwarded-For → Origin.
+ * v26 NEU „weg: xff“: Fehlt der Identitäts-Header (anderer tailscaled-Aufbau), genügt eine NICHT-leere X-Forwarded-For-Liste aus
+ *   lauter Tailnet-Adressen – Serve setzt sie aus der echten Quelladresse des Tailnet-Geräts. Sicherheit: Fremde über Funnel tragen
+ *   IMMER `Tailscale-Funnel-Request` (→ nein, wird vor allem anderen geprüft) und haben eine öffentliche Quelladresse (→ nein); ein
+ *   anderer Reverse-Proxy (cloudflared) hängt die öffentliche Adresse an die Liste (→ nein) und setzt cf-*-Header (→ nein).
+ *   Reines „kommt von 127.0.0.1“ reicht bewusst NICHT (das täte auch cloudflared).
+ */
+function schalterBewertung(req, oeffentlichHost) {
+  const nein = (grund) => ({ recht: false, grund, weg: '' });
   try {
     const h = (req && req.headers) || {};
-    if (!req || !req.socket || !LOOPBACK.has(req.socket.remoteAddress)) return false;           // 3
-    if (h['tailscale-funnel-request'] !== undefined) return false;                                // 2
-    const login = h['tailscale-user-login'];
-    if (typeof login !== 'string' || !/^[^\s,<>"'\\]{1,200}$/.test(login)) return false;          // 1 (leer/doppelt/seltsam → nein)
+    if (!req || !req.socket) return nein('oeffentlich');
+    if (h['tailscale-funnel-request'] !== undefined) return nein('oeffentlich');                   // Funnel nie
+    if (h['cf-connecting-ip'] !== undefined || h['cf-ray'] !== undefined || h['x-real-ip'] !== undefined) return nein('oeffentlich');
     const xff = h['x-forwarded-for'];
-    if (xff !== undefined && !String(xff).split(',').every(tailnetIP)) return false;               // 4
+    const xffListe = xff === undefined ? null : String(xff).split(',');
+    if (xffListe && !xffListe.every(tailnetIP)) return nein('oeffentlich');                         // öffentliche Quelladresse
+    if (!LOOPBACK.has(req.socket.remoteAddress)) return nein('keinTailnet');                         // Heimnetz/WLAN direkt: Header könnten gefälscht sein
+    const login = h['tailscale-user-login'];
+    const identOk = typeof login === 'string' && /^[^\s,<>"'\\]{1,200}$/.test(login);               // leer/doppelt/seltsam → nein
+    if (login !== undefined && !identOk) return nein('keinTailnet');
+    if (!identOk && !(xffListe && xffListe.length && xffListe.every(tailnetIP))) return nein('keinTailnet');
     const origin = h['origin'];
-    if (origin !== undefined) {                                                                    // 5
+    if (origin !== undefined) {
       let oh;
-      try { const u = new URL(origin); oh = u.host.toLowerCase(); if (!/^https?:$/.test(u.protocol)) return false; } catch (e) { return false; }
+      try { const u = new URL(origin); oh = u.host.toLowerCase(); if (!/^https?:$/.test(u.protocol)) return nein('oeffentlich'); } catch (e) { return nein('oeffentlich'); }
       const ok = [h['host'], h['x-forwarded-host'], oeffentlichHost].some(x => typeof x === 'string' && x.toLowerCase() === oh);
-      if (!ok) return false;
+      if (!ok) return nein('oeffentlich');
     }
-    return true;
-  } catch (e) { return false; }
+    return { recht: true, grund: 'ok', weg: identOk ? 'identitaet' : 'xff' };
+  } catch (e) { return nein('oeffentlich'); }
+}
+/** Darf diese WebSocket-Verbindung (Upgrade-Request) den Internet-Schalter bedienen? req: { socket:{remoteAddress}, headers }. */
+function schalterRecht(req, oeffentlichHost) { return schalterBewertung(req, oeffentlichHost).recht; }
+/** Welche Header-NAMEN (nie Werte) trägt die Anfrage? Für das Diagnose-Protokoll – damit man sieht, was tailscaled wirklich schickt. */
+function schalterKopfNamen(req) {
+  try {
+    const h = (req && req.headers) || {};
+    return Object.keys(h).filter(k => /^(tailscale-|x-forwarded-|cf-|x-real-ip|origin$|host$)/.test(k)).sort().join(',') || '-';
+  } catch (e) { return '-'; }
 }
 
-/** status.json des Helfers streng lesen → { funnel:'an'|'aus'|'unbekannt', bis:ms|null } (alt/kaputt/fehlt → unbekannt). */
+/** status.json des Helfers streng lesen → { funnel:'an'|'aus'|'unbekannt', bis:ms|null, helfer? } (alt/kaputt/fehlt → unbekannt, helfer = Grund). */
 function statusLesen(ordner, jetzt) {
   try {
     const f = path.join(ordner, 'status.json');
     const st = fs.lstatSync(f);
-    if (!st.isFile() || st.size > 200) return { funnel: 'unbekannt', bis: null };
+    if (!st.isFile() || st.size > 200) return { funnel: 'unbekannt', bis: null, helfer: 'kaputt' };
     const m = /^\{"funnel":"(an|aus)","bis":(\d{1,16}|null),"zeit":(\d{1,16})\}\s*$/.exec(fs.readFileSync(f, 'utf8'));
-    if (!m || jetzt - +m[3] > 30000) return { funnel: 'unbekannt', bis: null };                   // Helfer schreibt alle ~5 s
+    if (!m) return { funnel: 'unbekannt', bis: null, helfer: 'kaputt' };
+    if (jetzt - +m[3] > 30000) return { funnel: 'unbekannt', bis: null, helfer: 'alt' };           // Helfer schreibt alle ~5 s
     return { funnel: m[1], bis: m[2] === 'null' ? null : +m[2] };
-  } catch (e) { return { funnel: 'unbekannt', bis: null }; }
+  } catch (e) { return { funnel: 'unbekannt', bis: null, helfer: e && e.code === 'ENOENT' ? 'fehlt' : 'kaputt' }; }
 }
 
 // ------------------------------------------------------------------ statische Dateien
@@ -173,9 +201,22 @@ function starten(opt) {
     try { pfad = new URL(req.url, 'http://x').pathname; } catch (e) { /* ungültig */ }
     if (pfad === Brett.PFAD) return brett.upgrade(req, socket, kopf);       // Brettspiele (eigenes Protokoll, eigene Limits)
     if (pfad !== N.PFAD || verbindungen >= 80) { socket.write('HTTP/1.1 404 Not Found\r\n\r\n'); socket.destroy(); return; }
-    const recht = steuerung ? schalterRecht(req, oeffentlichHost) : false;
-    wss.handleUpgrade(req, socket, kopf, (ws) => wss.emit('connection', ws, req, recht));
+    const bew = schalterBewertung(req, oeffentlichHost);
+    if (!steuerung) bew.recht = false;                     // Funktion aus: nie Recht (der Grund „ohneSteuerung“ wird nur Tailnet-Geräten erklärt, s. schalterAntwort)
+    schalterProtokoll(bew, req);
+    wss.handleUpgrade(req, socket, kopf, (ws) => wss.emit('connection', ws, req, bew));
   });
+
+  // v26 Diagnose: pro Kombination (Ergebnis + Header-Namen) nur EINMAL eine Zeile ins Protokoll (höchstens 30) – ohne Namen/Adressen/Werte.
+  const protokolliert = new Set();
+  function schalterProtokoll(bew, req) {
+    if (opt.leise) return;
+    const namen = schalterKopfNamen(req), schl = (steuerung ? 'S' : 'o') + bew.recht + bew.grund + bew.weg + namen;
+    if (protokolliert.has(schl) || protokolliert.size >= 30) return;
+    protokolliert.add(schl);
+    log('Internet-Schalter: ' + (steuerung ? '' : '(ohne --steuerung) ') + (bew.recht ? 'Recht (' + bew.weg + ')' : 'KEIN Recht (' + bew.grund + ')') + ' · Quelle ' +
+      (LOOPBACK.has(req.socket.remoteAddress) ? 'lokal/Proxy' : 'direkt') + ' · Header: ' + namen);
+  }
 
   const senden = (ws, obj) => { if (ws.readyState === 1) ws.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); };
   const fehler = (ws, grund, text) => senden(ws, { t: 'fehler', grund, text });
@@ -254,15 +295,30 @@ function starten(opt) {
     log('Raum ' + raum.code + ': Rennen fertig');
   }
 
-  /** Antwort auf schalterFrage/schalterUmschalten. Ohne Recht (oder Funktion aus) immer dieselbe Antwort – verrät nichts. */
+  /** Antwort auf schalterFrage/schalterUmschalten. Ohne Recht antworten Funnel-/Fremd-Verbindungen immer nur { recht:false } – verrät nichts.
+   *  Tailnet-/lokale Verbindungen (grund 'keinTailnet') bekommen zusätzlich einen Grund, damit das Spiel erklären kann, warum der Knopf fehlt:
+   *  'ohneSteuerung' (Server ohne --steuerung, aber Gerät sieht aus wie Tailnet) oder 'keinTailnet' (lokal/Heimnetz/ohne Tailscale-Merkmale). */
   function schalterAntwort(c, extra) {
-    if (!steuerung || !c.schalter) return senden(c.ws, { t: 'schalter', recht: false });
+    if (!steuerung || !c.schalter) {
+      const m = { t: 'schalter', recht: false };
+      if (c.schalterGrund === 'keinTailnet') m.grund = 'keinTailnet';
+      else if (!steuerung && c.schalterGrund === 'ok') m.grund = 'ohneSteuerung';          // Gerät hätte Recht, nur die Funktion ist aus
+      return senden(c.ws, m);
+    }
     const jetzt = Date.now();
     const st = statusLesen(steuerung, jetzt);
-    let wartet = false;
-    if (letzterWunsch.art && st.funnel !== 'unbekannt' && letzterWunsch.art !== st.funnel && jetzt - letzterWunsch.zeit < 20000) wartet = true;
-    senden(c.ws, Object.assign({ t: 'schalter', recht: true, funnel: st.funnel, wartet,
-      rest: st.funnel === 'an' && st.bis ? Math.max(0, Math.round((st.bis - jetzt) / 1000)) : null }, extra || {}));
+    const seitWunsch = jetzt - letzterWunsch.zeit;
+    let wartet = false, haengt = false;
+    if (letzterWunsch.art && st.funnel === letzterWunsch.art) letzterWunsch.art = '';          // Wunsch erfüllt → später kein falscher „hängt“-Alarm (z. B. Handaufruf AUS)
+    if (letzterWunsch.art && st.funnel !== 'unbekannt' && letzterWunsch.art !== st.funnel) {
+      if (seitWunsch < 20000) wartet = true;
+      else if (seitWunsch < 300000) haengt = true;               // Helfer lebt (frischer Status), hat den Wunsch aber nicht umgesetzt (z. B. Funnel in Tailscale nicht erlaubt)
+    }
+    const m = Object.assign({ t: 'schalter', recht: true, funnel: st.funnel, wartet,
+      rest: st.funnel === 'an' && st.bis ? Math.max(0, Math.round((st.bis - jetzt) / 1000)) : null }, extra || {});
+    if (haengt) m.haengt = letzterWunsch.art;
+    if (st.helfer) m.helfer = st.helfer;                         // 'fehlt' | 'alt' | 'kaputt' – warum der Status unbekannt ist
+    senden(c.ws, m);
   }
 
   function schalterUmschalten(c, an) {
@@ -273,7 +329,10 @@ function starten(opt) {
     try {
       // feste Form, nur zwei mögliche Werte + Zeit; der Helfer prüft sie noch einmal streng
       fs.writeFileSync(path.join(steuerung, 'wunsch.json'), JSON.stringify({ funnel: art, seit: jetzt }), { mode: 0o644 });
-    } catch (e) { return schalterAntwort(c, { fehler: 'schreiben' }); }
+    } catch (e) {
+      console.error('Internet-Schalter: wunsch.json nicht beschreibbar (' + (e && e.code) + ') – installieren.command erneut ausführen');
+      return schalterAntwort(c, { fehler: 'schreiben', code: String((e && e.code) || '').slice(0, 12) });
+    }
     letzterWunsch = { art, zeit: jetzt };
     log('Internet-Schalter: ' + art + ' gewünscht');
     schalterAntwort(c);
@@ -401,9 +460,10 @@ function starten(opt) {
     }
   }
 
-  wss.on('connection', (ws, req, recht) => {
+  wss.on('connection', (ws, req, bew) => {
     verbindungen++;
-    const c = { ws, schalter: recht === true, id: crypto.randomBytes(4).toString('hex'), raum: null, lebt: true, eingaben: [], simNr: -1, letzteN: -1, ack: -1,
+    if (typeof bew !== 'object' || !bew) bew = { recht: bew === true, grund: bew === true ? 'ok' : 'oeffentlich' };
+    const c = { ws, schalter: bew.recht === true, schalterGrund: bew.recht === true ? '' : bew.grund, id: crypto.randomBytes(4).toString('hex'), raum: null, lebt: true, eingaben: [], simNr: -1, letzteN: -1, ack: -1,
       zaehler: 0, zaehlerSeit: Date.now() };
     ws.on('pong', () => { c.lebt = true; });
     ws.on('message', (daten, binaer) => {
@@ -629,7 +689,7 @@ function starten(opt) {
   });
 }
 
-module.exports = { starten, dateiFuer, schalterRecht };
+module.exports = { starten, dateiFuer, schalterRecht, schalterBewertung };
 
 // ------------------------------------------------------------------ Start von der Kommandozeile
 if (require.main === module) {

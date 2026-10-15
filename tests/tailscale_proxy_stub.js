@@ -3,6 +3,10 @@
 //  serve : entfernt vom Client mitgeschickte Tailscale-User-*/Tailscale-Funnel-Request-Header, setzt Tailscale-User-Login/-Name
 //          und X-Forwarded-For (Tailnet-IP); Host bleibt unverändert
 //  funnel: entfernt dieselben Header, setzt KEINEN Login, aber Tailscale-Funnel-Request: ?1 und X-Forwarded-For (öffentliche IP)
+//  serve-ohne-identitaet (v26): wie serve, aber OHNE Tailscale-User-* (nur X-Forwarded-For mit Tailnet-IP) – falls ein tailscaled keine Identität liefert
+//  serve-ohne-xff (v26)       : wie serve, aber OHNE X-Forwarded-For (nur Identität)
+//  serve-nichts (v26)         : weder Identität noch X-Forwarded-For (Header-lose Weiterleitung)
+//  cloudflared (v26)          : kein Tailscale; XFF = öffentliche IP, cf-connecting-ip (fremder Reverse-Proxy auf 127.0.0.1)
 // Verbindungen zum Ziel kommen – wie bei Tailscale – von 127.0.0.1.
 'use strict';
 const http = require('http'), net = require('net');
@@ -10,7 +14,11 @@ const [lausch, ziel, art] = [+process.argv[2], +process.argv[3], process.argv[4]
 function kopf(h) {
   const o = {};
   for (const [k, v] of Object.entries(h)) if (!/^tailscale-/i.test(k) && k.toLowerCase() !== 'x-forwarded-for') o[k] = v;
-  if (art === 'serve') { o['Tailscale-User-Login'] = 'sebastian@example.com'; o['Tailscale-User-Name'] = 'Sebastian'; o['X-Forwarded-For'] = '100.101.102.103'; }
+  if (art === 'serve-ohne-identitaet') { o['X-Forwarded-For'] = '100.101.102.103'; }
+  else if (art === 'serve-ohne-xff') { o['Tailscale-User-Login'] = 'sebastian@example.com'; o['Tailscale-User-Name'] = 'Sebastian'; }
+  else if (art === 'serve-nichts') { /* nichts */ }
+  else if (art === 'cloudflared') { o['X-Forwarded-For'] = '203.0.113.50'; o['CF-Connecting-IP'] = '203.0.113.50'; }
+  else if (art === 'serve') { o['Tailscale-User-Login'] = 'sebastian@example.com'; o['Tailscale-User-Name'] = 'Sebastian'; o['X-Forwarded-For'] = '100.101.102.103'; }
   else { o['Tailscale-Funnel-Request'] = '?1'; o['X-Forwarded-For'] = '203.0.113.50'; }
   return o;
 }
