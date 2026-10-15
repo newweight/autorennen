@@ -21,6 +21,7 @@
       this._pingTimer = null;
       this._proben = [];           // [{ lokal (s), wert (s) }] Server-Zeit − lokale Zeit
       this.versatz = null;         // s: Server-Zeit ≈ lokale Zeit + versatz
+      this.spaetSpitze = 0; this.spaet = 0;   // v23: Verspätung der Zustände (s), siehe _uhr
       this.gesendet = 0; this.empfangen = 0;
     }
 
@@ -84,19 +85,32 @@
     }
 
     // ---------- Server-Uhr ----------
+    // v23: Der schnellste Weg der letzten 4 s (Max über „Server-Zeit − lokale Zeit“) gibt den Versatz, träge nachgeführt (3 % je Zustand statt
+    // 10 %): sonst springt die geschätzte Server-Uhr, sobald der schnellste Zustand das Fenster verlässt (Millisekunden × 60 m/s = Dezimeter).
+    // Zusätzlich wird je Zustand gemessen, wie viel später er als der schnellste kam (Verspätung): spaetSpitze = abfallendes Maximum
+    // (Halbwertszeit ≈ 7 s) → verzug() = empfohlener Interpolationsverzug für die anderen Autos.
     _uhr(k) {
-      const DT = R.config.physik.schritt, jetzt = performance.now() / 1000;
+      const DT = R.config.physik.schritt, jetzt = performance.now() / 1000, O = R.NetzOptionen || {};
       const wert = k * DT - jetzt;               // je kleiner die Laufzeit, desto größer der Wert
-      const p = this._proben;
+      const p = this._proben, fenster = O.uhrGlatt === false ? 2 : 4;
       p.push({ lokal: jetzt, wert });
-      while (p.length && p[0].lokal < jetzt - 2) p.shift();
+      while (p.length && p[0].lokal < jetzt - fenster) p.shift();
       let best = -Infinity;
       for (let i = 0; i < p.length; i++) if (p[i].wert > best) best = p[i].wert;
-      if (this.versatz === null || Math.abs(best - this.versatz) > 0.5) this.versatz = best;    // erster Wert / großer Sprung
-      else this.versatz += (best - this.versatz) * 0.1;
+      if (this.versatz === null || Math.abs(best - this.versatz) > 0.5) { this.versatz = best; this.spaetSpitze = 0; }    // erster Wert / großer Sprung
+      else this.versatz += (best - this.versatz) * (O.uhrGlatt === false ? 0.1 : 0.03);
+      const spaet = Math.max(0, best - wert);
+      this.spaet = spaet;
+      this.spaetSpitze = Math.max(spaet, (this.spaetSpitze || 0) * 0.995);
+    }
+    /** Empfohlener Interpolationsverzug (s) für die anderen Autos: 0,1 s (Standard) – wächst mit der gemessenen Verspätung (Zittern/Bursts), höchstens 0,45 s. */
+    verzug() {
+      const O = R.NetzOptionen || {}, grund = R.Netz.INTERP_VERZUG;
+      if (O.adaptiv === false) return grund;
+      return Math.max(grund, Math.min(0.45, 0.06 + (this.spaetSpitze || 0) * 1.1));
     }
     /** Uhr zurücksetzen (neues Rennen: Tick fängt wieder bei 0 an). */
-    uhrNeu() { this._proben = []; this.versatz = null; }
+    uhrNeu() { this._proben = []; this.versatz = null; this.spaetSpitze = 0; this.spaet = 0; }
     /** Geschätzter aktueller Server-Tick (Bruchzahl) oder null. */
     serverTick() {
       if (this.versatz === null) return null;

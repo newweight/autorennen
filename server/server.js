@@ -148,7 +148,7 @@ function httpAntwort(req, res) {
  */
 function starten(opt) {
   // tempo: Zeitraffer NUR für Tests (tests/test_netz.js), 1 = Echtzeit
-  opt = Object.assign({ port: 8444, host: '0.0.0.0', leise: false, ladenMaxMs: 20000, tempo: 1, oeffentlich: '', steuerung: '' }, opt);
+  opt = Object.assign({ port: 8444, host: '0.0.0.0', leise: false, ladenMaxMs: 20000, tempo: 1, oeffentlich: '', steuerung: '', statistik: 0, eingabeAlt: false }, opt);
   // öffentliche Adresse (Tailscale Funnel), damit Link/QR in der Lobby auch stimmen, wenn der Host das Spiel über
   // http://localhost:8444 geöffnet hat. Nur https-Adressen ohne Pfad-Tricks.
   const oeffentlich = /^https:\/\/[a-z0-9.-]+(:\d{1,5})?\/?$/i.test(opt.oeffentlich || '') ? opt.oeffentlich.replace(/\/?$/, '/') : '';
@@ -240,6 +240,7 @@ function starten(opt) {
     spieler.forEach((c, i) => {
       c.simNr = i; c.geladen = false; c.eingaben = []; c.ack = -1; c.letzteN = -1; c.letzteEingabe = Date.now();
       c.minQ = Infinity; c.qTicks = 0; c.verworfen = 0;
+      c.ziel = 2; c.erw = null; c.fensterT = 0; c.leerFenster = 0; c.tiefeMin = Infinity; c.ruhe = 0; c.halten = 0; c.haltenT = 0; c.auslassen = false; c.spaetTicks = 0; c.spaetMax = 0;   // v23 eingabeTick
       senden(c.ws, Object.assign({ t: 'start', du: i }, info));
     });
     log('Raum ' + raum.code + ': Rennen wird geladen (' + spieler.length + ' Spieler, ' + sim.einstellungen.gegner + ' Computer, ' + sim.einstellungen.streckeId + ')');
@@ -380,6 +381,7 @@ function starten(opt) {
         const e = { n, s: N.eingabeDekodieren(m), i: m.i === 1, r: m.r === 1, f: m.f === 1 };
         c.eingaben.push(e);
         if (c.eingaben.length > 45) {        // > 3/4 s gepuffert (Paketstau, sehr langsames Gerät): Älteste verwerfen, Tasten-Flanken behalten
+          c.erw = null;                      // v23: neu ausrichten (eingabeTick)
           const weg = c.eingaben.splice(0, c.eingaben.length - 10);
           if (weg.some(x => x.i)) c.eingaben[0].i = true;
           if (weg.some(x => x.r)) c.eingaben[0].r = true;
@@ -425,6 +427,131 @@ function starten(opt) {
     ws.on('close', () => clearInterval(c.herz));
   });
 
+  // --- Server-Tick-Statistik (v23 Online-Ruckeln): nur Zahlen, keine Namen. opt.statistik = Sekunden zwischen den Zeilen (0 = aus) ---
+  // Je Raum: Dauer eines Schleifendurchgangs (Schritte + Senden), Abstand der Zustand-Sendungen (soll 50 ms), Verspätung der Schleife
+  // (setInterval-Drift), je Mensch: Ticks ohne Eingabe in der Warteschlange („leer“ = Server rechnet ohne frische Eingabe), verworfene, Länge.
+  const fensterNeu = () => ({ n: 0, a: [] });
+  const fensterZu = (w) => {
+    if (!w.n) return { n: 0, p50: 0, p99: 0, max: 0 };
+    const s = w.a.slice().sort((x, y) => x - y), p = (q) => +s[Math.min(s.length - 1, Math.floor(s.length * q))].toFixed(2);
+    return { n: w.n, p50: p(0.5), p99: p(0.99), max: +s[s.length - 1].toFixed(2) };
+  };
+  const fensterAdd = (w, x) => { w.n++; if (w.a.length < 4000) w.a.push(x); };
+  function statNeu() { return { dauer: fensterNeu(), abstand: fensterNeu(), lag: fensterNeu(), letzteSendung: 0, seit: 0 }; }
+  function statAusgeben(raum, jetzt) {
+    const s = raum.stat;
+    if (!s || !opt.statistik) return;
+    if (!s.seit) { s.seit = jetzt; return; }
+    if (jetzt - s.seit < opt.statistik * 1000) return;
+    const sp = raum.spieler.filter(c => c.simNr >= 0).map(c => ({ leer: c.statLeer || 0, verworfen: c.verworfen || 0, q: fensterZu(c.statQ || fensterNeu()) }));
+    const zeile = { raum: raum.code, sek: +((jetzt - s.seit) / 1000).toFixed(1), tick: fensterZu(s.dauer), zustandAbstand: fensterZu(s.abstand), schleifenLag: fensterZu(s.lag), spieler: sp };
+    raum.statLetzte = zeile;
+    if (!opt.leise) console.log('STAT ' + JSON.stringify(zeile));
+    raum.stat = statNeu(); raum.stat.seit = jetzt;
+    for (const c of raum.spieler) { c.statLeer = 0; c.verworfen = 0; c.statQ = fensterNeu(); }
+  }
+
+  // --- Eingaben je Tick ---
+  const flankenAnwenden = (sim, c, e) => { if (e.r) sim.reset(c.simNr); if (e.i) sim.item(c.simNr); if (e.f) sim.freikaufen(c.simNr); };
+
+  /**
+   * v23 (Online-Ruckeln): Eingabe nach INDEX statt „eine Eingabe je Tick aus der Warteschlange“.
+   * Problem v22b: Kam in einem Tick keine Eingabe (Netz-Zittern, Burst), rechnete der Server den Wagen mit der alten Eingabe weiter, die Bestätigung (ack)
+   * blieb aber stehen → der Server stand danach „einen Schritt weiter“ als die Bestätigung sagt → die Vorhersage im Browser (Zustand + Replay ab ack) sprang
+   * je leerem Tick um einen Schritt (0,5–1 m bei 30–60 m/s) VORWÄRTS, und das spätere Kürzen der Warteschlange sprang wieder zurück.
+   * Jetzt: `erw` = Nummer der Eingabe, die in diesem Tick fällig ist; sie rückt mit JEDEM Tick um 1 vor (ack = erw, Server-Zustand und Bestätigung laufen
+   * im Gleichschritt). Liegt die fällige Eingabe nicht da, wird mit der letzten weitergerechnet (nur der INHALT weicht ab, nicht die Anzahl der Schritte);
+   * kommt sie später doch, ist sie überholt und wird verworfen (Item/Reset/Freikaufen-Flanken bleiben erhalten). Die Tiefe (Eingaben, die vorab bereitliegen)
+   * passt sich an: kommen in 0,5 s mindestens 3 Ticks mit überholten Eingaben (oder 3 leere Ticks) vor – das ist KEIN einmaliger Aussetzer (der wird
+   * einfach überbrückt), sondern ein Dauerzustand wie ein Gerät mit wenigen Bildern je Sekunde, das die Eingaben in Paketen schickt –, wächst das Ziel sofort um die
+   * größte Verspätung (höchstens 16 Ticks); die Pause dafür (`halten`) ist ein einmaliger Sprung der Vorhersage. 10 s ruhig → Ziel −1, dauerhaft Überschuss → eine
+   * Eingabe auslassen. Ganz neu ausrichten (Hintergrund-Tab, Paketstau): `erw = null`.
+   */
+  function eingabeTick(c, sim, jetzt) {
+    const q = c.eingaben;
+    if (!c.statQ) c.statQ = fensterNeu();
+    if (c.ziel === undefined) { c.ziel = 2; c.erw = null; c.fensterT = 0; c.leerFenster = 0; c.tiefeMin = Infinity; c.ruhe = 0; c.halten = 0; c.haltenT = 0; c.auslassen = false; c.spaetTicks = 0; c.spaetMax = 0; }
+    if (c.erw === null || c.erw === undefined) {
+      if (!q.length) { fensterAdd(c.statQ, 0); return; }
+      const neuest = q[q.length - 1].n;
+      c.erw = neuest - c.ziel + 1;                             // die letzten `ziel` Eingaben liegen bereit
+      c.fensterT = 0; c.leerFenster = 0; c.tiefeMin = Infinity;
+    }
+    if (c.halten > 0 && ++c.haltenT >= 6) {                    // Ziel wurde erhöht: jeder 6. Tick nimmt nichts (Tiefe wächst um 1; verteilt, damit die Vorhersage nicht auf einmal springt)
+      c.haltenT = 0; c.halten--;
+      fensterAdd(c.statQ, q.length);
+      return;
+    }
+    // überholte Eingaben (n < erw) verwerfen, Flanken sofort anwenden; Lücke > 3: neu ausrichten
+    let spaetL = 0, letzteN = -1;
+    while (q.length && q[0].n < c.erw) { spaetL = Math.max(spaetL, c.erw - q[0].n); letzteN = q[0].n; flankenAnwenden(sim, c, q[0]); q.shift(); c.verworfen = (c.verworfen || 0) + 1; }
+    if (spaetL) {
+      c.spaetTicks++; c.spaetMax = Math.max(c.spaetMax, spaetL);
+      // Der Strom hängt weit hinter der Fälligkeit (Fenster war > 0,3 s still, Aussetzer, Ruhezustand) und nichts Rechtzeitiges ist dabei: auf den Strom neu ausrichten,
+      // sonst wären ALLE späteren Eingaben ebenfalls „überholt“ und das Auto bliebe für immer unbedient. (Ein Aussetzer mit Burst danach hat rechtzeitige Eingaben dabei → kein Neuabgleich.)
+      if (!q.length && c.erw - letzteN > 8) { c.erw = letzteN + 1 - c.ziel; c.halten = 0; c.haltenT = 0; }
+    }
+    if (c.auslassen) {                                         // dauerhafter Überschuss: eine Eingabe auslassen (ack springt um 2)
+      c.auslassen = false;
+      if (q.length > 1 && q[0].n === c.erw) { flankenAnwenden(sim, c, q[0]); q.shift(); c.erw++; c.verworfen = (c.verworfen || 0) + 1; }
+    }
+    if (q.length && q[0].n > c.erw + 3) c.erw = q[0].n;
+    const e = q.length && q[0].n === c.erw ? q.shift() : null;
+    if (e) {
+      sim.eingabeSetzen(c.simNr, e.s); c.letzteEingabe = jetzt; c.warLeer = false;
+      flankenAnwenden(sim, c, e);
+    } else {
+      c.statLeer = (c.statLeer || 0) + 1;
+      if (!c.warLeer) c.leerFenster++;                           // gezählt wird jede neue Lücke, nicht jeder leere Tick (ein langer Aussetzer ist EIN Ereignis)
+      c.warLeer = true;
+      // Tab im Hintergrund: nach 0,7 s ohne Eingabe rollt das Auto ohne Gas (v22b: 0,3 s – ein Netz-Aussetzer von 0,3 s riss dann Lenkung und Gas weg:
+      // Auto in der Kurve geradeaus, Abweichung 3–4 m = harte Korrektur). Neue Browser schicken im Hintergrund selbst neutrale Eingaben.
+      if (jetzt - c.letzteEingabe > 700) sim.eingabeSetzen(c.simNr, { gas: 0, bremse: 0, lenkung: 0 });
+    }
+    c.ack = c.erw;                                             // dieser Tick deckt die Eingabe `erw` ab (echt oder gehalten)
+    c.erw++;
+    fensterAdd(c.statQ, q.length);
+    c.tiefeMin = Math.min(c.tiefeMin, q.length);
+    // Tiefe anpassen (alle 0,5 s)
+    if (++c.fensterT >= 30) {
+      if (c.halten > 0) { /* Ziel wird gerade erst erreicht: nicht noch einmal erhöhen */ }
+      else if (c.spaetTicks >= 3 || c.leerFenster >= 3) {
+        const neu = Math.min(16, c.ziel + Math.max(1, c.spaetMax));
+        if (neu > c.ziel) { c.halten = neu - c.ziel; c.ziel = neu; }
+        c.ruhe = 0;
+      } else if (++c.ruhe >= 20 && c.ziel > 2) { c.ziel--; c.ruhe = 0; }
+      if (c.tiefeMin !== Infinity && c.tiefeMin >= c.ziel + 2) {
+        if (c.tiefeMin >= 20) c.erw = null; else c.auslassen = true;     // riesiger Überschuss (Burst/Hintergrund): neu ausrichten
+      }
+      c.fensterT = 0; c.leerFenster = 0; c.tiefeMin = Infinity; c.spaetTicks = 0; c.spaetMax = 0;
+    }
+  }
+
+  /** v22b (nur Vergleich/Test: --eingabe-alt): eine Eingabe je Tick aus der Warteschlange, leere Ticks rechnen mit der alten Eingabe ohne ack. */
+  function eingabeTickAlt(c, sim, jetzt) {
+    // Warteschlange klein halten: war sie eine ganze Sekunde lang nie kürzer als 3 (Paketstau/Uhren-Drift über
+    // Mobilfunk), werden die überzähligen ältesten Eingaben verworfen (Item/Reset bleiben) → kein wachsender Verzug.
+    c.minQ = Math.min(c.minQ, c.eingaben.length);
+    if (++c.qTicks >= 60) {
+      if (c.minQ > 2 && c.minQ < Infinity) {
+        const weg = c.eingaben.splice(0, c.minQ - 2);
+        if (weg.some(x => x.i)) c.eingaben[0].i = true;
+        if (weg.some(x => x.r)) c.eingaben[0].r = true;
+        if (weg.some(x => x.f)) c.eingaben[0].f = true;
+        c.verworfen = (c.verworfen || 0) + weg.length;
+      }
+      c.minQ = Infinity; c.qTicks = 0;
+    }
+    if (!c.statQ) c.statQ = fensterNeu();
+    fensterAdd(c.statQ, c.eingaben.length);
+    const e = c.eingaben.shift();
+    if (!e) c.statLeer = (c.statLeer || 0) + 1;       // Statistik: dieser Tick lief ohne frische Eingabe
+    if (e) {
+      sim.eingabeSetzen(c.simNr, e.s); c.ack = e.n; c.letzteEingabe = jetzt;
+      flankenAnwenden(sim, c, e);
+    } else if (jetzt - c.letzteEingabe > 300) sim.eingabeSetzen(c.simNr, { gas: 0, bremse: 0, lenkung: 0 });   // Tab im Hintergrund
+  }
+
   // --- Spielschleife: alle Räume, fester Schritt 1/60 s mit Zeitakkumulator ---
   function tickRaum(raum, jetzt) {
     const sim = raum.sim;
@@ -436,6 +563,8 @@ function starten(opt) {
       log('Raum ' + raum.code + ': Rennen läuft');
     }
     if (raum.zustand !== 'rennen' || !sim) return;
+    if (!raum.stat) raum.stat = statNeu();
+    const tickStart = performance.now();
     raum.acc += Math.min(0.25, (jetzt - raum.letzteZeit) / 1000) * opt.tempo;
     raum.letzteZeit = jetzt;
     let schritte = 0;
@@ -443,26 +572,7 @@ function starten(opt) {
       raum.acc -= DT; schritte++;
       for (const c of raum.spieler) {
         if (c.simNr < 0) continue;
-        // Warteschlange klein halten: war sie eine ganze Sekunde lang nie kürzer als 3 (Paketstau/Uhren-Drift über
-        // Mobilfunk), werden die überzähligen ältesten Eingaben verworfen (Item/Reset bleiben) → kein wachsender Verzug.
-        c.minQ = Math.min(c.minQ, c.eingaben.length);
-        if (++c.qTicks >= 60) {
-          if (c.minQ > 2 && c.minQ < Infinity) {
-            const weg = c.eingaben.splice(0, c.minQ - 2);
-            if (weg.some(x => x.i)) c.eingaben[0].i = true;
-            if (weg.some(x => x.r)) c.eingaben[0].r = true;
-            if (weg.some(x => x.f)) c.eingaben[0].f = true;
-            c.verworfen = (c.verworfen || 0) + weg.length;
-          }
-          c.minQ = Infinity; c.qTicks = 0;
-        }
-        const e = c.eingaben.shift();
-        if (e) {
-          sim.eingabeSetzen(c.simNr, e.s); c.ack = e.n; c.letzteEingabe = jetzt;
-          if (e.r) sim.reset(c.simNr);
-          if (e.i) sim.item(c.simNr);
-          if (e.f) sim.freikaufen(c.simNr);
-        } else if (jetzt - c.letzteEingabe > 300) sim.eingabeSetzen(c.simNr, { gas: 0, bremse: 0, lenkung: 0 });   // Tab im Hintergrund
+        if (opt.eingabeAlt) eingabeTickAlt(c, sim, jetzt); else eingabeTick(c, sim, jetzt);
       }
       sim.schritt();
       const ev = sim.abholen();
@@ -473,6 +583,9 @@ function starten(opt) {
         for (const c of raum.spieler) if (an === null || an === undefined || c.simNr === an) senden(c.ws, text);
       }
       if (sim.tick % N.ZUSTAND_JE_TICKS === 0 || sim.fertig) {
+        const tS = performance.now();
+        if (raum.stat.letzteSendung) fensterAdd(raum.stat.abstand, tS - raum.stat.letzteSendung);
+        raum.stat.letzteSendung = tS;
         const gemeinsam = JSON.stringify(sim.zustand());
         const kopf = gemeinsam.slice(0, -1);
         for (const c of raum.spieler) {
@@ -484,10 +597,15 @@ function starten(opt) {
       if (sim.fertig) { ergebnisSenden(raum); break; }
     }
     if (raum.acc > DT * maxSchritte) raum.acc = 0;       // Server war zu langsam: nicht nachholen
+    if (raum.stat) { fensterAdd(raum.stat.dauer, performance.now() - tickStart); statAusgeben(raum, jetzt); }
   }
+  let schleifeLetzte = 0;
   const schleife = setInterval(() => {
     const jetzt = Number(process.hrtime.bigint() / 1000n) / 1000;
+    const lag = schleifeLetzte ? jetzt - schleifeLetzte : 0;
+    schleifeLetzte = jetzt;
     for (const raum of raeume.values()) {
+      if (lag && raum.stat && raum.zustand === 'rennen') fensterAdd(raum.stat.lag, lag);
       try { tickRaum(raum, jetzt); } catch (e) { console.error('Fehler in Raum ' + raum.code, e && e.stack); raumSchliessen(raum, 'fehler'); }
     }
   }, 4);
@@ -518,7 +636,9 @@ if (require.main === module) {
   const host = arg('host') || process.env.HOST || '0.0.0.0';
   const oeffentlich = arg('oeffentlich') || process.env.OEFFENTLICH || '';
   const steuerung = arg('steuerung') || '';       // Ordner für den Internet-Schalter (wunsch.json / status.json); ohne = aus
-  starten({ port, host, oeffentlich, steuerung }).then((s) => {
+  const statistik = Math.max(0, +(arg('statistik') || process.env.STATISTIK || 0)) || 0;   // v23: Sekunden zwischen den Tick-Statistik-Zeilen (0 = aus)
+  const eingabeAlt = process.argv.includes('--eingabe-alt');       // nur Vergleich/Test: v22b-Verhalten der Eingabe-Warteschlange
+  starten({ port, host, oeffentlich, steuerung, statistik, eingabeAlt }).then((s) => {
     const netz = [];
     for (const liste of Object.values(require('os').networkInterfaces())) {
       for (const a of liste || []) if (a.family === 'IPv4' && !a.internal) netz.push(a.address);

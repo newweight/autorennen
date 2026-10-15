@@ -736,6 +736,10 @@
       vp.setzen(p0.x, p0.z, p0.heading); vp.y = strecke.hoeheAn(p0.x, p0.z);
       this.puffer = new R.NetzPuffer();
       if (this.verb) this.verb.uhrNeu();
+      this.anz = new R.NetzAnzeige(this.verb, this.puffer);      // v23: gleichmäßiger Anzeige-Tick für die anderen Autos
+      this.takt = new R.NetzEingabeTakt();                       // v23: Eingabe-Schritte 1:1 zum Physikschritt
+      this._bildZeit = performance.now(); this._hintergrund = false; this._versteckt = 0;
+      this._wachpostenAn();
       this.n = 0; this.t0 = null; this.empfangen = false; this._letzteS = null; this.itemFlag = false; this.resetFlag = false; this.freikaufFlag = false;
       this.startTick = null; this.dynTick = 0; this._gestartet = false; this.warSonder = false;
       this.schattenListe = spiel.fahrzeuge.slice(0, this.nT).map(f => ({ vehicle: f.schatten, istSpieler: false }));
@@ -780,6 +784,7 @@
     rennenAbbauen() {
       const spiel = this.spiel;
       this.phase = null;
+      this._wachpostenAus();
       spiel.online = null;
       this.dialog = false; this.dialogEl.style.display = 'none';
       spiel.szeneAbbauen();
@@ -953,6 +958,8 @@
     physikSchritt(dt) {
       if (this.phase !== 'rennen') return;
       const spiel = this.spiel, fz = spiel.fahrzeuge, r = spiel.rennen, st = spiel.strecke, V = this.vorhersage;
+      this._bildZeit = performance.now();
+      if (this._hintergrund) this._zurueck(performance.now());
       spiel._physikZeit = (spiel._physikZeit || 0) + dt;
       for (let i = 0; i < fz.length; i++) {
         const v = fz[i].vehicle, a = fz[i].vorher;
@@ -969,11 +976,9 @@
       if (this.empfangen && this.verb) {
         // Eingaben im Echtzeit-Takt (60 je Sekunde), unabhängig von der Bildrate: langsame Geräte schicken pro
         // Bild mehrere Schritte nach, damit der Server (der in Echtzeit rechnet) nie ohne Eingabe dasteht.
-        const jetzt = performance.now() / 1000;
-        if (this.t0 === null) this.t0 = jetzt - DT;
-        let soll = Math.floor((jetzt - this.t0) / DT);
-        if (soll - this.n > 120) { this.t0 = jetzt - (this.n + 1) * DT; soll = this.n + 1; }   // > 2 s: Tab war im Hintergrund
-        for (let k = 0; this.n < soll && k < 40; k++) {
+        // v23: je Physikschritt genau EIN Eingabe-Schritt (NetzEingabeTakt); mehr nur zum Aufholen nach verworfener Zeit (langes Bild, Hintergrund).
+        const anzahl = this.takt.anzahl(performance.now() / 1000, DT, this.n);
+        for (let k = 0; k < anzahl; k++) {
           // Eingabe je Schritt: Pfeile ODER WASD (online fährt jeder allein); Touch mischt input.steuerung selbst ein
           let s = { gas: 0, bremse: 0, lenkung: 0 };
           if (!this.dialog) {
@@ -995,6 +1000,8 @@
         }
       }
       const tick = this.verb ? this.verb.serverTick() : null;
+      // v23: Anzeige-Tick der anderen Autos (gleichmäßig, adaptiver Verzug) – Akkumulator-Rest nach diesem Schritt = spiel.uhr.rest − dt
+      const anzTick = this.anz && tick !== null ? this.anz.schritt(Math.max(0, (spiel.uhr.rest || 0) - dt)) : null;
       // --- eigener Wagen ---
       if (!V.sonder) {
         if (this.warSonder) { this.warSonder = false; }
@@ -1036,15 +1043,15 @@
         }
       }
       v_letzte(mein.vehicle, sd);       // Motorton/Bremslicht
-      // --- andere Autos: 100 ms hinter dem Server interpolieren ---
-      if (tick !== null) {
-        const um = this.puffer.um(tick - N.INTERP_VERZUG / DT);
+      // --- andere Autos: hinter dem Server interpolieren (Verzug adaptiv ≥ 100 ms, hinter dem neuesten Zustand begrenzt extrapolieren) ---
+      if (tick !== null && anzTick !== null) {
+        const um = this.anz.um();
         if (um) {
           for (let i = 0; i < this.nT; i++) {
             if (i === this.du) continue;
             const f = fz[i], a0 = um.a.a[i], a1 = um.b.a[i];
             if (!a0 || !a1) continue;
-            const lp = R.NetzPuffer.interpolieren(a0, a1, um.t, f.vehicle);
+            const lp = this.anz.pose(i, f.vehicle);
             const rs = um.t > 0.5 ? a1[13] : a0[13];
             if (f.netRs !== rs) { f.netRs = rs; spiel._vorherAngleichen(f); }
             this._looping(f, lp);
@@ -1056,7 +1063,7 @@
             for (let k = 0; k < po.idx.length; k++) {
               const f = fz[po.idx[k]], a0 = um.a.po[k], a1 = um.b.po[k];
               if (!f || !a0 || !a1) continue;
-              R.NetzPuffer.interpolieren(a0, a1, um.t, f.vehicle);
+              this.anz.pose(k, f.vehicle, 'po');
               const rs = um.t > 0.5 ? a1[13] : a0[13];
               if (f.netRs !== rs) { f.netRs = rs; spiel._vorherAngleichen(f); }
               f.bremst = !!(a1[6] & 1);
@@ -1077,7 +1084,7 @@
       if (r.zustand === 'laeuft') r.zeit += dt;
       else if (r.zustand === 'countdown') r.countdown = Math.max(0, r.countdown - dt);
       // --- Optik: Bälle/Dinos/Strohballen und Pylonen wie beim Server (eigene Rechnung, nur Anzeige) ---
-      this._weltOptik(tick, dt);
+      this._weltOptik(anzTick === null ? tick : anzTick + N.INTERP_VERZUG / DT, dt);       // v23: Dynamik im Takt der Anzeige (Ziel unten: tick − 0,1 s)
       // Ping-Anzeige (2× je Sekunde)
       this._pingZeit -= dt;
       if (this._pingZeit <= 0 && this.pingEl && this.verb) {
@@ -1086,6 +1093,51 @@
         const text = '🌐 ' + (p === null ? '…' : Math.round(p)) + ' ms';
         if (this.pingEl._t !== text) { this.pingEl._t = text; this.pingEl.textContent = text; }
       }
+    }
+
+    // ---------- v23 (e): verdecktes / im Hintergrund laufendes Fenster ----------
+    // Chrome hält requestAnimationFrame an, sobald das Fenster verdeckt ist (macOS-Okklusion, anderer Tab, minimiert) und drosselt Timer des Fensters auf
+    // ca. 1 Hz. Die Eingaben werden aber im Physikschritt gesendet, der an requestAnimationFrame hängt → der Server bekäme keine Eingaben mehr (nach 0,3 s: Gas
+    // aus; beim Zurückkehren ein Burst). Ein Worker-Takt (Worker-Timer werden nicht gedrosselt) schickt dann im 60-Hz-Takt weiter NEUTRALE Eingaben (das
+    // Auto rollt gleichmäßig aus, wie es der Server ohnehin täte), und beim Zurückkehren erscheint ein Hinweis. Läuft requestAnimationFrame normal, tut der Takt nichts.
+    _wachpostenAn() {
+      if (this._wpWorker || typeof Worker === 'undefined' || typeof Blob === 'undefined') return;
+      try {
+        const url = URL.createObjectURL(new Blob(['setInterval(function(){postMessage(1)},16)'], { type: 'text/javascript' }));
+        this._wpWorker = new Worker(url);
+        URL.revokeObjectURL(url);
+        this._wpWorker.onmessage = () => this._hintergrundTakt();
+      } catch (e) { this._wpWorker = null; }       // ohne Worker (file://, Sandbox): wie bisher
+    }
+    _wachpostenAus() {
+      if (this._wpWorker) { try { this._wpWorker.terminate(); } catch (e) { /* egal */ } this._wpWorker = null; }
+      this._hintergrund = false;
+    }
+    _hintergrundTakt() {
+      if (this.phase !== 'rennen' || !this.empfangen || !this.verb || !this.vorhersage) return;
+      const jetzt = performance.now();
+      if (jetzt - this._bildZeit < (document.hidden ? 120 : 1500)) return;       // Bilder laufen normal (verdecktes Fenster: sofort einspringen; sichtbar: nur bei > 1,5 s Stillstand)
+      const N = R.Netz, DT = R.config.physik.schritt, r = this.spiel.rennen, meinT = r.teilnehmer[this.du];
+      if (!this._hintergrund) { this._hintergrund = true; this._versteckt = jetzt; }
+      const anzahl = this.takt.anzahl(jetzt / 1000, DT, this.n);
+      for (let k = 0; k < anzahl; k++) {
+        const sd = N.eingabeDekodieren(N.eingabeKodieren({ gas: 0, bremse: 0, lenkung: 0 }));
+        this._letzteS = sd;
+        this.n++;
+        const msg = { t: 'eingabe', n: this.n, g: 0, b: 0, l: 0 };
+        if (this.itemFlag) msg.i = 1;
+        if (this.resetFlag) msg.r = 1;
+        this.itemFlag = this.resetFlag = false;
+        this.verb.senden(msg);
+        this.vorhersage.schritt(this.n, sd, { countdown: r.zustand === 'countdown', imZiel: meinT.imZiel });
+      }
+    }
+    /** Erstes Bild nach dem Hintergrund: Posen angleichen, Hinweis zeigen. */
+    _zurueck(jetzt) {
+      this._hintergrund = false;
+      for (const f of this.spiel.fahrzeuge) this.spiel._vorherAngleichen(f);
+      if (this.anz) this.anz.neu();
+      if (jetzt - this._versteckt > 1000) { const hd = this.spiel.huds[0]; if (hd) hd.meldung('💤 Dieses Fenster war im Hintergrund – das Auto ist ausgerollt', 3000); }
     }
 
     /** Looping-Pose aus dem Server-Zustand (anzeigePose in main.js zeichnet dann den Kreis). */

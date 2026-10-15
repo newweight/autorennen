@@ -4,6 +4,17 @@ WebSocket unter **`/ws`** (gleiche Adresse wie das Spiel; `wss:` hinter HTTPS/Ta
 Jede Nachricht ist **ein JSON-Objekt** mit dem Typ in `t`. Gemeinsame Konstanten/Helfer: `src/net/protokoll.js`
 (`Rennspiel.Netz`, wird von Browser **und** Server geladen).
 
+**Nachtrag 15.10. (v23) – Online-Ruckeln (Protokoll-Version bleibt 4, Nachrichten und Felder UNVERÄNDERT, nur Verhalten):**
+- **Eingabe nach Index (Server):** Der Server rechnet jedes Auto jeden Tick genau einen Schritt. `ack` in `ich` heißt jetzt „dieser Zustand enthält alle Eingaben bis `ack`“ –
+  auch wenn die Eingabe `ack` nicht rechtzeitig da war: dann hat der Server mit der letzten Eingabe weitergerechnet und `ack` trotzdem um 1 erhöht; kommt die Eingabe
+  später, ist sie überholt und wird verworfen (Item/Reset/Freikaufen-Bits bleiben erhalten). v22b ließ `ack` bei leerem Tick stehen → die Vorhersage im Browser (Zustand + Replay
+  ab `ack`) sprang je leerem Tick um einen Schritt vorwärts, das spätere Kürzen der Warteschlange sprang zurück. Die Tiefe der vorab bereitliegenden Eingaben (Ziel 2 … 8)
+  passt sich an das Zittern an (≥ 2 leere Ticks in 0,5 s → +1, 10 s ruhig → −1). Ältere Browser sind kompatibel (sie senden dieselben Nachrichten und rechnen ab `ack` nach).
+- **Browser:** je Physikschritt genau ein `eingabe`-Schritt (nur zum Aufholen nach verworfener Zeit mehr), die Anzeige der anderen Autos läuft in gleichmäßigem Anzeige-Tick mit
+  adaptivem Verzug (≥ 100 ms) und begrenzter Extrapolation; verdecktes Fenster: neutrale Eingaben aus einem Worker-Takt (`src/net/online.js` `_hintergrundTakt`).
+- **Server-Statistik:** `node server/server.js --statistik 10` (oder `STATISTIK=10`) schreibt alle 10 s je Rennraum eine Zeile `STAT {…}` (Tick-Dauer, Abstand der Zustände, Schleifen-Verspätung,
+  je Mensch leere Ticks/verworfene Eingaben/Warteschlange) – nur Zahlen. `--eingabe-alt` schaltet für Vergleichsmessungen die v22b-Warteschlange ein.
+
 **Nachtrag 14.10. (v22) – Polizei freikaufen (additiv, Protokoll-Version bleibt 4):**
 - `geladen` darf `k` mitschicken: Münzen-Guthaben des Fahrers (Garage-Konto) als ganze Zahl; der Server klemmt auf 0 … 99999, alles andere (fehlt, negativ, Text, Kommazahl) zählt als 0.
 - `eingabe` darf `f: 1` mitschicken (Flanke wie `i`/`r`, nur die Zahl 1 gilt): „Polizei freikaufen“ (Doppeltipp Rückwärts am Gerät des Spielers). Der Server prüft **autoritativ**: nur wenn der Spieler gerade von der Polizei angehalten ist und das Rennen läuft, und das gemeldete Guthaben ≥ `config.polizei.freikaufKosten` (10) reicht; dann zieht er 10 vom Guthaben ab und beendet den Stopp im nächsten Tick (ohne „Weiterfahren!“-Meldung).
@@ -74,9 +85,8 @@ werden **deterministisch** erzeugt (Seed aus Strecke + Variante + Menge, ohne `M
 Wirkt nur in Welten mit Hindernis-Schichten (in „Klassisch“ ignoriert). `raumErstellen` darf den zuletzt gewählten Wert mitschicken.
 
 Eingaben sind ganze Zahlen (`Netz.eingabeKodieren`), damit Server und Vorhersage im Browser **genau** mit
-denselben Werten rechnen (`wert / 100`). Der Server verarbeitet je Tick (1/60 s) eine Eingabe je Spieler aus einer
-Warteschlange (> 20 gepuffert → die ältesten werden verworfen, Item/Reset-Flanken bleiben erhalten); kommt
-300 ms nichts (Tab im Hintergrund), rollt das Auto ohne Gas.
+denselben Werten rechnen (`wert / 100`). Der Server verarbeitet je Tick (1/60 s) die fällige Eingabe je Spieler (nach Folge-Nr, siehe Nachtrag v23; > 45 gepuffert → neu
+ausrichten, Item/Reset-Flanken bleiben erhalten); kommt 300 ms nichts (Tab im Hintergrund), rollt das Auto ohne Gas.
 
 ## Server → Browser
 

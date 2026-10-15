@@ -61,6 +61,7 @@
       this.polizeiRest = 0;        // v4: Rest der Polizei-Anhaltung (s), vom Server in ich.ps
       this.sonder = false;         // Server rechnet gerade allein (Looping, Flug, …)
       this.korr = { x: 0, z: 0, y: 0, h: 0, w: 0 };   // w = Looping-Winkel (rad), nur mit Looping-Vorhersage
+      this.tauKorr = 0.25;          // v23: Abklingzeit der Korrektur nach einem Abgleich (s); v22b: 0,12
       // v16: Sonderzustände lokal mitrechnen (opt.sonderVorhersage: false = v15 | true = Standard | { kleber, anlauf, flug, looping })
       const sv = opt.sonderVorhersage === false ? {} : (opt.sonderVorhersage && typeof opt.sonderVorhersage === 'object' ? opt.sonderVorhersage : SONDER_STANDARD);
       const st0 = opt.strecke || {};
@@ -336,7 +337,8 @@
 
     /** Korrektur abklingen lassen (je Schritt). */
     abklingen(dt) {
-      const k = Math.exp(-dt / 0.12), c = this.korr;
+      const O = R.NetzOptionen || {};
+      const k = Math.exp(-dt / (O.abgleich === false ? 0.12 : this.tauKorr)), c = this.korr;
       c.x *= k; c.z *= k; c.y *= k; c.h *= k; c.w *= k;
       if (Math.abs(c.x) + Math.abs(c.z) < 1e-4) { c.x = c.z = c.y = 0; }
       if (Math.abs(c.h) < 1e-5) c.h = 0;
@@ -378,6 +380,18 @@
       return { a: l[0], b: l[0], t: 0 };
     }
     leeren() { this.liste = []; }
+    /**
+     * v23: wie um(), aber hinter dem neuesten Zustand wird mit den letzten zwei Zuständen WEITERGEFAHREN (Extrapolation, t > 1) – höchstens
+     * maxExtra Ticks (Standard 15 = 0,25 s), danach bleibt das Auto stehen (t am Limit). Liefert extra: true, solange extrapoliert wird.
+     */
+    umE(tick, maxExtra) {
+      const l = this.liste, n = l.length;
+      if (n >= 2 && tick > l[n - 1].k) {
+        const a = l[n - 2], b = l[n - 1], d = b.k - a.k, lim = maxExtra === undefined ? 15 : maxExtra;
+        if (d > 0 && d <= 6) return { a, b, t: Math.min(tick - a.k, d + lim) / d, extra: true };
+      }
+      return this.um(tick);
+    }
   }
 
   /**
@@ -396,7 +410,108 @@
     return lb || null;
   }
 
+  /**
+   * v23: Eingabe-Takt. Wie viele Eingabe-Schritte (Senden + Vorhersage) gehören zu DIESEM Physikschritt?
+   * v22b: nach der Wanduhr (soll − n) → 0, 1 oder 2 Schritte je Physikschritt. Die Grafik (main.js frame) nimmt aber genau 1 Schritt je Physikschritt an
+   * und interpoliert vorher → jetzt mit alpha → bei 0/2 sprang der eigene Wagen um bis zu einen Schritt (≈ 0,5–1 m bei 30–60 m/s). Jetzt: normal genau 1;
+   * mehr nur, wenn Zeit verworfen wurde (langes Bild, Hintergrund) und der Rückstand zur Wanduhr > 3 Schritte ist – dann bis auf 2 aufholen,
+   * damit der Server (Echtzeit) nicht ohne Eingabe dasteht.
+   */
+  class NetzEingabeTakt {
+    constructor() { this.t0 = null; }
+    reset() { this.t0 = null; }
+    /** jetzt in s (performance.now()/1000), S = Schrittdauer, n = bisher gesendete Schritte. */
+    anzahl(jetzt, S, n) {
+      if (this.t0 === null) this.t0 = jetzt - S;
+      let soll = Math.floor((jetzt - this.t0) / S);
+      if (soll - n > 120) { this.t0 = jetzt - (n + 1) * S; soll = n + 1; }       // > 2 s: Tab war im Hintergrund
+      const rueck = soll - n, O = R.NetzOptionen || {};
+      if (O.eins === false) return Math.max(0, Math.min(40, rueck));
+      if (rueck > 3) return Math.min(40, rueck - 2);
+      if (-rueck > 6) return 0;                                                    // weit voraus (sollte nicht vorkommen): kurz warten
+      return 1;
+    }
+  }
+
+  /**
+   * v23: Anzeige der ANDEREN Autos (Menschen, Computer, Streifenwagen) aus dem Zustands-Puffer.
+   * v22b: Pose zur Wanduhr-Zeit des Aufrufs (100 ms hinter der Server-Uhr), kein Extrapolieren. Probleme: (1) die Grafik interpoliert je Physikschritt
+   * vorher → jetzt mit alpha, nimmt also gleichmäßig verteilte Schritte an – die Wanduhr-Proben liegen aber bei 0/2-Schritt-Bildern ungleichmäßig
+   * (zwei Schritte im selben Bild = dieselbe Pose, dann Sprung); (2) bei Zittern/Bursts ist der Puffer leer → Auto bleibt stehen, dann Sprung;
+   * (3) die Server-Uhr springt (Fenster-Maximum).
+   * Jetzt: schritt(restNach) liefert den Anzeige-Tick: er läuft pro Physikschritt um genau 1 Tick und wird nur sanft (Geschwindigkeit ±4 %/−8 %)
+   * zur Server-Uhr minus Verzug (verb.verzug(), adaptiv) nachgeführt; sein Ziel ist die Server-Uhr zum Ende DIESES Schritts (jetzt − Rest im Akkumulator).
+   * pose(i, v) interpoliert, hinter dem neuesten Zustand begrenzt extrapoliert, und übernimmt Sprünge (Extrapolations-Fehler, Stoß, Uhr) als weich
+   * abklingenden Versatz (τ 0,25 s), damit die gezeigte Bahn keinen Knick bekommt.
+   */
+  class NetzAnzeige {
+    constructor(verb, puffer) { this.verb = verb; this.puffer = puffer; this.neu(); }
+    neu() {
+      this.tick = null; this._um = null; this.d = null; this.g = [];
+      this.stat = { schritte: 0, extra: 0, leer: 0, snaps: 0, maxVerzug: 0, absorbiert: 0 };
+    }
+    /** Pro Physikschritt aufrufen (vor pose). restNach = Akkumulator-Rest NACH diesem Schritt (s). Rückgabe: Anzeige-Tick (Bruchzahl) oder null. */
+    schritt(restNach) {
+      const O = R.NetzOptionen || {}, S = R.config.physik.schritt, jetzt = this.verb.serverTick();
+      this._um = null;
+      if (jetzt === null) { this.tick = null; return null; }
+      const dz = this.verb.verzug() / S;
+      // Verzug (Ticks): wachsen schnell (bis 4 Ticks je Schritt-Sekunde), schrumpfen langsam (1 Tick/s) – Pufferschutz zuerst
+      if (this.d === null || O.adaptiv === false) this.d = dz;
+      else if (dz > this.d) this.d = Math.min(dz, this.d + 4 * S); else this.d = Math.max(dz, this.d - 1 * S);
+      const st = this.stat;
+      st.schritte++;
+      if (this.d * S > st.maxVerzug) st.maxVerzug = this.d * S;
+      if (O.pll === false) this.tick = jetzt - this.d;                                   // v22b: Wanduhr
+      else {
+        const ziel = jetzt - Math.max(0, restNach || 0) / S - this.d;
+        if (this.tick === null || Math.abs(ziel - this.tick) > 21) {                    // erster Wert / > 0,35 s daneben: springen
+          if (this.tick !== null) st.snaps++;
+          this.tick = ziel; this.g.length = 0;
+        } else this.tick += 1 + Math.max(-0.08, Math.min(0.04, (ziel - this.tick) * 0.02));
+      }
+      const neuest = this.puffer.neuester;
+      if (neuest && this.tick > neuest.k) { st.leer++; if (O.extra !== false) st.extra++; }
+      this._um = O.extra === false ? this.puffer.um(this.tick) : this.puffer.umE(this.tick);
+      return this.tick;
+    }
+    /** Die beiden Zustände (+Anteil) des aktuellen Anzeige-Ticks, wie NetzPuffer.um(); null ohne Daten. */
+    um() { return this._um; }
+    /** Pose von Auto i (Index in zustand.a) in v schreiben. Rückgabe: Looping-Daten wie NetzPuffer.interpolieren oder null. false = keine Daten für dieses Auto. */
+    pose(i, v, listeA) {
+      const um = this._um;
+      if (!um) return false;
+      const a0 = (listeA ? um.a[listeA] : um.a.a)[i], a1 = (listeA ? um.b[listeA] : um.b.a)[i];
+      if (!a0 || !a1) return false;
+      const lp = R.NetzPuffer.interpolieren(a0, a1, um.t, v);
+      const O = R.NetzOptionen || {};
+      if (O.glatt !== false) this._glatten((listeA ? listeA : 'a') + i, v);
+      return lp || null;
+    }
+    _glatten(id, v) {
+      const S = R.config.physik.schritt;
+      let g = this.g[id];
+      if (!g) { g = this.g[id] = { n: 0, sx: 0, sz: 0, sy: 0, sh: 0, dx: 0, dz: 0, dh: 0, ox: 0, oz: 0, oy: 0, oh: 0 }; }
+      const k = Math.exp(-S / 0.25);
+      if (g.n >= 2) {
+        const jx = v.x - (g.sx + g.dx), jz = v.z - (g.sz + g.dz), jump = Math.hypot(jx, jz);
+        const jh = R.Vehicle.winkelDiff(v.heading, g.sh + g.dh);
+        if (jump > 4 || Math.abs(jh) > 2) { g.ox = g.oz = g.oy = g.oh = 0; }            // Reset/Teleport/Looping-Wechsel: nicht verschmieren
+        else {
+          if (jump > 0.08) { g.ox -= jx; g.oz -= jz; this.stat.absorbiert++; }
+          if (Math.abs(jh) > 0.05) g.oh -= jh;
+        }
+      }
+      if (g.n >= 1) { g.dx = v.x - g.sx; g.dz = v.z - g.sz; g.dh = R.Vehicle.winkelDiff(v.heading, g.sh); }
+      g.sx = v.x; g.sz = v.z; g.sy = v.y; g.sh = v.heading; g.n++;
+      g.ox *= k; g.oz *= k; g.oh *= k;
+      v.x += g.ox; v.z += g.oz; v.heading += g.oh;
+    }
+  }
+
   R.NetzVorhersage = NetzVorhersage;
+  R.NetzEingabeTakt = NetzEingabeTakt;
+  R.NetzAnzeige = NetzAnzeige;
   R.NetzPuffer = NetzPuffer;
   R.NetzPuffer.interpolieren = interpolieren;
 })();

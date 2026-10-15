@@ -114,3 +114,17 @@ Ich plane, prüfe jeden Abschnitt (Code lesen, Node-Tests, Screenshot headless) 
 - 8 GB RAM: Browser + Spiel ok, aber keine anderen schweren Programme parallel
 - Rundenzeit 2 min für 5-Jährigen evtl. lang → Rundenzahl 1–2 wählen
 - Browser unbekannt (Safari/Chrome) → beide testen; Starter nutzt Standardbrowser
+
+## 15.10. Online-Ruckeln (v23, Agent Sonnet) – Plan/Fortschritt
+Sicherung: tests/sicherung_online_ruckeln_alt/ (server.js, simulation.js, PROTOKOLL.md, online.js, client.js, vorhersage.js, protokoll.js). Baseline-Kopie (ohne Fixes, mit Statistik) im Scratchpad.
+1. [x] Server-Tick messen (tests/messung_server_tick.js): Schritt p50 0,6–1,2 ms, p99 ≤ 6, max ≤ 13 ms (nur 1. Tick 60–90 ms JIT) → (c) Rechenzeit nicht die Ursache
+2. [x] Server-Statistik (--statistik s) eingebaut (verhaltensneutral)
+3. [x] Harness tests/test_netz_jitter.js (Proxy + 2 Node-Clients + Rahmenschleife wie main.js + Ruckel-Metrik)
+4. [x] Baseline messen je Profil; Hypothesen a/b/d/e einzeln
+5. [x] Fixes (Backup erst), Tests vorher/nachher, VERLAUF-Eintrag
+Zwischenstand (Befunde aus Harness, Baseline v22b, Wiese, 2 Clients + 5 KI):
+- Eigenes Auto: Anzahl V.schritt je Physikschritt hängt an der Wanduhr (soll−n) statt 1:1 → 0/2-Schritt-Muster, Grafik-alpha geht von 1 aus → Ruckeln auch ohne Netz-Jitter (A1)
+- Andere Autos: Pose zur Wanduhr-Zeit des Aufrufs statt Schrittzeit + fester Puffer 100 ms + kein Extrapolieren + Uhr = Max-Filter(2 s)+EMA 0,1 (springt) (A2)
+- Server: jede leere Warteschlange = Extra-Schritt ohne Ack → Vorhersage-Basis springt vorwärts, Trim springt rückwärts (B)
+Plan: A1 (Eingabe 1:1), A2 (Anzeige-Takt/PLL, adaptiver Puffer, Extrapolation, Kontinuitäts-Glättung), A3 (Abgleich weicher), B (Server Eingabe nach Index), E (Hintergrund-Hinweis + Eingabe-Pumpe). Schalter R.NetzOptionen für Vorher/Nachher je Hypothese.
+Erledigt 15.10.: alle Punkte, siehe VERLAUF.md.

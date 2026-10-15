@@ -65,5 +65,17 @@
     rund(x, n) { const f = Math.pow(10, n); return Math.round(x * f) / f; },
   };
 
+  // v23 (Online-Ruckeln): Schalter für die Glättungs-Maßnahmen. Alle an = Standard. NUR für Tests/Messung (tests/test_netz_jitter.js schaltet
+  // einzelne ab, um Vorher/Nachher je Ursache zu messen); im Spiel nie verändert.
+  R.NetzOptionen = {
+    eins: true,        // A1: je Physikschritt genau EINE Eingabe/Vorhersage (statt nach der Wanduhr 0/1/2) – nur bei zu großem Rückstand mehr (Aufholen)
+    uhrGlatt: true,    // A2: Server-Uhr: Fenster 4 s, träge nachgeführt (statt 2 s / 10 % je Zustand)
+    pll: true,         // A2: Anzeige-Tick läuft gleichmäßig (1 Tick je Physikschritt, nur sanft zur Server-Uhr nachgeführt) statt nach der Wanduhr
+    adaptiv: true,     // A2: Interpolationsverzug wächst mit der gemessenen Verspätung der Zustände (statt fest 100 ms)
+    extra: true,       // A2: Puffer leer → begrenzt weiterfahren (Extrapolation) statt stehen bleiben
+    glatt: true,       // A2: Sprünge der Fremd-Autos werden als weich abklingender Versatz übernommen
+    abgleich: true,    // A3: eigener Wagen: Korrekturen der Vorhersage klingen langsamer ab und werden in der Geschwindigkeit begrenzt
+  };
+
   R.Netz = Netz;
 })();

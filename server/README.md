@@ -105,3 +105,9 @@ localhost-Link – Gäste können aber auch einfach die trycloudflare-Adresse ö
 
 Technik: `server/PROTOKOLL.md` (Nachrichten), `ERWEITERN.md` (Abschnitt Mehrspieler), Tests:
 `node tests/test_netz.js`, `python3 tests/online_test.py`.
+
+## Server-Statistik (v23, bei Ruckeln im Online-Rennen)
+`node server/server.js --statistik 10` (oder Umgebungsvariable `STATISTIK=10`; im LaunchDaemon als zusätzliches Argument) schreibt alle 10 Sekunden je laufendem Rennraum eine Zeile
+`STAT {…}` ins Protokoll (nur Zahlen, keine Namen): `tick` = Dauer eines Schleifendurchgangs in ms (p50/p99/max; Soll ≪ 16,7), `zustandAbstand` = Abstand der Zustands-Sendungen
+(Soll 50 ms), `schleifenLag` = Abstand der Schleifenaufrufe (Soll ≈ 4 ms), je Mensch `leer` (Ticks ohne rechtzeitige Eingabe = Netz-Zittern des Spielers), `verworfen` (überholte Eingaben), `q` (Warteschlange).
+Große `tick`/`schleifenLag`-Werte = Server überlastet; große `leer`-Zahlen = Zittern auf dem Weg Browser → Server (Tailscale, WLAN).

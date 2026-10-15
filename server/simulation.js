@@ -46,7 +46,7 @@ let aktuell = null;      // Simulation, deren Schritt gerade läuft (Geister-Sch
  * Script-Dateien des Spiels in einen eigenen vm-Kontext laden (wie tests/lade.js, dazu ein document-Stub für
  * Canvas-Texturen). Auch für Tests nutzbar (z. B. eine „Browser-Seite“ ohne DOM für die Vorhersage).
  */
-function kontextLaden(dateien) {
+function kontextLaden(dateien, extra) {
   const leise = (...a) => { if (!String(a[0]).includes('deprecated')) console.warn(...a); };
   const sandbox = {
     console: { log: console.log, warn: leise, error: console.error, info: console.info },
@@ -54,6 +54,7 @@ function kontextLaden(dateien) {
     document: { createElement: () => ({ width: 0, height: 0, style: {}, getContext: () => nichts() }) },
     setTimeout, clearTimeout,
   };
+  if (extra) Object.assign(sandbox, extra);        // v23: Tests geben z. B. WebSocket mit (Netz-Client im Node-Kontext)
   sandbox.window = sandbox;
   sandbox.self = sandbox;
   sandbox.addEventListener = () => {};
