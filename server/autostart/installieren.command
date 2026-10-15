@@ -120,7 +120,7 @@ sudo "$TS" serve --bg --https=10000 http://127.0.0.1:8444 >/dev/null 2>&1 && ech
 for i in $(seq 1 30); do curl -s -o /dev/null http://localhost:8444/ && break; sleep 1; done
 echo ""
 if curl -s -o /dev/null http://localhost:8444/; then
-  echo "✅ Fertig. Server läuft als Benutzer „$U“ und startet nach jedem Neustart von selbst (auch ohne Anmeldung)."
+  echo "✅ Fertig. Server läuft als Benutzer „${U}“ und startet nach jedem Neustart von selbst (auch ohne Anmeldung)."
   echo "   Adresse (nur Geräte mit Tailscale): $ADRESSE"
   echo "   Freunde ohne Tailscale: im Spiel 🌐 Online → „Internet für Freunde“ (jedes Tailscale-Gerät) oder „🌐 Internet-Zugang AN.command“"
 else
