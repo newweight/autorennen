@@ -523,7 +523,7 @@ if (daten.welten) {
       st.hindernisse.length + ' von ' + katalogH);
     if (w === 'klassisch') {
       pruefe(pf + 'keine Hindernisse/Schichten, Breite konstant', st.hindernisse.length === 0 && st.wracks.length === 0 && st.schanzen.length === 0 &&
-        st.boostFelder.length === 0 && st.spuren.length === 0 && st.daten.baelle.length === 0 && [0, 500, 900, 2000].every(s => st.breiteBei(s) === st.breite));
+        st.boostFelder.length === 0 && st.spuren.length === 0 && st.daten.baelle.length === 0 && [0, 500, 900, 2000].every(s => st.breiteBei(s) === st.breite || st.gabelNah(s, 0)));   // v25: Gabelung (Dino 675–1025) zählt nicht als Spur
     }
     // strecke.daten zeigt nur aktive Listen (dynamik.js liest baelle/wasserstrahlen dort)
     const ok = Object.keys(listen).every((k) => {

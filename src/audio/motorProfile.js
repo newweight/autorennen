@@ -97,6 +97,10 @@
     formant: { hz: 300, db: 5, q: 1.1 }, cut0: 440, cut1: 750, cutGas: 450,
     turbo: 0.3, knallen: 0, pegel: 0.95,
   };
+  // 15.10. (v25): Verkehr – Krankenwagen (Multivan-Basis) und Abschleppwagen (Diesel-Lkw: tiefer Leerlauf, niedrige Drehzahl)
+  P.krankenwagen = Object.assign({}, P.multivan, { id: 'krankenwagen', name: 'Krankenwagen (Multivan-Basis)' });
+  P.abschleppwagen = Object.assign({}, P.multivan, { id: 'abschleppwagen', name: 'Abschleppwagen (Diesel-Lkw)', leerlauf: 650, rpmMax: 3200, rpmVmax: 2600, startRpm: 1500,
+    hoch: 1800, hochVoll: 2800, runter: 1000, pegel: 1.05, klopf: 3.6 });
 
   P['porsche-911'] = {
     id: 'porsche-911', name: 'Porsche 911 Carrera 3.0 Boxer', bauart: 'Boxer-6 Biturbo', zyl: 6, hubraum: 2981, ps: 394,

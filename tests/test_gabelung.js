@@ -1,5 +1,5 @@
-// Gabelung (14.10., v18): node tests/test_gabelung.js [wiese|wueste]
-// Wiese + Wüste: die doppelspurige Straße teilt sich in zwei einspurige Äste mit Insel und führt wieder zusammen (trackBuilder.js, Kopfkommentar).
+// Gabelung (14.10., v18): node tests/test_gabelung.js [wiese|wueste|dino]
+// Wiese + Wüste + Dino (15.10. v25): die doppelspurige Straße teilt sich in zwei einspurige Äste mit Insel und führt wieder zusammen (trackBuilder.js, Kopfkommentar).
 // Prüft: Katalog (Lage, Länge, Sperrzonen aller Listen, alle Welten + XL), Äste (Längenunterschied, Krümmungsradius), Abfrage (Untergrund
 // auf Ästen / Rand / Insel, nahtloser Übergang an Y-Spitze und Zusammenführung, Bande), keine Abkürzung über die Insel (Autos quer über
 // die Insel bei 20–75 m/s), beide Äste fahrbar (KI mit erzwungenem Ast, Checkpoints + Runden), KI nutzt beide Äste (je Runde Wechsel),
@@ -14,13 +14,13 @@ const dt = R.config.physik.schritt;
 const nurId = process.argv[2];
 let fehler = 0;
 function pruefe(name, ok, info) { console.log((ok ? 'OK   ' : 'FEHL ') + name + (info ? '  (' + info + ')' : '')); if (!ok) fehler++; }
-const IDS = ['wiese', 'wueste'].filter((i) => !nurId || nurId === i);
+const IDS = ['wiese', 'wueste', 'dino'].filter((i) => !nurId || nurId === i);
 const katalog = (id) => R.trackCatalog.find((t) => t.id === id);
 const f1 = (x) => (Math.round(x * 10) / 10);
 
 // ---------------------------------------------------------------- A: Katalog
 for (const daten of R.trackCatalog) {
-  const soll = daten.id === 'wiese' || daten.id === 'wueste';
+  const soll = ['wiese', 'wueste', 'dino'].includes(daten.id);
   if (!nurId) pruefe(`[${daten.id}] Gabelung im Katalog: ${soll ? 'ja' : 'nein'}`, (daten.gabelungen || []).length === (soll ? 1 : 0));
 }
 const VARIANTEN = (id) => [''].concat(Object.keys(katalog(id).varianten || {}));
@@ -93,7 +93,7 @@ for (const id of IDS) {
     // 2) nahtlos: die befahrbare Breite ist 1 m vor und 1 m hinter der Y-Spitze / Zusammenführung gleich (volle Straße)
     ok = true; info = '';
     for (const [sv, sn] of [[g.s0 - 1.5, g.s0 + 1.5], [g.s1 + 1.5, g.s1 - 1.5]]) {
-      for (let q = -st.breite / 2 - rb - 1; q <= st.breite / 2 + rb + 1; q += 0.25) {
+      for (let q = -st.breite / 2 - rb - 1 + 0.05; q <= st.breite / 2 + rb + 1; q += 0.25) {   // v25: +0,05 m, damit das Raster nicht genau auf die Straßenkante (Dino: 8,00 m) fällt
         const a = abfr(sv, q).untergrund, b = abfr(sn, q).untergrund;
         const abs = (u) => u === 'gras' || u === 'sand', gleich = abs(a) === abs(b);   // Randstein/Asphalt zwischen den Ästen an der Spitze egal, Gras/Sand muss gleich sein
         if (!gleich) { ok = false; info = `q ${q.toFixed(2)}: ${a} → ${b} (s ${f1(sv)} → ${f1(sn)})`; }
@@ -299,7 +299,7 @@ for (const id of IDS) {
 
 // ---------------------------------------------------------------- I: andere Strecken ohne Gabelung, Welten unverändert
 for (const daten of R.trackCatalog) {
-  if (nurId || daten.id === 'wiese' || daten.id === 'wueste') continue;
+  if (nurId || ['wiese', 'wueste', 'dino'].includes(daten.id)) continue;
   const st = new R.Strecke(daten, { welt: Object.keys(daten.welten)[0] });
   pruefe(`[${daten.id}] keine Gabelung, breiteBei/grenzeBei/abfrage ohne Ast-Felder`, st.gabelungen.length === 0 && st.abfrage(st.spline.punkte[3].x, st.spline.punkte[3].z).ast === undefined && st.gabelC(10) === 0);
 }

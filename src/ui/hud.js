@@ -117,7 +117,7 @@
     }
 
     /** Karte + Punkte für alle Autos zeichnen (Umriss kommt fertig aus dem Offscreen-Canvas). */
-    zeichnen(teilnehmer, eigener, polizei) {
+    zeichnen(teilnehmer, eigener, polizei, verkehr) {
       const g = this.ctx, k = this.karte, dpr = this.dpr, farben = R.config.ui.spielerFarben;
       g.clearRect(0, 0, this.canvas.width, this.canvas.height);
       g.drawImage(k.canvas, 0, 0);
@@ -131,6 +131,11 @@
       teilnehmer.forEach((t) => { if (!t.istSpieler) punkt(t, 3.5, KI_FARBE); });
       // Runde 5b: Streifenwagen blau blinkend (polizei = Liste von Vehicles, .blink = Phase)
       if (polizei) for (let j = 0; j < polizei.length; j++) punkt({ vehicle: polizei[j] }, 4.5, polizei.blink ? '#d6e2ff' : '#2a5cff');
+      // 15.10. (v25): Verkehr – Geisterfahrer rot blinkend, Krankenwagen weiß, Abschleppwagen orange (verkehr = Liste { vehicle, art }, .blink = Phase)
+      if (verkehr) for (let j = 0; j < verkehr.length; j++) {
+        const a = verkehr[j].art;
+        punkt(verkehr[j], a === 'geisterfahrer' ? 5 : 4.5, a === 'geisterfahrer' ? (verkehr.blink ? '#ffd0d0' : '#ff2a2a') : a === 'krankenwagen' ? '#ffffff' : '#ffa21a');
+      }
       teilnehmer.forEach((t, i) => { if (t.istSpieler && t !== eigener) punkt(t, 4.5, farben[i] || '#fff'); });
       if (eigener) {
         const i = teilnehmer.indexOf(eigener);
@@ -364,6 +369,29 @@
       }
     }
 
+    /** 15.10. (v25): Verkehr – Geisterfahrer-Warnung („⚠️ Geisterfahrer voraus!“, ~150 m vorher) und Punkte auf der Minimap. */
+    verkehrSetzen(verkehr, index) {
+      this.verkehr = verkehr || null;
+      this.verkehrIndex = index;
+      if (!this.verkehr) { if (this.eVerkehr) setzeAnzeige(this.eVerkehr, false); return; }
+      if (!this.eVerkehr) {
+        const e = document.createElement('div');
+        e.className = 'hud-geisterfahrer';
+        Object.assign(e.style, { position: 'absolute', left: '50%', top: '24%', transform: 'translateX(-50%)', whiteSpace: 'pre', textAlign: 'center',
+          fontSize: '2.3em', fontWeight: '900', color: '#fff', padding: '.25em .9em', borderRadius: '1em', border: '.08em solid #fff',
+          background: 'rgba(210,25,25,.93)', pointerEvents: 'none', display: 'none', textShadow: '0 .06em .12em rgba(0,0,0,.4)' });
+        this.el.appendChild(e);
+        this.eVerkehr = e;
+      }
+    }
+
+    _verkehrAnzeigen() {
+      const w = this.verkehr.warnung(this.verkehrIndex), e = this.eVerkehr;
+      setzeText(e, w ? w.text + '\n' + Math.max(0, Math.round(w.abstand / 10) * 10) + ' m' : '');
+      setzeAnzeige(e, !!w);
+      if (w) e.style.opacity = (Math.floor(performance.now() / 250) % 2) ? '1' : '.72';
+    }
+
     _polizeiAnzeigen() {
       const a = this.polizei.anzeige(this.polizeiIndex), e = this.ePolizei;
       let text = '';
@@ -547,7 +575,8 @@
       if (this.polizei && this.ePolizei) this._polizeiAnzeigen();
       if (f && f.dachL && R.DachRegel) this._dachAnzeigen(r, t, f.dachL);   // 15.10. (v24): Cabrio-Dach bei Regen
       if (this.pickups && this.eItem) this._itemAnzeigen();
-      if (this.minimap) this.minimap.zeichnen(r.teilnehmer, t, this.polizei ? this.polizei.minimapPunkte() : null);
+      if (this.verkehr && this.eVerkehr) this._verkehrAnzeigen();
+      if (this.minimap) this.minimap.zeichnen(r.teilnehmer, t, this.polizei ? this.polizei.minimapPunkte() : null, this.verkehr ? this.verkehr.minimapPunkte() : null);
       if (this.cockpit) this.cockpit.update();
     }
 

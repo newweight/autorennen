@@ -25,6 +25,9 @@
       tempoKlasse: c.tempoKlasseStandard || 'normal',
       // Runde 5b: Polizei (Streifenwagen hält an, world/polizei.js), Standard aus
       polizei: !!(c.polizei && c.polizei.standardAn),
+      // 15.10. (v25): Verkehr – Geisterfahrer (3 je Runde, fahren entgegen) und Krankenwagen/Abschleppwagen (world/verkehr.js), Standard aus
+      geisterfahrer: !!(c.verkehr && c.verkehr.geisterfahrerStandardAn),
+      verkehr: (c.verkehr && c.verkehr.stufen && c.verkehr.stufen[c.verkehr.verkehrStandard]) ? c.verkehr.verkehrStandard : 'aus',
       // Runde 6 (W1-A4): Rempeln 'sanft' (nur Abstoßung, wie bisher) | 'echt' (Drehen, Abdrängen), Standard sanft
       rempeln: (c.kollision && c.kollision.rempeln && c.kollision.rempeln.standard) === 'echt' ? 'echt' : 'sanft',
       // Runde 6 (W2-D): Tageszeit 'tag' (Standard, Licht wie bisher) | 'daemmerung' | 'nacht'
@@ -67,6 +70,8 @@
       schaden: r.schaden === true,
       tempoKlasse: c.tempoKlassen && c.tempoKlassen[r.tempoKlasse] ? r.tempoKlasse : std.tempoKlasse,
       polizei: typeof r.polizei === 'boolean' ? r.polizei : std.polizei,
+      geisterfahrer: typeof r.geisterfahrer === 'boolean' ? r.geisterfahrer : std.geisterfahrer,
+      verkehr: c.verkehr && c.verkehr.stufen && c.verkehr.stufen[r.verkehr] ? r.verkehr : std.verkehr,
       rempeln: r.rempeln === 'echt' || r.rempeln === 'sanft' ? r.rempeln : std.rempeln,
       tageszeit: c.tageszeit && c.tageszeit[r.tageszeit] ? r.tageszeit : std.tageszeit,
       kollisionen: r.kollisionen === true,                // W5 Stufe 2 (nur online genutzt)
@@ -265,6 +270,7 @@
       if (this.werkstatt) { this.werkstatt.zerstoeren(); this.werkstatt = null; }
       if (this.schaden) { this.schaden.zerstoeren(); this.schaden = null; }
       if (this.polizei) { this.polizei.zerstoeren(); this.polizei = null; }   // Runde 5b: Blaulicht-Lichter, Sirene
+      if (this.verkehr) { this.verkehr.zerstoeren(); this.verkehr = null; }    // 15.10. (v25)
       this.huds.forEach(h => h.zerstoeren());
       this.huds = [];
       const autoMeshes = new Set(this.fahrzeuge.map(f => f.mesh));
@@ -292,6 +298,7 @@
       this.rennen = null; this.strecke = null; this.ergebnis = null;
       this.stoesse = [];
       if (R.Audio) { R.Audio.motorAlleEntfernen(); R.Audio.bremsen(false); }
+      if (R.Publikum) R.Publikum.stop();   // 15.10. (v25)
     }
 
     /** Nur die Strecke samt Deko und Himmel aufbauen (Menühintergrund und Rennen). */
@@ -317,6 +324,13 @@
       }
       // Strecke + Deko bewegen sich nie: Instanzen in Regionen teilen (Culling je Kamera), Matrizen einfrieren
       this.szene.add(R.themes.statischVorbereiten(strecke.bauen()));
+      // 15.10. (v25): Zuschauertribünen (world/tribuenen.js) – VOR der Deko eintragen (dekoSperre), eigene Gruppe mit 3 Meshes
+      this.tribuenenGruppe = null;
+      if (R.Tribuenen) {
+        R.Tribuenen.einbauen(strecke);
+        const tg = R.Tribuenen.bauen(strecke);
+        if (tg) { this.szene.add(tg); this.tribuenenGruppe = tg; }
+      }
       const deko = R.themes.dekoBauen(daten.thema, strecke, this.wetter ? this.wetter.jahreszeit : undefined);
       // Runde 6 (W1-A5): Bäume/Felsen/Büsche zwischen Straße und Zaun als Kollider (nur Physik)
       if (R.Kollisionen.pflanzenSammeln) R.Kollisionen.pflanzenSammeln(strecke, deko);
@@ -423,6 +437,7 @@
         spieler: zwei ? 2 : 1, autoIds: e.autoIds, fahrer: e.fahrer, gegner: gegnerE, runden: rundenE,
         schwierigkeit: e.schwierigkeit, fahrhilfe: e.fahrhilfe, schaden: e.schaden === true, tempoKlasse: e.tempoKlasse,
         polizei: e.polizei === true && !elim,
+        geisterfahrer: e.geisterfahrer === true && !elim, verkehr: elim ? 'aus' : (e.verkehr || 'aus'),    // 15.10. (v25)
         elimination: elim ? { zuschauerSekunden: CE.zuschauerSekunden === undefined ? 6 : CE.zuschauerSekunden } : null,   // W3-F
         upgradesZaehlen: e.upgradesZaehlen !== false,      // W3-G
       });
@@ -440,14 +455,15 @@
       this.huds.forEach((h, i) => h.itemSetzen && h.itemSetzen(this.pickups, this.fahrzeuge.findIndex(f => f.istSpieler && f.spielerNr === i), i));   // W3-H
       // Runde 5b: Polizei-Anzeige (Stopp-Countdown) + Streifenwagen auf der Minimap
       this.huds.forEach((h, i) => h.polizeiSetzen && h.polizeiSetzen(this.polizei, i));
+      this.huds.forEach((h, i) => h.verkehrSetzen && h.verkehrSetzen(this.verkehr, i));   // 15.10. (v25): Geisterfahrer-Warnung + Minimap
       this.huds.forEach((h) => h.muenzenSetzen && h.muenzenSetzen(this.muenzen ? 0 : null));   // Runde 6 (W3-G): 🪙 0
       // Ton: Motoren je Auto, Ereignisse
       if (R.Audio) {
         const A = R.Audio; this._tonCd = -1;
         this.fahrzeuge.forEach((f, i) => A.motorAnlegen(i, { spieler: f.istSpieler, auto: f.auto }));   // 14.10. (v21): Klangprofil je Auto (src/audio/motorProfile.js)
         this.rennen.bei('start', () => A.countdown(0));
-        this.rennen.bei('runde', (t) => { if (t.istSpieler && t.runde < this.rennen.runden) A.runde(); });
-        this.rennen.bei('ziel', (t) => { if (t.istSpieler) A.ziel(t.zielPlatz); });
+        this.rennen.bei('runde', (t) => { if (t.istSpieler && t.runde < this.rennen.runden) { A.runde(); if (R.Publikum) R.Publikum.ereignis('runde'); } });
+        this.rennen.bei('ziel', (t) => { if (t.istSpieler) { A.ziel(t.zielPlatz); if (R.Publikum) R.Publikum.ereignis('ziel'); } });
       }
       this.zustand = 'rennen';
       this.uhr.rest = 0;
@@ -704,13 +720,16 @@
       }
       // 14.10. (v18): sichtbarer Abschleppwagen + Werkstatt neben der Fahrbahn – nur mit Schaden „an“ (online/Server: gar nicht geladen)
       this.abschlepp = null; this.werkstatt = null;
-      if (this.schaden && this.schaden.an) {
-        if (R.Abschleppwagen) this.abschlepp = new R.Abschleppwagen(strecke, this.fahrzeuge, this.schaden, this.szene);
+      // 15.10. (v25): config.werkstatt.nurMitSchaden = false → Werkstatt steht auch bei „Schaden aus“ (Kulisse + Asphalt, ohne Heilung); Standard true wie bisher
+      const werkKulisse = !!(R.config.werkstatt && R.config.werkstatt.nurMitSchaden === false);
+      if ((this.schaden && this.schaden.an) || werkKulisse) {
+        if (R.Abschleppwagen && this.schaden && this.schaden.an) this.abschlepp = new R.Abschleppwagen(strecke, this.fahrzeuge, this.schaden, this.szene);
         if (R.Werkstatt) {
-          const w = new R.Werkstatt(strecke);
+          const w = R.Werkstatt.fuer ? R.Werkstatt.fuer(strecke) : new R.Werkstatt(strecke);   // v25: Megastrecke (> 6 km) bekommt zwei
           if (w.vorhanden) {
             const gr = w.bauen();
             if (gr) this.szene.add(gr);
+            if (w.freiraeumen) w.freiraeumen(this.szene);     // v25: Bäume im Weg (nur wenn die Platzsuche keine freie Stelle fand)
             w.bei((e) => this._werkstattEreignis(e));
             this.werkstatt = w;
           }
@@ -723,6 +742,12 @@
         this.polizei = new R.Polizei(this);
         this.polizei.einsetzen(strecke, opt.spieler + opt.gegner, opt.gegner);
         this.polizei.vorkompilieren(this.renderer, this.szene, this.menueKamera);
+      }
+      this.verkehr = null;
+      if ((opt.geisterfahrer === true || (opt.verkehr && opt.verkehr !== 'aus')) && R.Verkehr && !opt.elimination) {   // 15.10. (v25)
+        this.verkehr = new R.Verkehr(this);
+        this.verkehr.einsetzen(strecke, opt.spieler + opt.gegner, { geister: opt.geisterfahrer === true, stufe: opt.verkehr || 'aus' });
+        this.verkehr.vorkompilieren(this.renderer, this.szene, this.menueKamera);
       }
       // Runde 6 (W3-G): Münzen auf der Fahrbahn (nur im Rennen, jede Welt; keine Physik – nur Einsammeln)
       this.muenzen = null;
@@ -897,7 +922,9 @@
       if (this.schaden && this.schaden.an) this.schaden.update(this.pausiert || this.zustand === 'menue' ? 0 : dt);
       if (this.abschlepp) this.abschlepp.update(this.pausiert ? 0 : dt);                      // 14.10. (v18): Abschleppwagen/Kran überschreibt die Mesh-Pose des Wracks
       if (this.werkstatt) this.werkstatt.animieren(this._physikZeit || 0, this.fahrzeuge);   // Schild/Lampe der Werkstatt
+      if (this.strecke && this.strecke.tribuenen && this.strecke.tribuenen.length && R.Tribuenen) R.Tribuenen.animieren(this.strecke, this._physikZeit || 0, this.pausiert ? 0 : dt);   // 15.10. (v25): Zuschauer wippen/jubeln, Fahnen wehen
       if (this.polizei) this.polizei.animieren(this._physikZeit || 0);   // Runde 5b: Blaulicht
+      if (this.verkehr) this.verkehr.animieren(this._physikZeit || 0);   // 15.10. (v25): Blaulicht Krankenwagen, Rundumleuchte, Lichthupe
       if (this.tunnelLichter) this._tunnelLichterAktualisieren();
       const t2 = performance.now();
       if (R.Audio) this.tonAktualisieren(dt);
@@ -973,6 +1000,8 @@
       const stumm = !(this.zustand === 'rennen' || (this.zustand === 'online' && this.online && this.online.phase === 'rennen')) || this.pausiert;
       if (stumm !== this._tonStumm) { this._tonStumm = stumm; A.motorStumm(stumm); }
       if (this.polizei) this.polizei.ton(stumm);   // Runde 5b: Sirene (Pause/Menü: aus)
+      if (R.Publikum) R.Publikum.aktualisieren(this, dt, stumm || !r);   // 15.10. (v25): Publikum an den Tribünen (audio/publikum.js; Jubel steuert auch die Zuschauer-Animation)
+      if (this.verkehr) this.verkehr.ton(stumm);   // 15.10. (v25): Sirene Krankenwagen, Hupe Geisterfahrer
       if (!r || stumm) return;
       const z = r.countdownZahl;
       if (z !== this._tonCd) { this._tonCd = z; if (z > 0) A.countdown(z); }
@@ -1240,9 +1269,10 @@
       const strecke = this.strecke, rennen = this.rennen;
       const countdown = !!rennen && !rennen.gasErlaubt;
       const schaden = this.schaden && this.schaden.an ? this.schaden : null;
-      const werkstatt = schaden && this.werkstatt ? this.werkstatt : null;     // 14.10. (v18): nur mit Schaden an
+      const werkstatt = this.werkstatt || null;     // 14.10. (v18): nur mit Schaden an (v25: bei nurMitSchaden=false auch als Kulisse; Heilung/KI prüfen `schaden` selbst)
       const pickups = this.pickups;
       const polizei = this.polizei;      // Runde 5b (null = aus → alles wie vorher)
+      const verkehr = this.verkehr || null;   // 15.10. (v25)
       const rempeln = this.einstellungen && this.einstellungen.rempeln === 'echt' ? 'echt' : 'sanft';   // Runde 6
       // Fortschritt der Spieler für das Gummiband der KI
       const tn = rennen ? rennen.teilnehmer : [];
@@ -1272,6 +1302,7 @@
         const fahrer = f.driver || f.autopilot || f.polizeiFahrer;       // Computerfahrer (KI, Autopilot, Polizei)
         if (schaden && schaden.gesperrt(i)) s = { gas: 0, bremse: 1, lenkung: 0 };
         else if (polizei && polizei.gesperrt(i)) s = polizei.haltSteuerung(v);   // Runde 5b: von der Polizei angehalten
+        else if (f.verkehr) { s = verkehr ? verkehr.steuerung(i, dt) : s; }   // 15.10. (v25): Geisterfahrer/Krankenwagen/Abschleppwagen
         else if (f.polizei) { if (polizei) s = polizei.steuerung(i, dt, rennen); }   // Runde 5b: Streifenwagen
         else if (f.istSpieler && tn[i] && tn[i].imZiel) s = { gas: 0, bremse: v.vLaengs > 0.3 ? 0.6 : 0, lenkung: 0 };   // im Ziel: ausrollen (v23: nur bremsen, solange es vorwärts rollt – sonst fuhr es nach dem Stand rückwärts)
         else if (f.istSpieler && f.spielerNr >= 0 && !f.autopilot) s = this.input.steuerung(f.spielerNr);
@@ -1280,7 +1311,7 @@
         else if (fahrer && rennen) {
           const t = tn[i];
           // andere = alle Teilnehmer (die KI überspringt ihr eigenes Fahrzeug selbst)
-          umgebung.andere = polizei ? polizei.andereFuer(tn) : tn; umgebung.spielerFortschrittMax = spielerMax;
+          umgebung.andere = verkehr ? verkehr.andereFuer(polizei ? polizei.andereFuer(tn) : tn, true) : (polizei ? polizei.andereFuer(tn) : tn); umgebung.spielerFortschrittMax = spielerMax;
           umgebung.eigenerFortschritt = t.fortschritt; umgebung.laeuft = rennen.gasErlaubt;
           umgebung.rempeln = rempeln;   // Runde 6: KI ab profi darf bei 'echt' gezielt rempeln
           s = fahrer.steuerung(dt, umgebung);
@@ -1488,6 +1519,7 @@
           for (let i = 0; i < bandeSt.length; i++) if (bandeSt[i] > 0) fang(i, 'bande', bandeSt[i]);
           for (let k = 0; k < this.stoesse.length; k++) { const st = this.stoesse[k]; fang(st.a, 'auto', st.staerke); fang(st.b, 'auto', st.staerke); }
         }
+        if (verkehr) for (let k = 0; k < this.stoesse.length; k++) this.stoesse[k].faktor = verkehr.schadenFaktor(this.stoesse[k]);   // 15.10. (v25): Krankenwagen 3× Schaden
         schaden.stoesseAuswerten({ bande: bandeSt, auto: this.stoesse, hindernis: hs, dynamik: ds || [], pflanzen: ps });
         schaden.schritt(dt);
         if (werkstatt && (!rennen || rennen.gasErlaubt)) werkstatt.schritt(dt, this.fahrzeuge, schaden, rennen);   // 14.10. (v18): +15 %/s im Stand
@@ -1496,7 +1528,7 @@
       // --- 10. Pickups: zuerst geplatzte Schilde dieses Schritts melden (schritt() leert die Liste), dann Felder/Kugeln
       //         (erst ab Rennfreigabe – kein Turbo im Countdown) ---
       if (pickups && (!rennen || rennen.gasErlaubt)) {
-        const pfz = polizei ? polizei.rennListe : this.fahrzeuge;   // Runde 5b: Polizei sammelt nichts ein
+        const pfz = polizei ? polizei.rennListe : verkehr ? verkehr.rennListe : this.fahrzeuge;   // Runde 5b: Polizei sammelt nichts ein
         for (let k = 0; k < pickups.geplatzt.length; k++) {
           const g = pickups.geplatzt[k];
           this._meldung(g.nr, 'Schild weg! 💥', 1000);
@@ -1569,6 +1601,7 @@
           if (f.istSpieler && !f.autopilot && f.spielerNr >= 0 && this.input.rueckwaertsDoppel(f.spielerNr) && rennen.gasErlaubt && polizei.gesperrt(i)) this.polizeiFreikaufen(i);
         }
       }
+      if (verkehr && rennen) verkehr.schritt(dt, rennen.gasErlaubt);   // 15.10. (v25): Auftritte, Spurwechsel, Hupe
       if (polizei && rennen) polizei.schritt(dt, rennen.gasErlaubt);   // Runde 5b: Ziel, Nähe, Anhalten, Freigabe
       if (rennen) rennen.schritt(dt);
       if (rennen && strecke && strecke.kreuzungen && strecke.kreuzungen.length) this._abbiegenPruefen();   // 13.10. (v16): falsch abgebogen

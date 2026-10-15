@@ -341,10 +341,14 @@ Rennspiel.config = {
   werkstatt: {
     prozentProSekunde: 15,
     steheTempo: 1.0,           // m/s – darunter gilt ein Auto als stehend
-    laenge: 13, breite: 6.4,   // m – Parkfläche (längs × quer), zwei Boxen hintereinander
+    laenge: 35, breite: 6.4,   // m – Parkfläche (längs × quer); 15.10. (v25) von 13 auf 35 m („Zone deutlich länger“, Wunsch des Vaters), 4 Boxen
+    zweiteAb: 6000,           // m – Strecken länger als das (Megastrecke ≈ 8 km) bekommen eine zweite Werkstatt gegenüber der ersten (Heil-Regel „1× je Runde“ gilt für beide zusammen)
+    boxLaenge: 9,              // m – Richtwert je Box (Anzahl Boxen = Länge / boxLaenge, mindestens 2)
+    zufahrt: 18, ausfahrt: 10, // m – weicher Asphalt-Keil vor/hinter der Fläche (Straßenrand → Fläche), Untergrund ohne Gras-Bremsen
     randAbstand: 1.4,          // m Gras zwischen Randstreifen und Parkfläche
-    gebaeudeTiefe: 5.5, gebaeudeBreite: 12, gebaeudeHoehe: 4.4,
-    sucheAb: 70, sucheFenster: 36, maxKruemmung: 0.0022, hindernisAbstand: 8, sperrAbstand: 40,
+    gebaeudeTiefe: 5.5, gebaeudeBreite: 31, gebaeudeHoehe: 4.4,   // Halle so lang wie die Fläche (höchstens laenge − 2)
+    nurMitSchaden: true,       // true (Standard, wie bisher): Werkstatt gibt es nur bei Einstellung „Schaden an“; false: steht auch bei „Schaden aus“ (Kulisse, ohne Wirkung)
+    sucheAb: 85, maxKruemmung: 0.0022, hindernisAbstand: 8, sperrAbstand: 40,
     kiUnter: 40, kiBis: 100, kiMaxWarten: 9, kiVorlauf: 90, kiTempo: 22, kiBremse: 6,
     melden: 60,                // m vor der Einfahrt: HUD-Hinweis „Werkstatt voraus“ (nur Spieler mit Schaden)
   },
@@ -374,6 +378,38 @@ Rennspiel.config = {
     haarnadelWinkel: 130, haarnadelKmh: 80, leitpfeilAbstand: 24,
     mastKollision: true,       // 14.10. (v21): der dünne Mast ist ein festes Hindernis (strecke.saeulen, auch im Server); nur der Mast, nicht das Schild
     mastRadius: 0.12,          // m
+  },
+
+  // --- 15.10. (v25): Zuschauertribünen (src/world/tribuenen.js) auf Wiese, Wüste, Fantasie (+ deren Abschnitte der Megastrecke) ---
+  // „Baue noch Zuschauertribünen bei Wüste, Wiese, Fantasie, ungefähr 5 je Strecke, auch in Kurven, dort wo Zuschauertribünen sind auch mit Akustik.“
+  // Je Strecke ~anzahl (5; lange Strecken bis anzahlMax): 1 am Start/Ziel, mindestens kurvenMin an Kurven-Außenseiten, Rest auf Geraden.
+  // Lage hinter der Bande (abstandBande m), nie in Sperrzonen. an: false schaltet Tribünen UND Publikum-Akustik ab.
+  tribuenen: {
+    an: true,
+    themen: ['wiese', 'wueste', 'fantasie'],     // Strecken-Themen mit Tribünen (Megastrecke: nur diese Abschnitte)
+    anzahl: 5, refLaenge: 3300, anzahlMin: 5, anzahlMax: 8, megaMin: 2,   // Anzahl = anzahl × Länge / refLaenge (mindestens anzahlMin, höchstens anzahlMax)
+    kurvenAnteil: 0.4, kurvenMin: 2, kurveWinkelMin: 35,                 // Kurventribünen: Anteil, Mindestzahl, Mindest-Kurvenwinkel (°)
+    laenge: [30, 40], reihen: [5, 8],            // m / Sitzreihen
+    reiheTiefe: 0.9, reiheHoehe: 0.5, vorne: 1.6, hinten: 1.4,
+    abstandBande: 3.0,                           // m hinter der Bande (Sicherheitsabstand)
+    abstandMin: 130, abstandWelt: 70,            // m Mindestabstand zweier Tribünen (entlang s / Luftlinie)
+    maxHang: 2.2,                                // m größter Höhenunterschied der Standfläche
+    sperre: 14, sperreHindernis: 6,              // m Abstand zu Tunnel/Brücke/Überführung/Kreuzung/Gabelung/Looping/Schanze bzw. Hindernissen
+    dekoAbstand: 4,                              // m: Pflanzen/Felsen/Deko halten diesen Abstand zur Tribüne
+    kollision: true, kollisionRadius: 1.9,       // feste Säulen entlang der Vorderkante (strecke.saeulen, auch im Server)
+    zuschauer: { an: true, dichte: 0.85 },       // Anteil besetzter Plätze
+    fahnen: true, text: 'JONAS HOT STEERING WHEEL',
+    jubelAbklingen: 1.6,                         // s: Zuschauer-Jubel klingt ab (Optik)
+    // Akustik (WebAudio-Synthese, src/audio/publikum.js): Rauschen/Murmeln, Klatschen, „Ohhh“-Formant; Lautstärke nach Abstand, links/rechts
+    akustik: {
+      an: true, stimmen: 3,                      // gleichzeitig hörbare Tribünen (nächste zuerst)
+      hoerweite: 170, nah: 30,                   // m: ab hoerweite stumm, bis nah voll
+      pegel: 0.55,                               // Gesamtlautstärke des Publikums
+      grund: 0.5,                                // Grundrauschen (Anteil von pegel) bei voller Nähe
+      jubelNah: 65, jubelPause: 5, jubelMinTempo: 9,   // Vorbeifahrt: Jubel ab so nah (m), Pause je Tribüne (s), ab Tempo (m/s)
+      ueberholen: true, ziel: true,              // Extra-Jubel bei Überholmanövern (Platz verbessert) und Zieleinlauf/Runde
+      takt: 0.1,                                 // s: Aktualisierungs-Takt (CPU)
+    },
   },
 
   // --- Runde 6 (W1-A3/A4/A5): Kollisionen Auto↔Auto, Rempeln, Pflanzen (Logik: src/physics/collisions.js) ---
@@ -660,6 +696,38 @@ Rennspiel.config = {
     lichtAbstand: 40,            // m: PointLights nur so nah an einer Spieler-Kamera
     lichtStaerke: 30, lichtReichweite: 14,
     sireneHoerweite: 120,        // m: Lautstärke linear bis 0
+  },
+
+  // --- 15.10. (v25): Verkehr auf der Strecke (Einstellungen `geisterfahrer` aus/an und `verkehr` aus/wenig/viel, beide Standard AUS – damit alles
+  //     wie bisher bleibt; Logik + Optik: src/world/verkehr.js). Die Wagen sind – wie die Streifenwagen – Einträge hinter den Teilnehmern in
+  //     spiel.fahrzeuge (f.polizei = true: kein Rennen, keine Pickups, kein Schaden für sie selbst) mit f.verkehr = { art, ... }.
+  //     Geisterfahrer: je Runde (= Runde des Führenden) 3 Wagen (Auto aus dem Katalog in Fremdfarbe), die ENTGEGEN der Fahrtrichtung die Strecke
+  //     entlangfahren (Spline-Folgen, weicher Spurwechsel, kein Ausweichen), mit Licht + Hupe/Lichthupe; Warnung im HUD ab warnAbstand m.
+  //     Krankenwagen (Multivan-Basis): in Fahrtrichtung, zügig, Blaulicht; Kontakt kostet schadenFaktor × den normalen Auto-Schaden.
+  //     Abschleppwagen: in Fahrtrichtung, langsam – bewegliches Hindernis. Fahrstrecken: nur freie Abschnitte (keine Loopings, Schanzen,
+  //     Tunnel, Brücken, Überführungen, Kreuzungen, Spur-Engstellen, Start/Ziel); Gabelung: Ast wird gewählt.
+  verkehr: {
+    geisterfahrerStandardAn: false,
+    verkehrStandard: 'aus',
+    stufen: {
+      aus:   { name: 'Aus',   krankenwagen: 0, abschleppwagen: 0 },
+      wenig: { name: 'Wenig', krankenwagen: 1, abschleppwagen: 1 },
+      viel:  { name: 'Viel',  krankenwagen: 2, abschleppwagen: 2 },
+    },
+    geister: { anzahl: 3, tempo: 21, tempoSchwankung: 3, warnAbstand: 150, spurWechselAb: 70, spurWechselBis: 170, wechselLaenge: 45,
+      routeMax: 700, routeMin: 260, hupeAbstand: 110 },
+    krankenwagen: { tempo: 34, schadenFaktor: 3, autoId: 'krankenwagen', spurQ: 0.28 },
+    abschleppwagen: { tempo: 9.5, spurQ: 0.3, hoerweite: 110 },
+    // gemeinsam
+    sperrVor: 45, sperrNach: 45,          // m Sicherheitsrand um Sperrzonen (Tunnel, Brücken, Überführungen, Kreuzungen, Spur-Engstellen)
+    loopingVor: 140, loopingNach: 70,     // Anlauf vor Looping/Schanze + Auslauf
+    schanzeVor: 140, schanzeNach: 40,
+    startFrei: 220, zielFrei: 120,        // m nach Start/Ziel nichts spawnen (Startaufstellung)
+    freiAbstand: 130,                     // m: so nah darf beim Erscheinen kein Teilnehmer / keine Kamera sein (kein Auftauchen vor der Nase)
+    spawnVorAnderen: 260,                 // m: Krankenwagen/Abschleppwagen erscheinen so weit vor dem Führenden (und mind. freiAbstand von allen)
+    wiederkehr: [4, 12],                  // s Pause bis zum nächsten Auftritt (Krankenwagen/Abschleppwagen)
+    lichtAbstand: 45,                     // m: Lichtkegel/Blaulicht-Schein nur so nah an einer Spieler-Kamera
+    blinkHz: 3,
   },
 
   // --- Runde 6 (W3-G): Münzen auf der Strecke + Garage (Logik: src/world/muenzen.js, src/ui/garage.js) ---

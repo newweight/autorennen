@@ -23,8 +23,8 @@ const MODULE = [
   'vendor/three.min.js',
   'src/config.js', 'src/physics/vehicle.js', 'src/physics/collisions.js', 'src/physics/schaden.js', 'src/cars/carCatalog.js', 'src/cars/dachregel.js',
   'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/looping.js', 'src/track/schanze.js',
-  'src/track/anlauf.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
-  'src/world/kleber.js', 'src/world/polizei.js', 'src/race/raceManager.js', 'src/race/startBoost.js', 'src/ai/driver.js', 'src/net/protokoll.js',
+  'src/track/anlauf.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/tribuenen.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
+  'src/world/kleber.js', 'src/world/polizei.js', 'src/world/verkehr.js', 'src/race/raceManager.js', 'src/race/startBoost.js', 'src/ai/driver.js', 'src/net/protokoll.js',
   'src/track/megastrecke.js',   // v22: Megastrecke (Add-on, nach Wetter/Themen/Strecke geladen)
   'src/main.js',
 ];
@@ -72,7 +72,12 @@ function laden() {
   R = kontextLaden(MODULE);
   // Geister-Modus (Stufe 1): Auto↔Auto aus, solange die laufende Simulation keine Kollisionen will
   const K = R.Kollisionen, autoAuto = K.autoAuto, loopingAbstand = K.loopingAbstand;
-  K.autoAuto = function (liste, opt) { return aktuell && !aktuell.kollisionen ? [] : autoAuto.call(this, liste, opt); };
+  // v25 (15.10., Verkehr): auch im Geister-Modus stoßen Teilnehmer mit Verkehrswagen (Geisterfahrer, Krankenwagen, Abschleppwagen), nie untereinander
+  K.autoAuto = function (liste, opt) {
+    if (!aktuell || aktuell.kollisionen) return autoAuto.call(this, liste, opt);
+    if (!aktuell.sim || !aktuell.sim.verkehr) return [];
+    return autoAuto.call(this, liste, Object.assign({}, opt, { paarNur: (a, b) => !!((a && a.verkehr) || (b && b.verkehr)) }));
+  };
   if (loopingAbstand) K.loopingAbstand = function (liste, st) { return aktuell && !aktuell.kollisionen ? undefined : loopingAbstand.call(this, liste, st); };
   return R;
 }
@@ -99,6 +104,9 @@ function einstellungenPruefen(roh, spielerAnzahl) {
     schaden: false,                       // Stufe 1: online immer aus
     kollisionen: r.kollisionen === true,  // Stufe 2 (nicht im Menü): Auto↔Auto an
     polizei: r.polizei === true,          // v4 (14.10.): Streifenwagen (nur ein echtes true schaltet ihn an)
+    // v25 (15.10., additiv): Verkehr – Geisterfahrer (true/false) und Krankenwagen/Abschleppwagen ('aus'|'wenig'|'viel'); alte Clients senden es nicht → aus
+    geisterfahrer: r.geisterfahrer === true,
+    verkehr: c.verkehr && c.verkehr.stufen && typeof r.verkehr === 'string' && Object.prototype.hasOwnProperty.call(c.verkehr.stufen, r.verkehr) ? r.verkehr : 'aus',
     // 12.10. Hindernis-Menge: nur 'normal' | 'viele' | 'sehrViele' (unbekannt, Zahl, null … → 'normal'); alle Browser bauen dieselbe Strecke
     hindernisMenge: c.hindernisMenge && c.hindernisMenge.stufen && typeof r.hindernisMenge === 'string' &&
       Object.prototype.hasOwnProperty.call(c.hindernisMenge.stufen, r.hindernisMenge) ? r.hindernisMenge : ((c.hindernisMenge && c.hindernisMenge.standard) || 'normal'),
@@ -131,6 +139,7 @@ class Simulation {
     // Wracks in die Hindernisliste (hindernisseBauen), nachts Laternenmasten als Säulen
     strecke.tempoKlasse = e.tempoKlasse;
     if (R.Kurvenschilder) R.Kurvenschilder.einbauen(strecke, e.tempoKlasse);   // 14.10. (v21): Schild-Masten als feste Säulen (wie im Browser)
+    if (R.Tribuenen) R.Tribuenen.einbauen(strecke);   // 15.10. (v25): Zuschauertribünen als feste Säulen (wie im Browser)
     R.Kollisionen.pflanzenSammeln(strecke, R.themes.dekoBauen(daten.thema, strecke, wetter.jahreszeit));
     if (R.Kollisionen.wracksEinbauen) R.Kollisionen.wracksEinbauen(strecke);
     const tz = wetter.tz, thema = R.themes[daten.thema] || R.themes.wiese;
@@ -205,7 +214,8 @@ class Simulation {
     // Sie sind Einträge hinter den Teilnehmern in sim.fahrzeuge (f.polizei = true); zustand() meldet sie getrennt (`po`, `ps`, `pz`).
     this.nT = teilnehmer.length;
     sim.polizei = null;
-    if (e.polizei && R.Polizei) {
+    const verkehrAn = R.Verkehr && (e.geisterfahrer || e.verkehr !== 'aus');
+    if ((e.polizei && R.Polizei) || verkehrAn) {
       sim.fahrzeugHinzufuegen = function (auto, x, z, heading) {     // kopflos: kein Mesh, keine Szene
         const vehicle = new R.Vehicle(auto.fahrwerte, { tempoKlasse: e.tempoKlasse });
         vehicle.setzen(x, z, heading);
@@ -215,9 +225,18 @@ class Simulation {
         this.fahrzeuge.push(eintrag);
         return eintrag;
       };
-      sim.polizei = new R.Polizei(sim);
-      sim.polizei.einsetzen(strecke, teilnehmer.length, G);
-      sim.polizei.idx.forEach((i) => { sim.fahrzeuge[i].netReset = 0; });
+      if (e.polizei && R.Polizei) {
+        sim.polizei = new R.Polizei(sim);
+        sim.polizei.einsetzen(strecke, teilnehmer.length, G);
+        sim.polizei.idx.forEach((i) => { sim.fahrzeuge[i].netReset = 0; });
+      }
+    }
+    // v25 (15.10.): Verkehr online – der Server simuliert Geisterfahrer/Krankenwagen/Abschleppwagen autoritativ (src/world/verkehr.js), Einträge HINTER der Polizei
+    sim.verkehr = null;
+    if (verkehrAn) {
+      sim.verkehr = new R.Verkehr(sim);
+      sim.verkehr.einsetzen(strecke, teilnehmer.length, { geister: e.geisterfahrer, stufe: e.verkehr });
+      sim.verkehr.idx.forEach((i) => { sim.fahrzeuge[i].netReset = 0; });
     }
     // Reset-Zähler (Clients interpolieren nicht über einen Sprung hinweg)
     const zurueck = sim.zuruecksetzen, zurAnlauf = sim._zurAnlauf;
@@ -336,6 +355,9 @@ class Simulation {
       for (let i = 0; i < this.nT; i++) { const rest = po.logik.rest(i); if (rest > 0) ps.push([i, rd(rest, 2)]); }
       if (ps.length) z.ps = ps;
     }
+    // v25 (15.10., additiv): vk[k] = Verkehrswagen k (Geisterfahrer, Krankenwagen, Abschleppwagen in dieser Reihenfolge) im Format von `a` mit 14 Zahlen;
+    // flags: 1 bremst · 2 aktiv (sonst geparkt/unsichtbar) · 4 Lichthupe. Fehlt, wenn kein Verkehr eingestellt ist.
+    if (sim.verkehr) z.vk = sim.verkehr.zustandKodieren();
     if (pu) {
       z.pu = {
         k: pu.kugeln.map(k => (k.da ? 1 : 0)).join(''), f: pu.faesser.map(k => (k.da ? 1 : 0)).join(''),

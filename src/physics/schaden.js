@@ -179,13 +179,15 @@
      * Treffer für Fahrzeug i. art: bande|auto|hindernis|brand|ball|wasser|stroh, staerke in m/s.
      * @returns {number} verlorene Prozentpunkte (0 = kein Abzug: aus, Abklingzeit, zu schwach, liegengeblieben)
      */
-    treffer(i, art, staerke, zuschlag) {
+    treffer(i, art, staerke, zuschlag, faktor) {
       if (!this.zaehlt(i, art, staerke)) return 0;
       const z = this.z[i], C = cfg();
       // Runde 6: eigene Verluste je Art (config.schaden.verluste: bande/pflanze −3 %), zuschlag = z. B. Drehung +3
       const vj = (C.verluste || {})[art];
-      const verlust = (art === 'brand' ? wert(C.brandVerlust, 10) : wert(vj, wert(C.trefferVerlust, 5))) + (zuschlag || 0);
+      let verlust = (art === 'brand' ? wert(C.brandVerlust, 10) : wert(vj, wert(C.trefferVerlust, 5))) + (zuschlag || 0);
       const vorher = z.punkte;
+      // 15.10. (v25): Verkehr – Krankenwagen-Kontakt kostet faktor× (Standard 1 = wie bisher)
+      if (faktor > 1) verlust = verlust * faktor;
       z.abkling = wert(C.abklingZeit, 0.7);
       this._punkteSetzen(i, vorher - verlust);
       this._melden('treffer', i);
@@ -200,6 +202,7 @@
     zaehlt(i, art, staerke) {
       if (!this.an) return false;
       const z = this.z[i];
+      if (this.fahrzeuge && this.fahrzeuge[i] && this.fahrzeuge[i].verkehr) return false;   // 15.10. (v25): Verkehrswagen nehmen keinen Schaden (sie werden nie zu Wracks)
       if (!z || z.liegengeblieben || z.rep || z.abkling > 0 || z.punkte <= 0) return false;   // Reparatur: Auto steht, keine Treffer
       const min = (cfg().mindest || {})[art];
       return (staerke || 0) >= wert(min, 0);
@@ -232,8 +235,8 @@
       // Runde 6: Rempler mit Drehung (s.dreht[0] = a, [1] = b) kostet zusätzlich drehungVerlust (3 %) im selben Treffer
       const dz = wert(cfg().drehungVerlust, 3);
       (st.auto || []).forEach((s) => {
-        this.treffer(s.a, 'auto', s.staerke, s.dreht && s.dreht[0] ? dz : 0);
-        this.treffer(s.b, 'auto', s.staerke, s.dreht && s.dreht[1] ? dz : 0);
+        this.treffer(s.a, 'auto', s.staerke, s.dreht && s.dreht[0] ? dz : 0, s.faktor);
+        this.treffer(s.b, 'auto', s.staerke, s.dreht && s.dreht[1] ? dz : 0, s.faktor);
       });
       (st.pflanzen || []).forEach((s) => { if (s.typ === 'baum') this.treffer(s.nr, 'pflanze', s.staerke); });   // Busch: kein Schaden
       (st.hindernis || []).forEach((s) => this.treffer(s.nr, s.typ === 'brand' ? 'brand' : 'hindernis', s.staerke));

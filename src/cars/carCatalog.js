@@ -361,6 +361,36 @@ window.Rennspiel = window.Rennspiel || {};
     }));
   })();
 
+  // 15.10. (v25): Krankenwagen (Rettungswagen) = Multivan-Geometrie (Katalogeintrag 'multivan' bleibt unverändert), weiß mit roter Flanke,
+  // leuchtgelb-roter Warnmarkierung (Battenburg-Muster, DIN-Stil), „RETTUNGSDIENST“-Schriftzug (Canvas-Textur) und Blaulicht-Balken; Dach etwas höher.
+  //   form.rettungDekor: Battenburg-Streifen in die Karosserie (Seiten + Heck), form.dekorText: Schriftzug-Text des Dekor-Meshes.
+  // Nicht wählbar, kein Computer-Gegner – setzt nur das Spiel ein (world/verkehr.js).
+  (function () {
+    const mv = katalog.find((a) => a.id === 'multivan');
+    katalog.push(Object.assign({}, mv, {
+      id: 'krankenwagen',
+      name: 'Krankenwagen',
+      marke: 'Einsatzwagen', modell: 'Rettungswagen (Multivan-Basis)',
+      farbe: 0xf4f5f2, farbe2: 0xd4141c, farbeName: 'Weiß mit roter Flanke und Warnmarkierung',
+      waehlbar: false,
+      abmessungen: Object.assign({}, mv.abmessungen, { hoehe: 2.12 }),      // leicht höheres Dach (Multivan 1,97 m)
+      optionen: { lichtbalken: true },
+      form: Object.assign({}, mv.form, {
+        kontrastdach: false, schriftzug: null, schriftzug2: null, heckDeko: null, seitenDeko: null, seitenLinie: null,
+        flankenStreifen: { 2: 'farbe2' }, fensterRahmen: 'schwarz', felgeFarbe: 0xc2c7cd,
+        rettungDekor: true, dekorText: 'RETTUNGSDIENST', polizeiDekor: true, blaulicht: true,
+      }),
+      // Fahrwerte wie der Multivan (Wertebereiche der Katalog-Tests), nur schwerer (Ausrüstung) und etwas kräftiger – das Tempo im Spiel regelt
+      // world/verkehr.js (config.verkehr.krankenwagen.tempo), nicht die Höchstgeschwindigkeit.
+      fahrwerte: {
+        vMax: 220 / 3.6, beschleunigung: 5.0, bremsen: 18, rueckwaertsMax: 7,
+        wendigkeit: 1.6, grip: 0.85, masse: 2450, laenge: 4.90, breite: 1.90,
+      },
+      beschreibung: 'Der Krankenwagen hat Blaulicht und Vorfahrt – Vorsicht, wer ihn berührt!',
+      generischerName: 'Krankenwagen',
+    }));
+  })();
+
   // 14.10. (v20): Computer-Gegner nur aus den 4 Modellen mit der guten Optik (Passat, Multivan, 911, T-Roc), bunt gemischt:
   //   R.carCatalog.gegnerAutos(anzahl, { seed, spielerIds }) → Array abgeleiteter Katalogeinträge (Katalogeintrag selbst unverändert):
   //   Object.assign({}, auto, { optionen: { dach, lack, farbe } }) – gleiche id/Fahrwerte, nur Optik (carBuilder.bauen liest auto.optionen).

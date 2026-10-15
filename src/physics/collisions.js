@@ -277,6 +277,9 @@
       for (let i = 0; i < n; i++) {
         for (let j = i + 1; j < n; j++) {
           const A = autos[i], B = autos[j];
+          // 15.10. (v25): optionaler Paarfilter (Online-Geistermodus: nur Paare mit Verkehrswagen stoßen) – ohne opt.paarNur wie bisher
+          if (opt.paarNur && !opt.paarNur(fahrzeugListe[i], fahrzeugListe[j])) continue;
+          if (A.verkehrWagen && B.verkehrWagen) continue;      // 15.10. (v25): Verkehrswagen (Geisterfahrer/Krankenwagen/Abschleppwagen) stoßen nicht untereinander
           // Auto im Looping (track/looping.js) oder im Flug über eine Schanze (track/schanze.js): keine Auto-Auto-Stöße
           if (A.imLooping || B.imLooping || A.imFlug || B.imFlug) continue;
           // W4-I: übereinander (Überführung, |Δy| ≥ hoeheTrennung, Standard 2 m) → keine Berührung

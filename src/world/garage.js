@@ -65,6 +65,10 @@
       if (k === 'gabelungen' || SONDER.has(k)) return;
       d[k].forEach(e => dazu(e, 20));
     });
+    // v25: Zonen anderer Module (Tribünen, Verkehr …): strecke.tribuenen / strecke.sperrzonen / strecke.sperrzonenExtern = [{ s0, s1 } | { s }] – großzügig meiden
+    ['sperrzonen', 'sperrzonenExtern'].forEach((k) => { if (Array.isArray(strecke[k])) strecke[k].forEach(e => dazu(e, 12)); });
+    // Tribünen (world/tribuenen.js: { s (Mitte), laenge }): ganze Länge + 12 m frei lassen (Standfläche liegt hinter der Bande, Zuschauer/Fahnen davor)
+    (strecke.tribuenen || []).forEach((t) => { if (t && typeof t.s === 'number') liste.push({ s0: t.s - (t.laenge || 30) / 2 - 12, s1: t.s + (t.laenge || 30) / 2 + 12 }); });
     void sp;
     return liste;
   }
@@ -91,25 +95,36 @@
     if (!strecke || !strecke.spline) return null;
     const C = Object.assign({}, cfg(), optionen || {});
     const sp = strecke.spline, Ls = sp.laenge;
-    const laenge = wert(C.laenge, 13), fensterStd = wert(C.sucheFenster, 36);
+    const laenge = wert(C.laenge, 35);
+    const zufahrt = wert(C.zufahrt, 18), ausfahrt = wert(C.ausfahrt, 10);
     const b = strecke.breite / 2, rb = strecke.randBreite || 2;
-    const qA = b + rb + wert(C.randAbstand, 0.4);
+    const qE = b + rb;                                      // Kante des Randstreifens (Anfang des Asphalt-Keils)
+    const qA = qE + wert(C.randAbstand, 0.4);
     const koll = strecke.pflanzenKollider || [];
-    const gebB = wert(C.gebaeudeBreite, 12);
+    const gebB = Math.min(wert(C.gebaeudeBreite, 31), laenge - 2);
+    // Feste Säulen (Schildmasten, Warnlichter, Laternen, Startbogen, Looping-Beine …), ohne die der Werkstatt selbst
+    const saeulen = (strecke.saeulen || []).filter(c => c.art !== 'werkstatt' && typeof c.x === 'number');
+    const saeulenNah = saeulen.map((c) => { const n = sp.naechster(c.x, c.z); return { s: n.s, q: n.seitenabstand, r: c.r || 0.3 }; });
     // Stufen: 1 streng; 2 Flecken/Äste/Klebestreifen auf der Straße stören nicht; 3 + doppelte Krümmung, Anlauf nur ±40 m; 4 + vierfach, nur Wracks,
-    // kleineres Fenster; 5 + Bäume dürfen im Gebäude stehen (nur die Fläche muss frei sein)
-    const STUFEN = [{ k: 1, hind: 'alle', kleber: true, anlaufVoll: true }, { k: 1, hind: 'seite', kleber: false, anlaufVoll: true },
-      { k: 2, hind: 'seite', kleber: false, anlaufVoll: false }, { k: 4, hind: 'wenig', kleber: false, anlaufVoll: false, fenster: 24, eng: 16 },
-      { k: 4, hind: 'wenig', kleber: false, anlaufVoll: false, fenster: 24, eng: 16, baumNurFlaeche: true }];
+    // Zufahrt/Ausfahrt nur ±6 m geprüft; 5 + Bäume dürfen im Gebäude stehen (nur die Fläche muss frei sein); 6 (letzte Rettung) wie 5 mit
+    // ganz lockerer Krümmung; bei 5 und 6 werden Bäume/Büsche/Felsen in Gebäude/Zufahrt (6: auch Fläche) beim Bauen entfernt (freiraeumen) – nie Sperrzonen.
+    const STUFEN = [{ k: 1, hind: 'alle', kleber: true, anlaufVoll: true, keil: true }, { k: 1, hind: 'seite', kleber: false, anlaufVoll: true, keil: true },
+      { k: 2, hind: 'seite', kleber: false, anlaufVoll: false, keil: true }, { k: 4, hind: 'wenig', kleber: false, anlaufVoll: false, eng: 16 },
+      { k: 4, hind: 'wenig', kleber: false, anlaufVoll: false, eng: 16, baumNurFlaeche: true, raeumenGeb: true },
+      { k: 8, hind: 'wenig', kleber: false, anlaufVoll: false, eng: 12, baumNurFlaeche: true, raeumen: true }];
     for (const stufe of STUFEN) {
-      const faktor = stufe.k, liste = sperrListe(strecke, stufe), fenster = stufe.fenster || fensterStd;
+      const faktor = stufe.k, liste = sperrListe(strecke, stufe);
+      const vorn = laenge / 2 + (stufe.keil ? zufahrt : 6), hinten = laenge / 2 + (stufe.keil ? ausfahrt : 6);   // Prüfbereich um s (vorn = gegen die Fahrtrichtung)
+      const kern = laenge / 2 + 6;
       const maxK = wert(C.maxKruemmung, 0.0022) * faktor;
-      for (let s = wert(C.sucheAb, 70); s < Ls - 120; s += 6) {
-        // Fenster: fast gerade, normale Breite, keine Sperrzone
+      // sucheAb = Mindestabstand des Zufahrt-Keils zur Startlinie, 120 m vor dem Ziel muss die Ausfahrt zu Ende sein (Startaufstellung / Zielraum bleiben frei)
+      const sMin = Math.max(wert(C.sucheAb, 85) + laenge / 2 + zufahrt, wert(C.mitteAb, 0)), sMax = Ls - 120 - laenge / 2 - ausfahrt;   // (Keil wird immer gezeichnet, auch wenn Stufe ≥ 4 ihn nicht prüft)
+      for (let s = sMin; s < Math.min(sMax, wert(C.sucheBis, Infinity)); s += 6) {
+        // Fenster: Fläche (samt Rand) fast gerade, normale Breite, keine Sperrzone; Zufahrt/Ausfahrt ohne Sperrzone
         let ok = true;
-        for (let k = -fenster / 2; k <= fenster / 2 && ok; k += 4) {
+        for (let k = -vorn; k <= hinten && ok; k += 4) {
           const p = sp.punktBei(s + k);
-          if (Math.abs(p.kruemmung) > maxK) ok = false;
+          if (Math.abs(k) <= kern && Math.abs(p.kruemmung) > maxK) ok = false;
           else if (strecke.breiteBei && Math.abs(strecke.breiteBei(s + k) - strecke.breite) > 0.01) ok = false;
           else if (gesperrt(strecke, liste, s + k)) ok = false;
         }
@@ -119,20 +134,31 @@
           // enge Zäune (Wald): Gebäude darf bis knapp hinter die Bande reichen (unerreichbar für Autos)
           let grenze = Infinity;
           for (let k = -gebB / 2; k <= gebB / 2; k += 3) grenze = Math.min(grenze, strecke.grenzeBei ? strecke.grenzeBei(s + k) : strecke.seitenabstandMax);
+          for (let k = -laenge / 2; k <= laenge / 2; k += 3) grenze = Math.min(grenze, strecke.grenzeBei ? strecke.grenzeBei(s + k) : strecke.seitenabstandMax);
           const aussenMax = grenze + 0.3;
           const breite = klemme(aussenMax - qA - 0.5 - wert(C.gebaeudeTiefe, 5.5), 4.4, wert(C.breite, 6.4));
           const qB = qA + breite, gebQ0 = qB + 0.5, tiefe = Math.min(wert(C.gebaeudeTiefe, 5.5), aussenMax - gebQ0);
           if (tiefe < 2.4 || qB > grenze - 1.8) continue;
           const aussen = gebQ0 + tiefe;
-          // Bäume/Felsen/Büsche im Weg? (Pflanzen-Kollider zwischen Straße und Zaun)
+          // Feste Säulen im Weg (Fläche, Keil, Gebäude)? Nie räumbar.
           let frei = true;
-          for (let k = 0; k < koll.length && frei; k++) {
-            const c = koll[k], q = c.seitenabstand * seite;
-            if (Math.abs(sp.differenzS(c.s, s)) > Math.max(laenge, gebB) / 2 + c.r + 2) continue;
-            if (q + c.r > qA - 1 && q - c.r < (stufe.baumNurFlaeche ? qB + 0.5 : aussen + 1.5)) frei = false;
+          for (let k = 0; k < saeulenNah.length && frei; k++) {
+            const c = saeulenNah[k], ds = sp.differenzS(c.s, s), q = c.q * seite;
+            if (ds < -(vorn + c.r) || ds > hinten + c.r) continue;
+            if (q + c.r > qE - 0.3 && q - c.r < aussen + 1) frei = false;
           }
           if (!frei) continue;
-          return { s: sp.wrapS(s), seite, qA, qB, laenge, breite, gebTiefe: tiefe, gebBreite: gebB, gebQ: gebQ0 + tiefe / 2, grenze, kruemmungMax: maxK, stufe: STUFEN.indexOf(stufe) + 1 };
+          // Bäume/Felsen/Büsche im Weg? (Pflanzen-Kollider zwischen Straße und Zaun) – Fläche + Gebäude, bei Stufen 1–3 auch Zufahrt/Ausfahrt
+          if (!stufe.raeumen) for (let k = 0; k < koll.length && frei; k++) {
+            const c = koll[k], q = c.seitenabstand * seite, ds = sp.differenzS(c.s, s);
+            if (q + c.r <= qE - 0.3) continue;
+            const imKern = Math.abs(ds) <= Math.max(laenge, gebB) / 2 + c.r + 2 && q + c.r > qA - 1 && q - c.r < (stufe.baumNurFlaeche ? qB + 0.5 : aussen + 1.5);
+            const imKeil = stufe.keil && ds >= -(laenge / 2 + zufahrt + c.r) && ds <= laenge / 2 + ausfahrt + c.r && q - c.r < qB + 0.5;
+            if (imKern || imKeil) frei = false;
+          }
+          if (!frei) continue;
+          return { s: sp.wrapS(s), seite, qA, qB, qE, laenge, breite, gebTiefe: tiefe, gebBreite: gebB, gebQ: gebQ0 + tiefe / 2, grenze, kruemmungMax: maxK,
+            zufahrt, ausfahrt, boxen: Math.max(2, Math.round(laenge / wert(C.boxLaenge, 9))), raeumen: !!(stufe.raeumen || stufe.raeumenGeb), stufe: STUFEN.indexOf(stufe) + 1 };
         }
       }
     }
@@ -147,7 +173,8 @@
      */
     constructor(strecke, opt) {
       this.strecke = strecke;
-      this.platz = (opt && opt.platz) || platzSuchen(strecke);
+      this.platz = (opt && opt.platz) || platzSuchen(strecke, opt && opt.suche);
+      this.gemeinsam = (opt && opt.gemeinsam) || null;     // zweite Werkstatt (Megastrecke): „einmal je Runde“ gilt für beide zusammen
       this.st = [];                 // je Fahrzeug: { drin, heilt, runde (Runde des Heilens), benutztRunde, bereitsGemeldet, ki, kiZeit, kiQ0, kiWarte, letzte10 }
       this._hoerer = [];
       this._gruppe = null;
@@ -161,7 +188,15 @@
       const e = Object.assign({ art, i }, extra);
       for (const fn of this._hoerer) { try { fn(e); } catch (err) { if (typeof console !== 'undefined') console.error(err); } }
     }
-    _s(i) { return this.st[i] || (this.st[i] = { drin: false, heilt: false, runde: -1, benutztRunde: -1, ki: null, kiZeit: 0, kiQ0: 0, kiWarte: 0, letzte10: 0, zeigt: 'aus' }); }
+    _s(i) {
+      if (this.st[i]) return this.st[i];
+      const st = this.st[i] = { drin: false, heilt: false, runde: -1, benutztRunde: -1, ki: null, kiZeit: 0, kiQ0: 0, kiWarte: 0, letzte10: 0, zeigt: 'aus' };
+      if (this.gemeinsam) {       // benutztRunde liegt in einer Liste, die beide Werkstätten teilen
+        const g = this.gemeinsam;
+        Object.defineProperty(st, 'benutztRunde', { enumerable: true, get: () => (g[i] === undefined ? -1 : g[i]), set: (v) => { g[i] = v; } });
+      }
+      return st;
+    }
 
     // ---------------------------------------------------------- Geometrie
     /** Welt-Punkt zu Bogenlänge s und Querabstand qs (m, + = Seite der Werkstatt). */
@@ -169,10 +204,10 @@
       const p = this.strecke.spline.punktBei(s), q = qs * this.platz.seite;
       return { x: p.x + p.nx * q, z: p.z + p.nz * q, tx: p.tx, tz: p.tz, nx: p.nx * this.platz.seite, nz: p.nz * this.platz.seite, s: p.s };
     }
-    /** Mitte einer Box (0 = hinten, 1 = vorn in Fahrtrichtung): { x, z, s, qs }. */
+    /** Mitte der Box k (0 = hinterste … boxen − 1 = vorderste in Fahrtrichtung; v25: 4 Boxen auf 35 m): { x, z, s, qs }. */
     boxMitte(k) {
-      const P = this.platz;
-      const s = P.s + (k === 0 ? -1 : 1) * P.laenge / 4, qs = (P.qA + P.qB) / 2;
+      const P = this.platz, n = P.boxen || 2;
+      const s = P.s + ((Math.max(0, Math.min(n - 1, k)) + 0.5) / n - 0.5) * P.laenge, qs = (P.qA + P.qB) / 2;
       const w = this.welt(s, qs);
       return { x: w.x, z: w.z, s, qs };
     }
@@ -189,15 +224,16 @@
       return ds;
     }
 
-    /** Untergrund für main.js: Fläche = 'strasse', Zufahrt (zwischen Randstreifen und Fläche, auf Höhe der Fläche) = 'rand' statt Gras. */
+    /** Untergrund für main.js: Fläche = 'strasse', Zufahrt/Ausfahrt (weicher Keil + Lücke zum Randstreifen) = 'rand' statt Gras. */
     untergrund(v, n) {
       const P = this.platz;
       if (!P || !n || !v || (v.untergrund !== 'gras' && v.untergrund !== 'sand' && v.untergrund !== 'rand')) return null;
       const ds = this.strecke.spline.differenzS(n.s, P.s);
-      if (ds > P.laenge / 2 + 3 || ds < -(P.laenge / 2 + 12)) return null;       // Zufahrt: 12 m vor der Fläche bis 3 m dahinter
-      const qs = n.seitenabstand * P.seite;
-      if (qs < this.strecke.breite / 2 || qs > P.qB + 1.2) return null;          // zwischen Fahrbahnkante und hinterer Kante der Fläche
+      if (ds > P.laenge / 2 + (P.ausfahrt || 3) || ds < -(P.laenge / 2 + (P.zufahrt || 12))) return null;       // Zufahrt (18 m) vor der Fläche bis Ausfahrt (10 m) dahinter
+      const qs = n.seitenabstand * P.seite, qE = P.qE !== undefined ? P.qE : P.qA - 0.4;
+      if (qs < this.strecke.breite / 2) return null;                              // Fahrbahn selbst: nichts ändern
       if (Math.abs(ds) <= P.laenge / 2 + 0.2 && qs <= P.qB + 0.2 && qs >= P.qA - 0.2) return 'strasse';
+      if (qs > qE + this.keilBreite(ds) + 1.2) return null;                        // außerhalb des Keils (Breite des Asphalt-Keils + 1,2 m Toleranz)
       return v.untergrund === 'rand' ? null : 'rand';
     }
 
@@ -277,7 +313,7 @@
         if (z.punkte >= wert(C.kiUnter, 40) || benutzt || !(vor > 14 && vor <= wert(C.kiVorlauf, 90))) return null;
         if (Math.abs(n.seitenabstand) > this.strecke.breite / 2 + (this.strecke.randBreite || 2)) return null;
         void q;
-        st.ki = 'an'; st.kiZeit = 0; st.kiQ0 = n.seitenabstand * P.seite; st.kiWarte = 0; st.kiBox = (i % 2 === 0) ? 1 : 0;
+        st.ki = 'an'; st.kiZeit = 0; st.kiQ0 = n.seitenabstand * P.seite; st.kiWarte = 0; st.kiBox = i % (P.boxen || 2);
       }
       st.kiZeit += dt;
       const box = this.boxMitte(st.kiBox);
@@ -288,7 +324,9 @@
         const vor0 = Math.max(0, v.vLaengs), blick = klemme(6 + vor0 * 0.5, 6, 22);
         // Zielpunkt: Seitenlage in zwei weichen Stufen – erst (ab 80 m vor der Box) auf den Fahrbahnrand der Werkstattseite,
         // dann (26 → 3 m vor der Box) schräg über Randstreifen und Zufahrt auf die Box-Mitte. So bleibt das Auto bis kurz vorher auf Asphalt.
-        const dZiel = Math.max(dsBox - blick, 0);
+        // (v25) Bezugspunkt für das Einscheren ist der Anfang der langen Fläche (Box kann bis 30 m weiter hinten liegen)
+        const dEin = Math.min(dsBox, Math.max(vor, 0) + 6);
+        const dZiel = Math.max(dEin - blick, 0);
         const qRand = Math.max(1.5, this.strecke.breite / 2 - 2.4);
         const u1 = glatt(0, 1, (80 - dZiel) / 35), u2 = glatt(0, 1, (26 - dZiel) / 23);
         const qZiel = (st.kiQ0 * (1 - u1) + qRand * u1) * (1 - u2) + box.qs * u2;
@@ -305,7 +343,7 @@
         // Tempo: bis zur Box bremsen (v² = 2·a·Restweg); beim Einscheren (letzte 30 m) höchstens 11 m/s
         const rest = Math.max(0, dsBox - 0.3);
         let vSoll = Math.min(wert(C.kiTempo, 22), Math.sqrt(2 * wert(C.kiBremse, 6) * rest) + 0.3);
-        if (dsBox < 30) vSoll = Math.min(vSoll, 11);
+        if (dEin < 30 || dsBox < 30) vSoll = Math.min(vSoll, 11);
         // auf der Fläche und fast stehend → fertig angekommen
         if (this.istDrin(n) && vor0 < wert(C.steheTempo, 1) * 0.9) { st.ki = 'steht'; st.kiWarte = 0; return { gas: 0, bremse: 0, lenkung: 0 }; }
         const gas = vor0 < vSoll - 0.5 ? klemme((vSoll - vor0) * 0.5, 0.15, 1) : 0;
@@ -328,7 +366,7 @@
     }
 
     // ---------------------------------------------------------- Grafik (braucht THREE)
-    /** Gruppe 'Werkstatt' bauen (Fläche, Markierung, Gebäude, Schild, Lampe) und Gebäude-Säulen in strecke.saeulen eintragen. */
+    /** Gruppe 'Werkstatt' bauen (Fläche, Zufahrt-Keil, Markierungen, Halle in Segmenten, Schild, Lampe) und Gebäude-Säulen in strecke.saeulen eintragen. */
     bauen() {
       const P = this.platz;
       if (!P || typeof THREE === 'undefined') return null;
@@ -348,66 +386,84 @@
           const i0 = a * (nQ + 1) + c, i1 = i0 + 1, i2 = i0 + nQ + 1, i3 = i2 + 1;
           idx.push(i0, i2, i1, i1, i2, i3);
         }
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-        geo.setIndex(idx); geo.computeVertexNormals();
-        const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: farbe, side: THREE.DoubleSide, polygonOffset: true,
-          polygonOffsetFactor: -2 - (versatz || 0), polygonOffsetUnits: -2 - (versatz || 0) }));
-        // Normalen nach oben erzwingen (Gitter kann je nach Seite gespiegelt sein)
-        const nrm = geo.attributes.normal; for (let k = 0; k < nrm.count; k++) if (nrm.getY(k) < 0) nrm.setXYZ(k, -nrm.getX(k), -nrm.getY(k), -nrm.getZ(k));
-        return m;
+        return this._netz(pos, idx, farbe, versatz);
       };
-      const s0 = P.s - P.laenge / 2, s1 = P.s + P.laenge / 2;
-      g.add(flaeche(s0, s1, P.qA, P.qB, 0x4b4f55, 0.07, 8, 3));
+      const s0 = P.s - P.laenge / 2, s1 = P.s + P.laenge / 2, qE = P.qE !== undefined ? P.qE : P.qA - 0.4;
+      const nSeg = Math.max(2, Math.ceil(P.laenge / 3));
+      g.add(flaeche(s0, s1, qE - 0.05, P.qA + 0.1, 0x4b4f55, 0.065, nSeg, 1));        // Lücke zwischen Randstreifen und Fläche schließen
+      g.add(flaeche(s0, s1, P.qA, P.qB, 0x4b4f55, 0.07, nSeg, 3));
+      // Zufahrt vorn / Ausfahrt hinten: weiche Keile von der Straßenkante auf die Fläche (Breite = keilBreite, Glättung wie im Logik-Teil)
+      const keil = (sFern, sNah) => {
+        const N = 8, pos = [], idx = [];
+        for (let k = 0; k <= N; k++) {
+          const sk = sFern + (sNah - sFern) * k / N, w = this.keilBreite(sk - P.s);
+          for (const q of [qE - 0.05, qE + Math.max(0.02, w)]) { const p = this.welt(sk, q); pos.push(p.x, hoehe(p.x, p.z) + 0.06, p.z); }
+        }
+        for (let k = 0; k < N; k++) { const i0 = k * 2; idx.push(i0, i0 + 2, i0 + 1, i0 + 1, i0 + 2, i0 + 3); }
+        return this._netz(pos, idx, 0x4b4f55, 0);
+      };
+      g.add(keil(s0 - P.zufahrt, s0));
+      g.add(keil(s1, s1 + P.ausfahrt));
       const l = 0.14;   // Linienbreite
       const linie = (a0, a1, b0, b1) => g.add(flaeche(a0, a1, b0, b1, 0xf2f2ee, 0.09, Math.max(1, Math.round(Math.abs(a1 - a0) / 3)), 1, 1));
       linie(s0 + 0.2, s1 - 0.2, P.qA + 0.15, P.qA + 0.15 + l);                // zur Straße
       linie(s0 + 0.2, s1 - 0.2, P.qB - 0.15 - l, P.qB - 0.15);                // zum Gebäude
       linie(s0 + 0.2, s0 + 0.2 + l, P.qA + 0.15, P.qB - 0.15);                // hinten
       linie(s1 - 0.2 - l, s1 - 0.2, P.qA + 0.15, P.qB - 0.15);                // vorn
-      linie(P.s - l / 2, P.s + l / 2, P.qA + 0.15, P.qB - 0.15);              // Trennlinie der zwei Boxen
-      // gelb-schwarze Warnstreifen an der Hallenseite
-      for (let k = 0; k < 8; k++) {
-        const a = s0 + 0.6 + k * (P.laenge - 1.2) / 8, b = a + (P.laenge - 1.2) / 16;
+      const nBox = P.boxen || 2;
+      for (let k = 1; k < nBox; k++) { const sk = s0 + P.laenge * k / nBox; linie(sk - l / 2, sk + l / 2, P.qA + 0.15, P.qB - 0.15); }   // Trennlinien der Boxen
+      // gelb-schwarze Warnstreifen an der Hallenseite (Teilung ≈ 1,5 m wie in v18)
+      const nStr = Math.max(8, Math.round((P.laenge - 1.2) / 1.5));
+      for (let k = 0; k < nStr; k++) {
+        const a = s0 + 0.6 + k * (P.laenge - 1.2) / nStr, b = a + (P.laenge - 1.2) / nStr / 2;
         g.add(flaeche(a, b, P.qB - 0.15 - 0.7, P.qB - 0.15 - l - 0.02, 0xf2c200, 0.1, 1, 1, 2));
       }
-      // --- Gebäude (lokale Achsen: −z = Fahrtrichtung, x = zur Werkstatt-Seite) ---
-      const m0 = this.welt(P.s, P.gebQ), hGeb = wert(cfg().gebaeudeHoehe, 4.4), breiteG = P.gebBreite, tiefeG = P.gebTiefe;
-      const yb = Math.max(hoehe(m0.x, m0.z), hoehe(this.welt(P.s - breiteG / 2, P.gebQ).x, this.welt(P.s - breiteG / 2, P.gebQ).z), hoehe(this.welt(P.s + breiteG / 2, P.gebQ).x, this.welt(P.s + breiteG / 2, P.gebQ).z));
-      const halle = new THREE.Group();
-      halle.position.set(m0.x, yb, m0.z);
-      halle.rotation.y = Math.atan2(-m0.tx, -m0.tz) * 1;     // wie Auto-Heading: −z = Fahrtrichtung
-      // x-Achse der Gruppe = rechts der Fahrtrichtung; liegt die Werkstatt links (seite −1), zeigt „zur Straße“ nach +x
+      // --- Halle: ein Segment je Box (folgt der Kurve; lokale Achsen: −z = Fahrtrichtung, x = zur Werkstatt-Seite) ---
+      const hGeb = wert(cfg().gebaeudeHoehe, 4.4), breiteG = P.gebBreite, tiefeG = P.gebTiefe;
+      const nHalle = nBox, segB = breiteG / nHalle;
       const zurStrasse = -P.seite;                              // Vorzeichen der x-Achse in Richtung Straße
-      const box = (w, h, d, farbe, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(farbe)); m.position.set(x, y, z); halle.add(m); return m; };
-      box(tiefeG, 1.6, breiteG, 0x6d7076, 0, -0.7, 0);                                   // Fundament (reicht ins Gelände)
-      box(tiefeG, hGeb, breiteG, 0xd8dde4, 0, hGeb / 2, 0);                              // Wände
-      box(tiefeG + 0.7, 0.35, breiteG + 0.7, 0xa8382c, 0, hGeb + 0.17, 0);               // Dach
-      // zwei Rolltore zur Straße
       const tx = zurStrasse * (tiefeG / 2 + 0.04);
-      for (const dz of [-3.1, 3.1]) {
-        box(0.1, 3.2, 4.4, 0x3b414a, tx, 1.6, dz);
-        for (let k = 0; k < 5; k++) box(0.06, 0.08, 4.4, 0x59616c, tx + zurStrasse * 0.04, 0.6 + k * 0.55, dz);
+      let ybMax = -1e9;
+      const segmente = [];
+      for (let k = 0; k < nHalle; k++) {
+        const ds = (k + 0.5) / nHalle * breiteG - breiteG / 2;
+        const m0 = this.welt(P.s + ds, P.gebQ), ma = this.welt(P.s + ds - segB / 2, P.gebQ), mb = this.welt(P.s + ds + segB / 2, P.gebQ);
+        const yb = Math.max(hoehe(m0.x, m0.z), hoehe(ma.x, ma.z), hoehe(mb.x, mb.z));
+        ybMax = Math.max(ybMax, yb);
+        const halle = new THREE.Group();
+        halle.position.set(m0.x, yb, m0.z);
+        halle.rotation.y = Math.atan2(-m0.tx, -m0.tz);     // wie Auto-Heading: −z = Fahrtrichtung
+        const box = (w, h, d, farbe, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(farbe)); m.position.set(x, y, z); halle.add(m); return m; };
+        const bw = segB + 0.06;                            // Segmente überlappen leicht (keine Spalten in Kurven)
+        box(tiefeG, 1.6, bw, 0x6d7076, 0, -0.7, 0);                                  // Fundament (reicht ins Gelände)
+        box(tiefeG, hGeb, bw, 0xd8dde4, 0, hGeb / 2, 0);                             // Wände
+        box(tiefeG + 0.7, 0.35, bw + 0.7, 0xa8382c, 0, hGeb + 0.17, 0);              // Dach
+        const tw = Math.min(4.4, segB - 1.6);                                        // ein Rolltor je Box
+        box(0.1, 3.2, tw, 0x3b414a, tx, 1.6, 0);
+        for (let j = 0; j < 5; j++) box(0.06, 0.08, tw, 0x59616c, tx + zurStrasse * 0.04, 0.6 + j * 0.55, 0);
+        box(0.08, 0.7, Math.max(1, segB - 0.8), 0x2f6fd0, tx, hGeb - 0.5, 0);        // blaues Band über dem Tor
+        g.add(halle); segmente.push(halle);
       }
-      box(0.08, 0.7, 11.2, 0x2f6fd0, tx, hGeb - 0.5, 0);                                 // blaues Band über den Toren
-      // Dachschild
+      // Dachschild (große Hallentafel) in der Mitte
       const tafel = this._tafel(true);
       if (tafel) {
+        const mm = this.welt(P.s, P.gebQ), mitte = new THREE.Group();
+        mitte.position.set(mm.x, ybMax, mm.z);
+        mitte.rotation.y = Math.atan2(-mm.tx, -mm.tz);
         tafel.scale.set(1, 1, 1);
         tafel.position.set(tx + zurStrasse * 0.1, hGeb + 1.35, 0);
         tafel.rotation.y = zurStrasse > 0 ? Math.PI / 2 : -Math.PI / 2;
-        halle.add(tafel);
-        const stuetze = (dz) => box(0.12, 1.3, 0.12, 0x555a62, tx, hGeb + 0.8, dz);
-        stuetze(-2.6); stuetze(2.6);
+        mitte.add(tafel);
+        for (const dz of [-2.6, 2.6]) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.3, 0.12), mat(0x555a62)); st.position.set(tx, hGeb + 0.8, dz); mitte.add(st); }
+        g.add(mitte);
       }
-      g.add(halle);
-      // feste Gebäude-Säulen für die Kollision (drei Kreise entlang der Straßenseite des Gebäudes)
+      // feste Gebäude-Säulen für die Kollision (Kreise alle 4 m entlang der Straßenseite des Gebäudes)
       const sa = [];
-      for (const ds of [-4, 0, 4]) { const w = this.welt(P.s + ds, P.gebQ - tiefeG / 2 + 1.2); sa.push({ x: w.x, z: w.z, r: 2.6, art: 'werkstatt' }); }
+      for (let ds = -breiteG / 2 + 2; ds <= breiteG / 2 - 2 + 0.01; ds += 4) { const w = this.welt(P.s + ds, P.gebQ - tiefeG / 2 + 1.2); sa.push({ x: w.x, z: w.z, r: 2.6, art: 'werkstatt' }); }
       strecke.saeulen = (strecke.saeulen || []).concat(sa);
       this._saeulen = sa;
-      // --- Schild-Pfosten am Zufahrtsanfang (zur Straße gedreht, schaut dem Verkehr entgegen) ---
-      const sp0 = this.welt(P.s - P.laenge / 2 - 1.5, P.qA + 0.4);
+      // --- Schild-Pfosten vor dem Zufahrt-Keil (zur Straße gedreht, schaut dem Verkehr entgegen) ---
+      const sp0 = this.welt(s0 - P.zufahrt - 2, qE + 1.4);
       const schild = new THREE.Group();
       schild.position.set(sp0.x, hoehe(sp0.x, sp0.z), sp0.z);
       schild.rotation.y = Math.atan2(-sp0.tx, -sp0.tz);
@@ -418,14 +474,92 @@
       const lampe = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), lampeMat); lampe.position.set(0, 4.05, 0.05); schild.add(lampe);
       g.add(schild);
       this._lampe = lampeMat; this._brett = brett;
-      // Hütchen am Anfang und Ende der Fläche
-      for (const [ds, qs] of [[-P.laenge / 2 + 0.5, P.qA + 0.9], [P.laenge / 2 - 0.5, P.qA + 0.9]]) {
+      // Hütchen: Anfang und Ende der Fläche sowie entlang der Keile
+      const huetchen = [[-P.laenge / 2 + 0.5, P.qA + 0.9], [P.laenge / 2 - 0.5, P.qA + 0.9]];
+      for (const t of [0.3, 0.65]) huetchen.push([-P.laenge / 2 - P.zufahrt * (1 - t) * 1, qE + this.keilBreite(-P.laenge / 2 - P.zufahrt * (1 - t)) + 0.5]);
+      huetchen.push([P.laenge / 2 + P.ausfahrt * 0.5, qE + this.keilBreite(P.laenge / 2 + P.ausfahrt * 0.5) + 0.5]);
+      for (const [ds, qs] of huetchen) {
         const w = this.welt(P.s + ds, qs), kegel = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.7, 10), mat(0xff6a1a));
         kegel.position.set(w.x, hoehe(w.x, w.z) + 0.38, w.z); g.add(kegel);
         const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.12, 10), mat(0xf4f4f0)); ring.position.set(w.x, hoehe(w.x, w.z) + 0.42, w.z); g.add(ring);
       }
       this._gruppe = g;
       return g;
+    }
+
+    /** Gitter-Mesh aus Positionen/Indizes (Oberseite nach oben, leicht vor den Boden gezogen). */
+    _netz(pos, idx, farbe, versatz) {
+      // Umlaufsinn so wählen, dass die Vorderseite nach OBEN zeigt (sonst dreht DoubleSide die Normale um → fast schwarze Fläche)
+      let ny = 0;
+      for (let t = 0; t < idx.length; t += 3) {
+        const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3;
+        ny += (pos[b + 2] - pos[a + 2]) * (pos[c] - pos[a]) - (pos[b] - pos[a]) * (pos[c + 2] - pos[a + 2]);
+      }
+      if (ny < 0) for (let t = 0; t < idx.length; t += 3) { const x = idx[t + 1]; idx[t + 1] = idx[t + 2]; idx[t + 2] = x; }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setIndex(idx); geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: farbe, side: THREE.DoubleSide, polygonOffset: true,
+        polygonOffsetFactor: -2 - (versatz || 0), polygonOffsetUnits: -2 - (versatz || 0) }));
+      // sicherheitshalber: Normalen nach oben (Gelände-Gitter ist nahezu eben)
+      const nrm = geo.attributes.normal; for (let k = 0; k < nrm.count; k++) if (nrm.getY(k) < 0) nrm.setXYZ(k, -nrm.getX(k), -nrm.getY(k), -nrm.getZ(k));
+      return m;
+    }
+
+    /**
+     * Breite (m ab Randstreifen-Kante qE) des weichen Asphalt-Keils bei Abstand ds (m) von der Fläche-Mitte: vor der Fläche über `zufahrt` m
+     * von 0 auf die volle Tiefe (qB − qE), hinter der Fläche über `ausfahrt` m zurück auf 0. Auf der Fläche selbst: volle Tiefe, außerhalb: 0.
+     */
+    keilBreite(ds) {
+      const P = this.platz, voll = P.qB - (P.qE !== undefined ? P.qE : P.qA - 0.4), h = P.laenge / 2;
+      if (ds >= -h && ds <= h) return voll;
+      if (ds < -h && ds >= -h - P.zufahrt) return voll * glatt(0, 1, (ds + h + P.zufahrt) / P.zufahrt);
+      if (ds > h && ds <= h + P.ausfahrt) return voll * glatt(0, 1, 1 - (ds - h) / P.ausfahrt);
+      return 0;
+    }
+
+    /**
+     * Bäume/Büsche/Felsen (Pflanzen-Kollider) auf Fläche, Keil und Gebäude entfernen – nur wenn die Platzsuche sie dort nicht ausschließen konnte
+     * (platz.raeumen). Entfernt die Kollider (+ Raster neu) und – mit `wurzel` (THREE-Szene) – die sichtbaren Instanzen an derselben Stelle (Maßstab 0).
+     * @returns {number} Anzahl entfernter Kollider
+     */
+    freiraeumen(wurzel) {
+      const P = this.platz, st = this.strecke;
+      if (!P || !P.raeumen || !st.pflanzenKollider || this._geraeumt) return 0;
+      this._geraeumt = true;
+      const sp = st.spline, h = P.laenge / 2, gB = P.gebBreite / 2, aussen = P.gebQ + P.gebTiefe / 2;
+      const qE = P.qE !== undefined ? P.qE : P.qA - 0.4;
+      const weg = [], bleibt = [];
+      st.pflanzenKollider.forEach((c) => {
+        const ds = sp.differenzS(c.s, P.s), q = c.seitenabstand * P.seite;
+        const imKeil = ds >= -(h + P.zufahrt + c.r) && ds <= h + P.ausfahrt + c.r && q + c.r > qE - 0.3 && q - c.r < P.qB + 0.5;
+        const imGeb = Math.abs(ds) <= gB + c.r + 1 && q + c.r > P.qA - 1 && q - c.r < aussen + 1.5;
+        (imKeil || imGeb ? weg : bleibt).push(c);
+      });
+      if (!weg.length) return 0;
+      st.pflanzenKollider.length = 0; bleibt.forEach(c => st.pflanzenKollider.push(c));
+      const raster = new Map();
+      st.pflanzenKollider.forEach((k, idx) => {
+        for (let gx = Math.floor((k.x - k.r) / 10); gx <= Math.floor((k.x + k.r) / 10); gx++) for (let gz = Math.floor((k.z - k.r) / 10); gz <= Math.floor((k.z + k.r) / 10); gz++) {
+          const key = gx * 100003 + gz;
+          (raster.get(key) || raster.set(key, []).get(key)).push(idx);
+        }
+      });
+      st._pflanzenRaster = raster;
+      if (wurzel && typeof THREE !== 'undefined' && wurzel.traverse) {
+        const nul = new THREE.Matrix4().makeScale(0, 0, 0);
+        wurzel.traverse((o) => {
+          if (!o.isInstancedMesh || !o.instanceMatrix) return;
+          const a = o.instanceMatrix.array; let geaendert = false;
+          for (let i = 0; i < o.count; i++) {
+            const x = a[i * 16 + 12], z = a[i * 16 + 14];
+            if (weg.some(c => (c.x - x) * (c.x - x) + (c.z - z) * (c.z - z) < 0.09)) { o.setMatrixAt(i, nul); geaendert = true; }
+          }
+          if (geaendert) o.instanceMatrix.needsUpdate = true;
+        });
+      }
+      this.geraeumt = weg.length;
+      return weg.length;
     }
 
     /** Beschriftete Tafel (Canvas); dach = große Hallentafel. Zwei Zustände: bereit / benutzt (nur die Straßen-Tafel wechselt). */
@@ -505,9 +639,73 @@
     }
   }
 
+  // ============================================================ Mehrere Werkstätten (lange Strecken)
+  /**
+   * Strecken über config.werkstatt.zweiteAb m (Megastrecke ≈ 8 km) bekommen eine zweite Werkstatt ungefähr gegenüber der ersten. Die Gruppe hat
+   * dieselbe Schnittstelle wie Werkstatt (main.js/HUD merken keinen Unterschied); „einmal je Runde“ gilt für beide zusammen (gemeinsame Liste).
+   */
+  class WerkstattGruppe {
+    constructor(strecke, ersteOpt) {
+      this.strecke = strecke;
+      this.benutzt = [];                                  // Fahrzeug → Runde, in der eine der Werkstätten benutzt wurde
+      const erste = new Werkstatt(strecke, Object.assign({ gemeinsam: this.benutzt }, ersteOpt || {}));
+      this.teile = erste.vorhanden ? [erste] : [];
+      const C = cfg(), L = strecke.spline.laenge;
+      if (erste.vorhanden && L > wert(C.zweiteAb, 6000)) {
+        const ziel = erste.platz.s + L / 2, w = L * 0.12;
+        let zweite = null;
+        const fenster = [[ziel - w, ziel + w], [ziel - 2 * w, ziel + 2 * w], [0, Infinity]];
+        for (const [a, b] of fenster) {
+          const a2 = (a % L + L) % L, b2 = a2 + (b - a);              // Fenster ggf. über den Nullpunkt: einfach beide Hälften probieren
+          const versuche = b2 > L ? [[a2, L], [0, b2 - L]] : [[a2, b2]];
+          for (const [von, bis] of versuche) {
+            const kand = new Werkstatt(strecke, { gemeinsam: this.benutzt, suche: { mitteAb: von, sucheBis: bis } });
+            if (kand.vorhanden && Math.abs(strecke.spline.differenzS(kand.platz.s, erste.platz.s)) > L * 0.25) { zweite = kand; break; }
+          }
+          if (zweite) break;
+        }
+        if (zweite) this.teile.push(zweite);
+      }
+    }
+    get vorhanden() { return this.teile.length > 0; }
+    get platz() { return this.teile.length ? this.teile[0].platz : null; }
+    get plaetze() { return this.teile.map(t => t.platz); }
+    bei(fn) { this.teile.forEach(t => t.bei(fn)); }
+    bauen() {
+      if (typeof THREE === 'undefined') return null;
+      const g = new THREE.Group(); g.name = 'Werkstaetten';
+      this.teile.forEach((t) => { const x = t.bauen(); if (x) g.add(x); });
+      return g;
+    }
+    freiraeumen(wurzel) { return this.teile.reduce((n, t) => n + t.freiraeumen(wurzel), 0); }
+    schritt(dt, fahrzeuge, schaden, rennen) { this.teile.forEach(t => t.schritt(dt, fahrzeuge, schaden, rennen)); }
+    zustand(i) {
+      const rang = { heilt: 5, drin: 4, voll: 3, benutzt: 2, voraus: 1, aus: 0 };
+      let best = null;
+      this.teile.forEach((t) => { const z = t.zustand(i); if (!best || (rang[z.status] || 0) > (rang[best.status] || 0)) best = z; });
+      return best || { status: 'aus', vorhanden: false, heilt: false };
+    }
+    untergrund(v, n) { for (const t of this.teile) { const u = t.untergrund(v, n); if (u) return u; } return null; }
+    kiSteuerung(i, f, dt, rennen, schaden) {
+      const aktiv = this.teile.find(t => t.st[i] && t.st[i].ki);              // eine begonnene Werkstattfahrt zuerst zu Ende führen
+      if (aktiv) return aktiv.kiSteuerung(i, f, dt, rennen, schaden);
+      for (const t of this.teile) { const s = t.kiSteuerung(i, f, dt, rennen, schaden); if (s) return s; }
+      return null;
+    }
+    animieren(t, fahrzeuge) { this.teile.forEach(x => x.animieren(t, fahrzeuge)); }
+    zerstoeren() { this.teile.forEach(t => t.zerstoeren()); }
+  }
+
+  /** Werkstatt(en) für eine Strecke: eine einzelne Werkstatt (Standard) oder – bei sehr langen Strecken – eine Gruppe aus zwei. */
+  Werkstatt.fuer = function (strecke, opt) {
+    const g = new WerkstattGruppe(strecke, opt);
+    return g.teile.length === 1 ? g.teile[0] : g;
+  };
+
   /** Halbe Fahrbahnbreite (Hilfsfunktion). */
   function strecke_b(st) { return st.breite / 2; }
 
   Werkstatt.platzSuchen = platzSuchen;
+  Werkstatt.Gruppe = WerkstattGruppe;
   R.Werkstatt = Werkstatt;
 })();

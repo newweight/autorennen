@@ -128,7 +128,9 @@
       z.push('tageszeit');      // Runde 6 (W2-D): unten in der linken Spalte (rechts ist kein Platz mehr)
       if (this.streckeDaten().mega) z.push('wind', 'schaden');     // v22 Megastrecke: Jahreszeit/Wetter würfelt jede Zone selbst
       else z.push('jahreszeit', 'wetter', 'wind', 'schaden');
-      z.push( 'tempo', 'polizei', 'rempeln', 'start');   // Runde 5: Tempo-Klasse, 5b: Polizei, 6: Rempeln
+      z.push( 'tempo', 'polizei', 'rempeln');   // Runde 5: Tempo-Klasse, 5b: Polizei, 6: Rempeln
+      if (this.e.spielart !== 'elimination') z.push('geister', 'verkehr');      // 15.10. (v25): Geisterfahrer + Verkehr (stehen links unten; hinten angehängt, damit die Fokus-Nummern der bisherigen Zeilen gleich bleiben)
+      z.push('start');
       return z;
     }
 
@@ -392,6 +394,11 @@
         if (dx) e.tempoKlasse = dx > 0 ? 'schnell' : 'normal';
       } else if (zeile === 'polizei') {
         if (dx) e.polizei = dx > 0;
+      } else if (zeile === 'geister') {
+        if (dx) e.geisterfahrer = dx > 0;
+      } else if (zeile === 'verkehr') {      // 15.10. (v25): aus → wenig → viel
+        const l = ['aus', 'wenig', 'viel'], i = l.indexOf(e.verkehr || 'aus');
+        this.wertSetzen('verkehr', l[klemme((i < 0 ? 0 : i) + dx, 0, l.length - 1)]);
       } else if (zeile === 'tageszeit') {      // Runde 6 (W2-D): Tag → Dämmerung → Nacht
         const l = Object.keys(R.config.tageszeit || { tag: 1 }), i = l.indexOf(e.tageszeit || 'tag');
         this.wertSetzen('tageszeit', l[klemme((i < 0 ? 0 : i) + dx, 0, l.length - 1)]);
@@ -411,6 +418,8 @@
       else if (zeile === 'schaden') e.schaden = k === 'an';
       else if (zeile === 'tempo' && R.config.tempoKlassen[k]) e.tempoKlasse = k;
       else if (zeile === 'polizei') e.polizei = k === 'an';
+      else if (zeile === 'geister') e.geisterfahrer = k === 'an';
+      else if (zeile === 'verkehr') e.verkehr = (R.config.verkehr && R.config.verkehr.stufen && R.config.verkehr.stufen[k]) ? k : 'aus';
       else if (zeile === 'rempeln') e.rempeln = k === 'echt' ? 'echt' : 'sanft';
       else if (zeile === 'tageszeit') { if (R.config.tageszeit && R.config.tageszeit[k] && e.tageszeit !== k) { e.tageszeit = k; this.hintergrundNeu(); } }
     }
@@ -748,6 +757,19 @@
       links += pillenL('tageszeit', '🌗', 'Tageszeit', [{ k: 'tag', text: '☀️ Tag' }, { k: 'daemmerung', text: '🌇 Dämmerung' }, { k: 'nacht', text: '🌙 Nacht' }],
         e.tageszeit || 'tag', 'Dämmerung: tiefe Sonne, Licht an – Nacht: Mond, Sterne, Scheinwerfer und Laternen')
         .replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele');
+      // 15.10. (v25): EINE Zeile „Verkehr“ (links unten) mit zwei Gruppen: 👻 Geisterfahrer (Aus/An) und 🚑 Krankenwagen + Abschleppwagen (Aus/Wenig/Viel), Standard aus.
+      // Tastatur: zwei Fokus-Zeilen ('geister', 'verkehr'), die Zeile zeigt per Unterstreichung, welche Gruppe gemeint ist. Nicht im Modus „Letzter fliegt raus“.
+      if (e.spielart !== 'elimination') {
+        const gf = z[this.fokus], pille = (zeile, k, text, an) => `<span class="pille${an ? ' aktiv' : ''}" data-a="wert:${zeile}:${k}">${text}</span>`;
+        const u = (zeile) => (gf === zeile ? 'text-decoration:underline;text-decoration-thickness:.12em;text-underline-offset:.2em;' : '');
+        links += `<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele${gf === 'geister' || gf === 'verkehr' ? ' fokus' : ''}" ${fz(gf === 'verkehr' ? 'verkehr' : 'geister')} ` +
+          `title="Geisterfahrer: drei pro Runde fahren dir entgegen (Warnung vorher). Krankenwagen: Blaulicht, 3× Schaden bei Kontakt. Abschleppwagen: langsam, überholen! – Wenig: je 1, Viel: je 2">` +
+          `<div class="z-label">Verkehr</div><div class="z-wert">` +
+          `<span style="${u('geister')}margin:0 0 0 .2em" data-a="fokus:${z.indexOf('geister')}">👻</span>` + pille('geister', 'aus', 'Aus', !e.geisterfahrer) + pille('geister', 'an', 'An', !!e.geisterfahrer) +
+          `<span style="${u('verkehr')}margin:0 0 0 .35em" data-a="fokus:${z.indexOf('verkehr')}">🚑</span>` +
+          pille('verkehr', 'aus', 'Aus', (e.verkehr || 'aus') === 'aus') + pille('verkehr', 'wenig', 'Wenig', e.verkehr === 'wenig') + pille('verkehr', 'viel', 'Viel', e.verkehr === 'viel') +
+          `</div></div>`;
+      }
       const windZahl = e.windStaerke === 'zufall' ? '🎲' : e.windStaerke;
       const windExtra = e.windStaerke === 0 ? 'aus' : (e.windStaerke === 'zufall' ? '' : '💨');
       const wind =
@@ -783,7 +805,7 @@
         `<div class="t-zeile p1"><b>${e.fahrer[0]}</b><span><kbd>↑</kbd> Gas <kbd>↓</kbd> Bremse <kbd>←</kbd><kbd>→</kbd> Lenken <kbd>R</kbd> zurück</span></div>` +
         `<div class="t-zeile p2${this.zwei ? '' : ' aus'}"><b>${e.fahrer[1]}</b><span><kbd>W</kbd> Gas <kbd>S</kbd> Bremse <kbd>A</kbd><kbd>D</kbd> Lenken <kbd>T</kbd> zurück</span></div>` +
         `<div class="t-zeile"><b>Alle</b><span><kbd>C</kbd> Kamera <kbd>F</kbd> Vollbild <kbd>Esc</kbd> Pause</span></div></div>`;
-      return `<div class="m-start"><div class="m-spalten">` +
+      return `<div class="m-start"><div class="m-spalten"${this.zwei && e.spielart !== 'elimination' ? ' style="font-size:.9em"' : ''}>` +   // v25: zu zweit + Zeile „Verkehr“: 10 % kleiner, damit alles ohne Scrollen passt
         `<div class="m-einstellungen">${e.spielart === 'pokal' ? this.htmlPokalZeile(fk, fz)      // W3-F: Pokal-Größe als Überschrift
           : `<h3>${e.spielart === 'elimination' ? '🚪 Letzter fliegt raus' : '🏎️ Rennen'}</h3>`}${links}</div>` +
         `<div class="m-einstellungen"><h3>🌍 Welt &amp; Wetter</h3>${rechts}</div></div>${aktionen}${tafel}</div>`;

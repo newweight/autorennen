@@ -1047,6 +1047,8 @@
      * Darf an (x, z) keine Deko stehen? (Tunnelhügel, Brückensenke) n = naechster(x, z), falls schon bekannt.
      */
     dekoSperre(x, z, n) {
+      // 15.10. (v25): auf und neben einer Zuschauertribüne (world/tribuenen.js) steht keine Deko
+      if (this.tribuenen && this.tribuenen.length && R.Tribuenen && R.Tribuenen.sperre(this, x, z)) return true;
       // 14.10. (v22, Alpen hügeliger): keine Pflanzen/Felsen an sehr steilen Hängen (Einschnitt zwischen zwei Serpentinen-Ästen, > 32 %):
       // dort stünde das Auto bei flacher Fahrt mit dem Dach im Busch (test_gelaende_hoehe B). Nur Höhenmodell 'strasse'.
       if (this.sModell) {
@@ -2139,7 +2141,7 @@
     _gabelBauen(thema) {
       const sp = this.spline, pk = sp.punkte, N = pk.length, rb = this.randBreite;
       const wueste = this.thema === 'wueste';
-      const asphalt = thema.asphalt || 0x3c3f45, rasen = wueste ? 0xe9d3a0 : 0x78b94a;
+      const asphalt = thema.asphalt || 0x3c3f45, rasen = wueste ? 0xe9d3a0 : this.thema === 'dino' ? 0x4c8a2e : 0x78b94a;   // 15.10. (v25): Dino = Urwald-Grün
       const strasse = [], deko = [];
       const c = new THREE.Color();
       const gruppe = [];
@@ -2209,7 +2211,11 @@
         };
         if (sA !== null) kissen(sA, 1);
         if (sB !== null) kissen(sB, -1);
-        if (sA !== null) this._pfeilschild(deko, sA + 4.5);
+        if (sA !== null) this._pfeilschild(deko, sA + 6);
+        // 15.10. (v25): Ankündigung der Gabelung – Schilderbrücke ⬅ ➡ über der ganzen Straße 55 m vor der Teilung, Vorwarn-Tafeln an beiden
+        // Straßenseiten 130 m davor (nur Grafik, keine Kollision; liegt vor dem Abschnitt, also im Deko-Sperrstreifen von 30 m + Zaunabstand)
+        this._schilderbruecke(deko, g.s0 - 55);
+        [-1, 1].forEach((sg) => this._vorwarnTafel(deko, g.s0 - 130, sg));
         // ---- Inseldeko
         this._inselDeko(deko, g, wueste);
         gruppe.push(g);
@@ -2221,24 +2227,54 @@
       return [meshS, meshD];
     }
 
-    /** Pfeilschild (blau, zwei weiße Pfeile „links / rechts vorbei“) auf der Insel bei s, Vorderseite zum Verkehr (gegen die Fahrtrichtung). */
+    /**
+     * Pfeilschild (blau, weißer Rahmen, ⬅ und ➡ nebeneinander) auf der Insel bei s, Vorderseite zum Verkehr (gegen die Fahrtrichtung).
+     * 15.10. (v25): größer als vorher (Tafel 2,6 × 1,6 m statt 1,24 × 0,9 m) und mit waagerechten Pfeilen ⬅ ➡, damit man es schon von weitem sieht.
+     */
     _pfeilschild(v, s) {
-      const sp = this.spline, pp = sp.punktBei(s), P = this._punktSQ(s, 0, 0);
-      const tx = pp.tx, tz = pp.tz, nx = pp.nx, nz = pp.nz;
-      this._kiste(v, P[0], P[2], tx, tz, 0.05, 0.05, P[1] - 0.1, P[1] + 1.9, 0x8a8f95);          // Pfosten
-      const W = 0.62, H0 = 1.15, H1 = 2.05, d = 0.07;                                              // Schild: Breite/2, Unterkante, Oberkante
-      this._kiste(v, P[0], P[2], tx, tz, 0.035, W, P[1] + H0, P[1] + H1, 0x1d4fb0);
-      // Pfeile auf der Vorderseite (zeigt gegen die Fahrtrichtung: −t)
+      const pp = this.spline.punktBei(s), P = this._punktSQ(s, 0, 0);
+      this._kiste(v, P[0], P[2], pp.tx, pp.tz, 0.06, 0.06, P[1] - 0.1, P[1] + 3.15, 0x8a8f95);          // Pfosten
+      this._kiste(v, P[0], P[2], pp.tx, pp.tz, 0.035, 1.3, P[1] + 1.5, P[1] + 3.1, 0x1d4fb0);           // Tafel
+      this._schildPfeile(v, P, pp, 1.3, 1.5, 3.1);
+    }
+
+    /**
+     * Weißer Rahmen + zwei große waagerechte Pfeile (⬅ links, ➡ rechts) + Mittelstrich auf der Vorderseite einer blauen Tafel
+     * (Mitte P, Halbbreite W, Höhen H0..H1 über P; Tafel selbst baut der Aufrufer mit _kiste, Halbdicke 0,035).
+     */
+    _schildPfeile(v, P, pp, W, H0, H1) {
+      const tx = pp.tx, tz = pp.tz, nx = pp.nx, nz = pp.nz, d = 0.07, k = H1 - H0, f = 0.03 + 0.03 * k;
       const pkt = (u, w) => [P[0] + nx * u - tx * d, P[1] + w, P[2] + nz * u - tz * d];
-      const pfeil = (u0, w0, u1, w1) => {
-        const dx = u1 - u0, dw = w1 - w0, l = Math.hypot(dx, dw), ex = dx / l, ew = dw / l, px = -ew, pw = ex, dick = 0.045, kopfL = 0.2, kopfB = 0.14;
-        const bx = u1 - ex * kopfL, bw = w1 - ew * kopfL;
-        v.push({ a: pkt(u0 + px * dick, w0 + pw * dick), b: pkt(u0 - px * dick, w0 - pw * dick), c: pkt(bx - px * dick, bw - pw * dick), d: pkt(bx + px * dick, bw + pw * dick), farbe: 0xffffff });
-        v.push({ a: pkt(bx + px * kopfB, bw + pw * kopfB), b: pkt(bx - px * kopfB, bw - pw * kopfB), c: pkt(u1, w1), d: pkt(u1, w1), farbe: 0xffffff });
-      };
-      const wm = (H0 + H1) / 2;
-      pfeil(-0.06, H0 + 0.18, -0.44, wm + 0.2);     // nach links oben
-      pfeil(0.06, H0 + 0.18, 0.44, wm + 0.2);       // nach rechts oben
+      const quad = (u0, w0, u1, w1) => v.push({ a: pkt(u0, w0), b: pkt(u1, w0), c: pkt(u1, w1), d: pkt(u0, w1), farbe: 0xffffff });
+      quad(-W + f * 0.5, H0 + f * 0.5, W - f * 0.5, H0 + 1.5 * f); quad(-W + f * 0.5, H1 - 1.5 * f, W - f * 0.5, H1 - f * 0.5);   // Rahmen unten/oben
+      quad(-W + f * 0.5, H0 + f * 0.5, -W + 1.5 * f, H1 - f * 0.5); quad(W - 1.5 * f, H0 + f * 0.5, W - f * 0.5, H1 - f * 0.5);   // links/rechts
+      quad(-f * 0.4, H0 + 1.5 * f, f * 0.4, H1 - 1.5 * f);                                                                      // Mittelstrich
+      const wm = (H0 + H1) / 2, halb = W / 2, len = 0.8 * halb, hl = 0.36 * len, sh = 0.085 * k, hh = 0.27 * k;
+      [-1, 1].forEach((sg) => {            // sg −1 = Pfeil nach links (u < 0), +1 = nach rechts
+        const uc = sg * halb, tip = uc + sg * len / 2, tail = uc - sg * len / 2, base = tip - sg * hl;
+        quad(Math.min(tail, base), wm - sh, Math.max(tail, base), wm + sh);                                                     // Schaft
+        v.push({ a: pkt(base, wm + hh), b: pkt(base, wm - hh), c: pkt(tip, wm), d: pkt(tip, wm), farbe: 0xffffff });            // Spitze
+      });
+    }
+
+    /** 15.10. (v25): Schilderbrücke ⬅ ➡ über der ganzen Straße bei s (zwei Pfosten außerhalb des Randsteins, Querträger, große blaue Tafel). */
+    _schilderbruecke(v, s) {
+      const pp = this.spline.punktBei(s), halb = this.breite / 2 + this.randBreite + 1.3;
+      const L = this._punktSQ(s, -halb, 0), Rr = this._punktSQ(s, halb, 0), M = this._punktSQ(s, 0, 0);
+      const yTraeger = Math.max(L[1], Rr[1], M[1]) + 6.6, W = halb - 0.9, H0 = 3.9, H1 = 6.5;
+      [L, Rr].forEach((P) => this._kiste(v, P[0], P[2], pp.tx, pp.tz, 0.2, 0.2, P[1] - 0.4, yTraeger + 0.3, 0x8a8f95));          // Pfosten
+      this._kiste(v, M[0], M[2], pp.tx, pp.tz, 0.16, halb + 0.2, yTraeger - 0.2, yTraeger + 0.3, 0x7a8086);                      // Querträger
+      const hb = Math.max(M[1], L[1], Rr[1]);
+      this._kiste(v, M[0], M[2], pp.tx, pp.tz, 0.035, W, hb + H0, hb + H1, 0x1d4fb0);                                           // Tafel
+      this._schildPfeile(v, [M[0], hb, M[2]], pp, W, H0, H1);
+    }
+
+    /** 15.10. (v25): Vorwarn-Tafel am Straßenrand (Seite sg = −1 links / +1 rechts) bei s: kleine blaue Tafel ⬅ ➡ auf zwei Pfosten. */
+    _vorwarnTafel(v, s, sg) {
+      const pp = this.spline.punktBei(s), q = sg * (this.breite / 2 + this.randBreite + 1.8), P = this._punktSQ(s, q, 0);
+      this._kiste(v, P[0], P[2], pp.tx, pp.tz, 0.06, 0.06, P[1] - 0.1, P[1] + 3.0, 0x8a8f95);
+      this._kiste(v, P[0], P[2], pp.tx, pp.tz, 0.035, 1.5, P[1] + 1.4, P[1] + 3.0, 0x1d4fb0);
+      this._schildPfeile(v, P, pp, 1.5, 1.4, 3.0);
     }
 
     /** Inseldeko: Wiese = Bäume, Büsche, Blumen, Steine · Wüste = Kakteen, Felsen, Gestrüpp, Sandhügel. Als Vierecke in v (Lambert, Vertex-Farben). */
@@ -2280,7 +2316,28 @@
         }
         return erg;
       };
-      if (!wueste) {
+      if (this.thema === 'dino') {
+        // 15.10. (v25) Dino-Insel: Palmen, Riesenfarne, Farnbüsche, Vulkanfelsen, ein paar Knochen
+        stellen(12, 1.5).forEach((o) => {            // Palmen: schräger Stamm, 6 hängende Wedel
+          const y = boden(o.x, o.z), h = 3.2 + rnd() * 1.6, neig = (rnd() - 0.5) * 0.5, ph = rnd() * 6.28;
+          prisma(o.x, y - 0.1, o.z, 0.2, 0.13, h, 6, 0x7a5c38, ph);
+          const kx = o.x + neig * h * 0.5, kz = o.z + (rnd() - 0.5) * 0.3, ky = y + h - 0.1;
+          for (let k = 0; k < 6; k++) {
+            const w = ph + k * Math.PI / 3, ex = kx + Math.cos(w) * 1.9, ez = kz + Math.sin(w) * 1.9, px = -Math.sin(w) * 0.32, pz = Math.cos(w) * 0.32;
+            const wf = mischen(0x3f8f35, 0.8 + 0.35 * rnd());
+            v.push({ a: [kx + px * 0.5, ky + 0.15, kz + pz * 0.5], b: [kx - px * 0.5, ky + 0.15, kz - pz * 0.5], c: [ex - px, ky - 0.85, ez - pz], d: [ex + px, ky - 0.85, ez + pz], farbe: wf });
+          }
+        });
+        stellen(7, 1.0).forEach((o) => {             // Farnbüsche: 7 flache Wedel um einen Punkt
+          const y = boden(o.x, o.z) + 0.05, ph = rnd() * 6.28, wf = mischen(0x3e7a2c, 0.85 + 0.3 * rnd());
+          for (let k = 0; k < 7; k++) {
+            const w = ph + k * 2 * Math.PI / 7, ex = o.x + Math.cos(w) * (0.9 + o.r * 0.6), ez = o.z + Math.sin(w) * (0.9 + o.r * 0.6), px = -Math.sin(w) * 0.16, pz = Math.cos(w) * 0.16;
+            v.push({ a: [o.x + px, y + 0.35, o.z + pz], b: [o.x - px, y + 0.35, o.z - pz], c: [ex - px, y + 0.05, ez - pz], d: [ex + px, y + 0.05, ez + pz], farbe: wf });
+          }
+        });
+        stellen(16, 0.9).forEach((o) => { kugel(o.x, boden(o.x, o.z) - 0.15, o.z, 0.6 + o.r * 0.7, mischen(0x4a4540, 0.8 + 0.4 * rnd()), 0.75); });   // Vulkanfelsen
+        stellen(34, 0.5).forEach((o) => { prisma(o.x, boden(o.x, o.z) - 0.05, o.z, 0.08, 0.1, 0.9 + rnd() * 0.5, 5, 0xe9e2cc, rnd() * 3); });         // Knochen (aufrecht)
+      } else if (!wueste) {
         stellen(11, 1.7).forEach((o) => {            // Bäume (Eichen/Birken gemischt)
           const y = boden(o.x, o.z), birke = rnd() < 0.3, h = (birke ? 3.0 : 2.3) + rnd() * 1.1;
           prisma(o.x, y - 0.1, o.z, 0.2, 0.15, h, 6, birke ? 0xd8d2c4 : 0x6b4a2b, rnd() * 3);

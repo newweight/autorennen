@@ -1579,6 +1579,32 @@
   }
 
   // ------------------------------------------------------------
+  // 7b. Rettungsdienst-Warnmarkierung (form.rettungDekor, 15.10. v25): Battenburg-Muster leuchtgelb/rot (DIN-Stil) als Flächenfarben in der Karosserie
+  //     (kein eigener Draw-Call): unterer Streifen zwischen den Radhäusern auf beiden Seiten, breite Doppelreihe auf den Hecktüren, Streifen vorn an der Haube.
+  // ------------------------------------------------------------
+  function baueRettungDekor(S, K) {
+    const M = K.M, GELB = 0xdcf11a, ROT = 0xd4141c;
+    // Seiten: zwei Reihen Quadrate unter der roten Flanke, zwischen den Radhäusern (Vorder- und Hinterachse)
+    const z0 = M.zVA + M.archV + 0.10, z1 = M.zHA - M.archH - 0.10, n = Math.max(6, Math.round((z1 - z0) / 0.2)), zs = (z1 - z0) / n;
+    const yu = M.sill + 0.025, hr = 0.095;
+    [0, 1].forEach((reihe) => {
+      for (let i = 0; i < n; i++) {
+        const za = z0 + i * zs, zb = za + zs, farbe = (i + reihe) % 2 ? ROT : GELB;
+        seitenFlaeche(S, K, farbe, za, zb, yu + reihe * hr, yu + (reihe + 1) * hr, 1, 0.006);
+      }
+    });
+    // Heck: Battenburg über die ganze Breite, 2 Reihen
+    const H = M.H, hb = 0.88 * (M.B / 2);
+    for (let reihe = 0; reihe < 2; reihe++) {
+      const nx = 10;
+      for (let i = 0; i < nx; i++) {
+        const xa = -hb + (2 * hb) * i / nx, xb = -hb + (2 * hb) * (i + 1) / nx;
+        anbauLeisteFlach(S, K, (i + reihe) % 2 ? ROT : GELB, 'hinten', xa, xb, H * 0.255 + reihe * 0.12, 0.12, 0.004, 1);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------
   // 8. Formel-Renner (Typ 'formel'): Monoposto aus eigenem Loft + Anbauteilen
   //    Nase, Frontflügel, Seitenkästen, Airbox, Halo-Bügel, Heckflügel, Fahrerhelm, Radaufhängung;
   //    freistehende Räder (keine Radhäuser). Generisch: Startnummer 1, keine Logos/Sponsoren.
@@ -1796,8 +1822,14 @@
     return g;
   }
   /** Canvas-Textur mit dem Schriftzug (nur im Browser; ohne document → null, das Dekor-Mesh bleibt dann unsichtbar). */
-  function polizeiTextur() {
-    if (cache.material.polizeiDekor !== undefined) return cache.material.polizeiDekor;
+  // 15.10. (v25): Dekor-Varianten: 'POLIZEI' (Standard, unverändert) oder z. B. 'RETTUNGSDIENST' (Krankenwagen: weiße Schrift auf der roten Flanke,
+  // rote Schrift auf Haube und Heck). Schlüssel im Cache: Text; der Polizei-Eintrag behält seinen alten Namen.
+  const DEKOR_FARBEN = { POLIZEI: { seite: '#f4f6f8', haube: '#1d4fb0', heck: '#1d4fb0', linien: true },
+    RETTUNGSDIENST: { seite: '#ffffff', haube: '#d4141c', heck: '#d4141c', linien: false } };
+  function dekorSchluessel(text) { return !text || text === 'POLIZEI' ? 'polizeiDekor' : 'dekor_' + text; }
+  function polizeiTextur(dtext) {
+    const dtxt = dtext || 'POLIZEI', dkey = dekorSchluessel(dtext), DF = DEKOR_FARBEN[dtxt] || DEKOR_FARBEN.POLIZEI;
+    if (cache.material[dkey] !== undefined) return cache.material[dkey];
     let tex = null;
     try {
       if (typeof document !== 'undefined' && THREE.CanvasTexture) {
@@ -1805,13 +1837,13 @@
         c.width = T.w; c.height = T.h;
         const x = c.getContext('2d');
         x.clearRect(0, 0, T.w, T.h);
-        const BLAU = '#1d4fb0', WEISS = '#f4f6f8';
+        const BLAU = DF.haube, WEISS = DF.seite;
         const text = (reg, farbe, breiteAnteil, spiegeln) => {
           const [y0, y1] = T[reg], hh = y1 - y0;
           let px = hh * 0.9;
           x.font = '800 ' + px + 'px "Arial Black", Arial, Helvetica, sans-serif';
           x.textBaseline = 'middle'; x.textAlign = 'center';
-          const buchst = 'POLIZEI'.split(''), luecke = hh * 0.1;
+          const buchst = dtxt.split(''), luecke = hh * 0.1;
           let w = buchst.reduce((a, ch) => a + x.measureText(ch).width, 0) + luecke * (buchst.length - 1);
           const soll = T.w * breiteAnteil;
           if (w > soll) { px *= soll / w; x.font = '800 ' + px + 'px "Arial Black", Arial, Helvetica, sans-serif'; w = soll; }
@@ -1823,26 +1855,27 @@
         text('seite', WEISS, 0.9);
         // Haube: blaue Schrift mit schmalen Linien darüber/darunter
         text('haube', BLAU, 0.9);
-        x.fillStyle = BLAU; x.fillRect(T.w * 0.05, T[ 'haube' ][0] + 6, T.w * 0.9, 7); x.fillRect(T.w * 0.05, T['haube'][1] - 13, T.w * 0.9, 7);
-        // Heck: blaue Schrift
-        text('heck', BLAU, 0.88);
+        if (DF.linien) { x.fillStyle = BLAU; x.fillRect(T.w * 0.05, T[ 'haube' ][0] + 6, T.w * 0.9, 7); x.fillRect(T.w * 0.05, T['haube'][1] - 13, T.w * 0.9, 7); }
+        // Heck: Schrift in der Haubenfarbe
+        text('heck', DF.heck, 0.88);
         tex = new THREE.CanvasTexture(c);
         if (THREE.sRGBEncoding !== undefined && 'encoding' in tex) tex.encoding = THREE.sRGBEncoding;
         else if (THREE.SRGBColorSpace !== undefined && 'colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
         tex.anisotropy = 4;
       }
     } catch (e) { tex = null; }
-    cache.material.polizeiDekor = tex;
+    cache.material[dkey] = tex;
     return tex;
   }
-  function polizeiDekorMaterial() {
-    if (!cache.material.polizeiDekorMat) {
-      const map = polizeiTextur();
-      cache.material.polizeiDekorMat = new THREE.MeshLambertMaterial({ map, transparent: true, depthWrite: false, polygonOffset: true,
+  function polizeiDekorMaterial(dtext) {
+    const mk = dekorSchluessel(dtext) + 'Mat';
+    if (!cache.material[mk]) {
+      const map = polizeiTextur(dtext);
+      cache.material[mk] = new THREE.MeshLambertMaterial({ map, transparent: true, depthWrite: false, polygonOffset: true,
         polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.FrontSide, emissive: 0x4a4a4a });
-      cache.material.polizeiDekorMat.userData.ohneTextur = !map;
+      cache.material[mk].userData.ohneTextur = !map;
     }
-    return cache.material.polizeiDekorMat;
+    return cache.material[mk];
   }
 
   // ------------------------------------------------------------
@@ -1909,6 +1942,7 @@
     baueHeck(S, BL, K);
     baueAnbauten(S, K);
     if (M.f.blaulicht && !M.f.cabrio) baueBlaulicht(S, BLAU, K);
+    if (M.f.rettungDekor) baueRettungDekor(S, K);     // 15.10. (v25): Krankenwagen – Battenburg-Warnmarkierung
     const dach = baueDach(M, K);
     const dekor = M.f.polizeiDekor ? bauePolizeiDekor(M, K) : null;
     const raeder = achsen(M).map((a) => ({
@@ -1925,6 +1959,8 @@
    * @returns {THREE.Group} Ursprung = Bodenmitte, Front bei -z
    */
   function bauen(autoDaten, opt) {
+    // 15.10. (v25): Sonderbauten (z. B. Abschleppwagen, world/verkehr.js): auto.sonderbau = Name in R.sonderbauten → eigene Gruppe mit denselben userData-Feldern
+    if (autoDaten && autoDaten.sonderbau && R.sonderbauten && R.sonderbauten[autoDaten.sonderbau]) return R.sonderbauten[autoDaten.sonderbau](autoDaten, opt);
     // Optionen: auto.optionen = { dach: 'offen'|'zu', lack: <Schlüssel aus auto.lackVarianten, z. B. 'gulf'> } und/oder bauen(auto, { dach, lack, farbe }).
     // opt überschreibt auto.optionen. Lack: Variante wird in farbe/farbeName/form gemischt (eigener Cache-Eintrag), danach gilt opt.farbe (Garage).
     const optionen = Object.assign({}, autoDaten.optionen || {}, opt || {});
@@ -1995,9 +2031,10 @@
 
     // Polizei-Dekor: ein Mesh mit Canvas-Textur (Schriftzug „POLIZEI“); ohne Canvas (Node-Tests) unsichtbar
     if (e.dekor) {
-      const dm = new THREE.Mesh(e.dekor, polizeiDekorMaterial());
+      const dtext = autoDaten.form && autoDaten.form.dekorText;
+      const dm = new THREE.Mesh(e.dekor, polizeiDekorMaterial(dtext));
       dm.name = 'polizeiDekor'; dm.renderOrder = 1;
-      if (polizeiDekorMaterial().userData.ohneTextur) dm.visible = false;
+      if (polizeiDekorMaterial(dtext).userData.ohneTextur) dm.visible = false;
       g.add(dm);
     }
 

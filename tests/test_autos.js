@@ -7,8 +7,8 @@ let fehler = 0;
 function pruefe(name, ok, info) { console.log((ok ? 'OK   ' : 'FEHL ') + name + (info ? '  (' + info + ')' : '')); if (!ok) fehler++; }
 
 // --- Katalog-Vollständigkeit ---
-// 10 Autos: 8 Straßenautos + Formel-Renner (wählbar) + Streifenwagen (waehlbar: false, nur vom Spiel eingesetzt)
-pruefe('Katalog ist ein Array mit 10 Autos', Array.isArray(katalog) && katalog.length === 10, 'n=' + katalog.length);
+// 11 Autos: 8 Straßenautos + Formel-Renner (wählbar) + Streifenwagen + Krankenwagen (waehlbar: false, nur vom Spiel eingesetzt; Krankenwagen seit v25)
+pruefe('Katalog ist ein Array mit 11 Autos', Array.isArray(katalog) && katalog.length === 11, 'n=' + katalog.length);
 const ids = katalog.map((a) => a.id);
 pruefe('ids eindeutig', new Set(ids).size === ids.length);
 const waehlbar = katalog.filter((a) => a.waehlbar !== false);
@@ -55,8 +55,8 @@ for (const a of katalog) {
 // Pflichtautos vorhanden, Extremwerte wie vorgegeben
 const vmaxe = katalog.map((a) => a.fahrwerte.vMax);
 const sollKmh = { 'multivan': 220, 'troc-cabrio': 230, 'mini-cooper': 235, 'passat': 240, 'audi-rs6': 255, 'bmw-m4': 260, 'amg-gt': 265,
-  'porsche-911': 270, 'formel': 280, 'polizei': 62 * 3.6 };
-pruefe('vMax je Auto wie vorgegeben (Straße 220 … 270 km/h, Streifenwagen 223, Formel 280)', katalog.every((a) => Math.abs(a.fahrwerte.vMax * 3.6 - sollKmh[a.id]) < 0.01),
+  'porsche-911': 270, 'formel': 280, 'polizei': 62 * 3.6, 'krankenwagen': 220 };
+pruefe('vMax je Auto wie vorgegeben (Straße 220 … 270 km/h, Streifenwagen 223, Krankenwagen 220, Formel 280)', katalog.every((a) => Math.abs(a.fahrwerte.vMax * 3.6 - sollKmh[a.id]) < 0.01),
   vmaxe.map((x) => (x * 3.6).toFixed(0)).join('/'));
 // 13.10. Passat ist jetzt ein Kombi (Variant) -> kein Katalogauto mehr mit Typ 'limousine'; der Typ bleibt im carBuilder (TYP_STANDARD) nutzbar
 pruefe('Alle erlaubten Typen Pflicht: cabrio/van/sportwagen/coupe/kombi/kleinwagen vorhanden (limousine nur noch als Builder-Typ)',

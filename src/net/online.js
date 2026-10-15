@@ -224,7 +224,8 @@
         const e = this.spiel.einstellungen;
         v.senden(Object.assign({ t: 'raumErstellen', einstellungen: { streckeId: e.streckeId, welt: e.welt, variante: e.variante, runden: e.runden,
           gegner: e.gegner, schwierigkeit: e.schwierigkeit, tempoKlasse: e.tempoKlasse, jahreszeit: e.jahreszeit, wetter: e.wetter,
-          tageszeit: e.tageszeit, kollisionen: e.kollisionen === true, hindernisMenge: e.hindernisMenge, polizei: e.polizei === true } }, this.meineWahl()));   // Stufe 2: zuletzt gewählt (Standard Geister)
+          tageszeit: e.tageszeit, kollisionen: e.kollisionen === true, hindernisMenge: e.hindernisMenge, polizei: e.polizei === true,
+          geisterfahrer: e.geisterfahrer === true, verkehr: e.verkehr || 'aus' } }, this.meineWahl()));      // v25: Verkehr (additiv)   // Stufe 2: zuletzt gewählt (Standard Geister)
       } catch (err) { this.ansicht = 'start'; this.hinweis = 'Keine Verbindung zum Server 😕'; this.zeichnen(); }
     }
 
@@ -509,6 +510,8 @@
       }
       if (zeile === 'kollisionen') return { wert: e.kollisionen ? 'an' : 'aus', liste: [{ k: 'aus', text: '👻 Geister' }, { k: 'an', text: '💥 Rempeln' }] };
       if (zeile === 'polizei') return { wert: e.polizei ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '🚨 An' }] };   // v4 (14.10.)
+      if (zeile === 'geisterfahrer') return { wert: e.geisterfahrer ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '👻 An' }] };   // v25 (15.10.)
+      if (zeile === 'verkehr') return { wert: e.verkehr || 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'wenig', text: '🚑 Wenig' }, { k: 'viel', text: '🚑 Viel' }] };
       if (zeile === 'tageszeit') return { wert: e.tageszeit, liste: [{ k: 'tag', text: '☀️ Tag' }, { k: 'daemmerung', text: '🌇 Dämmerung' }, { k: 'nacht', text: '🌙 Nacht' }] };
       return { wert: null, liste: [] };
     }
@@ -549,6 +552,18 @@
         e.polizei = k === 'an';
         const lok = this.basis || this.spiel.einstellungen;     // zuletzt gewählten Wert merken (wie Rempeln)
         lok.polizei = e.polizei;
+        if (!this.basis) this.spiel.einstellungenSpeichern();
+      }
+      else if (zeile === 'geisterfahrer') {
+        e.geisterfahrer = k === 'an';
+        const lok = this.basis || this.spiel.einstellungen;
+        lok.geisterfahrer = e.geisterfahrer;
+        if (!this.basis) this.spiel.einstellungenSpeichern();
+      }
+      else if (zeile === 'verkehr') {
+        e.verkehr = k === 'wenig' || k === 'viel' ? k : 'aus';
+        const lok = this.basis || this.spiel.einstellungen;
+        lok.verkehr = e.verkehr;
         if (!this.basis) this.spiel.einstellungenSpeichern();
       }
       else e[zeile] = k;
@@ -625,7 +640,7 @@
           (this.variantenListe().length ? zeile('variante', '📏 Variante') : '') +
           zeile('hindernisMenge', this.hindernisMengeAktiv() ? '🚧 Hindernisse' : '🚧 Hindernisse <small>(erst ab Welt „Hindernisse“)</small>') + zeile('runden', '🔁 Runden') +
           zeile('gegner', '🤖 Computer-Gegner') + zeile('schwierigkeit', '🎚️ Computer-Stärke') + zeile('tempoKlasse', '🏎️ Tempo') +
-          zeile('jahreszeit', '🍂 Jahreszeit') + zeile('wetter', '🌦️ Wetter') + zeile('tageszeit', '🌗 Tageszeit') + zeile('polizei', '🚨 Polizei') +
+          zeile('jahreszeit', '🍂 Jahreszeit') + zeile('wetter', '🌦️ Wetter') + zeile('tageszeit', '🌗 Tageszeit') + zeile('polizei', '🚨 Polizei') + zeile('geisterfahrer', '👻 Geisterfahrer') + zeile('verkehr', '🚑 Verkehr') +
           `<div class="on-fest">💥 Schaden: aus (online) · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister: Autos fahren durcheinander durch'}</div>`;
       } else {
         const wi = (R.weltInfo || {})[e.welt || daten.weltStandard] || {};
@@ -635,7 +650,7 @@
           `🗺️ ${esc(daten.name)} · ${wi.emoji || '🌍'} ${esc(wi.name || e.welt || '')}${e.variante ? ' · 📏 XL' : ''}<br>` +
           `🔁 ${e.runden} Runden · 🤖 ${e.gegner} Computer (${esc(S.name || e.schwierigkeit)})<br>` +
           (e.hindernisMenge && e.hindernisMenge !== 'normal' && this.hindernisMengeAktiv() ? `🚧 Hindernisse: ${esc(((c.hindernisMenge.stufen[e.hindernisMenge]) || {}).name || e.hindernisMenge)}<br>` : '') +
-          `🏎️ ${e.tempoKlasse === 'schnell' ? 'Schnell' : 'Normal'} · ${J ? J.emoji + ' ' + J.name : '🎲'} · ${W ? (W.emoji || '☀️') + ' ' + W.name : '🎲'} · ${T[e.tageszeit] || ''}${e.polizei ? ' · 🚨 Polizei' : ''}<br>` +
+          `🏎️ ${e.tempoKlasse === 'schnell' ? 'Schnell' : 'Normal'} · ${J ? J.emoji + ' ' + J.name : '🎲'} · ${W ? (W.emoji || '☀️') + ' ' + W.name : '🎲'} · ${T[e.tageszeit] || ''}${e.polizei ? ' · 🚨 Polizei' : ''}${e.geisterfahrer ? ' · 👻 Geisterfahrer' : ''}${e.verkehr && e.verkehr !== 'aus' ? ' · 🚑 Verkehr: ' + (e.verkehr === 'viel' ? 'viel' : 'wenig') : ''}<br>` +
           `💥 Schaden: aus (online) · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister'}</div>`;
       }
       return `<div class="on-lobby">` +
@@ -670,7 +685,7 @@
         streckeId: e.streckeId, welt: e.welt, variante: e.variante, jahreszeit: e.jahreszeit, wetter: e.wetter, windStaerke: e.windStaerke,
         windRichtung: e.windRichtung, tageszeit: e.tageszeit, hindernisMenge: e.hindernisMenge, tempoKlasse: e.tempoKlasse, runden: e.runden, gegner: e.gegner,
         wetterSeed: m.wetterSeed,   // v22: Megastrecke – gleicher Seed wie der Server → gleiche Zonen
-        schaden: false, polizei: e.polizei === true, rempeln: 'sanft', modus: 'solo', spielart: 'rennen',
+        schaden: false, polizei: e.polizei === true, geisterfahrer: e.geisterfahrer === true, verkehr: e.verkehr || 'aus', rempeln: 'sanft', modus: 'solo', spielart: 'rennen',
       });
       if (spiel.menue) spiel.menue.verstecken();
       spiel.ergebnisAnzeige.verstecken(); spiel.pauseAnzeige.verstecken();
@@ -709,6 +724,14 @@
         spiel.polizei.einsetzen(strecke, this.nT, e.gegner);
         try { spiel.polizei.vorkompilieren(spiel.renderer, spiel.szene, spiel.menueKamera); } catch (err) { /* nur Optik */ }
       }
+      // v25 (15.10.): Verkehr online – der Server rechnet (Geisterfahrer, Krankenwagen, Abschleppwagen), hier nur Anzeige (Mesh, Blaulicht, Sirene, HUD-Warnung)
+      spiel.verkehr = null;
+      if ((e.geisterfahrer === true || (e.verkehr && e.verkehr !== 'aus')) && R.Verkehr) {
+        spiel.verkehr = new R.Verkehr(spiel);
+        spiel.verkehr.nurAnzeige = true;
+        spiel.verkehr.einsetzen(strecke, this.nT, { geister: e.geisterfahrer === true, stufe: e.verkehr || 'aus' });
+        try { spiel.verkehr.vorkompilieren(spiel.renderer, spiel.szene, spiel.menueKamera); } catch (err) { /* nur Optik */ }
+      }
       const mein = spiel.fahrzeuge[du];
       spiel.kameraHinzufuegen(mein);
       const hud = new R.Hud(spiel.hudWurzel, { rennen, teilnehmer: rennen.teilnehmer[du], fahrzeug: mein, nr: 0, split: false });
@@ -717,6 +740,7 @@
       if (hud.schadenSetzen) hud.schadenSetzen(null, du);
       if (hud.itemSetzen) hud.itemSetzen(spiel.pickups, du, 0);
       if (hud.polizeiSetzen) hud.polizeiSetzen(spiel.polizei, du);
+      if (hud.verkehrSetzen) hud.verkehrSetzen(spiel.verkehr, du);
       if (hud.muenzenSetzen) hud.muenzenSetzen(null);
       // Ping + 🌐 in der Namens-Karte oben links
       const links = hud.el.querySelector('.hud-links');
@@ -1071,6 +1095,18 @@
             if (f.netRs !== rs) { f.netRs = rs; spiel._vorherAngleichen(f); }
             this._looping(f, lp);
             this._flags(f, a1);
+          }
+          // v25: Verkehr (vk) – Geisterfahrer/Krankenwagen/Abschleppwagen; geparkte Einträge (Flag 2 aus) sind unsichtbar, beim Auftauchen KEIN Interpolieren aus dem Nichts
+          const vkw = spiel.verkehr;
+          if (vkw && um.a.vk && um.b.vk) {
+            vkw.zustandAnwenden(um.a.vk, um.t > 0.5 ? um.b.vk : um.a.vk);
+            for (let k = 0; k < vkw.idx.length; k++) {
+              const f = fz[vkw.idx[k]], a0 = um.a.vk[k], a1 = um.b.vk[k];
+              if (!f || !a0 || !a1 || !vkw.eintraege[k].aktiv) continue;
+              if ((a0[6] & 2) && (a1[6] & 2) && a0[13] === a1[13]) this.anz.pose(k, f.vehicle, 'vk');
+              else { const w = f.vehicle; w.x = a1[0]; w.z = a1[1]; w.y = a1[2]; w.heading = a1[3]; w.vLaengs = a1[4]; w.lenkung = a1[5]; w.nicken = a1[7]; w.neigung = a1[8]; }
+              if (f.netRs !== a1[13]) { f.netRs = a1[13]; spiel._vorherAngleichen(f); }
+            }
           }
           // v4: Streifenwagen (po) – gleiche Interpolation wie die anderen Autos
           const po = spiel.polizei;

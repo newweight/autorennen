@@ -47,7 +47,7 @@
 // Runde 6 (W4-J, Fantasie): kreuzungen: [{ s0, s1 }]  niveaugleiche Kreuzung mit sich selbst (Bahnübergang mit Warnlicht);
 //   s0..s1 = Bereich des ersten Abschnitts, die Stelle (sA/sB, Winkel 70–110°, |Δy| < 1 m) sucht trackBuilder.
 //   Listen-Einträge nicht an der Kreuzung (kreuzungNah, test_strecke prüft das).
-// 14.10. (v18) Gabelung (nur Wiese + Wüste, in ALLEN Welten): gabelungen: [{ s0, s1, versatz?, astBreite?, anteil? }]
+// 14.10. (v18) Gabelung (Wiese + Wüste; 15.10. v25 dazu Dino – in ALLEN Welten): gabelungen: [{ s0, s1, versatz?, astBreite?, anteil? }]
 //   Die doppelspurige Straße teilt sich bei s0 (Y) in zwei getrennte, je 1-spurige Fahrbahnen (astBreite ≈ 6 m) links und rechts
 //   (Mittellinie der Äste = Strecken-Mittellinie ± c(s), c wächst von breite/4 auf `versatz` m) mit Insel dazwischen und führt bei s1
 //   wieder zusammen. anteil = Länge der Teilung/Zusammenführung als Anteil der Gesamtlänge (Standard 0,36). Nur s0/s1 skalieren in
@@ -55,6 +55,8 @@
 //   Listen-Einträge (spuren, hindernisse, wracks, … ) liegen nicht in [s0 − 30, s1 + 30] (tests/test_gabelung.js prüft das):
 //   Wiese: Baustelle 1107 → 985 (die enge Stelle 1210–1330 entfällt, dort liegt jetzt die Gabelung);
 //   Wüste: Baustelle 1102 → 945 (die enge Piste 1210–1400 entfällt). Details: trackBuilder.js (Kopfkommentar „Gabelung“).
+//   15.10. (v25) Dino: Gabelung auf der langen Geraden (s 675–1025, 350 m). Dafür umgezogen (alle s in m): Ball 739 → 1840, Schanze 839 → 155
+//   (Start-Gerade; dafür Lava 180 → 262), Lava 960 → 490, Turbo-Feld 1019 → 420, enge Stelle 1089–1199 → 1125–1215 (90 m).
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -518,17 +520,19 @@
       // berg = Massiv-Kulisse (themes.js bergmassivBauen).
       tunnel: [{ s0: 2345, s1: 2405, art: 'hoehle' }, { s0: 2490, s1: 2630, art: 'hoehle' }],
       berg: { s0: 2318, s1: 2655 },
+      // 15.10. (v25) Gabelung auf der langen Geraden (645–1255 m gerade): Teilung bei 675, Zusammenführung bei 1025 (Äste ≈ 350 m, Mittellinie fast gerade)
+      gabelungen: [{ s0: 675, s1: 1025, versatz: 10, astBreite: 6 }],
       hindernisse: [
         { typ: 'sand', s: 359, seite: -0.3 },
         { typ: 'baustelle', s: 1389, seite: 1 },
         { typ: 'ast', s: 1779, seite: -1 },
         { typ: 'oel', s: 2014, seite: 0.3 },
         // Runde 6 (W2-C, C2): Lava-Zungen über die halbe Fahrbahn (seite = belegte Hälfte); Kontakt = 1 s Stopp, KI meidet
-        { typ: 'lava', s: 180, seite: -1 },
-        { typ: 'lava', s: 960, seite: 1 },
+        { typ: 'lava', s: 262, seite: -1 },        // 15.10. (v25): war 180 (Landebereich der neuen Schanze 155)
+        { typ: 'lava', s: 490, seite: 1 },        // 15.10. (v25): war 960 (dort liegt jetzt die Gabelung)
       ],
       spuren: [
-        { s0: 1089, s1: 1199, spuren: 1 },      // enger Urwaldweg am Ende der langen Geraden
+        { s0: 1125, s1: 1215, spuren: 1 },      // enger Urwaldweg am Ende der langen Geraden (15.10. v25: war 1089–1199; nach hinten und auf 90 m gekürzt wegen der Gabelung)
         { s0: 2104, s1: 2189, spuren: 3 },     // breit nach dem Kurvengeschlängel
       ],
       wracks: [
@@ -560,10 +564,10 @@
       vulkan: { ausbruch: true },
       schanzen: [
         { s: 65, winkel: 8, laenge: 10 },
-        { s: 839, winkel: 12, laenge: 10 },     // lange Gerade
+        { s: 155, winkel: 12, laenge: 10 },     // 15.10. (v25): war 839 (lange Gerade, dort liegt jetzt die Gabelung) → Start-Gerade nach der 1. Schanze
       ],
       boostFelder: [
-        { s: 1019, seitenabstand: 0, laenge: 12 },
+        { s: 420, seitenabstand: 0, laenge: 12 },      // 15.10. (v25): war 1019 (Gabelung)
         { s: 1529, seitenabstand: 2, laenge: 12 },
       ],
       schilde: [
@@ -571,7 +575,7 @@
         { s: 2440, seitenabstand: -2 },        // Runde 6: in der Schlucht zwischen den Tunneln
       ],
       baelle: [
-        { s: 739, von: -1, abRunde: 2, intervall: 8, tempo: 9, radius: 2.2, farbe: 0xff4fa3 },
+        { s: 1840, von: -1, abRunde: 2, intervall: 8, tempo: 9, radius: 2.2, farbe: 0xff4fa3 },   // 15.10. (v25): war 739 (Gabelung)
         { s: 2660, von: 1, abRunde: 'letzte', intervall: 8, tempo: 9, radius: 2.2, farbe: 0xffd23a },
       ],
       wasserstrahlen: [
