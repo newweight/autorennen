@@ -248,6 +248,24 @@
       });
     }
 
+    /**
+     * 15.10. (v23): Der Rückspiegel sitzt ganz oben in der Mitte – dort stand die Positions-Anzeige („3. von 4“). Sie rückt rechts neben den Spiegel
+     * (gleiche Oberkante); passt sie dort nicht mehr neben die Zeiten-Anzeige (schmales Fenster, Zweispieler-Hälfte), steht sie mittig unter dem Spiegel.
+     * Ohne Spiegel (aus, Kamera-Modus, Touch) wird alles zurückgesetzt.
+     */
+    _platzChip(an) {
+      const hud = this.hud, chip = this._chip || (this._chip = hud.el.querySelector('.hud-platz'));
+      if (!chip) return;
+      if (!an) { chip.style.position = chip.style.left = chip.style.top = chip.style.transform = ''; return; }
+      const vw = this.vw || hud.el.clientWidth, vh = this.vh || hud.el.clientHeight;
+      const rc = R.rueckspiegel.rechteck(vw, vh, hud.split), zeiten = hud.el.querySelector('.hud-zeiten');
+      const bChip = chip.offsetWidth || 7.5 * 16, bRechts = zeiten ? (zeiten.offsetWidth || 190) : 190;
+      const x = rc.x + rc.b + 14;
+      chip.style.position = 'absolute';
+      if (x + bChip + 12 + bRechts + 12 <= vw) { chip.style.left = x + 'px'; chip.style.top = Math.max(2, rc.y) + 'px'; chip.style.transform = ''; }
+      else { chip.style.left = (vw / 2) + 'px'; chip.style.top = (rc.y + rc.h + 8) + 'px'; chip.style.transform = 'translateX(-50%)'; }
+    }
+
     update() {
       const c = R.config.cockpit, hud = this.hud, spiel = R.spiel;
       const kam = spiel && spiel.kameras && spiel.kameras[hud.nr];
@@ -267,10 +285,11 @@
           stil(this.rahmen, { left: (rc.x - 4) + 'px', top: (rc.y - 4) + 'px', width: (rc.b + 8) + 'px', height: (rc.h + 8) + 'px' });
           this._layoutSp = this.vw + 'x' + this.vh;
         }
+        this._platzChip(sp);
       }
-      // Hinweis (Festgefahren? …) liegt sonst genau auf dem Spiegel → höher setzen
-      if (hud.eHinweis && this._hinweisHoch !== (sp || this.aktiv)) {
-        this._hinweisHoch = sp || this.aktiv;
+      // Hinweis (Festgefahren? …) liegt sonst genau auf den Instrumenten → höher setzen (der Spiegel sitzt seit v23 oben und stört dort nicht mehr)
+      if (hud.eHinweis && this._hinweisHoch !== this.aktiv) {
+        this._hinweisHoch = this.aktiv;
         hud.eHinweis.style.bottom = this._hinweisHoch ? '32%' : '';
       }
 

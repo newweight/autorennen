@@ -213,12 +213,17 @@
       let a = 0;
       const gas = s.gas || 0, bremse = s.bremse || 0;
       const vRel = this.vLaengs / vMaxWind;
+      const RW = P.rueckwaerts || {};
       if (gas > 0 && this.vLaengs >= -0.5) {
         a += d.beschleunigung * gas * (1 - P.kraftAbfall * Math.max(0, vRel)) * (0.6 + 0.4 * ug.grip);
+      } else if (gas > 0 && RW.gasBremst) {
+        // 15.10. (v23): Gas beim Rückwärtsfahren bremst die Rückwärtsfahrt zügig bis zum Stand (dann fährt das Auto vorwärts). Vorher rollte das Auto
+        // auf der Straße noch ≈ 10 s rückwärts weiter (nur 0,6 m/s² Rollwiderstand) und das Gas „ging nicht“.
+        a += Math.min(d.bremsen, RW.gasBremst) * gas * bremsFaktor;
       }
       if (bremse > 0) {
         if (this.vLaengs > 0.5) a -= d.bremsen * bremse * bremsFaktor;   // bremsen (Runde 4: × Wetter)
-        else if (gas === 0) a -= Math.min(6, d.beschleunigung) * 0.8 * bremse;   // rückwärts (nach Stillstand)
+        else if (gas === 0) a -= Math.max(Math.min(6, d.beschleunigung) * 0.8, RW.beschleunigung || 0) * bremse;   // rückwärts (nach Stillstand; v23: mindestens config.physik.rueckwaerts.beschleunigung)
       }
       const luft = Math.max(0, (1 - P.kraftAbfall - P.endKraft) * d.beschleunigung - 0.6);
       let rw = ug.rollwiderstand;

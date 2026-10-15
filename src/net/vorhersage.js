@@ -105,7 +105,7 @@
       let s = e.s;
       // v4 (14.10.): von der Polizei angehalten → wie main.js polizei.haltSteuerung (Vorrang vor allem anderen): nur Bremse bis zum Stillstand
       if (this.polizeiRest > 0) s = { gas: 0, bremse: v.vLaengs > 0.3 ? 1 : 0, lenkung: 0 };
-      else if (e.ziel) s = { gas: 0, bremse: 0.6, lenkung: 0 };
+      else if (e.ziel) s = { gas: 0, bremse: v.vLaengs > 0.3 ? 0.6 : 0, lenkung: 0 };   // v23: wie main.js (nur bremsen, solange es vorwärts rollt)
       if (e.cd || this.gasSperre) s = { gas: 0, bremse: s.bremse, lenkung: s.lenkung };
       if (kz && R.Kleber.gesperrt(kz)) s = NULL_S;                      // festgeklebt: Eingabe ignorieren (wie main.js)
       if (lp && (lp.aktiv || lp.fallen)) {

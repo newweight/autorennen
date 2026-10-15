@@ -73,7 +73,7 @@ with sync_playwright() as pw:
     # ---------- Spiegel: Inhalt, abschaltbar ----------
     start(page, 'passat')
     mit = bild(page, 'spiegel_an.png')
-    box = (480, 540, 800, 605)
+    box = (480, 8, 800, 76)   # 15.10. (v23): Spiegel ganz oben in der Mitte (vorher (480, 540, 800, 605) über den Instrumenten)
     page.evaluate("() => { Rennspiel.config.cockpit.spiegel.an = false; }")
     bis(page, "() => Rennspiel.spiel.huds[0].cockpit.rahmen.style.display === 'none'")
     ohne = bild(page, 'spiegel_aus.png')
@@ -90,7 +90,7 @@ with sync_playwright() as pw:
     oben = bild(page, 'spiegel_oben.png')
     top = page.evaluate("() => parseFloat(Rennspiel.spiel.huds[0].cockpit.rahmen.style.top)")
     d2 = unterschied(oben, mit, box)
-    pruefe('Position per Config änderbar (Spiegel y = 30: Rahmen wandert nach oben, alter Platz ist leer)', top < 300 and d2 > 20, f'Rahmen oben {top:.0f}px, Unterschied am alten Platz {d2:.1f}')
+    pruefe('Position per Config änderbar (Spiegel y = 30: Rahmen wandert nach unten, alter Platz ganz oben ist leer)', top < 300 and d2 > 20, f'Rahmen oben {top:.0f}px, Unterschied am alten Platz {d2:.1f}')
     page.evaluate("() => { Rennspiel.config.cockpit.spiegel.y = 71.5; Rennspiel.spiel.huds[0].cockpit._layoutSp = ''; }")
 
     # ---------- Wischer ----------

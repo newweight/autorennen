@@ -243,9 +243,17 @@ function fingerabdruck(umwelt) {
   // Runde 6 (W1-A2): neu erzeugt nach Gras-Änderung (Rollwiderstand 4,5, Deckel 60 km/h, Anfahrhilfe abseitsAnfahren 8 m/s);
   // mit den alten Gras-Werten (3,0 / 25 m/s) und abseitsAnfahren 0 ergibt vehicle.js Runde 6 bitgenau den Runde-5-Wert
   // 63.569917157452885,… (geprüft 11.10.2026)
-  const VORHER = '61.360003321236064,-4.5087142532100648,-1.6787553574715364,2.3244778201556078,0.0000000000000000';
+  const VORHER_V22 = '61.360003321236064,-4.5087142532100648,-1.6787553574715364,2.3244778201556078,0.0000000000000000';
+  // 15.10. (v23): neu erzeugt nach der Rückwärts-Änderung (config.physik.rueckwaerts: stärkere Rückwärtsbeschleunigung, Gas bremst die Rückwärtsfahrt) – die feste Fahrt
+  // bremst bis zum Stand und fährt dabei rückwärts. Ohne den Config-Block (delete) ergibt vehicle.js bitgenau den alten Wert VORHER_V22 (siehe nächste Prüfung).
+  const VORHER = '97.133986056685899,-90.158746307501616,0.32866790591501061,16.530887872192597,-0.27973854274458021';
   const ohne = fingerabdruck('ohne');
-  pruefe('Ohne umwelt: bitgenau wie vor Runde 4', ohne === VORHER, ohne === VORHER ? '' : ohne);
+  pruefe('Ohne umwelt: bitgenau wie vor Runde 4 (Stand v23: neu erzeugt nach Rückwärts-Änderung)', ohne === VORHER, ohne === VORHER ? '' : ohne);
+  {
+    const RW = R.config.physik.rueckwaerts; delete R.config.physik.rueckwaerts;
+    const alt = fingerabdruck('ohne'); R.config.physik.rueckwaerts = RW;
+    pruefe('Ohne config.physik.rueckwaerts: bitgenau der Wert von v22 (nur die Rückwärts-Änderung ist neu)', alt === VORHER_V22, alt === VORHER_V22 ? '' : alt);
+  }
   pruefe('umwelt undefined / neutral {1,1,Wind 0}: identisch', fingerabdruck(undefined) === ohne &&
     fingerabdruck({ gripFaktor: 1, bremsFaktor: 1, windX: 0, windZ: 0 }) === ohne);
 }

@@ -1235,7 +1235,7 @@
         if (schaden && schaden.gesperrt(i)) s = { gas: 0, bremse: 1, lenkung: 0 };
         else if (polizei && polizei.gesperrt(i)) s = polizei.haltSteuerung(v);   // Runde 5b: von der Polizei angehalten
         else if (f.polizei) { if (polizei) s = polizei.steuerung(i, dt, rennen); }   // Runde 5b: Streifenwagen
-        else if (f.istSpieler && tn[i] && tn[i].imZiel) s = { gas: 0, bremse: 0.6, lenkung: 0 };   // im Ziel: ausrollen
+        else if (f.istSpieler && tn[i] && tn[i].imZiel) s = { gas: 0, bremse: v.vLaengs > 0.3 ? 0.6 : 0, lenkung: 0 };   // im Ziel: ausrollen (v23: nur bremsen, solange es vorwärts rollt – sonst fuhr es nach dem Stand rückwärts)
         else if (f.istSpieler && f.spielerNr >= 0 && !f.autopilot) s = this.input.steuerung(f.spielerNr);
         else if (fahrer && rennen && werkstatt && (s = werkstatt.kiSteuerung(i, f, dt, rennen, schaden))) { /* 14.10. (v18): Computer-Auto fährt zur Werkstatt / steht dort */ }
         else if (fahrer && rennen) {
@@ -1649,8 +1649,18 @@
     spielerZuruecksetzen(nr) {
       if (this.zustand === 'online') { if (this.online) this.online.reset(); return; }   // W5: online setzt der Server zurück
       const i = this.fahrzeuge.findIndex(f => f.istSpieler && f.spielerNr === nr);
-      if (i >= 0 && this.schaden && this.schaden.gesperrt(i)) return;   // liegengeblieben: der Abschleppwagen kommt gleich
-      if (i >= 0 && this.fahrzeuge[i].kleber && R.Kleber.gesperrt(this.fahrzeuge[i].kleber)) return;   // Runde 5: festgeklebt
+      // 15.10. (v23): gesperrte Fälle sagen im HUD, warum R gerade nicht geht (vorher still: der Vater drückte R, „es ging nicht“)
+      if (i >= 0 && this.schaden && this.schaden.gesperrt(i)) {   // liegengeblieben: der Abschleppwagen kommt gleich
+        const z = this.schaden.zustand ? this.schaden.zustand(i) : null, rest = z && z.rest > 0 ? Math.ceil(z.rest - 1e-6) : 0;
+        this._meldung(i, '🛻 Abschleppwagen kommt gleich' + (rest > 0 ? ' – noch ' + rest + ' s' : ''), 1500);
+        return;
+      }
+      if (i >= 0 && this.fahrzeuge[i].kleber && R.Kleber.gesperrt(this.fahrzeuge[i].kleber)) { this._meldung(i, '🍯 Festgeklebt – gleich bist du frei', 1500); return; }   // Runde 5: festgeklebt
+      if (i >= 0 && this.polizei && this.polizei.gesperrt(i)) {      // von der Polizei angehalten: R wäre ein Ausreißen – warten oder freikaufen
+        const kosten = this.polizei.c && this.polizei.c.freikaufKosten > 0 ? this.polizei.c.freikaufKosten : 0;
+        this._meldung(i, '🚨 Polizei – warten oder 2× ' + (nr === 1 ? 'S' : '↓') + (kosten ? ' (' + kosten + ' 🪙)' : ''), 1800);
+        return;
+      }
       // Runde 5 (M6): vor Looping/Schanze gestoppt → Anlaufposition statt letztem Checkpoint
       if (i >= 0 && R.Anlauf && R.Anlauf.aktiv(this.fahrzeuge[i].anlauf) && this._zurAnlauf(i)) return;
       if (i >= 0) this.zuruecksetzen(i);

@@ -161,7 +161,7 @@ class Simulation {
     this.ereignisse = [];                    // [{ an: nr|null, ... }] seit dem letzten abholen()
     // Meldungen gehen nur an den Betroffenen. Online ist jeder „Spieler 1“ an seinem Gerät: Tasten-Hinweise für Spieler 2
     // (T = Reset, E = Item) werden auf R / Leertaste umgeschrieben (beide Tasten gehen online ohnehin).
-    const tastenText = (t) => String(t).replace(/oder T: /, 'oder R: ').replace(/\(E\)/, '(Leertaste)');
+    const tastenText = (t) => String(t).replace(/oder T: /, 'oder R: ').replace(/\(E\)/, '(Leertaste)').replace(/2× S\b/, '2× ↓');   // v23: Polizei-Hinweis (Spieler 2: S) online als ↓
     sim.huds = spieler.map((s, nr) => ({ meldung: (text) => this.ereignisse.push({ an: nr, art: 'meldung', text: tastenText(text) }) }));
 
     // Teilnehmer wie main.js streckeAufbauen: Spieler vorne, dann die Computer mit den Autos, die kein Spieler fährt

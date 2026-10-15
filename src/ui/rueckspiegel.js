@@ -24,9 +24,15 @@
     return { x: cx / 100 * vw - b / 2, y: cy / 100 * vh - h / 2, b, h };
   };
 
+  /**
+   * Rechteck des Rückspiegels. 15.10. (v23): oben Mitte wie ein echter Innenspiegel – Zweispieler vergrößert um den Ankerpunkt OBEN Mitte
+   * (die Instrumente unten skalieren um unten Mitte, siehe rechteckAus), sonst würde der Spiegel nach oben aus dem Bild wachsen.
+   */
   S.rechteck = function (vw, vh, split) {
-    const c = R.config.cockpit;
-    return S.rechteckAus(c.spiegel, vw, vh, split ? c.zweispielerFaktor : 1);
+    const c = R.config.cockpit, e = c.spiegel, f = split ? c.zweispielerFaktor : 1;
+    const b = e.b / 100 * vw * f, h = e.h !== undefined ? e.h / 100 * vh * f : b;
+    const cx = 50 + (e.x - 50) * f, cy = e.y * f;
+    return { x: cx / 100 * vw - b / 2, y: cy / 100 * vh - h / 2, b, h };
   };
 
   S.sichtbar = function (spiel, i) {

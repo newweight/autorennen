@@ -192,7 +192,7 @@ In **Schnell** fahren die Autos **220 bis 270 km/h** (Multivan 220 … Porsche 2
 
 ## 🕹️ Cockpit, Rückspiegel, Wischer (Positionen selbst ändern)
 - **Instrumente unten in der Mitte**: Passat, Polizei-Passat, Multivan und T-Roc Cabrio haben das VW „Digital Cockpit Pro“ (links Drehzahl, rechts km/h, in der Mitte Platz und Runde). Der Porsche 911 hat die fünf Rundinstrumente (Mitte großer Drehzahlmesser mit Digital-Tacho, links Gang und Runde, rechts Platz und Öl). Alle anderen Autos behalten den Tacho rechts unten.
-- **Rückspiegel** über den Instrumenten (echtes Bild nach hinten, links/rechts wie im Auto). Im Zweispieler-Modus aus (spart Leistung).
+- **Rückspiegel** ganz oben in der Mitte wie ein Innenspiegel (echtes Bild nach hinten, links/rechts wie im Auto; seit 15.10. – vorher über den Instrumenten). Die Anzeige „3. von 4“ steht rechts daneben. Position: `config.cockpit.spiegel` (x/y = Mitte in Prozent, y 5,2 = ganz oben). Im Zweispieler-Modus aus (spart Leistung).
 - **Scheibenwischer** nur bei Regen, Schnee und Hagel, nur in der Fahrersicht (Taste **C** drücken, bis man im Auto sitzt; Zweispieler: Spieler 2 hat eine eigene Taste).
 - **Alles ändern in `src/config.js`, Abschnitt `cockpit`.** Jede Position ist eine einfache Zahl in Prozent der Ansicht (Zweispieler: pro Hälfte): `x` = Mitte von links (0) nach rechts (100), `y` = Mitte von oben (0) nach unten (100), `b` = Breite in % der Ansichtsbreite, `h` = Höhe in % der Ansichtshöhe (ohne `h`: quadratisch). Beispiele:
   - Spiegel höher/tiefer: `cockpit.spiegel.y` (kleiner = weiter oben); größer: `b` und `h` erhöhen; Spiegel ganz aus: `cockpit.spiegel.an: false`.

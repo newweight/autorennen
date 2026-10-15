@@ -138,6 +138,10 @@ Rennspiel.config = {
     endKraft: 0.2,             // Netto-Beschleunigung bei vMax als Anteil von `beschleunigung` (vMax wird sicher erreicht)
     abseitsBremsen: 22,        // m/s² – so schnell sinkt das Tempo auf den Abseits-Deckel (statt Sprung)
     abseitsUebergang: 1,       // Runde 6: m – über diese Breite hinter dem Randstreifen mischen Rand und Gras/Sand
+    // 15.10. (v23) Rückwärts (Bremse/↓ ohne Gas, nach Stillstand): beschleunigung = Mindest-Rückwärtsbeschleunigung m/s² (vorher je Auto 0,8 × min(6, Antrieb) = 3,5–4,8;
+    // auf Gras/Sand blieb davon wenig übrig → aus Busch/Gras kaum herauszukommen); gasBremst = Gas während der Rückwärtsfahrt bremst mit höchstens so vielen m/s²
+    // (0/fehlt = wie früher: Auto rollt weiter). Grenze für die Rückwärtsfahrt bleibt fahrwerte.rueckwaertsMax.
+    rueckwaerts: { beschleunigung: 5.5, gasBremst: 14 },
     abseitsAnfahren: 8,        // Runde 6: m/s – darunter wirkt abseits der Rollwiderstand anteilig (Anfahren aus Gras/Sand bleibt möglich)
     // Runde 5 – Lenkgefühl (vehicle.js drehrateMax/schritt):
     // Drehrate (rad/s) nie unter rateVmax bei vMax bzw. rateHalb bei 50 % vMax (linear im Tempo-Anteil), für ein Auto
@@ -739,7 +743,7 @@ Rennspiel.config = {
     spiegel: {
       an: true,
       modi: ['cockpit', 'verfolger', 'weit'],
-      x: 50, y: 71.5, b: 25, h: 8.5,           // Position/Größe (siehe oben)
+      x: 50, y: 5.2, b: 25, h: 8.5,            // Position/Größe (siehe oben). 15.10. (v23): GANZ OBEN in der Mitte wie ein echter Innenspiegel (y = Mitte des Spiegels; 5,2 % bei 8,5 % Höhe = Oberkante ≈ 1 % vom Bildrand; vorher y 71,5 über dem Armaturenbrett). Zweispieler skaliert um den Ankerpunkt oben Mitte. Die Positions-Anzeige („3. von 4“) rückt neben den Spiegel (schmales Fenster: unter den Spiegel), siehe cockpit.js
       aufloesung: 288,                         // Breite des Spiegelbilds in Pixeln (Höhe folgt dem Seitenverhältnis): klein = schnell
       takt: 2,                                 // Spiegelbild nur bei jedem N-ten Bild neu rendern
       blickWinkel: 80,                         // waagerechter Blickwinkel (Grad)
