@@ -45,6 +45,15 @@ if [ -f "$HSRC" ] && /bin/bash -n "$HSRC"; then
   echo '{"funnel":"aus","seit":0}' | sudo tee "$STEU/wunsch.json" >/dev/null
   sudo chown "$U":staff "$STEU/wunsch.json"; sudo chmod 644 "$STEU/wunsch.json"
   sudo cp "$HSRC" "$HELFER"; sudo chown root:wheel "$HELFER"; sudo chmod 755 "$HELFER"
+  # F4: root-eigene Kopie der Tailscale-CLI für den Helfer (root führt nichts aus /opt/homebrew aus)
+  TS_KOPIE="/Library/PrivilegedHelperTools/de.newweight.autorennen.tailscale"
+  case "$TS" in
+    /Applications/*) sudo rm -f "$TS_KOPIE" ;;   # alte App: bleibt im App-Paket (root-eigen), keine Kopie
+    *) TS_ECHT=$(/usr/bin/python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$TS")
+       sudo cp "$TS_ECHT" "$TS_KOPIE.neu" && sudo chown root:wheel "$TS_KOPIE.neu" && sudo chmod 755 "$TS_KOPIE.neu" && sudo mv -f "$TS_KOPIE.neu" "$TS_KOPIE" \
+         && echo "   🔐 Tailscale-CLI root-eigen kopiert ($TS_KOPIE). Nach einem Tailscale-Update diesen Installer erneut ausführen." \
+         || echo "   ⚠️  Kopie der Tailscale-CLI fehlgeschlagen – Internet-Schalter im Spiel wirkt dann nicht." ;;
+  esac
   sudo tee /Library/LaunchDaemons/$SLABEL.plist >/dev/null <<EOS
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -59,7 +68,8 @@ EOS
   STEUARG="--steuerung $STEU"
   echo "🛡️  Internet-Schalter eingerichtet (Helfer: $HELFER)."
   # Annahme prüfen: kann root die Tailscale-CLI der GUI-App benutzen?
-  sudo "$TS" status >/dev/null 2>&1 && echo "   ✔ Tailscale-CLI funktioniert als root." || echo "   ⚠️  Tailscale-CLI als root geht NICHT – der Schalter im Spiel würde nichts bewirken. An Claude melden (Fallback: LaunchAgent)."
+  TS_HELFER="$TS"; [ -x "$TS_KOPIE" ] && TS_HELFER="$TS_KOPIE"
+  sudo "$TS_HELFER" status >/dev/null 2>&1 && echo "   ✔ Tailscale-CLI funktioniert als root." || echo "   ⚠️  Tailscale-CLI als root geht NICHT – der Schalter im Spiel würde nichts bewirken. An Claude melden (Fallback: LaunchAgent)."
 else
   STEUARG=""; echo "⚠️  Helfer-Skript nicht gefunden/fehlerhaft ($HSRC) – Internet-Schalter im Spiel bleibt aus (Doppelklick-Dateien gehen weiter)."
 fi

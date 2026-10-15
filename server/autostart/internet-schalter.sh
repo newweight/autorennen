@@ -37,19 +37,30 @@ AUTO_AUS_S=14400                                            # 4 Stunden
 LOKAL="http://127.0.0.1:8444"
 PORT_HTTPS="10000"
 
-# Tailscale-CLI suchen: zuerst Homebrew-tailscaled (Systemdienst, läuft schon vor der Anmeldung), sonst alte App
-if [ "$TS" = "AUTO" ]; then
-  TS=""
-  for _k in /opt/homebrew/bin/tailscale /usr/local/bin/tailscale /Applications/Tailscale.app/Contents/MacOS/Tailscale; do
-    [ -x "$_k" ] && { TS="$_k"; break; }
-  done
-fi
+# Tailscale-CLI (F4, Sebastian 15.10.: absichern): root führt NUR eine root-eigene Kopie aus, die installieren.command
+# nach $TS_KOPIE legt – nie /opt/homebrew/… (gehört dem Admin-Benutzer). Fallback nur die alte App (root-eigen).
+# Nach einem Tailscale-Update installieren.command erneut ausführen (frische Kopie).
+TS_KOPIE="/Library/PrivilegedHelperTools/de.newweight.autorennen.tailscale"
 OS=$(uname)
 st_eigner() { if [ "$OS" = Darwin ]; then stat -f '%Su' "$1"; else stat -c '%U' "$1"; fi; }
 st_groesse() { if [ "$OS" = Darwin ]; then stat -f '%z' "$1"; else stat -c '%s' "$1"; fi; }
 st_modus()   { if [ "$OS" = Darwin ]; then stat -f '%Lp' "$1"; else stat -c '%a' "$1"; fi; }
 jetzt_s() { $JETZT_S_BEFEHL; }
 protokoll() { echo "$(date '+%F %T') $*" >&2; }
+# nur Dateien nehmen, die root gehören, kein Link sind und für Gruppe/andere nicht beschreibbar sind
+ts_sicher() {
+  [ -f "$1" ] && [ ! -L "$1" ] && [ -x "$1" ] || return 1
+  [ "$(st_eigner "$1")" = root ] || return 1
+  local m; m=$(st_modus "$1"); case "${m: -2}" in *[2367]*) return 1;; esac
+  return 0
+}
+if [ "$TS" = "AUTO" ]; then
+  TS=""
+  for _k in "$TS_KOPIE" /Applications/Tailscale.app/Contents/MacOS/Tailscale; do
+    ts_sicher "$_k" && { TS="$_k"; break; }
+  done
+  [ -n "$TS" ] || protokoll "keine sichere Tailscale-CLI gefunden – installieren.command erneut ausführen"
+fi
 
 # Tailscale-CLI mit Zeitlimit (20 s), feste Argumente
 ts() { /usr/bin/perl -e 'alarm 20; exec @ARGV or exit 127' "$TS" "$@" >/dev/null 2>&1; }

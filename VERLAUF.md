@@ -1179,3 +1179,6 @@ Anlass: Ein anderes Projekt auf dem mini braucht Tailscale-Port 8443 (Sebastian:
 - **Offen/vorbestehend (nicht angefasst):** Lobby-Einstellungsspalte bei 1280×800 unten ~75 px abgeschnitten (Polizei-Zeile), Lobby im Handy-Querformat (844×390) beschnitten.
 
 Nachtrag 14.10. (Agent v22 Strecken XL + Alpen): test_welten_ki, Alpen-Gruppenfahrt (7 Stufen, schnell) hat in 2 Laeufen (klassisch/hindernisse, Seed 0) 2 statt max. 1 Reset (Pulk bei s~255-270, Autos stehen links neben der Strasse). Baseline hat dort ebenfalls 1 Reset (s~292); Seeds 1 und 2 sind in Baseline und neu 0 Resets -> Pulk-Chaos, nicht systematisch, aber Alpen-Gruppenfahrt bleibt knapp. Offene Fremd-FEHL: menu_test 7. Streckenkarte (Mega-Agent), test_netz E/M2 Echtzeit unter Last (Baseline ebenfalls).
+
+## 15.10. F4 abgesichert (v22b)
+- Wunsch Sebastian „Ja mach so“: root-Helfer (internet-schalter.sh) führt nur noch eine root-eigene Kopie der Tailscale-CLI aus (/Library/PrivilegedHelperTools/de.newweight.autorennen.tailscale; Prüfung: Eigentümer root, kein Link, nicht gruppen-/fremdbeschreibbar), Fallback nur alte App. installieren.command legt die Kopie an (realpath von /opt/homebrew/bin/tailscale); ausschalten.command entfernt sie. Nach Tailscale-Update Installer erneut ausführen. Tests: bash -n alle, test_schalter 39 OK, ts_sicher-Probe (gut/gruppen-w/fremd-w/Link/fehlt) korrekt.
