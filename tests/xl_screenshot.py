@@ -6,9 +6,9 @@ from playwright.sync_api import sync_playwright
 
 basis = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 url = 'file://' + os.path.join(basis, 'Autorennen.html')
-out = os.path.join(basis, 'tests', 'out'); os.makedirs(out, exist_ok=True)
+out = os.environ.get('XL_OUT') or os.path.join(basis, 'tests', 'out'); os.makedirs(out, exist_ok=True)   # v22: XL_OUT=Ordner
 wahl = sys.argv[1] if len(sys.argv) > 1 else 'alle'
-ids = ['wueste', 'fantasie'] if wahl == 'alle' else [wahl]
+ids = ['wiese', 'wald', 'wueste', 'fantasie', 'dino', 'alpen'] if wahl == 'alle' else wahl.split(',')   # v22: alle 6 Strecken, Liste mit Komma
 
 KAMERA_FREI = '''([px, py, pz, lx, ly, lz]) => { const s = Rennspiel.spiel, k = s.kameras[0];
   k.update = () => {}; k.kamera.far = 6000; k.kamera.updateProjectionMatrix();
@@ -36,6 +36,7 @@ with sync_playwright() as p:
         for var in ['', 'xl']:
             page = browser.new_page(viewport={'width': 1280, 'height': 800})
             fehler = []
+            page.set_default_timeout(180000)   # v22: bei Last (Software-GL) dauern Bilder > 30 s
             page.on('pageerror', lambda e: fehler.append(str(e)))
             page.on('console', lambda m: fehler.append(m.text) if m.type == 'error' else None)
             page.goto(url); page.wait_for_timeout(1500)
@@ -55,7 +56,7 @@ with sync_playwright() as p:
             if var == '':
                 basisInfo = info
             else:
-                pruefe(f'[{sid}] Länge ≈ Faktor ×', abs(info['laenge'] / basisInfo['laenge'] - (1.6 if sid == 'wueste' else 2.0)) < 0.04 * 2, (basisInfo['laenge'], info['laenge']))
+                pruefe(f'[{sid}] Länge ≈ Faktor ×', abs(info['laenge'] / basisInfo['laenge'] - page.evaluate("(id) => Rennspiel.trackCatalog.find(t => t.id === id).varianten.xl.faktor", sid)) < 0.04 * 2, (basisInfo['laenge'], info['laenge']))
                 pruefe(f'[{sid}] Checkpoints mehr als Normal', info['cps'] > basisInfo['cps'], (basisInfo['cps'], info['cps']))
                 f = info['laenge'] / basisInfo['laenge']
                 # Nahbilder: Loopings / Tunnel / Brücke (Kamera seitlich-oben auf die Stelle)

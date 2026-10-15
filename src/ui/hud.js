@@ -355,7 +355,7 @@
       if (!this.ePolizei) {
         const e = document.createElement('div');
         e.className = 'hud-polizei';
-        Object.assign(e.style, { position: 'absolute', left: '50%', top: '31%', transform: 'translateX(-50%)', whiteSpace: 'nowrap',
+        Object.assign(e.style, { position: 'absolute', left: '50%', top: '31%', transform: 'translateX(-50%)', whiteSpace: 'pre', textAlign: 'center',
           fontSize: '2.1em', fontWeight: '900', color: '#fff', padding: '.25em .9em', borderRadius: '1em', border: '.08em solid #fff',
           background: 'linear-gradient(90deg, rgba(40,90,255,.92), rgba(255,40,40,.92))', pointerEvents: 'none', display: 'none',
           textShadow: '0 .06em .12em rgba(0,0,0,.4)' });
@@ -367,7 +367,7 @@
     _polizeiAnzeigen() {
       const a = this.polizei.anzeige(this.polizeiIndex), e = this.ePolizei;
       let text = '';
-      if (a && a.art === 'stopp') text = '🚨 Polizei! Anhalten… ' + a.rest + ' s';
+      if (a && a.art === 'stopp') text = '🚨 Polizei! Anhalten… ' + a.rest + ' s' + (a.kosten > 0 ? '\n(2× ' + (this.nr === 1 ? 'S' : '↓') + ' = ' + a.kosten + ' 🪙 freikaufen)' : '');
       else if (a && a.art === 'verfolgt') text = '🚨 Polizei!';
       setzeText(e, text);
       const klein = !!a && a.art === 'verfolgt';

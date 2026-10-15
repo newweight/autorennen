@@ -12,6 +12,9 @@
       this.gedrueckt = new Set();      // aktuell gehaltene Tasten (event.code)
       this.geradeGedrueckt = new Set(); // in diesem Frame neu gedrückt
       this._listener = [];
+      this._bremsTipps = [[], []];     // 14.10. (v22): Zeitpunkte (s) der letzten Rückwärts-/Bremstipps je Spieler (Doppeltipp = Polizei freikaufen)
+      this._bremsPrev = [false, false];
+      this._bremsDoppel = [-Infinity, -Infinity];
       this._dachFlanken = [];          // 14.10. (v20): neu entstandene Dach-Gesten { nr, art: 'gb' | 'lr' } – bis dach.js sie abholt
 
       const spielTasten = new Set();
@@ -26,7 +29,7 @@
         const neu = !this.gedrueckt.has(e.code);
         if (neu) this.geradeGedrueckt.add(e.code);
         this.gedrueckt.add(e.code);
-        if (neu) this._dachMerken();
+        if (neu) { this._dachMerken(); this._bremsMerken(e.code); }
         this._listener.forEach(fn => fn(e.code, e));
       });
       window.addEventListener('keyup', (e) => {
@@ -64,6 +67,38 @@
       });
       return gefunden;
     }
+
+    // ---------- 14.10. (v22) Doppeltipp Rückwärts (Spieler 1 ↓, Spieler 2 S, Touch ▼ = Spieler 1) ----------
+    _jetzt() { return (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000; }
+    _bremsMerken(code) {
+      const T = R.config.tasten.spieler;
+      for (let nr = 0; nr < T.length && nr < 2; nr++) if (T[nr].bremse === code) this._bremsTipp(nr, this._jetzt(), this.gedrueckt.has(T[nr].gas));
+    }
+    /** Ein neuer Tipp auf Rückwärts/Bremse. Mit gehaltenem Gas (Dach-Geste ↑+↓) zählt er nicht und löscht die Reihe. */
+    _bremsTipp(nr, zeit, gasGehalten) {
+      const l = this._bremsTipps[nr], fenster = (R.config.polizei && R.config.polizei.freikaufFenster) || 0.5;
+      if (gasGehalten) { l.length = 0; return; }
+      if (l.length && zeit - l[l.length - 1] <= fenster) { this._bremsDoppel[nr] = zeit; l.length = 0; }
+      else { l.length = 0; l.push(zeit); }
+    }
+    /**
+     * Wurde Rückwärts für Spieler nr gerade zweimal kurz hintereinander getippt (≤ 0,5 s)? Einmal pro Doppeltipp true (danach false),
+     * höchstens 1 s nach dem zweiten Tipp (bei niedriger Bildrate wird erst im nächsten Bild abgefragt). Wird auch für Touch-▼ (steuerung(0) enthält die Touch-Tasten) pro Aufruf auf eine neue Flanke geprüft.
+     * Jeden Schritt aufrufen (auch wenn nichts anliegt), sonst bleibt ein alter Tipp liegen.
+     */
+    rueckwaertsDoppel(nr) {
+      if (nr !== 0 && nr !== 1) return false;
+      const T = R.config.tasten.spieler[nr], jetzt = this._jetzt();
+      if (T) {
+        const s = this.steuerung(nr), an = s.bremse > 0;
+        if (an && !this._bremsPrev[nr] && !this.gedrueckt.has(T.bremse)) this._bremsTipp(nr, jetzt, s.gas > 0);    // Touch ▼ (Tastatur kommt über keydown)
+        this._bremsPrev[nr] = an;
+      }
+      if (jetzt - this._bremsDoppel[nr] <= 1.0) { this._bremsDoppel[nr] = -Infinity; return true; }
+      return false;
+    }
+    /** Gemerkte Tipps verwerfen (Rennstart / Pause). */
+    bremsTippsLeeren() { this._bremsTipps = [[], []]; this._bremsDoppel = [-Infinity, -Infinity]; }
 
     /** Verwirft alle gemerkten Gesten (außerhalb eines Rennens). */
     dachFlankenLeeren() { this._dachFlanken.length = 0; }

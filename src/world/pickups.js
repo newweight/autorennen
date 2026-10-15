@@ -207,16 +207,17 @@
           a.turbo = dauer; a.vFaktor = vf; a.bFaktor = bf;
         }
         a.imFeld = imFeld;
-        // Schild-Kugeln
-        if (!a.schild) {
+        // Schild-Kugeln. 14.10. (v22): hat das Auto schon einen Schild, bleibt der alte, die Kugel verschwindet trotzdem
+        // und das Auto bekommt Gesundheit (Ereignis 'schildPlus', main.js heilt um config.stunt.schild.zweiteHeilung %, Standard 10)
+        {
           const r = wert(c.radius, 2.6);
           for (const k of this.kugeln) {
             if (!k.da) continue;
             const dx = v.x - k.x, dz = v.z - k.z;
             if (dx * dx + dz * dz <= r * r) {
               k.da = false; k.timer = wert(c.wiederDa, 10);
-              a.schild = true; a.schilde++;
-              erg.push({ nr: i, typ: 'schild' });
+              if (a.schild) { a.schildPlus = (a.schildPlus || 0) + 1; erg.push({ nr: i, typ: 'schildPlus' }); }
+              else { a.schild = true; a.schilde++; erg.push({ nr: i, typ: 'schild' }); }
               break;
             }
           }

@@ -141,7 +141,7 @@ with sync_playwright() as p:
     pruefe('Modus zu zweit', page.evaluate('Rennspiel.spiel.einstellungen.modus') == 'zwei')
     taste('Enter'); page.wait_for_timeout(200); snap('menu_2_strecke.png')
     karten = page.evaluate("Array.from(document.querySelectorAll('.karte.strecke')).map(k => k.dataset.a)")
-    pruefe('Streckenwahl: 6 Karten (Wiese, Wald, Wüste, Fantasie, Dino, Alpen)', karten == ['strecke:wiese', 'strecke:wald', 'strecke:wueste', 'strecke:fantasie', 'strecke:dino', 'strecke:alpen'], karten)
+    pruefe('Streckenwahl: 7 Karten (Wiese, Wald, Wüste, Fantasie, Dino, Alpen, Megastrecke)', karten == ['strecke:wiese', 'strecke:wald', 'strecke:wueste', 'strecke:fantasie', 'strecke:dino', 'strecke:alpen', 'strecke:mega'], karten)
     # 6 Karten (W4-I: + Alpen) in EINER Reihe (gleiches offsetTop), im Bild, ohne Überlappung – bei 1280×800 und 1440×900
     LAGE = """(() => { const k = Array.from(document.querySelectorAll('.karte.strecke')), r = k.map(e => e.getBoundingClientRect());
       return { gleicheReihe: new Set(k.map(e => e.offsetTop)).size === 1,
@@ -157,9 +157,9 @@ with sync_playwright() as p:
     for vw, vh in ((1280, 800), (1440, 900)):
         page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(400)
         lage = page.evaluate(LAGE)
-        pruefe(f'Streckenwahl {vw}×{vh}: 6 Karten in einer Reihe (gleiches offsetTop), im Bild, ohne Überlappung', lage['gleicheReihe'] and lage['ok'] and lage['scroll'] and not lage['textUeber'], lage)
+        pruefe(f'Streckenwahl {vw}×{vh}: 7 Karten in einer Reihe (gleiches offsetTop), im Bild, ohne Überlappung', lage['gleicheReihe'] and lage['ok'] and lage['scroll'] and not lage['textUeber'], lage)
         snap(f'menu_2_strecke_{vw}.png')
-    pruefe('Streckenkarten: Schwierigkeits-Pillen leicht/mittel/schnell/spaß/mittel/mittel', lage['pilleText'] == ['leicht', 'mittel', 'schnell', 'spaß', 'mittel', 'mittel'], lage['pilleText'])
+    pruefe('Streckenkarten: Schwierigkeits-Pillen leicht/mittel/schnell/spaß/mittel/mittel/spaß (Mega)', lage['pilleText'] == ['leicht', 'mittel', 'schnell', 'spaß', 'mittel', 'mittel', 'spaß'], lage['pilleText'])
     pruefe('Dino-Karte: eigene Farbe (Rahmen/Hintergrund) + Vulkan-Himmel im Bild', lage['farbe4'] != lage['farbe0'] and '242, 179, 106' in lage['bild4'], [lage['farbe4'], lage['bild4'][:80]])
     pruefe('Fantasie-Karte: eigene Farbe + Hinweis 2 Loopings, Bälle, Wasserstrahl', lage['farbe3'] != lage['farbe0'] and '2 Loopings' in lage['hinweis'] and 'Bälle' in lage['hinweis'] and 'Wasserstrahl' in lage['hinweis'], [lage['farbe3'], lage['hinweis']])
     page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
@@ -243,14 +243,14 @@ with sync_playwright() as p:
     for _ in range(16):
         if zustand() != 'menue': break
         taste('Enter'); page.wait_for_timeout(100)
-    page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=15000)
+    page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=120000)
     pruefe('Rennen gestartet (zwei Spieler + 2 Computer)', page.evaluate('Rennspiel.spiel.fahrzeuge.length') == 4)
     hudnamen = page.evaluate("Array.from(document.querySelectorAll('.hud-name')).map(e => e.textContent)")
     pruefe('HUD-Kopf zeigt Fahrernamen', len(hudnamen) == 2 and 'Senna' in hudnamen[0] and 'Verstappen' in hudnamen[1], hudnamen)
     page.wait_for_timeout(1500)
     snap('menu_5_splitscreen_countdown.png')
     page.keyboard.down('ArrowUp'); page.keyboard.down('KeyW')
-    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=20000)
+    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=120000)
     page.wait_for_timeout(2500)
     snap('menu_6_splitscreen_fahrt.png')
     page.keyboard.up('ArrowUp'); page.keyboard.up('KeyW')
@@ -320,14 +320,14 @@ with sync_playwright() as p:
 
     # d) Enter = Nochmal
     taste('Enter')
-    page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=5000)
+    page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=60000)
     page.wait_for_timeout(1200)
     cd = page.evaluate('Rennspiel.spiel.rennen.zustand')
     pruefe('Nochmal: neues Rennen mit Countdown', cd == 'countdown', cd)
     speicher1 = page.evaluate('(() => { const m = Rennspiel.spiel.renderer.info.memory; return [m.geometries, m.textures]; })()')
     pruefe('Aufräumen: Geometrien/Texturen wachsen nicht', speicher1[0] <= speicher0[0] + 2 and speicher1[1] <= speicher0[1] + 1, [speicher0, speicher1])
     snap('menu_8_nochmal_countdown.png')
-    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=20000)
+    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=120000)
     # Pause
     page.wait_for_timeout(1500)
     taste('Escape'); page.wait_for_timeout(300)
@@ -407,9 +407,22 @@ with sync_playwright() as p:
     page.click('[data-a="variante:"]'); page.wait_for_timeout(700)
     pruefe('Zurück auf Normal: strecke.variante leer, Länge 3331 m', page.evaluate('Rennspiel.spiel.strecke.variante') == '' and abs(page.evaluate('Rennspiel.spiel.strecke.laenge') - 3331) < 5)
     page.click('[data-a="strecke:wiese"]'); page.wait_for_timeout(300)
-    pruefe('Wiese: keine Varianten-Zeile', len(va()) == 0 and E()['variante'] == '')
-    page.click('[data-a="strecke:wald"]'); page.wait_for_timeout(200)
-    pruefe('Wald: keine Varianten-Zeile', len(va()) == 0)
+    # v22 (14.10.): XL für ALLE Strecken – Varianten-Zeile (Normal + XL) bei jeder Strecke, XL baut ≈ Faktor × Länge, Zeile im Bild
+    pruefe('Wiese: Varianten-Zeile Normal + XL, Standard Normal', len(va()) == 2 and 'XL' in va()[1] and E()['variante'] == '', [va(), E().get('variante')])
+    for sid, f in (('wiese', 1.6), ('wald', 1.6), ('wueste', 1.6), ('fantasie', 2.0), ('dino', 1.6), ('alpen', 1.6)):
+        page.click('[data-a="strecke:%s"]' % sid); page.wait_for_timeout(500)
+        page.wait_for_function('Rennspiel.spiel.strecke.id === "%s" && Rennspiel.spiel.strecke.variante === ""' % sid, timeout=120000)   # Menühintergrund fertig gebaut (bei Last langsam)
+        L0 = page.evaluate('Rennspiel.spiel.strecke.laenge')
+        pruefe('%s: Varianten-Zeile Normal + XL, Variante Normal' % sid, len(va()) == 2 and 'Normal' in va()[0] and 'XL' in va()[1] and E()['variante'] == '', [va(), E().get('variante')])
+        page.click('[data-a="variante:xl"]'); page.wait_for_timeout(500)
+        page.wait_for_function('Rennspiel.spiel.strecke.variante === "xl"', timeout=120000)
+        L1 = page.evaluate('Rennspiel.spiel.strecke.laenge')
+        l = page.evaluate("""(() => { const m = document.querySelector('.m-inhalt'), r = document.querySelector('.m-variante').getBoundingClientRect();
+          return { scroll: m.scrollHeight <= m.clientHeight + 1, ok: r.left >= 0 && r.right <= innerWidth && r.bottom <= document.querySelector('.m-fuss').getBoundingClientRect().top }; })()""")
+        pruefe('%s XL: strecke.variante xl, Länge ≈ %s × Normal (%d → %d m), Zeile im Bild ohne Scrollen' % (sid, f, L0, L1), page.evaluate('Rennspiel.spiel.strecke.variante') == 'xl' and abs(L1 / L0 - f) < 0.05 * f and l['scroll'] and l['ok'], l)
+        page.click('[data-a="variante:"]'); page.wait_for_timeout(500)
+    page.click('[data-a="strecke:wiese"]'); page.wait_for_timeout(300)
+    pruefe('Streckenwechsel setzt Variante zurück (Wiese Normal)', E()['variante'] == '' and E()['streckeId'] == 'wiese', E()['variante'])
     page.click('[data-a="strecke:wiese"]'); page.click('[data-a="welt:stunt"]')
     # 12.10. Hindernis-Menge: Zeile „🚧 Hindernisse“ (Normal / Viele / Sehr viele), Taste O, ausgegraut in Welt Klassisch
     page.wait_for_timeout(500)
@@ -556,7 +569,7 @@ with sync_playwright() as p:
     page.evaluate("Rennspiel.spiel.einstellungen.modus = 'solo'; Rennspiel.spiel.menue.einstellungenFix(); Rennspiel.spiel.menue.tafelOffen = false; Rennspiel.spiel.menue.zeichnen()")
     # Start mit den gewählten Welt-Einstellungen
     page.click('[data-a="start"]', force=True)      # fokussierter Knopf wackelt (Animation) -> nicht „stabil“
-    page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=20000)
+    page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=120000)
     st = page.evaluate("""(() => { const s = Rennspiel.spiel; return { welt: s.strecke.welt, schadenAn: !!(s.schaden && s.schaden.an), fz: s.fahrzeuge.length,
       jz: s.wetter ? s.wetter.jahreszeit : null, wetter: s.wetter ? s.wetter.wetterName || s.wetter.wetter : null }; })()""")
     pruefe('Start: Welt Stunt, Schaden an, 11 Autos (10 Gegner)', st['welt'] == 'stunt' and st['schadenAn'] is True and st['fz'] == 11, st)
@@ -616,15 +629,15 @@ with sync_playwright() as p:
         snap(f'menu_12_einstellungen_{vw}.png')
     page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
     page.click('[data-a="start"]')
-    page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=15000)
+    page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=120000)
     pruefe('Maus: Solo-Rennen gestartet', page.evaluate('Rennspiel.spiel.kameras.length') == 1 and page.evaluate('Rennspiel.spiel.fahrzeuge[0].auto.id') == 'bmw-m4')
-    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=20000)
+    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=120000)
     page.wait_for_timeout(1500); snap('menu_13_solo_hud.png')
     pruefe('Solo-HUD zeigt Fahrername Kerle', 'Kerle' in page.evaluate("document.querySelector('.hud-name').textContent"))
     # HUD-Hinweise: "Falsch herum!" und Rundenmeldungen
     page.evaluate("Rennspiel.spiel.fahrzeuge[0].vehicle.heading += Math.PI")
     # Spielzeit läuft unter Software-Grafik langsamer als Echtzeit → auf den Hinweis warten statt fester Pause
-    try: page.wait_for_function("document.querySelector('.hud-hinweis').textContent.includes('Falsch herum')", timeout=20000)
+    try: page.wait_for_function("document.querySelector('.hud-hinweis').textContent.includes('Falsch herum')", timeout=120000)
     except Exception: pass
     hinweis = page.evaluate("document.querySelector('.hud-hinweis').textContent")
     snap('menu_14_falsch_herum.png')

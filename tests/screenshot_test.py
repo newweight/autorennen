@@ -793,6 +793,7 @@ def fantasie_kreuzung_bilder(page, snap):
 def lauf(browser, sid, out):
     os.makedirs(out, exist_ok=True)
     page = browser.new_page(viewport={'width': 1280, 'height': 800})
+    page.set_default_timeout(240000)   # v22: bei Last (Software-GL) dauern Bilder und Wartezeiten länger als 30 s
     fehler = []
     page.on('pageerror', lambda e: fehler.append(str(e)))
     page.on('console', lambda m: fehler.append('console.' + m.type + ': ' + m.text) if m.type in ('error',) else None)
@@ -808,7 +809,7 @@ def lauf(browser, sid, out):
     z['deko'] = page.evaluate(DEKO_PRUEFEN)
     z['dekoAnzahl'] = page.evaluate('(() => { let a = null; Rennspiel.spiel.szene.children.forEach(g => { if (g.name.startsWith("Deko")) a = g.userData.anzahl; }); return a; })()')
     # Fahrt: Autopilot fährt eine Weile (realistisches Bild mitten im Rennen)
-    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=60000)
+    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=300000)
     page.evaluate('Rennspiel.spiel.autopilot(0, true)')
     page.wait_for_timeout(12000)
     snap('02_fahrt.png')

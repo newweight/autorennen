@@ -366,19 +366,24 @@ function starten(opt) {
         rennenStarten(raum);
         return;
       case 'geladen':
-        if (raum.zustand === 'laden') c.geladen = true;
+        if (raum.zustand === 'laden') {
+          c.geladen = true;
+          // v22 (additiv, Protokoll-Version bleibt 4): optional k = Münzen-Guthaben des Fahrers (ganze Zahl 0 … 99999) – nur für „Polizei freikaufen“ (10 Münzen)
+          if (raum.sim && c.simNr >= 0 && Number.isInteger(m.k)) raum.sim.kontoSetzen(c.simNr, Math.max(0, Math.min(99999, m.k)));
+        }
         return;
       case 'eingabe': {
         if (raum.zustand !== 'rennen' && raum.zustand !== 'laden') return;
         const n = m.n;
         if (!Number.isInteger(n) || n <= c.letzteN || n > c.letzteN + 100000) return;
         c.letzteN = n;
-        const e = { n, s: N.eingabeDekodieren(m), i: m.i === 1, r: m.r === 1 };
+        const e = { n, s: N.eingabeDekodieren(m), i: m.i === 1, r: m.r === 1, f: m.f === 1 };
         c.eingaben.push(e);
         if (c.eingaben.length > 45) {        // > 3/4 s gepuffert (Paketstau, sehr langsames Gerät): Älteste verwerfen, Tasten-Flanken behalten
           const weg = c.eingaben.splice(0, c.eingaben.length - 10);
           if (weg.some(x => x.i)) c.eingaben[0].i = true;
           if (weg.some(x => x.r)) c.eingaben[0].r = true;
+          if (weg.some(x => x.f)) c.eingaben[0].f = true;
         }
         return;
       }
@@ -446,6 +451,7 @@ function starten(opt) {
             const weg = c.eingaben.splice(0, c.minQ - 2);
             if (weg.some(x => x.i)) c.eingaben[0].i = true;
             if (weg.some(x => x.r)) c.eingaben[0].r = true;
+            if (weg.some(x => x.f)) c.eingaben[0].f = true;
             c.verworfen = (c.verworfen || 0) + weg.length;
           }
           c.minQ = Infinity; c.qTicks = 0;
@@ -455,6 +461,7 @@ function starten(opt) {
           sim.eingabeSetzen(c.simNr, e.s); c.ack = e.n; c.letzteEingabe = jetzt;
           if (e.r) sim.reset(c.simNr);
           if (e.i) sim.item(c.simNr);
+          if (e.f) sim.freikaufen(c.simNr);
         } else if (jetzt - c.letzteEingabe > 300) sim.eingabeSetzen(c.simNr, { gas: 0, bremse: 0, lenkung: 0 });   // Tab im Hintergrund
       }
       sim.schritt();

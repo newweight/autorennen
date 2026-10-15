@@ -99,7 +99,7 @@
   // zieht den Boden NICHT mit (Gewicht 0 im Brückenbereich, UEB_RAMPE m Übergang) → Boden darunter = untere Straße/Tal.
   const FLACH_ZUGABE = 2.5, BLEND_R = 28, UEB_RAMPE = 12, GLATT_SIGMA = 45, GRUND_ZELLE = 10;
   const KORRIDOR_SENKE = 3;      // grobes Bodengitter im Straßenkorridor so viel tiefer (die feine Böschung liegt darüber)
-  const BOESCHUNG_TOL = 0.04, BOESCHUNG_STUFEN = 4;   // 14.10. (v20): Böschung wird geteilt, bis die Sehne höchstens 3 cm von der wahren Höhe abweicht
+  const BOESCHUNG_TOL = 0.03, BOESCHUNG_STUFEN = 4;   // 14.10. (v20): Böschung wird geteilt, bis die Sehne höchstens 3 cm von der wahren Höhe abweicht
   const BOESCHUNG_BIS = BLEND_R + 26;   // feine Böschung quer bis hierhin (m ab Mitte)
   const UNTEN_HALB = 45;         // unterer Abschnitt an einer Überführung: ± so viel m um die Kreuzung gilt als „darunter"
   // Runde 6 (W4-J): niveaugleiche Kreuzung
@@ -363,7 +363,10 @@
     cx /= pk.length; cz /= pk.length;
     const rund = (x) => Math.round(x * 100) / 100;
     const kopie = Object.assign({}, daten);
-    kopie.punkte = pk.map(p => [rund(cx + (p[0] - cx) * f), p[1], rund(cz + (p[2] - cz) * f)]);
+    // 14.10. (v22): optional `hoeheFaktor` (nur Höhenmodell 'strasse', z. B. Alpen XL): y der Kontrollpunkte wächst um den Startpunkt mit
+    // diesem Faktor, damit eine lange Variante nicht flach wird. Ohne hoeheFaktor bleibt y unverändert (alle bisherigen Varianten bitgleich).
+    const hf = (v.hoeheFaktor > 0 && daten.hoehenModell === 'strasse') ? v.hoeheFaktor : 1, h0 = pk[0][1];
+    kopie.punkte = pk.map(p => [rund(cx + (p[0] - cx) * f), hf === 1 ? p[1] : rund(h0 + (p[1] - h0) * hf), rund(cz + (p[2] - cz) * f)]);
     kopie.huegel = (daten.huegel || []).map(h => Object.assign({}, h, { x: rund(cx + (h.x - cx) * f), z: rund(cz + (h.z - cz) * f), r: rund(h.r * f) }));
     Object.keys(daten).forEach((k) => {
       // W2-C1: auch einzelne Objekte mit s/s0/s1 (z. B. dino berg { s0, s1 }, flugsaurier { s0, s1, intervall }) mitskalieren
@@ -581,7 +584,8 @@
       const h0 = this.hoeheAn(x, z, startIndex);
       let zu = Math.max(0, h0 - mitte);                    // Kuppe quer/längs unter dem Auto: die Mitte darf nicht einsinken
       for (const [a, b, g] of [[1, -1, vl], [1, 1, vr], [-1, -1, hlk], [-1, 1, hr]]) zu = Math.max(zu, g - (mitte + tn * hl * a + tq * hb * b));
-      o.dy = mitte + zu + 0.03 - h0;      // +3 cm: Netz-Sehne über den Dreiecken des Bodens (Böschung ≤ BOESCHUNG_TOL)
+      // v22: Alpen (Höhenmodell 'strasse', steile Hänge bis ~40 %): +6 cm statt +3 cm (Nick-/Rollwinkel nur linear genähert)
+      o.dy = mitte + zu + (this.sModell ? 0.06 : 0.03) - h0;      // +3 cm: Netz-Sehne über den Dreiecken des Bodens (Böschung ≤ BOESCHUNG_TOL)
       o.nicken = nick; o.neigung = neig;
       return o;
     }
@@ -1043,6 +1047,12 @@
      * Darf an (x, z) keine Deko stehen? (Tunnelhügel, Brückensenke) n = naechster(x, z), falls schon bekannt.
      */
     dekoSperre(x, z, n) {
+      // 14.10. (v22, Alpen hügeliger): keine Pflanzen/Felsen an sehr steilen Hängen (Einschnitt zwischen zwei Serpentinen-Ästen, > 32 %):
+      // dort stünde das Auto bei flacher Fahrt mit dem Dach im Busch (test_gelaende_hoehe B). Nur Höhenmodell 'strasse'.
+      if (this.sModell) {
+        const hx = (this.bodenHoehe(x + 1.5, z) - this.bodenHoehe(x - 1.5, z)) / 3, hz = (this.bodenHoehe(x, z + 1.5) - this.bodenHoehe(x, z - 1.5)) / 3;
+        if (hx * hx + hz * hz > 0.32 * 0.32) return true;
+      }
       // W4-J: Kreuzung – Kreis um die Kreuzungsmitte frei (Masten, freie Sicht auf den Querverkehr)
       for (const k of this.kreuzungen) if ((x - k.x) * (x - k.x) + (z - k.z) * (z - k.z) < KREUZ_DEKO * KREUZ_DEKO) return true;
       // W4-I: Überführung – unter und neben der Brücke (bis Geländer + 12 m) und am unteren Abschnitt darunter frei halten
@@ -1504,7 +1514,19 @@
         if (this.ueberfuehrungen.length && this._bodenGewicht(e.s) < 0.5) continue;
         d = Math.min(d, e.abstand);
       }
-      return d === Infinity ? 0 : KORRIDOR_SENKE * (1 - glatt(BLEND_R + 6, BLEND_R + 22, d));
+      if (d === Infinity) return 0;
+      const w = 1 - glatt(BLEND_R + 6, BLEND_R + 22, d);
+      if (w <= 0) return 0;
+      // 14.10. (v22, Alpen hügeliger): liegt in der Nähe (16 m = Gitterweite) höheres Gelände (Einschnitt, die Straße liegt bis ~10 m unter dem
+      // geglätteten Gelände), steigt das grobe Gitter dort als Sehne über die wahre Bodenhöhe → Mesh bis 0,8 m über dem Auto. Darum
+      // zusätzlich so viel tiefer, wie das Gelände ringsum höher ist (die feine Böschung deckt das ab, sie reicht bis BOESCHUNG_BIS).
+      const hier = this.hoeheAn(x, z);
+      let hoechst = hier;
+      for (let k = 0; k < 8; k++) {
+        const a = k * Math.PI / 4;
+        hoechst = Math.max(hoechst, this.hoeheAn(x + 16 * Math.cos(a), z + 16 * Math.sin(a)));
+      }
+      return (KORRIDOR_SENKE + (hoechst - hier)) * w;
     }
 
     /**

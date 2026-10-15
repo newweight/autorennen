@@ -126,7 +126,9 @@
       if (this.e.spielart === 'pokal') z.unshift('pokal');     // Runde 6 (W3-F): Pokal-Größe 3/4/5 Rennen
       if (this.zwei) z.push('hilfe1');
       z.push('tageszeit');      // Runde 6 (W2-D): unten in der linken Spalte (rechts ist kein Platz mehr)
-      z.push('jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'rempeln', 'start');   // Runde 5: Tempo-Klasse, 5b: Polizei, 6: Rempeln
+      if (this.streckeDaten().mega) z.push('wind', 'schaden');     // v22 Megastrecke: Jahreszeit/Wetter würfelt jede Zone selbst
+      else z.push('jahreszeit', 'wetter', 'wind', 'schaden');
+      z.push( 'tempo', 'polizei', 'rempeln', 'start');   // Runde 5: Tempo-Klasse, 5b: Polizei, 6: Rempeln
       return z;
     }
 
@@ -239,7 +241,10 @@
     }
     /** Streckenwechsel: Welt zurück auf Standard, Wetter prüfen. */
     streckeWaehlen(id) {
-      if (this.e.streckeId !== id) { this.e.streckeId = id; this.e.welt = ''; this.e.variante = ''; this.weltFix(); }
+      if (this.e.streckeId !== id) {
+        this.e.streckeId = id; this.e.welt = ''; this.e.variante = ''; this.weltFix();
+        if (this.streckeDaten().mega) this.e.runden = 1;      // v22: Megastrecke ist lang → Standard 1 Runde
+      }
       this.spiel.menueHintergrund(id);
     }
     /** Welt der Strecke um `d` weiterschalten (Tastatur ↑↓). */
@@ -752,8 +757,10 @@
         `<span class="pille${e.windStaerke === 'zufall' ? ' aktiv' : ''}" data-a="wert:wind:zufall" title="Zufälliger Wind">🎲</span>` +
         `<span class="extra">${windExtra}</span></div></div>`;
       const rechts =
-        pillenL('jahreszeit', '🍂', 'Jahreszeit', this.jahreszeitListe(), e.jahreszeit) +
-        pillenL('wetter', '🌦️', 'Wetter', this.wetterListe(), e.wetter) +
+        (this.streckeDaten().mega
+          ? `<div class="zeile"><div class="z-label">🌍 Jahreszeit &amp; Wetter</div><div class="z-wert"><span class="extra">wechselt alle paar hundert Meter – jede Fahrt anders</span></div></div>`
+          : pillenL('jahreszeit', '🍂', 'Jahreszeit', this.jahreszeitListe(), e.jahreszeit) +
+            pillenL('wetter', '🌦️', 'Wetter', this.wetterListe(), e.wetter)) +
         wind +
         pillenL('schaden', '💥', 'Schaden', [{ k: 'aus', text: 'Aus' }, { k: 'an', text: 'An' }], e.schaden ? 'an' : 'aus',
           'Treffer kosten Energie, bei 0 % kommt der Abschleppwagen und repariert (ab 30 % darfst du losfahren)') +

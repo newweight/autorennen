@@ -2065,10 +2065,101 @@
    * Runde 6 (Dämmerung/Nacht): Fahrlicht an/aus – Scheinwerfer leuchten weiß (ohne Nebel), Rücklichter hellrot
    * (Bremsen noch heller). Kein echtes Licht (das setzt main.js nur für Spielerautos). an = false → genau wie vorher.
    */
+  // ---- 14.10. (v22) Lichtkegel: billige additive Geometrie (kein echtes Licht) ----
+  // Je Auto EIN Mesh 'fahrlicht' (1 Draw-Call, nur sichtbar bei eingeschaltetem Licht): je Scheinwerfer ein Lichtteppich auf der Fahrbahn
+  // (Trapezstreifen, vorn hell → hinten 0) und eine senkrechte Lichtbahn in der Luft; hinter jedem Rücklicht ein kurzer roter Schein.
+  // Entsteht erst beim ersten Einschalten (setzeLicht(auto, true)); bauen() und damit die Auto-Geometrie bleiben unverändert.
+  const FAHRLICHT = { laenge: 13, breiteEnde: 1.5, hoehe: 0.07, vorneHell: 0.14, mitteHell: 0.24, mitteAbstand: 3.2, luftHell: 0.025, rotLaenge: 2.6, rotHell: 0.32 };
+  function fahrlichtTextur() {
+    if (!cache.material.fahrlichtTextur) {
+      const n = 64, d = new Uint8Array(n * 4);
+      for (let i = 0; i < n; i++) {
+        const u = Math.abs((i + 0.5) / n * 2 - 1), v = Math.pow(Math.max(0, 1 - u), 1.6) * 255;      // weich zum Rand
+        d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255;
+      }
+      const t = new THREE.DataTexture(d, n, 1, THREE.RGBAFormat);
+      t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.needsUpdate = true;
+      cache.material.fahrlichtTextur = t;
+    }
+    return cache.material.fahrlichtTextur;
+  }
+  function fahrlichtMaterial() {
+    if (!cache.material.fahrlicht) {
+      cache.material.fahrlicht = new THREE.MeshBasicMaterial({ map: fahrlichtTextur(), vertexColors: true, transparent: true, depthWrite: false, fog: false,
+        blending: THREE.AdditiveBlending, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    }
+    return cache.material.fahrlicht;
+  }
+  /** Stellen der Lichter eines Autos (Karosserie-Koordinaten, vorn = −z): { v: [{x, y, z}] Scheinwerfer, h: [{x, y, z}] Rücklichter }. */
+  function lichtStellen(ud) {
+    const mitte = (geo) => { geo.computeBoundingBox(); return geo.boundingBox; };
+    const liste = (meshes, vorn) => {
+      const erg = [];
+      (meshes || []).forEach((m) => {
+        const b = mitte(m.geometry), ax = Math.max(Math.abs(b.min.x), Math.abs(b.max.x)), vorz = (b.min.x + b.max.x) >= 0 ? 1 : -1;
+        const x = (b.max.x - b.min.x) > 0.5 ? vorz * ax * 0.72 : (b.min.x + b.max.x) / 2;     // breite Leiste (Tagfahrlicht) → äußeres Drittel
+        erg.push({ x, y: Math.max(0.4, Math.min(1.1, (b.min.y + b.max.y) / 2)), z: vorn ? b.min.z : b.max.z });
+      });
+      return erg;
+    };
+    return { v: liste(ud.scheinwerfer, true), h: liste(ud.bremslichter, false) };
+  }
+  function fahrlichtGeometrie(st) {
+    const F = FAHRLICHT, pos = [], col = [], uv = [], idx = [];
+    const punkt = (x, y, z, hell, farbe, u) => { pos.push(x, y, z); col.push(farbe[0] * hell, farbe[1] * hell, farbe[2] * hell); uv.push(u, 0.5); return pos.length / 3 - 1; };
+    const streifen = (reihen, farbe) => {      // reihen: [[{x,y,z,hell} links, {…} rechts], …] von nah nach fern
+      let vor = null;
+      reihen.forEach((r) => {
+        const a = punkt(r[0].x, r[0].y, r[0].z, r[0].hell, farbe, 0), b = punkt(r[1].x, r[1].y, r[1].z, r[1].hell, farbe, 1);
+        if (vor) idx.push(vor[0], vor[1], b, vor[0], b, a);
+        vor = [a, b];
+      });
+    };
+    const WEISS = [1, 0.93, 0.72], ROT = [1, 0.12, 0.06];
+    st.v.forEach((l) => {
+      const z0 = l.z - 0.05, z1 = z0 - F.mitteAbstand, z2 = z0 - F.laenge, h = F.hoehe;
+      const w0 = 0.25, w1 = 0.6, w2 = F.breiteEnde;
+      streifen([[{ x: l.x - w0, y: h, z: z0, hell: F.vorneHell }, { x: l.x + w0, y: h, z: z0, hell: F.vorneHell }],
+        [{ x: l.x - w1, y: h, z: z1, hell: F.mitteHell }, { x: l.x + w1, y: h, z: z1, hell: F.mitteHell }],
+        [{ x: l.x - w2, y: h, z: z2, hell: 0 }, { x: l.x + w2, y: h, z: z2, hell: 0 }]], WEISS);
+      // Lichtbahn in der Luft: senkrechte Fläche in Fahrtrichtung, am Ende sinkt sie auf die Fahrbahn
+      const yo = Math.max(0.35, l.y - 0.1);
+      streifen([[{ x: l.x, y: yo - 0.12, z: z0, hell: F.luftHell }, { x: l.x, y: yo + 0.12, z: z0, hell: F.luftHell }],
+        [{ x: l.x, y: yo * 0.5, z: z1, hell: F.luftHell * 0.8 }, { x: l.x, y: yo * 0.5 + 0.8, z: z1, hell: F.luftHell * 0.8 }],
+        [{ x: l.x, y: h, z: z2, hell: 0 }, { x: l.x, y: h + 1.2, z: z2, hell: 0 }]], WEISS);
+    });
+    st.h.forEach((l) => {
+      const z0 = l.z + 0.05, z1 = z0 + F.rotLaenge, h = F.hoehe;
+      streifen([[{ x: l.x - 0.3, y: h, z: z0, hell: F.rotHell }, { x: l.x + 0.3, y: h, z: z0, hell: F.rotHell }],
+        [{ x: l.x - 0.6, y: h, z: z1, hell: 0 }, { x: l.x + 0.6, y: h, z: z1, hell: 0 }]], ROT);
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    return geo;
+  }
+  function fahrlichtMesh(auto) {
+    const ud = auto.userData;
+    if (ud.fahrlicht !== undefined) return ud.fahrlicht;
+    const st = lichtStellen(ud);
+    if (!st.v.length && !st.h.length) { ud.fahrlicht = null; return null; }
+    const key = 'fl' + JSON.stringify(st, (k, v) => (typeof v === 'number' ? Math.round(v * 100) / 100 : v));
+    if (!cache.karosserie[key]) cache.karosserie[key] = { geo: fahrlichtGeometrie(st), sw: [], bl: [], blau: [] };     // im Cache: cacheLeeren() räumt auf
+    const m = new THREE.Mesh(cache.karosserie[key].geo, fahrlichtMaterial());
+    m.name = 'fahrlicht'; m.renderOrder = 2; m.frustumCulled = true;
+    auto.add(m);
+    ud.fahrlicht = m;
+    return m;
+  }
+
   function setzeLicht(auto, an) {
     if (!auto || !auto.userData) return;
     const ud = auto.userData;
     ud.lichtAn = !!an;
+    if (an) { const fl = fahrlichtMesh(auto); if (fl) fl.visible = true; }
+    else if (ud.fahrlicht) ud.fahrlicht.visible = false;
     (ud.scheinwerfer || []).forEach((m) => { m.material = an ? scheinwerferAnMaterial() : scheinwerferMaterial(); });
     const bm = ud.bremslichtMaterial;
     if (bm && bm.fog !== !an) { bm.fog = !an; bm.needsUpdate = true; }

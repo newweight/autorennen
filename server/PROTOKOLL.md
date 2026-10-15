@@ -4,6 +4,13 @@ WebSocket unter **`/ws`** (gleiche Adresse wie das Spiel; `wss:` hinter HTTPS/Ta
 Jede Nachricht ist **ein JSON-Objekt** mit dem Typ in `t`. Gemeinsame Konstanten/Helfer: `src/net/protokoll.js`
 (`Rennspiel.Netz`, wird von Browser **und** Server geladen).
 
+**Nachtrag 14.10. (v22) – Polizei freikaufen (additiv, Protokoll-Version bleibt 4):**
+- `geladen` darf `k` mitschicken: Münzen-Guthaben des Fahrers (Garage-Konto) als ganze Zahl; der Server klemmt auf 0 … 99999, alles andere (fehlt, negativ, Text, Kommazahl) zählt als 0.
+- `eingabe` darf `f: 1` mitschicken (Flanke wie `i`/`r`, nur die Zahl 1 gilt): „Polizei freikaufen“ (Doppeltipp Rückwärts am Gerät des Spielers). Der Server prüft **autoritativ**: nur wenn der Spieler gerade von der Polizei angehalten ist und das Rennen läuft, und das gemeldete Guthaben ≥ `config.polizei.freikaufKosten` (10) reicht; dann zieht er 10 vom Guthaben ab und beendet den Stopp im nächsten Tick (ohne „Weiterfahren!“-Meldung).
+- Antworten nur an den Betroffenen: `ereignis {art:'freikauf', kosten, konto}` (der Browser bucht `kosten` vom lokalen Garage-Konto ab) und `ereignis {art:'meldung', text:'💰 −10 – weiter!'}`; bei zu wenig Guthaben `meldung 'Zu wenig Münzen (10 nötig)'` (Stopp läuft weiter, nichts abgezogen).
+- Ein älterer Server ignoriert `k`/`f`, ein älterer Browser kennt `freikauf` nicht (unbekannte `ereignis`-Arten werden ignoriert).
+- Zweite Schild-Kugel (`pickups`-Ereignis `schildPlus`): Der Server rechnet sie wie offline (Schild bleibt, Kugel weg, Meldung „🛡️ Schild bleibt“); Gesundheit +10 % gibt es nur, wo Schaden an ist – online ist Schaden aus.
+
 **Version 4 (14.10., v21)** ist zu Version 3 rein *additiv* (Polizei online + Schild-Masten):
 - `einstellungen.polizei` (bool, Standard false; Lobby-Zeile „Polizei“). Der Server simuliert dann autoritativ `R.Polizei` (gleiche Logik wie offline; Stopp 4 s, Passat-Streifenwagen neben dem Auto). Die Streifenwagen sind zusätzliche Einträge hinter den Teilnehmern.
 - `zustand.po`: Streifenwagen, je ein Eintrag im Format von `a` (14 Zahlen). `zustand.pz`: Ziel (Auto-Nr.) je Streifenwagen. `zustand.ps`: `[[Auto-Nr., Rest-s]]` angehaltener Autos (Rest auf 2 Stellen). `a` enthält weiterhin nur die Teilnehmer.

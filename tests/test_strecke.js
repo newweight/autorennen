@@ -25,14 +25,15 @@ const ERWARTUNG = {
             hindernisse: [5, 6] },   // Runde 6 (W2-C): + 2 Lava-Zungen
   // Runde 6 (W4-I): Alpen 2.600–3.000 m, Pass +40 m, kräftiges Höhenprofil (≥ 40 m), 3 Haarnadeln (2 Serpentinen + Kehre),
   // Steigung bis 10 % (s. STEIGUNG_JE), eine Überführung (Ausnahme vom 40-m-Abstand), Höhenmodell 'strasse'
-  alpen:  { kurven: [14, 30], geraden: { min: 150, anzahl: [3, 5] }, hoehe: 40, hoeheMin: 40, laenge: [2600, 3000], haarnadeln: 3,
+  alpen:  { kurven: [14, 30], geraden: { min: 150, anzahl: [3, 5] }, hoehe: 80, hoeheMin: 75, laenge: [2600, 3000], haarnadeln: 3,
             hindernisse: [4, 4], ueberfuehrungen: 1 },
 };
 const STEIGUNG_MAX = 0.08;
 // W4-I: Alpen dürfen steiler sein (Pass, Serpentinen): bis 10 %. Begründung: vehicle.js kennt keine Hangabtriebskraft – die
 // Steigung wirkt nur optisch (Nicken/Kamera), Fahrbarkeit/KI ändern sich nicht; 10 % ist für eine Alpenstraße normal und
 // im Bild deutlich zu sehen. Gebaut sind höchstens ~8 %.
-const STEIGUNG_JE = { alpen: 0.10 };
+// v22 (14.10.): Alpen noch hügeliger (Höhenunterschied 45 → ~80 m, Kuppen/Senken), Steigung bis 18 % (gebaut ≈ 17 %).
+const STEIGUNG_JE = { alpen: 0.18 };
 // W4-J: Paare an einer niveaugleichen Kreuzung (beide Abschnitte je ± Kreuzungsbereich + 40 m) dürfen näher als 40 m liegen
 const anKreuzung = (st, sa, sb) => (st.kreuzungen || []).some(k =>
   (st._inBereich(k.a, sa, 40) && st._inBereich(k.b, sb, 40)) || (st._inBereich(k.a, sb, 40) && st._inBereich(k.b, sa, 40)));
@@ -517,7 +518,7 @@ if (daten.welten) {
     pruefe(pf + 'welt/weltDaten/aktiveSchichten gesetzt, alle Schichten bool', st.welt === w && R.Strecke.SCHICHTEN.every(k => typeof a[k] === 'boolean') &&
       JSON.stringify(st.weltDaten) === JSON.stringify(a));
     pruefe(pf + 'Länge + Steigung wie Standard', Math.abs(st.laenge - L) < 1e-6 && st.spline.punkte.every((p, i) => {
-      const q = st.spline.punkte[(i + 1) % N]; return Math.abs(q.y - p.y) / st.spline.ds <= STEIGUNG_MAX; }), st.laenge.toFixed(1) + ' m');
+      const q = st.spline.punkte[(i + 1) % N]; return Math.abs(q.y - p.y) / st.spline.ds <= (STEIGUNG_JE[daten.id] || STEIGUNG_MAX); }), st.laenge.toFixed(1) + ' m');
     pruefe(pf + 'Hindernisse nur wenn aktiv', a.hindernisse ? st.hindernisse.length === katalogH : st.hindernisse.length === 0,
       st.hindernisse.length + ' von ' + katalogH);
     if (w === 'klassisch') {
@@ -870,12 +871,14 @@ for (const daten of R.trackCatalog) {
       maxSteig = Math.max(maxSteig, Math.abs(q.y - p.y) / Math.max(1e-6, Math.hypot(q.x - p.x, q.z - p.z)));
     });
     pruefe('Mindestradius wächst mit (0,7…1,1 × ' + f + ' × Normal, ≥ 25 m)', minR >= 25 && minR / minR0 > 0.7 * f && minR / minR0 < 1.1 * f, minR0.toFixed(0) + ' → ' + minR.toFixed(0) + ' m');
-    pruefe('Steigung ≤ 8 %', maxSteig <= STEIGUNG_MAX, (maxSteig * 100).toFixed(2) + ' %');
+    const steigXL = STEIGUNG_JE[daten.id] || STEIGUNG_MAX;
+    pruefe('Steigung ≤ ' + Math.round(steigXL * 100) + ' %', maxSteig <= steigXL, (maxSteig * 100).toFixed(2) + ' %');
     let minAbst = Infinity;
     for (let i = 0; i < sp.anzahl; i += 2) for (let j = i + 1; j < sp.anzahl; j += 2) {
       if (Math.abs(sp.differenzS(sp.punkte[i].s, sp.punkte[j].s)) < 150) continue;
       const dd = Math.hypot(sp.punkte[i].x - sp.punkte[j].x, sp.punkte[i].z - sp.punkte[j].z);
       if (dd < 40 && anKreuzung(st, sp.punkte[i].s, sp.punkte[j].s)) continue;   // W4-J
+      if (dd < 40 && (st.ueberfuehrungen || []).some(u => u.unten && ((st._inBereich(u, sp.punkte[i].s) && st._inBereich(u.unten, sp.punkte[j].s, 40)) || (st._inBereich(u, sp.punkte[j].s) && st._inBereich(u.unten, sp.punkte[i].s, 40))))) continue;   // v22: Überführung (Alpen XL)
       minAbst = Math.min(minAbst, dd);
     }
     pruefe('Abstand nicht benachbarter Teile ≥ 40 m' + (st.kreuzungen.length ? ' (außer an der Kreuzung)' : ''), minAbst >= 40, minAbst.toFixed(0) + ' m');
@@ -886,7 +889,8 @@ for (const daten of R.trackCatalog) {
         k.winkel >= 70 && k.winkel <= 110 && k.dy < 1 && Math.abs(k.sA / k0.sA - f) < 0.02 * f && Math.abs(k.sB / k0.sB - f) < 0.02 * f,
         k ? k.sA.toFixed(0) + '/' + k.sB.toFixed(0) + ', ' + k.winkel.toFixed(1) + '°, Δy ' + k.dy.toFixed(3) : '-');
     }
-    pruefe('Mittellinie auf dem (skalierten) Gelände', sp.punkte.every(p => Math.abs(p.y - st.gelaendeHoehe(p.x, p.z)) < 0.05));
+    // Höhenmodell 'strasse' (Alpen): Fahrbahnhöhe ist eigenes Profil, Gelände wird angeglichen (Ausnahme unter der Überführung)
+    if (!st.sModell) pruefe('Mittellinie auf dem (skalierten) Gelände', sp.punkte.every(p => Math.abs(p.y - st.gelaendeHoehe(p.x, p.z)) < 0.05));
     // alle s-Felder: ×f und innerhalb [0, L]
     let anz = 0, ok = true, info = '';
     Object.keys(daten).forEach((k) => {
@@ -967,7 +971,7 @@ for (const daten of R.trackCatalog) {
   pruefe('Strecke baut: 2 Tunnel (60/140 m × f), Lava 2, Hindernisse gleich viele', st.tunnel.length === 2 && Math.abs(st.tunnel[0].laenge - 60 * f) < 1 &&
     Math.abs(st.tunnel[1].laenge - 140 * f) < 1 && st.hindernisse.filter(h => h.typ === 'lava').length === 2 && st.hindernisse.length === basis.hindernisse.length,
     st.tunnel.map(t => t.laenge.toFixed(0)).join('/'));
-  pruefe('Katalog-Original unverändert', dino.berg.s0 === 2318 && dino.tunnel[0].s0 === 2345 && !dino.varianten);
+  pruefe('Katalog-Original unverändert', dino.berg.s0 === 2318 && dino.tunnel[0].s0 === 2345 && dino.varianten.xl.faktor === 1.6);
 }
 praefix = '';
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');

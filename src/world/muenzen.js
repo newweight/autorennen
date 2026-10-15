@@ -172,6 +172,13 @@
     /** Anzahl der Münzen, die Fahrzeug i in diesem Rennen eingesammelt hat. */
     anzahlVon(i) { return this.gesammelt[i] || 0; }
 
+    /** 14.10. (v22): n Münzen vom Zähler dieses Rennens abziehen (Freikaufen bei der Polizei). → tatsächlich abgezogen */
+    abziehen(i, n) {
+      const jetzt = this.gesammelt[i] || 0, weg = Math.max(0, Math.min(jetzt, Math.floor(n) || 0));
+      this.gesammelt[i] = jetzt - weg;
+      return weg;
+    }
+
     zuruecksetzen() {
       this.liste.forEach((m) => { m.da = true; m.weg = 0; });
       this.gesammelt = [];

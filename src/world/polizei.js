@@ -35,7 +35,7 @@
   const R = window.Rennspiel;
 
   const STANDARD = {
-    anzahl: 1, anzahlViele: 2, vieleAb: 6, startHinter: 60, naheAbstand: 6, naheZeit: 1.5, vorZiel: 1, stoppDauer: 4,
+    anzahl: 1, anzahlViele: 2, vieleAb: 6, startHinter: 60, naheAbstand: 6, naheZeit: 1.5, vorZiel: 1, stoppDauer: 4, freikaufKosten: 10, freikaufFenster: 0.5,
     schonfrist: 30, kiRadius: 300, zielWahl: 1, folgeAbstand: 8, nebenLuecke: 0.8, versatzVor: 0.4, einparkRate: 5, blinkHz: 4, lichtAbstand: 40,
     lichtStaerke: 30, lichtReichweite: 14, sireneHoerweite: 120, schwierigkeit: 'meister', autoId: 'polizei',
   };
@@ -98,6 +98,17 @@
     /** Restzeit der Anhaltung (s). */
     rest(i) { const a = this.autos[i]; return a ? Math.max(0, a.stopp) : 0; }
     zielVon(k) { const s = this.streifen[k]; return s ? s.ziel : -1; }
+
+    /**
+     * 14.10. (v22) Freikaufen: beendet die Anhaltung von Auto i beim nächsten schritt() (Ereignis 'weiter' mit gekauft: true,
+     * Schonfrist wie bei normalem Ende). Das Bezahlen macht der Aufrufer (main.js). → true, wenn Auto i angehalten war.
+     */
+    freikaufen(i) {
+      const a = this.autos[i];
+      if (!a || !(a.stopp > 0)) return false;
+      a.stopp = 1e-12; a.gekauft = true;
+      return true;
+    }
 
     /** Darf Auto i (Daten z) Ziel von Streifenwagen k sein? */
     waehlbar(i, z, k) {
@@ -163,7 +174,8 @@
           a.schonBis = this.zeit + c.schonfrist;
           const s = this._s(a.stoppK);
           s.phase = 'jagd'; s.ziel = -1; s.nahe = 0; s.wahlRest = 0;
-          ev.push({ art: 'weiter', nr: i, k: a.stoppK });
+          ev.push({ art: 'weiter', nr: i, k: a.stoppK, gekauft: !!a.gekauft });
+          a.gekauft = false;
         }
       }
       // 2) je Streifenwagen: Ziel wählen, Nähe messen, anhalten
@@ -484,7 +496,7 @@
         // Text: HUD-Anzeige „🚨 Polizei! Anhalten… N s" (hud.polizeiSetzen), keine zusätzliche Meldung
       } else if (e.art === 'weiter') {
         this.statistik.freigaben++;
-        sp._meldung(e.nr, 'Weiterfahren! 🚗💨', 1800);
+        if (!e.gekauft) sp._meldung(e.nr, 'Weiterfahren! 🚗💨', 1800);     // v22: freigekauft → Meldung „💰 −10 – weiter!“ kommt vom Freikaufen
         const pf = sp.fahrzeuge[this.idx[e.k]];
         if (pf && pf.polizeiFahrer) pf.polizeiFahrer.zurueckgesetzt();
         if (f.driver && f.driver.zurueckgesetzt) f.driver.zurueckgesetzt();
@@ -494,10 +506,13 @@
       }
     }
 
-    /** HUD: { art: 'stopp', rest } | { art: 'verfolgt' } | null für Teilnehmer i. */
+    /** 14.10. (v22): Anhaltung von Teilnehmer i beenden (Bezahlung macht der Aufrufer). → true/false */
+    freikaufen(i) { return this.logik.freikaufen(i); }
+
+    /** HUD: { art: 'stopp', rest, kosten } | { art: 'verfolgt' } | null für Teilnehmer i. */
     anzeige(i) {
       if (i >= this.n) return null;
-      if (this.logik.gesperrt(i)) return { art: 'stopp', rest: Math.ceil(this.logik.rest(i) - 1e-6) };
+      if (this.logik.gesperrt(i)) return { art: 'stopp', rest: Math.ceil(this.logik.rest(i) - 1e-6), kosten: this.c.freikaufKosten };
       const fz = this.spiel.fahrzeuge, f = fz[i];
       for (let k = 0; k < this.idx.length; k++) {
         if (this.logik.zielVon(k) !== i) continue;

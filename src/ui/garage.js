@@ -76,6 +76,12 @@
       if (!name) return 0;
       return aendern(name, null, (f) => { f.muenzen += Math.max(0, Math.floor(n) || 0); return f.muenzen; });
     },
+    /** 14.10. (v22) Münzen abbuchen (z. B. Polizei freikaufen). → { ok, konto } (ok false = zu wenig, nichts abgebucht). */
+    abbuchen(name, n) {
+      if (!name) return { ok: false, konto: 0 };
+      const k = Math.max(0, Math.floor(n) || 0);
+      return aendern(name, null, (f) => { if (f.muenzen < k) return { ok: false, konto: f.muenzen }; f.muenzen -= k; return { ok: true, konto: f.muenzen }; });
+    },
     /** Garage-Daten eines Autos (Kopie, mit Standardwerten). */
     autoDaten(name, autoId) {
       const o = laden(), f = fahrerEintrag(o, name), a = autoEintrag(f, autoId);

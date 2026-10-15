@@ -141,8 +141,9 @@
         Math.abs(x - m.x), Math.abs(x - m.x2), Math.abs(z - m.z), Math.abs(z - m.z2)) / ZELLE) + 1;
       for (let ring = 0; ring <= maxRing; ring++) {
         for (let ix = cx - ring; ix <= cx + ring; ix++) {
-          for (let iz = cz - ring; iz <= cz + ring; iz++) {
-            if (Math.max(Math.abs(ix - cx), Math.abs(iz - cz)) !== ring) continue; // nur der Rand
+          // v22: nur der Rand (gleiche Reihenfolge wie vorher, aber ohne das Innere des Rings abzulaufen – Megastrecke: riesiges Raster)
+          const randSpalte = Math.abs(ix - cx) === ring, schritt = randSpalte || ring === 0 ? 1 : 2 * ring;
+          for (let iz = cz - ring; iz <= cz + ring; iz += schritt) {
             const liste = this._raster.get(this._schluessel(ix, iz));
             if (!liste) continue;
             for (const i of liste) {

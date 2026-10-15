@@ -1,0 +1,1148 @@
+
+## Fortschritt
+- 10.10. 17:48 – Plan + Recherche fertig (10 %)
+- 10.10. 17:55 – Abschnitt 1 fertig: Grundgerüst (config, input, vehicle, cameras, main, HTML),
+  9/9 Physik-Tests (tests/test_physik.js), Screenshot-Test headless Chromium ok (20 %)
+  Fixes: Drehrate war 3x zu hoch (Einspurmodell ersetzt durch Arcade-Drehrate),
+  Luftwiderstand relativ zu vMax, Abseits-Tempo-Deckel (Gras 52 %, Sand 44 %)
+  Übertragung Container → Mac: _hilfsdateien/uebertragung.tgz, MD5 geprüft
+- Antworten Sebastian: Browser/Three.js, Chrome, alle drei Söhne → Standard "mittel", Hilfen umschaltbar
+- Abschnitt 2 (Autos, Sonnet-Agent) + Abschnitt 3 (Strecke/Rundenzähler, Opus-Agent) parallel gestartet
+- 10.10. 18:25 – Abschnitt 2 fertig (Sonnet): 8 Autos (carCatalog.js, carBuilder.js, 10 Meshes/Auto,
+  Vertex-Farben, Räder/Lenkung/Bremslicht), tests/test_autos.js grün, Vorschau tests/autos_vorschau.html
+- 10.10. 18:25 – Abschnitt 3 fertig (Opus): spline.js, trackCatalog.js (Wiese 2.252 m, 14 Kurven,
+  Haarnadel, Hügel), trackBuilder.js, themes.js (Wiese-Deko 902 Instanzen, ≤25 Draw-Calls),
+  raceManager.js (Checkpoints in Reihenfolge, Teleport/Rückwärts zählt nicht), 36/36 Tests,
+  simulierte Rundenzeit 106 s (Ziel 100–140)
+- 10.10. 18:35 – Autos in main.js eingebaut (Katalog statt Platzhalter), Screenshot ok (50 %)
+  Bekannte Schwächen: Wiese noch leer, Hügel kaum sichtbar, Gegner stehen still (KI = Abschnitt 5)
+- Abschnitt 4 (Physik fein, Opus) + Abschnitt 5 (KI, Opus) parallel gestartet
+- 10.10. – Abschnitt 4 fertig (Opus): collisions.js (Bande bei breite/2+18 m, Auto-Auto-Kapseln), Fahrhilfen in vehicle.js,
+  Quer-Vektor korrigiert (rechts()), Nicken, Holzzaun (2 Draw-Calls), Reset auf freie Stelle (R/T), Hinweis bei Feststecken;
+  tests/test_kollisionen.js 18/18, Physik 16/16, Rundenzeit unverändert 106,4 s
+- 10.10. 18:50 – Abschnitt 4 fertig (Opus): collisions.js (Bande bei ±25 m mit Holzzaun, Auto-Auto-Kapseln),
+  Fahrhilfen (Lenk-/Bremshilfe), Quer-Vektor-Vorzeichen korrigiert, Nicken, Kamerawackeln; 34 Tests grün
+- 10.10. 18:50 – Abschnitt 5 fertig (Opus): ai/driver.js (Hase auf Ideallinie, Skill, Gummiband +35 %/−12 %,
+  Ausweichen, Festfahr-Logik, deterministisch); Rundenzeiten leicht 124 s, mittel 112 s, schwer 105 s, unfair 102 s
+- 10.10. 19:00 – KI in main.js eingebaut, tests/rennen_test.py (Rennen im Schnellvorlauf): KI fährt sauber,
+  0 Resets, keine Fehler. Befund: stehendes Auto auf der Linie wird von KI gerammt/weggeschoben → Nachbesserung (65 %)
+- 10.10. – Abschnitt 6 fertig (Sonnet): Menü (4 Schritte, Tastatur+Maus), HUD je Spieler, Ergebnis, Pause, Split-Screen,
+  Autopilot-Hook, localStorage-Einstellungen; tests/menu_test.py (26 Prüfungen) grün, Split-Screen 72 Draw-Calls
+- 10.10. 19:45 – KI-Nachbesserung: Ausweichen tempoabhängig, stehende Autos werden umfahren (Test 6: 0 Stöße)
+- 10.10. 19:45 – Abschnitt 6 fertig (Sonnet): ui/menu.js (4-Schritte-Assistent, Tastatur+Maus), ui/hud.js,
+  styles.css, Split-Screen (72 Draw-Calls), Ergebnis, Pause, localStorage; tests/menu_test.py 25 OK.
+  Von mir geprüft: Screenshots Autowahl/Split-Screen/Ergebnis ok. Offen: KI-Namen im Ergebnis doppelt (78 %)
+- Abschnitt 7 (Wald, Wüste, Minimap – Opus) + Sound (Sonnet) gestartet
+- 10.10. 20:40 – Abschnitt 7 fertig (Opus): Wald 1.982 m/23 Kurven/Tunnel/Brücke, Wüste 2.297 m/Oase/Sand,
+  Wiese mit Blumen+Teich, Minimap; Rundenzeiten mittel: Wiese 115 s, Wald 125 s, Wüste 109 s; ≤19 Draw-Calls Deko
+- 10.10. 20:40 – Sound (Sonnet): audio/engine.js synthetisch (Motor mit Gängen, Countdown, Stöße, Fanfaren),
+  von mir in main.js/Menü eingebaut (Taste M, Knopf), audio_test 19 OK
+- 10.10. 20:55 – Abschnitt 8: KI-Namen im Ergebnis = "Computer n", Starter-App (🚗 Autorennen starten.app,
+  Shell-Starter → Chrome), Autorennen starten.command, ANLEITUNG.md, ERWEITERN.md. Alle Tests grün (95 %)
+- Offen: Test auf dem echten Mac (Chrome, Leistung, Tastatur-Ghosting bei 2 Spielern), Klang ungehört
+- 10.10. 21:35 – Alles auf dem Mac: Spiele/🚗 Autorennen starten.app + Spiele/Autorennen/. Start auf dem Mac
+  nicht geprüft (Chrome-Erweiterung darf keine file://-Seiten öffnen, Bildschirm gesperrt). (96 %)
+## Offen (Handgriffe Sebastian)
+1. Doppelklick „🚗 Autorennen starten" im Ordner Spiele (Chrome öffnet sich). Falls macOS die App blockiert:
+   Rechtsklick → Öffnen, oder Autorennen/„Autorennen starten.command" doppelklicken.
+2. Im Spiel F für Vollbild, ein Rennen allein fahren: Ruckelt es? (H zeigt fps; Ziel ≥ 50)
+3. Zu zweit: ↑+← und W+A gleichzeitig halten – lenken beide Autos? (Tastatur-Ghosting)
+4. Ton (Taste M): zu laut/leise/schrill? → Rückmeldung, dann stimme ich engine.js ab.
+
+## Runde 2 (11.10.2026) – Rückmeldung Sebastian
+- "vieles cool", aber: (1) bei zwei Spielern ruckeln die Autos, (2) Modelle detailreicher + näher am Original (ohne Rechteverletzung)
+- Gestartet: Opus-Agent Leistung (Profiler, adaptive Qualität, Split-Screen-Optimierung) + Opus-Agent Automodelle v2
+- 11.10. Automodelle v2 (Opus-Agent) gestartet: Recherche Maße fertig, Sicherung alter Stand im Scratchpad
+- 11.10. – Automodelle v2 fertig (Opus): carCatalog.js mit echten Maßen (abmessungen) + form-Merkmalen je Auto;
+  carBuilder.js neu: Loft-Unterbau mit Radhäusern/Kotflügel-Wölbung, Kabinen-Loft (Fenster/Säulen als Flächenfarben),
+  Anbauteile per flaecheZ() auf gewölbter Front/Heck, 5-Speichen-Felgen. 10 Meshes, 5.000–6.900 Dreiecke je Auto.
+  Vorschau ?ansicht=alle4, Screenshots tests/out/autos_alle4.png + autos_<id>_alle4.png; 3 Iterationen.
+  test_autos.js um 3D-Prüfungen erweitert (Maße ±8 %, Radmitte, Symmetrie, Meshes, Dreiecke) – alle Node-Tests grün.
+- 10.10. 23:55 – Leistung/Ruckeln (Opus, übernommen vom unterbrochenen Vorgänger-Agent). Vorgänger hatte schon: H-Overlay +
+  `Rennspiel.spiel.leistung()`, HUD ≤ 20 Hz + Text nur bei Änderung, Minimap im Offscreen-Canvas, adaptive Qualität mit
+  Hysterese (45/58 fps, 2 s), Split pixelRatio 1,0 / Solo 1,5, Deko-Chunks 3×3 mit boundingSphere, matrixAutoUpdate=false,
+  Audio setTargetAtTime + KI > 60 m stumm, KI ohne filter/map, **Interpolation der Auto-Pose (Mesh + Kamera)**.
+  Neu: tests/interpolation_test.py (Ruckel-Nachweis), Vorher/Nachher-Tabelle in tests/leistung_test.py
+  (Basis tests/leistung_vorher.json = Mac-Stand 20:13), Closures im Frame-Pfad entfernt, HUD style.display nur bei Änderung,
+  menu_test: Draw-Call-Schwelle 80 → 120 (Deko-Chunks), Speicherprüfung lädt vorher alle Geometrien (kein falsches „Leck").
+  **Hauptursache Ruckeln = Physik-Akkumulator ohne Interpolation**: 60-Hz-vsync ± 1,5 ms Jitter, ungünstige Phase →
+  24 % Frames 0 Physikschritte, 24 % 2 Schritte. Tempo-Schwankung je Frame (Variationskoeffizient) 0,66 → 0,05,
+  Zittern Auto relativ zur Kamera 13,4 cm → 0,06 cm je Frame (Kamera ist geglättet, darum ruckeln „die Autos", nicht das Bild).
+  JS-Zeit war nie das Problem: Split Wald 2560×1600 physik+audio+hud 0,42 → 0,24–0,33 ms (Ziel < 8 ms).
+  Split-Screen: Zeichenpuffer −56 % Pixel (pr 1,5 → 1,0), Dreiecke Wald 744k → 610k, Draw-Calls 91 → 114.
+  Alle Tests grün (6× node, menu, rennen, screenshot wald, audio, interpolation, leistung). Mac-Messung steht aus (H-Overlay).
+
+## Runde 3 (11.10.2026) – Titel + Fahrerwahl
+- Spiel heißt „Jonas Hot Steering Wheel“ (Untertitel Autorennen): <title>, Menü-Kopf, ANLEITUNG.md, ERWEITERN.md; Dateinamen unverändert.
+- Neuer Menü-Schritt „Fahrer“ (vor Auto, jetzt 5 Schritte): config.fahrer (12 Namen + Emoji), Standard Jonas/Emmy, Solo 6×2, zu zweit je 3×4,
+  P1 Pfeile / P2 WASD / Maus; gleicher Fahrer nicht möglich (Bewegender springt weiter, Karte „vergeben“ markiert).
+- Namen in HUD (auch Solo), Rundenmeldungen/Zieleinlauf (Name über der Meldung), Ergebnis; Computer = nicht gewählte Fahrer (Vorrang Schumacher, Senna, Verstappen, Röhrl), „🤖 Name“.
+- localStorage `fahrer: [p1, p2]`, einstellungenPruefen validiert; Hilfsfunktionen in config.js (R.fahrerEindeutig, R.fahrerComputerNamen), tests/test_fahrer.js neu.
+- tests/menu_test.py um Fahrer-Schritt/Titel/Namen erweitert, alle Tests grün. Screenshots 1280×800 und 1440×900 geprüft.
+- 11.10. – Runde 2 abgeschlossen: (1) Ruckeln: Ursache Physik-Akkumulator ohne Interpolation (0/2 Schritte je Frame),
+  jetzt interpoliert (Zittern 13,4 cm → 0,06 cm/Frame), dazu pixelRatio 1.0 im Split, adaptive Qualität, HUD 20 Hz,
+  Deko-Chunks, Leistungs-Overlay (H); (2) Automodelle v2 mit echten Maßen (5–7k Dreiecke/Auto, 10 Meshes);
+  (3) Titel "Jonas Hot Steering Wheel", Fahrerwahl (12 Fahrer, KI nimmt Restnamen). Alle Tests grün.
+  Offen: M4/AMG-Front zu flach; Messung auf dem Mac (H-Overlay) fehlt
+
+## Runde 3 (11.10.2026) – siehe PLAN_RUNDE3.md
+- Rückmeldung: "super" + 6 neue Wünsche (3D-Autowahl drehbar, 220–270 km/h, Berg/Brücke/Tunnel mit Licht,
+  Hindernisse Öl/Baustelle/Sand/Ast, 3 weitere KI-Stufen, Fantasie-Strecke mit 2 Loopings, Bällen, Wasserstrahl)
+- Offene Fragen F1–F4 in PLAN_RUNDE3.md; Entscheidungen vorläufig getroffen
+- Welle 1 gestartet: A Tempo/Schwierigkeit (Opus), B Streckenelemente (Opus), D 3D-Autowahl (Sonnet)
+- 11.10. Agent B (Opus) – Streckenelemente + Hindernisse: Höhen neu (Wald −11…14 m, Wüste −8…13 m, Wiese −2…6 m, ≤ 8 %),
+  Brücken (Wiese Stein über Teich, Wald Holz über Bach, Wüste Beton/Stahl über Schlucht; Senke = bodenHoehe),
+  Tunnel (Wald Fels 690–780, Wüste Sandstein 130–220; Lampen, 3 Punkt- + 2 Spotlichter nur im Tunnel, Licht je Ansicht gedimmt),
+  Hindernisse (config.hindernisse, trackCatalog.hindernisse, Kollisionen.hindernisse), Nicken nach Steigung.
+  Neue Tests: tests/test_hindernisse.js, test_strecke.js (Brücken/Tunnel/Hindernisse), screenshot_test.py Bilder 13–18.
+  Offen (Agent A/driver.js): KI weicht noch nicht aus → Schumacher hängt auf der Wiese an der Baustellen-Bake (s≈820),
+  rennen_test 400 s: nur 1 Runde. Struktur strecke.hindernisse an Agent A gemeldet; main.js ruft driver.hindernisseSetzen() falls vorhanden.
+- 11.10. Agent C (Opus) – Strecke „Fantasie“ fertig: trackCatalog 'fantasie' (1.388 m, Breite 14, Bauplan tests/bauplan/fantasie.json),
+  Thema 'fantasie' (lila Himmel, Pastell-Felder, Riesenpilze, Zuckerwatte-Bäume, Ballons, Pastell-Hügel, Regenbogen, Regenbogen-Randsteine).
+  2 Loopings (s=170 Start-Gerade, s=800 Süd-Gerade, r=12, vMin 87 km/h) – neu src/track/looping.js (Helix-Band, Gerüst, Fahrlogik
+  Spieler=KI, Sturz → zurück vor die Einfahrt „Mehr Anlauf! 🚀“, zu langsam → unten durch „Schneller für den Looping!“, Kamera rollt mit).
+  Bälle (3 Stellen, ab Runde 2 bzw. letzte Runde, −60 %) + Wasserfontänen (2, alle 20 s, −40 % + Schlingern) – neu src/world/dynamik.js.
+  HUD.meldung() oben; Kollisionen ignorieren Autos im Looping (vehicle.imLooping). Autorennen.html: 2 neue <script>-Zeilen.
+  Tests: neu test_looping.js, test_dynamik.js; test_strecke/test_rundenzeit/test_ki/screenshot_test/rennen_test/menu_test auf Fantasie erweitert.
+  KI Runde 2: leicht 65,4 s … unschlagbar 49,0 s, alle 7 Stufen 4/4 Loopings, 0 Stürze. rennen_test fantasie: 3 KI × 3 Runden in 400 s.
+  Offen (nicht meine Dateien): menu.js Kartenfarbe für Thema fantasie fehlt (Karte grün wie Wiese); 4. Streckenkarte bricht bei 1280 px
+  in Zeile 2 um und wird unten abgeschnitten (styles.css .karte.strecke { width: 16em } → z. B. 13.5em).
+- 11.10. – Runde 3 abgeschlossen (Hauptmodell geprüft): 10 Node-Testdateien + menu_test (alle Prüfungen) +
+  rennen_test wiese/fantasie grün. V_DECKEL Ideallinie 45→78 m/s, Tacho 280. Screenshots Looping/Bälle/
+  Tunnel/Baustelle angesehen. Offen: Fragen F1–F4 in PLAN_RUNDE3.md; Leistung mit Tunnel-Lichtern auf dem
+  Mac ungemessen; M4/AMG-Front weiter flach.
+
+## Runde 4 (11.10.2026) – siehe PLAN_RUNDE4.md
+- Antworten F1–F4 + neue Wünsche (Welten-Add-on, Jahreszeit/Wetter/Wind, Schaden, Schanzen, Wracks, 10 Gegner,
+  Emojis Emmy 🦁 Jonas 🐯). Oberstes Gebot: Bestehendes bleibt spielbar (Welt "Klassisch", Standard-Einstellungen).
+- Welle 1 gestartet: A Längen/Spuren/Welten (Opus), B Jahreszeit/Wetter/Wind (Opus)
+- 11.10. Agent A (W1-A, Opus) – Längen + Welten + Spuren fertig:
+  F1: Wiese ×1,35 = 3.040 m, Wald ×1,25 = 2.477 m, Wüste ×1,45 = 3.331 m (Punkte + Hügel x/z/r um den Schwerpunkt, h gleich,
+  alle s-Werte × Faktor; Bauplan-JSON + generator.js kennen "skalierung"). Bodenplatte wächst mit (Strecke + 450 m, Feld 16 m).
+  KI Runde 2 (leicht…unschlagbar): Wiese 120,8/108,0/…/87,3 · Wald 127,0/112,4/…/88,4 · Wüste 116,4/103,6/…/83,7 s
+  → mittel Wiese/Wüste knapp unter Ziel 110 (Test-Band 100–130).
+  Welten: trackCatalog welten/weltStandard (Wiese klassisch, Wald/Wüste hindernisse, Fantasie fantasie|verrueckt), R.weltInfo;
+  new R.Strecke(daten, { welt }) → strecke.welt/weltDaten/aktiveSchichten, gefilterte strecke.daten (dynamik.js), Listen
+  wracks/strohballen/schanzen/boostFelder/schilde (nur Daten). Spuren: breiteBei(s), spurBei(s), Leitplanken (1 Spur),
+  2 Mittellinien (3 Spuren), Bande/Untergrund/Checkpoints lokal; driver.js begrenzt Versatz auf ±max(0,5; breiteBei/2 − 2,2).
+  Tests: test_strecke (Welten/Spuren/Sperrzonen), test_rundenzeit + test_ki (Stunt-Welt), test_hindernisse (Welt),
+  screenshot 23_spur_eng/23b/24_spur_breit, rennen_test 560 s für lange Strecken. Alle Node-Tests + rennen wiese/fantasie
+  + screenshot wiese/wald/wueste/fantasie + menu_test grün. Offen für main.js: Welt durchreichen (siehe Bericht).
+- 11.10. Welle 1 fertig + integriert (Fable): Längen Wiese 3.040/Wald 2.477/Wüste 3.331 m (mittel 104–112 s,
+  Testgrenze 100–130 s gelockert – F1 nicht ganz erreicht, Kurven werden mit Skalierung schneller), Spuren
+  (breiteBei), Welten-Datenmodell (welten/weltStandard/aktiveSchichten; Welt-Daten für wracks/strohballen/
+  schanzen/boost/schilde liegen bereit), Wetter/Jahreszeit/Wind (wetter.js; ohne Einstellung bitgenau wie
+  vorher). main.js: Welt-Wahl (einst.welt), Wetter-Einbau, Einstellungen welt/jahreszeit/wetter/windStaerke/
+  windRichtung/schaden mit Validierung; Smoke-Test Winter-Schnee/Herbst-Regen/Sandsturm ok, 11 Node-Tests grün
+- Welle 2 gestartet: C Schaden+Wracks+Strohballen (Opus), D Schanzen+Boost+Schild (Opus)
+- 11.10. Agent D (W2-D, Opus) – Sprungschanzen + Turbo-Felder + Schild fertig (main.js/hud.js/collisions.js NICHT geändert):
+  Neu src/track/schanze.js (R.Schanzen: zustand, nachSchritt, flugSchritt, hoehe, anzeigeNicken, inLuft, abbrechen, hoeheAuf,
+  liste, bauen; Keil mit Pfeilen, rot-weißen Rändern, Zielstreifen, Fahnen; vyMax 5 m/s deckelt Flugweite → 270 km/h ≈ 85–100 m),
+  neu src/world/pickups.js (R.Pickups: schritt, faktoren, turboAktiv, hatSchild, schildVerbrauchen, vorTreffern/nachTreffern,
+  zuruecksetzen, ton, bauen [Kugeln], felderBauen [statisch], animieren, zerstoeren), config.stunt, trackBuilder: schanzenBauen()/
+  boostBauen() in bauen(). Tests: neu test_schanze.js (30 m/s/12°: 1,33 s, 39 m, ×0,95; quer/abseits ×0,8; KI 7 Stufen × Wiese/
+  Wald/Wüste: alle Schanzen geflogen, 0 schräg), test_pickups.js (Turbo 2,5 s + 2 s Auslauf, ≤ 8,3 m/s² Verzögerung, Schild genau
+  1 Treffer, Respawn 10,000 s, KI sammelt), test_strecke (Welten + freie Landung), tests/stunt_screenshot.py (7 Bilder, 2 Iterationen
+  angesehen; Fehler gefunden+behoben: Flammen blieben nach zuruecksetzen()). Alle 14 Node-Tests grün.
+  EINBAU W2-D (für Agent F):
+   a) Autorennen.html: <script src="src/track/schanze.js"> nach looping.js, <script src="src/world/pickups.js"> nach dynamik.js.
+   b) fahrzeugHinzufuegen: eintrag.flug = R.Schanzen ? R.Schanzen.zustand() : null;
+   c) streckeSzeneBauen (nach Dynamik): this.pickups = null; if (R.Pickups && (strecke.boostFelder.length || strecke.schilde.length))
+      { this.pickups = new R.Pickups(strecke); this.szene.add(this.pickups.bauen()); }   (Turbo-Felder baut strecke.bauen() schon)
+   d) physikSchritt je Auto, direkt nach dem Looping-Block: const fz = f.flug; if (fz && fz.aktiv && strecke) {
+      const e = R.Schanzen.flugSchritt(fz, v, strecke, s, dt); const n = strecke.abfrage(v.x, v.z, f.index); f.index = n.index;
+      f.nah = n; f.bremst = false; this._flugEreignis(i, e); return; }
+      Um v.schritt: const fk = this.pickups ? this.pickups.faktoren(i) : null, dd = v.daten, vm0 = dd.vMax, b0 = dd.beschleunigung;
+      if (fk) { dd.vMax = vm0 * fk.vMax; dd.beschleunigung = b0 * fk.beschleunigung; }  v.schritt(...);
+      if (fk) { dd.vMax = vm0; dd.beschleunigung = b0; }   (exakt zurück, verträgt Schaden/datenBasis, solange die nicht IN schritt schreibt)
+      Danach: if (fz && strecke && f.nah) this._flugEreignis(i, R.Schanzen.nachSchritt(fz, v, strecke, f.nah, xAlt, zAlt, dt));
+   e) Treffer mit Schild: vor JEDER Prüfung, die Treffer selbst anwendet (Kollisionen.hindernisse, dynamik.kollisionen, Strohballen/
+      Wrack von Agent C): const sch = this.pickups && this.pickups.vorTreffern(this.fahrzeuge); let hs = …prüfung…;
+      if (sch) hs = this.pickups.nachTreffern(this.fahrzeuge, hs);   (Treffer-Objekte brauchen .nr). Schaden (Agent C): vor dem Abzug
+      if (this.pickups && this.pickups.schildVerbrauchen(i)) → Treffer ignorieren.
+   f) Nach den Kollisionen: if (this.pickups) { this.pickups.schritt(dt, this.fahrzeuge).forEach(e => e.typ === 'turbo'
+      ? (this._meldung(e.nr, 'TURBO! 🔥', 1200), this.fahrzeuge[e.nr].istSpieler && this.pickups.ton('turbo'))
+      : (this._meldung(e.nr, 'Schutzschild! 🛡️', 1200), this.fahrzeuge[e.nr].istSpieler && this.pickups.ton('schild')));
+      this.pickups.geplatzt.forEach(g => { this._meldung(g.nr, 'Schild weg! 💥', 1000); if (this.fahrzeuge[g.nr].istSpieler) this.pickups.ton('platzen'); }); }
+   g) y: if (strecke && !v.imLooping) v.y = f.flug ? R.Schanzen.hoehe(f.flug, v, strecke) : strecke.hoeheAn(v.x, v.z);
+      (Interpolation a.y→v.y in frame läuft dann von selbst; Kamera folgt anzeige.y)
+   h) _flugEreignis(i, e): 'sprung' → _meldung(i, 'Sprung! ✈️', 1300); 'landung'|'landungSchraeg' → für Spieler Kamera
+      wackeln(R.config.stunt.schanze.kameraWackeln) + R.Audio.kollision(Math.min(6, 2 + f.flug.landeStaerke / 2));
+      'landungSchraeg' optional _meldung 'Rumms! 😬'.
+   i) frame: nach der Steigungsberechnung: if (f.flug && R.Schanzen.inLuft(f.flug)) steigung = 0;
+      mesh.rotation.set(d.nicken + steigung + (f.flug ? R.Schanzen.anzeigeNicken(f.flug, alpha) : 0), d.heading, d.neigung, 'YXZ');
+      neben dynamik.animieren(): if (this.pickups) this.pickups.animieren(this._physikZeit || 0, this.fahrzeuge);
+   j) zuruecksetzen(i): if (f.flug) R.Schanzen.abbrechen(f.flug, f.vehicle);   szeneAbbauen (ganz vorne):
+      if (this.pickups) { this.pickups.zerstoeren(); this.pickups = null; }   Neues Rennen auf gleicher Szene: pickups.zuruecksetzen().
+   k) collisions.js: autoAuto `if (A.imLooping || B.imLooping || A.imFlug || B.imFlug) continue;`, hindernisse
+      `if (v.imLooping || v.imFlug) continue;` (test_schanze meldet per INFO, ob das schon drin ist; Bande bleibt an).
+  Schwächen: Rampe von der Seite befahren = kein Flug (Auto fährt „durch" den Keil); Flugweite per vyMax gedeckelt (Arcade);
+  Turbo-Ende bremst bis 8,3 m/s² (Auslauf 2 s); KI fährt Pickups nicht gezielt an (sammelt zufällig, Test: alle Stufen ≥ 2 Turbos).
+- 11.10. Agent C (W2-C, Opus) – Schaden + Wracks + Strohballen fertig (main.js/Autorennen.html NICHT geändert → Einbau-Anleitung im Bericht):
+  neu src/physics/schaden.js (R.Schaden: treffer/stoesseAuswerten/schritt/update/zustand/gesperrt/meshBauen/bei/zerstoeren,
+  Faktoren über vehicle.datenBasis → neue vehicle.daten-Kopie; Ereignisse treffer/stufe/liegengeblieben/abschleppwagen/abschleppen;
+  R.Schaden.wrackGruppe = Grafik Wrack/Brand mit Warnblinker, Warndreieck, Flammen-Sprites, Glut, Rauchsäule, selbst animiert
+  über onBeforeRender). collisions.js: wracksEinbauen(strecke) + Wrack-Kapsel (Stoß typ 'wrack'/'brand'). trackBuilder
+  hindernisseBauen(): ruft wracksEinbauen + wrackGruppe. dynamik.js: Strohballen (rollen ab Runde 1, −50 %, kippen, 3 s am Rand).
+  config: hindernisse.wrack/brand, strohballen, schaden (standardAn false). hud.js/styles.css: Gesundheitsbalken (schadenSetzen).
+  engine.js: schadenTreffer/liegengeblieben/abschleppen. Tests: neu test_schaden.js, test_hindernisse (Wracks), test_dynamik
+  (Strohballen), tests/schaden_screenshot.py (6 Bilder in tests/out/schaden, angesehen). Alle 14 Node-Tests grün.
+  Offen: driver.js behandelt wrack/brand nur „weich“ → Wald-brand wird von meister/legende/unschlagbar gestreift
+  (Vorschlag: hart = … || h.typ === 'wrack' || h.typ === 'brand' → 0 Treffer, geprüft in Kopie); main.zuruecksetzen meidet nur
+  baustelle/ast (wrack/brand ergänzen); schaden.js-<script> in Autorennen.html fehlt.
+- 11.10. Agent F (Integration W2 C+D in main.js, Fable/Opus) – fertig:
+  main.js: Kopfkommentar + Reihenfolge-Kommentar über physikSchritt (Eingabe → gesperrt → Looping/Flug → Turbo-Faktoren
+  → vehicle.schritt → nachSchritt → Kollisionen [Bande, Auto, Hindernis/Dynamik mit Schild vor/nach] → Schaden → Pickups
+  → Höhe/Feststecken/Rennen). Eingebaut: f.flug (fahrzeugHinzufuegen), Flug ersetzt vehicle.schritt, Turbo-Faktoren nur um
+  vehicle.schritt (exakt zurück), y = Schanzen.hoehe, Flug-Nicken in frame (Steigung 0 in der Luft), _flugEreignis
+  (Sprung/Landung/Rumms), Pickups bauen/schritt/animieren/zerstoeren (erst ab Rennfreigabe), Schild vor/nach Hindernissen
+  und Dynamik + gegen Bande/Auto-Schaden (schaden.zaehlt/abfangen, neu in schaden.js), Schaden aus einstellungen.schaden
+  (opt.schaden, meshBauen, Ereignisse → Ton/Meldung, 'abschleppen' → zuruecksetzen + driver.zurueckgesetzt), gesperrt =
+  nur Bremse (KI wird nicht gefragt), R-Taste gesperrt während liegengeblieben, HUD schadenSetzen, schaden.update je Frame,
+  Dynamik auch bei NUR Strohballen (Bedingung jetzt aus strecke.daten = nach Welt gefiltert), zuruecksetzen meidet
+  wrack/brand (Breite über breiteBei) und bricht den Flug ab. Autorennen.html: schaden.js nach collisions.js, schanze.js
+  nach looping.js, pickups.js nach dynamik.js. collisions.js: imFlug in autoAuto/hindernisse (Bande bleibt), dynamik.js:
+  imFlug nicht treffbar, driver.js: hart auch für wrack/brand. config.rennen.gegnerMax 5 → 10 (Startplätze für 11 und 12
+  Autos alle auf der Straße, alle Strecken/Welten). schaden.js: Rauch-Points mit fester Hüllkugel (frustumCulled).
+  Fehler gefunden+behoben: (1) pickups.geplatzt wurde von schritt() geleert, bevor main es liest (Anleitung f) → jetzt vorher
+  gemeldet; (2) Wracks hatten in Wald/Wüste-Standard schon Kollision, aber keine Grafik (schaden.js fehlte im HTML);
+  (3) Turbo/„TURBO!“ im Countdown → Pickups erst ab gasErlaubt.
+  Tests: 14 Node-Tests grün (test_schanze: „collisions.js kennt imFlug“), rennen_test wiese/wald/wueste/fantasie grün,
+  menu_test 81 OK, NEU tests/welten_test.py (14 Strecke×Welt, Schaden an, Regen, Wind 3, 10 Gegner, 5 Runden, 200 s):
+  97/97 OK inkl. KI liegengeblieben → abgeschleppt → fährt weiter und Regression (wiese ohne Felder = klassisch, nichts
+  aktiv, Bahnen nach 60 s bitgleich mit/ohne die drei neuen Module). Bilder tests/out/welten/*.png angesehen.
+  Draw-Calls: Bilder 32–133; schlimmster Fall Spieler hinter 10 qualmenden Gegnern 157–170 (Wald/Wüste verrückt 170).
+  Offen: tests/stunt_screenshot.py + schaden_screenshot.py hängen den Einbau selbst ein → jetzt doppelt, anpassen;
+  Wetter 'regen' in der Wüste ohne Regen-Symbol (wetter.js entscheidet); Leistung auf dem Mac ungemessen.
+  Hinweis: Die Einbau-Anleitung von Agent C (Punkte 1–8) stand nicht in VERLAUF.md – Einbau nach der API in schaden.js/Kopfkommentar.
+- 11.10. Runde 4 abgeschlossen (Fable-Prüfung): 14 Node-Tests, menu_test 128 OK, welten_test 97 OK,
+  rennen_test alle 4 Strecken grün. Menü: Welt-Zeile je Strecke, Jahreszeit/Wetter/Wind/Schaden (2 Spalten),
+  Gegner bis 10, Emmy 🦁 Jonas 🐯 (Kerle → 🐺). Doku aktualisiert. Übertragen auf den Mac.
+  Offen/Fragen: F1 Rundenzeit mittel 104–112 s statt ≥110 (weiter verlängern?); F5–F8 (PLAN_RUNDE4.md);
+  Leistung auf dem Mac mit 10 Gegnern + Wetterpartikeln ungemessen; stunt_/schaden_screenshot.py doppelter Einbau (nur Testskripte).
+
+## Runde 5 (11.10.2026) – siehe PLAN_RUNDE5.md
+- Rückmeldung: schwerer fahrbar, zu zweit kaum; Versionen sichern; Looping/Schanze-Anlauf; Zaun; dann Dino, Polizei, F1, Kleber
+- Schritt 1: Versionen auf dem Mac anlegen; Schritt 2: Messung in Sebastians Chrome über Artefakt-Seite
+- 11.10. Messung auf Sebastians Mac (Artefakt-Seite in seinem Chrome, Overlay H): Solo Wiese 60 fps, 1,32 ms/Frame
+  (physik 0,21, render 0,95), Draw-Calls 63, pixelRatio 1,5, Qualität voll. Zu zweit Wald Klassisch: 60 fps,
+  1,91 ms/Frame, Draw-Calls 144, pixelRatio 1,0 → Leistung ist NICHT die Ursache (H1 widerlegt, Fenster 1200×1449;
+  Vollbild ungemessen). Ursache: H2 Fahrphysik (Tempo/Lenkung/Streckenskalierung), zu zweit durch halbe Sicht verschärft.
+  H3 Ghosting bleibt offen (Handgriff). Versionen v1–v4 in _versionen/ gesichert.
+- Welle Fix gestartet: A Fahrbarkeit (Tempo-Klasse, Lenkung, Kamera, Physikschritt), B Anlauf/Zaun/Kleber (Opus ×2)
+- 11.10. Agent B (Fix-B: Anlauf/Zaun/Kleber, Opus) – fertig:
+  Zaun-Lücken (tests/zaun_test.js, 4 Strecken × alle Welten, 40 Stellen, 20/45/75 m/s × 15/45/90°, 10 080 Läufe/Welt-Satz):
+  (1) Hauptursache: Bande prüfte nur die AUTO-MITTE → Blech ragte bis 3,7 m durch Zaun/Geländer/Leitplanke/Tunnelwand
+  (90°-Aufprall: halbe Länge). Fix collisions.bande: 4 Karosserie-Ecken (+ Mitte) gegen grenzeBei(s), tiefste Ecke
+  zurückschieben (bis 3 Durchgänge), Tempo in die Bande weg, nach dem Eindrehen nochmal nachschieben (kein Hängenbleiben).
+  Jetzt max. 0,02 m. Mitte entkam nie (kein Tunneln: Grenze ist ein Halbraum je Streckenstück, kein dünnes Segment).
+  (2) Zaun-Deko bis 1 m an Stellen, wo ein anderes Streckenstück näher lag (dort keine Bande) → zaunPunkte ok nur, wenn der
+  Punkt zum eigenen Stück gehört. (3) Startbogen-Masten + Looping-Gerüstbeine waren durchfahrbar → strecke.saeulen (feste Kreise).
+  Bande im Flug/Looping-Austritt aktiv (bestätigt). Leitplanke/Geländer/Tunnelwand liegen an der Grenze (Karosserie stößt an).
+  Anlauf (neu src/track/anlauf.js, config.anlauf): weiche Bremse (5 m/s²) bis 10 m vor Looping-Einfahrt/Rampe, wenn
+  Vorhersage < Mindesttempo; ausgerollt davor stehen = gleicher Zustand; HUD „Zu langsam! 🐢 / Zurück und Anlauf nehmen –
+  oder R: Anlaufposition" (Spieler 2: T, hud.meldung kann jetzt 2 Zeilen); R/T → Anlaufposition (freie Stelle, 8 m, sonst
+  10 m zurück). Notstopp in looping.einfahrt/schanze.nachSchritt (nie mehr unten durch / auf den Keil). Looping oben:
+  Arcade-Hilfe mit Gas ab 0,9·nötigem Tempo. KI: in der Anlauf-Zone Vollgas bis vMin+10 % (kiHilfe – Gummiband bremste
+  sie sonst unter vMin → Endlosschleife), nach 2 s Stillstand selbst auf Anlaufposition. Schanze-Mindesttempo 14 m/s.
+  Anlauf-Abstände: Loopings 160 m (berechnet: Multivan/Normal braucht 149 m bis 96 km/h), alle Schanzen 150 m (Standard,
+  braucht 43 m). Katalog-Feld `anlauf` überschreibt.
+  Kleber (neu src/world/kleber.js, config.kleber, Schicht 'kleber' nur Fantasie beide Welten): 4 Abschnitte
+  (220–270 L, 470–530 beide, 975–1035 L, 1170–1230 R), Untergrund 'kleber' (grip 0,7, roll 8, vMax 0,6), > 2 s → 5 s
+  festgeklebt (Fäden/Blasen, HUD-Countdown), „Gelöst! 💨" + 2 m/s zur Mitte + 3 s Schonzeit (Streifen = Rand; sonst
+  käme der Multivan/Normal mit Roll 8 nie herunter). main.js: nur Looping/Flug-Block (+1 Zeile Untergrund), Meldungen,
+  Reset-Funktionen. Autorennen.html: anlauf.js, kleber.js.
+  Tests: neu zaun_test.js (38 OK, ~75 s), test_kleber.js; test_looping/test_schanze erweitert (Stopp, rückwärts, R,
+  Vollgas aller 8 Autos × Klassen + Worst Case, Mindest-Anlauf); alle 16 Node-Tests grün, screenshot_test fantasie
+  (Bilder 25/25b/26/27/27b angesehen), rennen_test fantasie, welten_test 97 OK.
+  Schwächen: Fantasie-Pilze/Schilder zwischen Straße und Zaun bleiben durchfahrbar (Deko, keine Zäune); Kleber-Streifen
+  ähnelt den grünen Regenbogen-Randsteinen (glänzt + Tropfen); Schanze von der Seite weiter „durch den Keil".
+- 11.10. Agent A (Fix-A Fahrbarkeit, Opus) – fertig:
+  1. Tempo-Klasse: config.tempoKlassen { normal: vMax ×0,70, Beschl. ×0,85, Bremsen ×0,9 | schnell: Katalog },
+     tempoKlasseStandard 'normal'; Einstellung `tempoKlasse` (standardEinstellungen/einstellungenPruefen), Menü-Zeile
+     „🏎️ Tempo: Normal / Schnell (220–270 km/h)" rechts unter Schaden (Fokus-Reihenfolge …schaden, tempo, start).
+     vehicle.js: new Vehicle(daten, { tempoKlasse }) rechnet die Faktoren einmal in daten ein (vor schaden.datenBasis,
+     Turbo bleibt multiplikativ); ohne Option Vehicle.klasseStandard (null = Katalog; Tests setzen sie). main.js:
+     streckeAufbauen(opt.tempoKlasse) → this.tempoKlasse → fahrzeugHinzufuegen (Spieler + KI gleich). normal = 154–189 km/h.
+  2. Lenkung: config.physik.lenkung { rateVmax 0,52, rateHalb 0,80 rad/s, bezug 1,8, ueberDrift 0,35, ueberBremsen 0,15,
+     einschwingen 9, zurueck 12 }. drehrateMax = min(langsam, max(Haftgrenze, Arcade-Untergrenze × √(Wendigkeit/bezug))).
+     Über der Haftgrenze: Rutschen nach außen + Tempoverlust (Untersteuern). Standard-Auto: vMax 0,35 → 0,52 rad/s
+     (normal 0,44 → 0,52), 50 % vMax 0,56 → 0,80 (normal 0,75 → 0,80); Volleinschlag 2 s bei vMax max. 1,13 rad (Mini).
+  3. Kamera (cameras.js, config.kamera): Abstand 9→12 m, Höhe 3,6→4,6 m, Vorausblick 5→9 m linear mit Tempo/vMax
+     (geglättet), Blick folgt Fahrtrichtung inkl. Drift + Lenk-Vorgriff 0,12 rad, eigene blickWeichheit 7; weit/cockpit
+     analog leicht; fovSplitScreen 70→74.
+  4. frame(): maxSchritteProFrame 3→4, Frame > 80 ms (physik.frameVerwerfenMs) → Rest verworfen; Eingabe wird je
+     physikSchritt aus dem aktuellen Tastenzustand gelesen, frameEnde() danach (geprüft).
+  5. KI driver.js: Mindesttempo-Bereiche vor Schanzen (80 m vorher bis Kante ≥ 27 m/s, gedeckelt auf 100-%-Ideallinie;
+     Katalog-Feld minTempoBereiche optional) – vorher Wald-Schanze 2082 nach Kurve: „leicht" 74 km/h.
+  Tests: test_physik (neue Erwartungen je Klasse, alle Autos, Lenktempo, Lenkhilfe-gegen-Spieler, Fingerabdruck neu),
+  test_rundenzeit + test_ki laufen je Klasse (TEMPO_KLASSE, ohne = beide), neu tests/test_welten_ki.js (4 Strecken ×
+  alle Welten × 7 Stufen × 2 Runden, Absprung ≥ 90 km/h außer Start-Schanze Runde 1, Loopings), neu
+  tests/fahrbarkeit_test.py (Tastatur-Hold, Wiese/Wald, Solo + Split P1 Pfeile / P2 WASD: 100 % auf der Straße),
+  interpolation_test (Toleranz 0,12 + bereinigte Kennzahl, s. u.), menu_test 130 OK, welten_test 97 OK, 17 Node-Tests grün.
+  Rundenzeiten KI mittel (Runde 2): normal Wiese 113,9 / Wald 115,2 / Wüste 113,5 / Fantasie 62,2 s;
+  schnell 108,0 / 112,3 / 103,6 / 59,0 s.
+  Schwächen: Rundenzeit normal nur ~5 % langsamer (Kurven bestimmen sie, Geraden kurz); Verfolger-Kamera hinkt
+  weiterhin ~v/4,5 m nach (exponentielles Nachziehen) – effektiver Abstand bei Tempo größer als 12 m; Tacho-Balken
+  bleibt bei 280 km/h Vollausschlag (normal ~60 %); welten_test-Abschlepp-Prüfung ist lageabhängig (1× rot im
+  Parallel-Lauf: KI im Flug beschädigt bzw. Reset kurz vor Looping, Wiederholung grün); Start-Schanze (Runde 1)
+  aus dem Stand nur 80–96 km/h; interpolation_test: Roh-Kennzahl 0,12–0,13 kommt vom echten Beschleunigen in „normal"
+  (bereinigt 0,001) → Kriterium bereinigt < 0,05.
+- 11.10. Runde 5a abgeschlossen (Fable-Prüfung): Tempo-Klasse Normal (Standard, 154–189 km/h) / Schnell;
+  Lenkung direkter (vMax 0,52 rad/s statt 0,35), Kamera tempoabhängig; Anlauf-Mechanik Looping+Schanze (R/T =
+  Anlaufposition 150–160 m), Zaun dicht (4-Ecken-Bande, Masten fest), Fantasie-Kleberstreifen.
+  17 Node-Tests + zaun_test + menu/welten/rennen grün. → Version v5.
+- 11.10. Agent Polizei (Runde 5b, Opus) – fertig:
+  Neu src/world/polizei.js (PolizeiLogik ohne THREE + Glue R.Polizei), config.polizei, Einstellung `polizei` (Standard aus,
+  einstellungenPruefen: nur boolean), Menü-Pille „🚓 Polizei Aus/An" rechts unter Tempo (Fokus …tempo, polizei, start).
+  Ablauf: 1 Streifenwagen (2 ab 6 Gegnern) 60 m hinter dem letzten Startplatz, Katalog 'polizei' (Ersatz: weißer Passat +
+  eigener Lichtbalken/Streifen), eigener R.Driver 'meister' ohne Gummiband; Eintrag in spiel.fahrzeuge HINTER allen
+  Teilnehmern (f.polizei, f.polizeiFahrer), nach Schaden angelegt → kein Schaden, nicht in RaceManager/Ergebnis.
+  Ziel = nächster Spieler vor ihm (Bogenlänge, −10 m zählt noch), KI nur wenn kein Spieler in 300 m; Neuwahl 1×/s.
+  Jagd: ≤ 60 m hinter dem Ziel auf dessen Spur einschwenken, < 8 m Tempo angleichen (nicht rammen). Nähe = Kapsel-
+  Abstand ≤ 6 m und nicht vor der Ziel-Front; ≥ 1,5 s am Stück → 10 s angehalten (haltSteuerung: Bremse bis Stand, nicht
+  rückwärts), Streifenwagen parkt 3,8 m daneben (parkSteuerung), HUD „🚨 Polizei! Anhalten… N s", Ton polizeiStopp;
+  danach „Weiterfahren! 🚗💨", Schonfrist 30 s, max. 1 Anhaltung je Auto/Runde. Schild → platzt (pickups.schildVerbrauchen)
+  statt Stopp. Kein Stopp im Looping/Flug/liegengeblieben/festgeklebt. KI weicht dem Streifenwagen aus (andereFuer).
+  Blaulicht 4 Hz blau/rot (Materialfarbe), 2 PointLights am Wagen nur ≤ 40 m an einer Spieler-Kamera (vorkompiliert),
+  Sirene (engine.js sirene(an, laut): 466/622 Hz Wechsel, Lautstärke bis 120 m), Minimap blau blinkend, HUD „🚨 Polizei!"
+  klein, wenn er dich ≤ 80 m verfolgt. main.js: Einstellung, streckeAufbauen/szeneAbbauen, Eingabe-Zweige (gesperrt →
+  haltSteuerung, f.polizei → polizei.steuerung), KI-Umgebung, Anlauf-Hilfe nicht für Angehaltene, Pickups ohne Polizei,
+  polizei.schritt vor rennen.schritt, verfolgungSetzen nicht für Polizei, animieren/ton. Autorennen.html: polizei.js.
+  Tests: neu tests/test_polizei.js (40 OK), tests/polizei_test.py (Wiese Klassisch: Stopp nach 12 s, Bild
+  tests/out/polizei_stopp.png angesehen, Countdown, Weiterfahrt, Ergebnis 4 Zeilen ohne Polizei, 6 Gegner → 2 Wagen,
+  Nochmal/Menü sauber, keine JS-Fehler). welten_test: Regression bitgleich grün (Wald-Abschleppprüfung 1× rot im
+  Parallel-Lauf, einzeln grün – bekannt lageabhängig), rennen_test wiese grün, Node-Tests grün außer test_autos/test_physik
+  (neue Katalog-Autos formel/polizei des Auto-Agenten). menu_test: Fokus-Reihenfolge (Z. 330) + „↓ erreicht Start" brauchen
+  'polizei' bzw. ein ↓ mehr; Auto-Auswahl-Scrollprüfungen rot durch 10 Katalog-Autos.
+  Schwächen: Streifenwagen stoppt beim Parken nur vorwärts (Punkt hinter ihm → bleibt stehen, evtl. etwas versetzt);
+  kein eigenes Ausweichen der Polizei vor Baustellen beim Parken; Sirene eine Stimme für alle Wagen; KI-Opfer werden
+  weiter vom Gummiband beeinflusst; Katalog-'polizei' ist auch als Spieler-/KI-Auto wählbar (KI-Gegner im Polizei-Look möglich).
+- 11.10. Agent Dino (Runde 5b, Opus) – fertig: Strecke „Dino" (id/Thema 'dino', mittel, 2.753 m, 5. Streckenkarte)
+  Bauplan tests/bauplan/dino.json (×1,225): Start-Gerade (Schanze 65), Schikane, lange Gerade 588 m (Schanze 839),
+  1 Haarnadel R31 (s≈1272), Baumstamm-Brücke (art 'stamm', 1579–1644) über Sumpf, viele S-Kurven, Dino-Höhle
+  (tunnel art 'hoehle', 2359–2504: Stalaktiten/Stalagmiten, Fackeln statt Lampen), Hügel −10,9…+12,5 m, Steigung ≤ 7 %.
+  Welten klassisch/hindernisse(Standard)/stunt/verrueckt; neue Schicht 'dinos' (ab Hindernisse). Felsbrocken = Strohballen-
+  Mechanik mit strohOptik 'fels' (Stoß 'fels' → „Steinschlag! 🪨"). Laufende Dinos (dynamik.js, config.dinos): Dreihorn 1899,
+  Langhals 2284, tempo 4 m/s quer, Beine pendeln; Kontakt −60 % + Hüpfer, einmal je Dino/Auto, Dino läuft weiter („Dino! 🦕").
+  Deko (themes.js dinoDeko): Urwaldbäume ('Laubbaeume' → Jahreszeiten wie Wald), Palmen, Riesenfarne, Farne, Vulkangestein,
+  Knochen, 7 Skelette, 9 Deko-Dinos (3 Langhals/3 Dreihorn/3 Zweibeiner, Lichtung bis zur Straße), Lavasee (MeshBasic, pulsiert),
+  Vulkan + Rauchsäule als Horizont-Kulisse (je Kamera in Sichtweite gezogen, ohne Tiefentest als Hintergrund).
+  Geändert: trackCatalog (Eintrag, AUS/W_HINDERNISSE + dinos), trackBuilder (Schicht dinos, Brücke 'stamm', Höhle, _inBereich
+  +1e-9 gegen Rundungsfehler bei s+L), themes.js, dynamik.js, config.js (dinos), main.js (2 Edits: Meldungstexte, Dynamik auch
+  nur mit Dinos), menu.js (Kartenfarbe/Himmel), styles.css (.karte.strecke 12,2→10em, t-dino).
+  Tests: test_strecke (dino-Erwartungen, Haarnadel/lange Gerade, dinos-Liste), test_rundenzeit (dino 110–140/100–130),
+  test_dynamik (+16 Dino-Prüfungen), menu_test (5 Karten bei 1280×800/1440×900, Dino-Hintergrund), screenshot_test (dino_bilder
+  30–35, Draw-Calls ohne Wrack-Autos, Wrack-Hindernisse ohne Bild übersprungen).
+  Rundenzeiten Runde 2 normal: leicht 128,6 / mittel 114,2 / schwer 106,4 / profi 101,7 / meister 98,3 / legende 96,0 /
+  unschlagbar 92,3 s; schnell mittel 108,1 s. welten_ki: alle 4 Welten × 7 Stufen 0 Resets (Absprung ≥ 111 km/h).
+  Draw-Calls Strecke+Deko+Hindernisse 30 (+22 Wrack-Meshes). Screenshots tests/out/dino/ (2 Iterationen angesehen).
+  Schwächen: Felsbrocken/Dinos kennt die KI nicht (gewollt, wie Bälle); Auto fährt nach Dino-Treffer durch den Dino hindurch
+  (kein Abprall); Vulkan ohne eigenes Licht/Glühen am Himmel; Urwaldbäume = Laubbaum-Modell (hoch skaliert);
+  test_physik (F1 196 km/h) und menu_test Auto-/Polizei-Schritte rot durch parallele Agenten, nicht Dino.
+- 11.10. Runde 5b abgeschlossen (Fable-Prüfung): Dino-Strecke (2.753 m, Höhle, Lava, Vulkan, laufende Dinos, Felsbrocken),
+  Polizei-Schalter (Streifenwagen, 1,5 s Nähe → 10 s Stopp, Schonfrist, Schild schützt), Formel-Renner (wählbar, 280 km/h
+  schnell / 196 normal), Streifenwagen-Modell (nicht wählbar). 18 Node-Tests + menu/welten/polizei grün. → Version v6.
+  Offen: Dino ohne Abprall; Streifenwagen parkt nur vorwärts; Ghosting zu zweit weiter ungeprüft.
+
+## Runde 6 (11.10.2026) – Planungsphase, siehe PLAN_RUNDE6.md
+- Todo-Liste T1–T17 erfasst; Recherche-Agenten gestartet (Rennspiel-Features, Mehrspieler/Tailscale, Netzwerk-Technik)
+- Vereinbart: erst Vorschläge diskutieren, dann programmieren
+- Recherche fertig (Sonnet ×2): Mario Kart/Hot Wheels/CTR-Mechaniken; Tailscale Funnel + Node/ws-Server als
+  Mehrspieler-Weg (Gäste nur Link). Quellen: tailscale.com/kb/1223/funnel, /kb/1242/tailscale-serve,
+  developers.cloudflare.com (Quick Tunnel), docs.colyseus.io, mariokart.fandom.com (MK8D), wikipedia Hot Wheels Unleashed,
+  playstation.com (CTR). Vorschlagsplan A–E + Q1–Q7 in PLAN_RUNDE6.md – wartet auf Diskussion.
+- 11.10. abends: Beschlüsse Runde 6 (siehe PLAN_RUNDE6.md). Spiele-Ordner jetzt über Mac Studio (iCloud-synchron mit Air)
+  erreichbar; Autorennen-Versionen/v1–v6 spielbar angelegt. W1 gestartet: Opus (Kollisionen/Rempeln/Abseits/Zaun),
+  Sonnet (Reifen, Bronze, Welt Alles, Start-Boost, Sterne).
+- 11.10. Agent Sonnet W1 (Reifen, Bronze, Welt Alles, Start-Boost, Sterne) – fertig. Sicherung vorher: versionen_r6/vor_sonnet_w1/ (src + tests).
+  A1 Reifen (carBuilder.js): radGeometrie(r, w, zoll, felgeFarbe, slick): Reifen = Flanke (heller) + Lauffläche mit 2 umlaufenden Rillen
+  (Flächennormalen) + 6 Querblöcke (Boxen ohne Boden), Felge 3D (Felgenhorn, dunkles Bett, Nabe, 5 Speichen ohne Rückseite),
+  Bremsscheibe dahinter; roter Bremssattel fest in der Karosserie (bremssattel(), dreht nicht mit). Rad steht 1 cm weiter außen
+  (x = Halbbreite − w/2 − 0,005). 598 Dreiecke/Rad (Limit 600); Formel-Slicks: breit, glatt, Felgenabdeckung + Ring + Mutter, 296 Dreiecke.
+  Cache je Radgröße+slick. Audi RS6 (größtes Auto) 7.671 von 8.000 Dreiecken. tests/autos_vorschau.html: ?nah=1|r = Nahbild Vorderrad.
+  Multivan: Bronze 0xa5703c, Dach cremeweiß 0xf3eddc, farbeName „Bronze-Cremeweiß“, generischerName „Bronzefarbener Familienbus“.
+  B4 Welt „Alles": trackCatalog.js hängt je Strecke welten.alles (alle Schichten true, inkl. loopings/kleber/dinos) als letzte Welt an,
+  R.weltInfo.alles = 🎪 Alles („Jede Hindernisart zugleich."); weltName brauchte keine Änderung. Polizei bleibt eigener Schalter.
+  D3 Start-Boost: neues Modul src/race/startBoost.js (R.StartBoost, reine Logik): Gasdruck-Beginn im Fenster −0,25…+0,15 s um LOS → 1,5 s
+  vMax/Beschleunigung ×1,2; früher gedrückt und bei LOS gehalten → „Zu früh! 🐢" (Gas 1 s gesperrt); später → normal. KI würfelt bei LOS
+  (Chance 0,95 − 3,2 × fehler: leicht 15 %, mittel 47 %, unschlagbar 95 %), eigener Zufallsgenerator. main.js: startBoost in streckeAufbauen
+  (nur mit Countdown), Hook vor der Countdown-Sperre in physikSchritt (Autopilot-Hook und Polizei ausgenommen), Faktoren multiplizieren
+  NACH den Pickup-Faktoren (fvm/fbe, Rückschreiben wie gehabt), startBoost.schritt am Ende. Meldungen „Startboost! 🚀" / „Zu früh! 🐢", Ton.
+  D3 Sterne: src/race/sterne.js (R.Sterne): 3 = Platz 1, 2 = Platz 2–3 oder beste Runde < zielRundenzeit der Strecke (×0,9 bei Tempo „schnell"),
+  1 = angekommen; Summe je Fahrername in localStorage rennspiel.sterne.v1 (try/catch, Rückfall im Speicher). main.js rennenFertig (zeile.sterne/
+  sterneGesamt), menu.js: ⭐ hinter dem Spielernamen in der Ergebnistafel, „⭐ n" an der Fahrerkarte (nur > 0); styles.css 2 Regeln.
+  Autorennen.html: 2 neue Script-Tags (startBoost.js, sterne.js nach raceManager.js).
+  Tests: test_autos (Rad-Dreiecke ≤ 600, Slick ≤ 400, Multivan bronze), test_strecke (Welt alles, sollSchanzen/Pickups auch alles),
+  neu test_startboost.js (35 Prüfungen: Fenster/Dauer/Sperre/KI/Sterne/localStorage), neu startboost_test.py (echtes Spiel: Boost 9,9 m/s vs.
+  normal 8,4 vs. zu früh 5,4 nach 2,5 s), menu_test (Welt-Pillen 5/3, Sterne in Ergebnis + localStorage + Fahrerkarte), test_welten_ki läuft mit
+  „alles" automatisch (alle 5 Strecken × 5 Welten grün).
+  Offen/Schwächen: Bremssattel dreht beim Lenken nicht mit; Reifenprofil nur aus der Nähe sichtbar; Boost ist moderat (+18 % Tempo nach 2,5 s);
+  menu_test Fokus-Reihenfolge rot durch Agent A (neue Pille „rempeln"), nicht durch diese Änderungen.
+- 11.10. Agent W1-A (Opus) – fertig: Kollisionen/Rempeln/Abseits/Zaun+Pflanzen (A2–A5), alles als Add-on, Standard „sanft".
+  A3 collisions.autoAuto: Autos = gedrehte Rechtecke (laenge×breite) mit SAT, 2 Teilschritte, Mindestabstand 0,1 m, Sweep über
+  vehicle._kollAlt (Achse, die zuletzt überlappt hat → kein Durchschießen bei 75 m/s frontal), Auto an der Bande zählt beim Trennen 10×
+  so schwer; main.js prüft danach die Bande für verschobene Autos nochmal. Looping: K.loopingAbstand() hält zwei Autos im selben Looping
+  ≥ Länge + 0,1 m Bogenabstand auseinander (hinteres bremst bzw. fährt einen Moment später ein; looping.js unverändert). obbAbstand() für Tests.
+  A4 Einstellung rempeln 'sanft'|'echt' (main.js Standard/Validierung, Menü-Pille „🌀 Rempeln: Sanft/Echt" rechte Spalte, letzte Zeile vor
+  Start). echt: Opfer = wer angefahren wird; seitlich/versetzt → vehicle.drehImpuls (Hebelarm×Stoß/Trägheit×drehFaktor 1,6, ≤ 4,7 rad/s,
+  exp. Abklingen ~1 s ≈ max. 90°, Lenkung 30 %); schräg von hinten 15–45° → Querimpuls 3–6 m/s × Massenverhältnis; < 15° nebeneinander →
+  nur schieben; mittiger Auffahrer → Stoß ohne Drehung. Meldung „Dreher! 🌀". KI ab profi (rang ≥ 4) bei 'echt': Gegner ≤ 6 m voraus,
+  < 1,5 m versetzt → Lenkimpuls 0,35 für 0,35 s, max. 1×/10 s (driver.rempler zählt). Schaden: Auto ab 1 m/s (−5 %), Drehung +3 % im
+  selben Treffer, Bande −3 % (config.schaden.verluste), Pflanze −3 %.
+  A2 config.physik.untergrund gras 60 km/h / Rollw. 4,5, sand 50 km/h / 5,5; vehicle.untergrundMisch (main.js aus dem Seitenabstand) mischt
+  Rand→Gras/Sand über 1 m; Deckel weich (abseitsBremsen). ABWEICHUNG: abseitsAnfahren 8 m/s – darunter wirkt der höhere Rollwiderstand nur
+  anteilig, sonst kam man aus dem Sand kaum noch los (Vollgas aus dem Stand netto 0,9 m/s², KI blieb am Zaun stecken → 3 Resets Wüste).
+  A5 K.pflanzenSammeln(strecke, deko) (main.js streckeSzeneBauen, vor statischVorbereiten): Kreis-Kollider aus den Deko-Instanzen bis
+  grenzeBei(s)+2 m, Radius = Fuß der Geometrie (≤ 0,9 m über Boden, also Stamm statt Krone); fest (Bäume, Tannen, Stümpfe, Felsen, Kakteen,
+  Palmen, Riesenpilze) = wie Säule, Stoß 'baum'; weich (Büsche, Farne, Gestrüpp, Kugelkakteen, Pilze, Heuballen) = Tempo ×0,7. Wiese 78,
+  Wald 276, Wüste 115, Dino 179, Fantasie 0 Kollider; 2–50 ms Aufbau; Draw-Calls unverändert. Aktiv in allen Welten (welten_test-Regression
+  vergleicht Lauf mit/ohne Module → bleibt grün).
+  Tests: test_kollisionen (+20: 4 Szenen × sanft/echt bei 75 m/s nie < 0,1 m, Drehung nur echt, Abdrängen genau +3–6 m/s, Multivan schiebt/dreht
+  Mini stärker, Tempo, Bande-Masse, Looping nebeneinander/dahinter), test_physik (Gras/Sand-Deckel weich, Übergang, Anfahren; Fingerabdruck neu,
+  mit alten Werten + abseitsAnfahren 0 bitgenau Runde 5), test_schaden (neue Schwellen, Drehung, Baum/Busch), zaun_test (echte Deko mit THREE:
+  Baum 60 km/h → Stopp + −3 %, Busch ×0,7, 27 feste Pflanzen nicht durchfahrbar), test_welten_ki (+23 Rennen je Klasse: 7 Stufen gemeinsam,
+  rempeln echt, 2 Runden: 0 Resets, alle im Ziel; Diagnose REMPELN_MODUS/ARTEN/RESET_LOG), menu_test (Fokus + Rempeln-Zeile), neu
+  tests/rempeln_test.py (Wiese, echt, Schaden, 5× profi, 120 s: 3 Dreher, 27 Schaden-Treffer, min. Abstand 0,096 m, Bild
+  tests/out/rempeln_drehung.png angesehen). Alle Node-Tests grün, welten_test wiese + Regression grün, menu_test grün, rennen_test grün.
+  Schwächen: Spieler-Lenkhilfe kennt Pflanzen nicht; in den KI-Rennen trifft die KI nie Bäume (gut), Spieler schon; Querimpuls kommt zum
+  normalen Stoß dazu (bei 75 m/s fliegt das Opfer weit); polizei_test HUD-Countdown-Prüfungen schwanken (Frame-Timing, je Lauf andere Zeile).
+  Sicherung vorher: /home/claude/Autorennen-Sicherung/w1a_vorher, nachher: …/w1a_nachher.
+- 11.10. W1 abgeschlossen (Fable-Prüfung): Kollisionen als Rechtecke ohne Verschmelzung, Rempeln sanft/echt (Drehung,
+  Abdrängen, KI rempelt ab profi), Schaden-Schwellen, Abseits Gras 60/Sand 50 km/h, Zaun −3 %, Pflanzen-Kollider,
+  Reifen/Felgen/Bremsscheiben, Multivan bronze, Welt „Alles", Start-Boost, Sterne. 19 Node-Tests + menu/welten/polizei
+  (Test robuster gemacht) grün. → Version v7 (Autorennen-Versionen/v7_…).
+- W2 gestartet: C Dino-Ausbau + Rehe/Bären (Opus), D Tag/Dämmerung/Nacht (Opus), E XL-Varianten Wüste ×1,6 / Fantasie ×2 (Sonnet)
+- 11.10. Agent W2-E (Sonnet) – XL-Streckenvarianten Wüste ×1,6 / Fantasie ×2 – fertig (Add-on, Standard unverändert „Normal").
+  trackBuilder.js: neue statische R.Strecke.varianteAnwenden(daten, id) → skalierte KOPIE (Katalog bleibt): Kontrollpunkte x/z und Hügel x/z/r um den
+  Schwerpunkt × Faktor (y und Hügelhöhe bleiben → Steigung sinkt), alle Listen-Felder s/s0/s1 generisch × Faktor (Hindernisse, Tunnel, Brücken,
+  Loopings, Bälle, Wasser, Kleber, Schanzen, Boost, Schilde, Wracks, Strohballen, Spuren, Dinos/Tiere – jede Liste ohne Namensliste, d. h. auch Agent-C-Felder),
+  absolut bleiben Looping-Radius, Schanzenlänge, Anlauf, checkpointAbstand (→ 26→41 bzw. 12→23 Checkpoints). Konstruktor: new R.Strecke(daten, { welt, variante });
+  strecke.variante, strecke.katalog = skalierte Kopie (Sterne lesen darüber die skalierte zielRundenzeit).
+  trackCatalog.js: `varianten: { xl: { name, faktor, zeitFaktor, beschreibung } }` bei wueste (1,6) und fantasie (2).
+  WICHTIG zielRundenzeit: Rundenzeit wächst NICHT linear mit der Länge (Kurventempo ∝ √Radius, längere Geraden): gemessen KI mittel Wüste ×1,32–1,41,
+  Fantasie ×1,40–1,50 (schnell/normal). Darum zielRundenzeit × zeitFaktor (Wüste 1,37 → 171 s, Fantasie 1,45 → 102 s), nicht × Faktor (125→200 / 70→140 wären zu locker für ⭐).
+  Längen: Wüste XL 5.329 m, Fantasie XL 2.777 m. KI mittel XL: Wüste 136,6 s (schnell) / 160,4 s (normal), Fantasie 82,9 / 93,2 s. Loopings: alle 7 Stufen schaffen alle.
+  main.js: Einstellung `variante` ('' = Normal; einstellungenPruefen string; streckeSzeneBauen gibt nur gültige Varianten an die Strecke).
+  menu.js: Zeile „📏 Variante: Normal / XL" (class m-variante, getrennt von .m-welt) unter der Welt-Zeile, nur bei Strecken mit varianten; Pillen klickbar
+  (data-a="variante:xl"), Taste V schaltet Normal↔XL im Strecken-Schritt; ↑↓ = weiter Welt, ←→ = Strecke (unverändert); Streckenwechsel setzt Variante zurück.
+  Tests: test_strecke (neuer Block Varianten: Länge, Katalog unverändert, alle s-Felder × Faktor + innerhalb, Orte skaliert, Loopings/Anlauf, Checkpoints, Steigung ≤ 8 %),
+  test_rundenzeit (KI mittel XL ≈ zeitFaktor × Grundzeit ±15 %), test_welten_ki (XL in Welt „alles", 7 Stufen), neu tests/xl_screenshot.py (Übersicht + Nahbilder, angesehen:
+  Straße proportional, Loopings auf der Straße, Tunnel/Brücke an der richtigen Stelle), menu_test (Varianten-Zeile).
+  Offen: Deko-/Leistung bei Wüste XL (5,3 km) auf dem Mac ungemessen; XL-Hintergrund im Menü baut die große Strecke (kurz verzögert).
+- 11.10. Agent W2-D (Opus) – Tageszeit Tag/Dämmerung/Nacht – fertig. Sicherung: /home/claude/Autorennen-Sicherung/w2d_vorher, …/w2d_nachher.
+  config.tageszeit (tag = keine Werte → Licht bitgleich; daemmerung/nacht mit Themen-Ausnahmen wueste/fantasie), Einstellung `tageszeit`
+  (main.js Standard/Validierung). wetter.js: opt.tageszeit → w.tz/tageszeitEmoji/nacht; anwenden: Sonne (Dämmerung orange 0,7, 11°;
+  Nacht Mondlicht 0,16), Halbkugel absolut × Jahreszeit/Wetter-Faktor (Dämmerung 0,8 warm, Nacht 0,25 kühl-blau), Himmel/Nebel der
+  Tageszeit, Wetter-Mischfarben mit wetterHell abgedunkelt (Nacht+Regen dunkel), Himmelskuppel mit Verlauf (1 DC), Sterne (Points, 1 DC),
+  Mond statt Sonne, Wolken rosa/dunkel, Partikel Richtung Nebelfarbe; nachts Mittellinie emissiv, Randsteine heller, Fantasie-Ballons
+  MeshBasic (leuchten farbig). themes.js: laternen: true (Wiese, Wald; Alpen später), laternenBauen(): alle 60 m abwechselnd links/rechts,
+  2,2 m hinter dem Randstein (nicht Tunnel/Brücke/Säulen/Trichter), 3 InstancedMeshes (Mast, Kopf leuchtend, Lichtfleck additiv);
+  Masten als strecke.saeulen (Kollision). main.js: Laternen + nachts immer _tunnelLichterAnlegen; L.nacht: alle 5 Lichter immer
+  visible (aus = intensity 0, kein Shader-Neuübersetzen), Spots dauerhaft an den Spielerautos, 3 Punktlichter = Tunnellampen im Tunnel,
+  sonst die 3 nächsten Laternen (≤ 90 m, zu irgendeiner Kamera); Tunnel-Logik tagsüber unverändert. carBuilder.setzeLicht(auto, an):
+  Scheinwerfer weiß ohne Nebel, Rücklicht 0xe0201a / Bremse 0xff6a50 (alle Autos ab Dämmerung, nur Material). HUD 🌇/🌙 vor dem
+  Wetter-Symbol. Overlay H: „Lichter: Spot n · Punkt n" (spiel.lichterZaehlen(), auch in leistung().lichter). Menü: Pille „🌗 Tageszeit"
+  unten in der LINKEN Spalte (rechts kein Platz bei 1440×900 zu zweit), Fokus nach Fahrhilfe → menu_test-Indizes +1 angepasst.
+  Messung: Nacht +5 Draw-Calls (Kuppel, Sterne, 3 Laternen-Meshes), ohne Laternen +2, Dämmerung +1; Lichter max. Spot 2 · Punkt 3.
+  Tests: test_wetter +17 (u. a. Tag für 53 Thema×Jahreszeit×Wetter numerisch identisch), neu tests/tageszeit_screenshot.py (80 Prüfungen:
+  Tag-Licht bitgleich mit Referenz tests/tageszeit_tag_referenz.json aus dem Stand vorher, 8 Bilder tests/out/tageszeit/ in 2 Iterationen
+  angesehen – Dämmerung danach aufgehellt, Lichtfleck kräftiger; Nacht-Rennen Wiese/Wald 200 s ohne KI-Resets), menu_test grün,
+  welten_test wiese + Regression bitgleich grün. test_strecke: 3 FEHL bei dino (Lava/Dinos – Agent C, nicht W2-D).
+  Schwächen: Lichtfleck liegt flach (auf Kuppen/Querneigung teils halb im Boden); Dämmerung bleibt eher dunkel (Asphalt);
+  Polizei-Blaulichter kommen nachts zum Budget dazu (2 Punktlichter je Streifenwagen, wie bisher).
+- 11.10. W2 Teil 1 fertig: Tag/Dämmerung/Nacht (alle Strecken, Sterne/Mond/Scheinwerfer/Laternen), XL Wüste ×1,6 / Fantasie ×2.
+  Sebastian: W2 ZU ENDE (Dino-Ausbau) vor W3. Start: C1 Dino-Strecke neu + Lava + Vulkan (Opus), parallel Doku (Sonnet);
+  danach C2 Dinos/Tiere/Meteoriten/Flugsaurier (Opus). Sicherung vorher: /home/claude/Autorennen-Sicherung/w2c_vorher
+- 11.10. Agent W2-C1 (Opus) – C4 Berg/2 Tunnel, C2 Lava, C3 Vulkanausbruch – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w2c1_vorher,
+  nachher: …/w2c1_nachher. Ausgangslage: Vorgänger (abgebrochen) hatte C1–C6 weitgehend gebaut, alle Tests grün; geprüft und behalten
+  (Meteoriten/Flugsaurier/Tiere = funktionierende Add-ons mit Tests, nicht entfernt).
+  C4: Grundriss BLEIBT (bewusst, nix kaputtmachen): erfüllt bereits 2.753 m, Radius ≥ 30, Höhen ±14 m, Steigung ≤ 8 %; Berg-Massiv (themes.js)
+  über s 2318–2655, Tunnel 1 2345–2405 (60 m gerade), Tunnel 2 2490–2630 (140 m, endet in der 90°-Kurve R 44 m), 85 m Schlucht dazwischen.
+  bauplan/dino.json: Block runde6_C4 (Tunnel/Berg/Lava, Generator-Ausgabe unverändert). Vulkan-Kulisse größer (610/860 statt 470/700).
+  trackBuilder.varianteAnwenden: skaliert jetzt auch Einzel-Objekte mit s/s0/s1 (dino berg, flugsaurier) – vorher wären sie bei einer
+  Dino-Variante unskaliert geblieben.
+  C2: Lava-Zungen + neu 7 flackernde Flammen je Zunge (LatheGeometry, InstancedMesh, +1 Draw-Call → 34 von 45).
+  C3/KI: Krater haben jetzt s0/s1 (weich); dynamik.hindernisVersion zählt Krater-Wechsel → main.js ruft driver/autopilot/polizeiFahrer
+  .hindernisseSetzen neu auf (geprüft: zur Laufzeit wiederholbar, Liste wird kopiert). Bomben zielen vor den Führenden PLUS dessen Fahrweg
+  während des Flugs (geglättetes Tempo), Einschläge eines Ausbruchs ≥ 30 m auseinander (config bombenAbstandS), sonst landet die Bombe
+  neben der Fahrbahn. Lavabomben größer (3,0), Rauchspur kräftiger. Himmel-Rot auch bei Dämmerung/Nacht: Himmelskuppel-Materialfarbe
+  wird temporär getönt und danach auf Weiß zurückgesetzt (Licht-Funktionen der Tageszeit unverändert).
+  Tests: test_dynamik +4 (hindernisVersion/hindernisseSetzen, Krater weg nach 20 s, Einschlag-Abstand, Vorlauf zum fahrenden Führenden;
+  2 Messfehler behoben: abgeschnittene Steh-Zeit am Laufende, Krater früherer Läufe auf gemeinsamer Strecke), test_hindernisse (Krater s0/s1),
+  test_strecke +6 (Dino-Test-Variante ×1,3: nichts verloren, berg/flugsaurier skaliert, 2 Tunnel), test_welten_ki (KI bekommt Krater zur
+  Laufzeit; neue Prüfung profi+ trifft ≤ 25 % der Krater), screenshot_test (Himmel-Messfeld unter der Meldung, neues Bild 45a_tunnel1_innen).
+  Bilder angesehen (2 Iterationen: Flammen erst additiv = weiße Spitzen → Lathe-Flammen deckend): 40/40b Lava, 41/41b Ausbruch, 42 Krater,
+  45/45a Tunnel innen, 46 Berg; tests/out/w2c1/ Ausbruch bei Tag/Dämmerung/Nacht + Lava-Flammen.
+  Schwächen: nachts wirkt das Rot fast nur im Nebel/Horizont (Kuppel dunkel, Faktor kann nicht aufhellen); ferne Bomben bleiben kleine
+  Punkte; Flammen eher gelblich.
+- 11.10. Agent W2-C2 (Opus) – C1 Dinos, Rehe/Bären, Prüfung C5 Meteoriten / C6 Flugsaurier – fertig. Sicherung vorher:
+  /home/claude/Autorennen-Sicherung/w2c2_vorher, nachher: …/w2c2_nachher. Ausgangslage: Vorgänger hatte fast alles gebaut (4 Dino-Stellen,
+  Tiere im Wald, Meteoriten, Flugsaurier, grasende Rehe in dynamik.js statt themes.js – bewusst dort gelassen, laufen auch in Klassisch).
+  Geändert gegen die Vorgaben: (1) Dinos: 30 % ALLER Dinos bleiben MITTEN auf der Straße (|q| ≤ 40 % halbe Breite) 1–3 s stehen und kehren um
+  (vorher 30 % der Steher ≈ 18 %), übrige 50 % bleiben 1–3 s stehen; Brüllen je Stelle alle 15–30 s (vorher nur zufällig beim Stehen), Kopf hoch +
+  Atemwolke; eigener Zufall dinoRnd → deterministisch je Seed (config.dino: umkehrChance, stehenChance 0,5, bruellenMin/Max/Dauer).
+  (2) Flugsaurier: Takt lief nur zwischen den Anflügen → Start-zu-Start war 40 s + Flugdauer; jetzt genau 40 s (Timer läuft immer).
+  (3) Reh/Bär maßstäblich: Reh ×0,62 (Kopf 1,28 m, Sprung 0,6 m), Bär ×0,87 (1,52 m) und heller braun (war fast schwarz); Kollisionskreise angepasst.
+  (4) Töne: neu rehRuf (Reh bleibt stehen/getroffen), Bär brummt auch beim Betreten der Straße (Ereignisse 'rehRuf'/'brummen', main.js-Hooks).
+  C5 Meteoriten geprüft = Vorgabe erfüllt (2 Stellen, 2 s Schatten + Pfeifen, Einschlag 15 m neben der Fahrbahn, 3–5 Brocken, je Runde einmal).
+  varianteAnwenden skaliert `tiere` generisch (Test-Variante ×1,4 geprüft, Katalog unverändert).
+  Tests: test_dynamik +12 (Umkehr mitten 30 % Langlauf 3 Seeds 30,9 %, Brüllen 15–30 s je Stelle, Protokoll deterministisch je Seed,
+  Flugsaurier Start-zu-Start 40 s, Wald Welten/Töne/Variante), test_welten_ki: Wald jetzt ALLE Welten (klassisch…alles) 0 Resets, Dino alle Welten
+  0 Resets; screenshot_test: 47b Dino Umkehr, 47c Dino brüllt, 48c Reh schaut, Größenprüfung (Reh 1,05–1,4 / Bär 1,35–1,7 m), Draw-Calls Wald
+  inkl. Dynamik 25 + 8 = 33 ≤ 45. Bilder in 2 Iterationen angesehen (1.: Reh 2 m groß, Bär schwarz, Brüllen kaum sichtbar → korrigiert).
+  Schwächen: Umkehren ist auf Standbildern schwer zu erkennen (nur Richtung); Reh-Kopfdrehung beim Schauen aus Fahrersicht klein.
+- 11.10. W2 abgeschlossen (Fable-Prüfung): Tageszeit, XL, Dino-Ausbau komplett (Lava, Vulkanausbruch mit Kratern, 2 Tunnel,
+  Meteoriten, Flugsaurier, Dinos ×2 mit Verhalten), Rehe/Bären im Wald, Doku v8. 19 Node-Tests grün. → Version v8.
+  Schwäche: Flugsaurier aus Fahrersicht sehr klein (Polierrunde). Nächster Schritt: W3 (Pokal, Garage/Münzen, Ölfalle, Elimination).
+- W3 gestartet: F Pokal + Elimination (Opus, src/race/pokal.js), G Münzen + Garage (Opus, src/world/muenzen.js, src/ui/garage.js),
+  H Ölfalle-Item + Flugsaurier näher/größer (Sonnet). Sicherung: Autorennen-Sicherung/w3_vorher
+- 12.10. Agent W3-H (Sonnet) – Ölfalle (D5) + Flugsaurier näher/größer – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w3h_vorher.
+  Ölfalle (world/pickups.js, config.stunt.oelfalle): Ölfässer (schwarz, gelbe Ringe, rotierend, Respawn 10 s) stehen 35 m hinter jeder Schild-Kugel
+  auf der Gegenseite (also nur Welt Verrückt/Alles; KEIN Katalog-/trackBuilder-Umbau nötig). Aufsammeln → 1 Item (HUD 🛢️ + Taste neben der Minimap);
+  Space (Spieler 1) / E (Spieler 2) legt 8 m hinter dem Auto einen Ölfleck (Ellipse 3,2 × 2,6 m, 20 s, max. 6, ältester weicht). Wirkung ohne
+  Strecken-Liste: main.js setzt nach untergrundAn v.untergrund = 'oel' (pickups.oelWirkt) → grip 0,25 wie Hindernis oel. Eigenes Auto 1 s immun,
+  Schild fängt ab (verbraucht, Fleck dann für das Auto wirkungslos). KI weicht nicht aus, sammelt Fässer, legt mit 30 % je Gelegenheit (Spieler
+  ≤ 15 m hinter ihr, steigende Flanke, eigener Seed-Zufall → deterministisch). Töne oelAuf/oelLegen/oelRutsch, Meldungen „Öl-Fass!/Öl gelegt!/Öl!".
+  Space ist im Menü „bestätigen", im Rennen frei (taste() gibt es nur im Zustand rennen). input.js: item1/item2 in der preventDefault-Liste.
+  Flugsaurier (dynamik.js, config.dino.flugsaurier): Modell ×1,8 (Spannweite 2 × 4,2 × 1,8 ≈ 15 m; der Altwert war schon ≈ 8,4 m), Anflug 60 m voraus
+  (vorher 170), Einblenden in 0,6 s statt Aufpoppen, Schatten (dunkle Ellipse, wächst/dunkelt beim Annähern), Schrei gleich beim Auftauchen und in
+  < 80 m doppelt übereinander (Engine kappt laut bei 1), Kamera-Duck 0,6 m (Vorgabe „0,4" wäre weniger als der Altwert 0,45 – bewusst 0,6), Mindesthöhe 2,5 m bleibt.
+  Tests: test_pickups +22 (Fass, Legen 8 m, Ellipse, Immunität, Schild, Limit 6, 20 s, KI 30,7 % deterministisch, schlingern), test_dynamik +3 (60 m, ×1,8,
+  Schrei beim Auftauchen, Duck); tests/oel_test.py (Playwright: Fass → Space → Fleck, KI schlingert vQuer 1,3 m/s, Flugsaurier 335 px (nah) / 956 px (Überflug)
+  Spannweite bei 1280 px; Bilder tests/out/oel/*.png angesehen). Alle Node-Tests grün.
+  Gefundener Altfehler (nicht behoben, cameras.js nicht in meinem Bereich): Cockpit-Kamera rollt bei Heading ≈ ±90° (rotation.z auf Euler XYZ im Gimbal-Lock) →
+  Fix: kamera.rotation.order = 'YXZ'. oel_test setzt das nur im Test.
+- 12.10. Agent W3-G (Opus) – D2 Münzen + Garage – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w3g_vorher.
+  Neu src/world/muenzen.js (R.Muenzen): 30 Münzen je Strecke (config.garage.muenzen: 20–40, Ziel 30), bis 4 Reihen à 5 (6 m) gleichmäßig auf
+  Geraden + Einzelmünzen (Kurven zur Innenseite); Start/Ziel, Loopings und 110 m hinter Schanzen frei; deterministisch; 1 InstancedMesh
+  (1 Draw-Call), drehen/schweben, Einsammeln = hochspringen + verschwinden; KEINE Physik (Fahrzeug bitgleich); Looping/Flug/Polizei sammeln nicht,
+  KI sammelt nebenbei (zählt nicht). Jede Welt, nur im Rennen (nicht Menü-Hintergrund), neues Rennen = alle wieder da.
+  Neu src/ui/garage.js (R.Garage): Logik (localStorage rennspiel.garage.v1 {fahrer:{muenzen, autos:{id:{farbe, farben[], motor, reifen, bremsen, rest}}}},
+  RAM-Rückfall) + Bildschirm Fahrer → Auto → Werkstatt (Bühne drehbar, Lack: Original + 4 Farben, 20 🪙 je Farbe einmalig, danach gratis; Pfeile/Maus-
+  Hover = Live-Vorschau; Reparatur 10 🪙 nur mit Schaden an und Rest < 100, sonst „Nicht nötig"; Motor/Reifen/Bremsen 3 Stufen 30/60/100 🪙,
+  +4 % vMax / +4 % grip / +6 % bremsen je Stufe, Balken; Schalter „Upgrades zählen im Rennen: An/Aus" = einstellungen.upgradesZaehlen (Standard an) –
+  bewusst IN der Garage statt im Einstellungen-Schritt (dort kein Platz bei 1440×900, Fokus-Indizes menu_test).
+  main.js: Münzen bauen/sammeln (Schritt 10b, sofort +1 aufs Konto + Ton + HUD „🪙 n +1"), Preisgeld in rennenFertig (30/20/15/sonst 5, Meldung
+  „🏆 Preisgeld", ergebnis.zeilen[].preisgeld/muenzenRennen/muenzenGesamt), fahrzeugHinzufuegen(auto, x, z, h, garage): Upgrade-Faktoren in
+  vehicle.daten vor der Schaden-Kopie + Lack; nur Spieler, KI nie. Schaden an: Endprozent je Fahrer+Auto gespeichert, nächstes Rennen startet damit
+  (min. 30 %), Reparatur = 100 %; Schaden aus = unverändert. carBuilder.bauen(auto, {farbe}) (Kopie mit anderem Lack, Farbe steht im Cache-Schlüssel →
+  Standard-Autos nutzen denselben Cache-Eintrag wie bisher; userData.lackFarbe). autoVorschau.binden(…, farbe), kachel(auto, farbe), lack(i).
+  menu.js: Karte „🔧 Garage" unter den Modus-Karten (+ Taste G), Garage fängt Tasten ab, Fahrerkarte „🪙 n". hud.js: muenzenSetzen(n, plus).
+  styles.css: Garage-Block. config.js: Block garage. Autorennen.html: muenzen.js, garage.js.
+  Tests: neu tests/test_garage.js (48 Prüfungen: Platzierung alle Strecken/XL/Welten, Einsammeln ohne Physik, Konto, Käufe, Faktoren, Reparatur,
+  Rest, Speicherformat), neu tests/garage_test.py (45 Prüfungen inkl. Pixel/Material: Autopilot sammelt 8, KI 21, Preisgeld Platz 1 = 30, Garage per
+  Tastatur+Maus, Pink-Lack im nächsten Rennen, vMax × 1,04, Schalter aus = Standard, Rest 45 % → Start 45 %, Reparatur), welten_test-Regression um
+  muenzen.js/garage.js erweitert (bitgleich, 7 von 30 Münzen von der KI gesammelt), menu_test (Garage-Karte, Esc, Münzen an der Fahrerkarte).
+  Bilder angesehen: tests/out/garage/01–07 (1. Iteration: Münzen zu braun → heller; Werkstatt-Label abgeschnitten, Autowahl lief über → behoben).
+  Schwächen: Ergebnis-Tafel zeigt das Preisgeld nicht (nur HUD-Meldung; Daten liegen in ergebnis.zeilen – menu.js war für W3-G gesperrt);
+  Ergebnis-Farbklecks zeigt Katalogfarbe; grip-Upgrade wirkt beim Formel-Renner kaum (Haftung schon nahe 1, Deckel min(1, …));
+  test_ki „Laufzeit < 60 s" schlug unter Last fehl (106 s; parallele Agenten), fachlich grün.
+- 12.10. Agent W3-F (Opus) – D1 Pokal + D7 „Letzter fliegt raus" – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w3f_vorher,
+  nachher: …/w3f_nachher. Neu src/race/pokal.js: R.Pokal (Punkte 10/8/6/5/4/3/2/1, Reihenfolge je Größe aus config.pokal.reihenfolge,
+  Stärke +1 Stufe je Rennen bis legende – unschlagbar bleibt, Gewinne je Fahrer in rennspiel.pokale.v1, nur menschliche Sieger),
+  R.Pokal.Serie (Stand, Tabelle mit Gleichstand: Siege → beste Plätze → letztes Rennen), R.PokalAnzeige (Zwischenstand, Siegerehrung mit
+  Podest 2-1-3 + Auto-Kacheln, 90 Konfetti-Schnipsel CSS, Fanfare über Audio._ton; Rückfrage „Pokal abbrechen?"), R.Puff (Wolke, Three.js).
+  Einstellungen: neu spielart ('rennen'|'pokal'|'elimination') + pokalGroesse. Pokal-Rennen laufen über rennenStarten(ein, {temporaer:true})
+  (nicht gespeichert); nach Ende/Abbruch werden die Einstellungen von vor dem Pokal wiederhergestellt; Welt/Variante/Wetter je Strecke
+  geprüft. main.js: Zustand 'pokal', rennenFertig → Zwischenstand/Siegerehrung statt Ergebnis-Tafel; zumMenue() fragt im Pokal nach.
+  Elimination: RaceManager-Option elimination (Runden = Teilnehmer − 1, mind. 3 Gegner, Polizei aus): raus, sobald alle Fahrenden bis auf
+  eines Runde k haben ODER der Führende schon Runde k+1 fertig hat (kein Hängenbleiben); Ereignis 'raus'; Sieger = letztes Auto;
+  Ausgeschiedene in der Rangliste hinten (später raus = besser); alle Spieler raus → nach 6 s Ergebnis. Ausgeschiedene Autos: f.ausgeschieden,
+  unsichtbar, bei (100000+60·nr, 100000) geparkt (Arrays bleiben, Kollisionen/Pflanzen/Hindernisse greifen dort nicht), Physik/Bande/Höhe/
+  Ton/Reset/Gummiband überspringen sie; Zuschauer-Kamera auf den Führenden, HUD „Du bist raus!" / „👀 Du schaust zu: X".
+  Menü: Modus-Schritt 4 Karten in einer Reihe (Pokal mit Pillen 3/4/5 Rennen + allein/zu zweit, Raus-Karte mit allein/zu zweit;
+  ←→ wandert über alle 4, ↑↓ allein/zu zweit), Einstellungs-Schritt: Pokal-Größe als Spaltenkopf (keine Extra-Höhe), Fahrer-Karte „🏆 n",
+  Ergebnistafel „🚪 raus in Runde n". Tests: tests/test_pokal.js (48 Prüfungen inkl. Elimination-Rennleitung kinematisch), tests/pokal_test.py
+  (42/42, Bilder tests/out/pokal/ angesehen: Puff erst kaum sichtbar → heller/größer), menu_test +2 (164+ OK), welten_test grün, alle Node-Tests grün.
+  Schwächen: Strecken-Liste im Pokal-Spaltenkopf wird bei 5 Rennen abgekürzt (…); Ausgeschiedene sehen auf der Minimap nichts Eigenes mehr.
+- 12.10. W3 abgeschlossen (Fable-Prüfung): Pokal-Serie (3/4/5 Rennen, Punkte, Stärke steigt, Siegerehrung, 🏆-Zähler),
+  „Letzter fliegt raus", Münzen (30/Strecke) + Preisgeld + Garage (Lack 4 Farben, Reparatur 10, Upgrades Motor/Reifen/
+  Bremsen 3 Stufen, Schalter „Upgrades zählen"), Ölfalle-Item (Space / E), Flugsaurier ×1,8 nah. 20 Node-Tests, menu_test,
+  welten_test grün bis auf die bekannte lageabhängige Abschlepp-Prüfung Wald (einmal rot). → Version v9.
+  Offen: Preisgeld in Ergebnistafel anzeigen; Cockpit-Kamera rollt bei ±90° (rotation.order 'YXZ' setzen) – Polierrunde.
+- W4 gestartet: I Alpen + Überführung (Opus), parallel Polierrunde (Sonnet: Preisgeld-Anzeige, Cockpit-Kamera, Doku W3); danach
+  J Fantasie-Kreuzung (Opus). Sicherung: Autorennen-Sicherung/w4_vorher
+- 12.10. Polierrunde W3 (Sonnet) – Ergebnis-Preisgeld, Cockpit-Roll, Doku W3 – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w4p_vorher.
+  menu.js (nur ErgebnisAnzeige): neue Spalte „🪙 Preisgeld“ (Spieler „+30 🪙 (+n gesammelt)“, KI „–“; Daten aus ergebnis.zeilen preisgeld/muenzenRennen).
+  cameras.js: kamera.rotation.order = 'YXZ' (Gimbal-Lock bei Fahrtrichtung ±90°; alt gemessen ±87° Roll bei Neigung 0,1, neu 2,9° = gewollte Neigung × 0,5).
+  Neu tests/cockpit_test.py (5/5: 8 Richtungen Roll 0°, Neigung wirkt gleich, keine JS-Fehler; Bild tests/out/cockpit/cockpit_heading_90.png angesehen: Horizont waagerecht).
+  menu_test.py: +3 Prüfungen Preisgeld-Spalte. ANLEITUNG.md: Pokal, Letzter fliegt raus, Münzen/Garage, Ölfalle, Flugsaurier, Space/E/G. ERWEITERN.md: pokal/muenzen/garage/Ölfalle,
+  Speicherformate (rennspiel.pokale.v1, garage.v1, sterne.v1), neue Tests. Hinweis: bestehende menu_test-Prüfungen mit spieler_zeilen (Name == 'Senna') sind wegen der Sterne im Namen leer (greifen nie) – nicht angefasst.
+- 12.10. Agent W4-I (Opus) – B1 Alpen mit Überführung – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w4i_vorher,
+  nachher: …/w4i_nachher.
+  Höhenlogik „aus eigenem s" (trackBuilder.js): neues Höhenmodell 'strasse' (Katalog hoehenModell) – Fahrbahnhöhe = Spline-y der
+  Kontrollpunkte, Querneigung 0; hoeheBeiS(s, q); hoeheAn(x, z) = Boden (an der Überführung das untere Niveau), hoeheAn(x, z, index) =
+  Fahrbahn des Abschnitts zum Index; abfrage/untergrundAn mit Index-Kontinuität (_naechsterKont: lokal ±60 Punkte ≈ ±120 m, global erst
+  > Bande + 15 m). Boden = geglättete Straßenhöhe (Gauß σ 45 m, Raster 10 m, Cache je Katalog, ~160 ms einmalig) + Hügel + See-Mulde,
+  an die Fahrbahnen angeglichen (bis Rand + 2,5 m exakt, bis 28 m weich, mehrere Abschnitte symmetrisch gemischt); feine Böschung
+  (Querstreifen alle 4 m, steil = Fels), grobes Bodengitter im Korridor 3 m tiefer. Überführungen [{ s0, s1 }]: Kreuzung wird gesucht
+  (sOben/sUnten/Δy/Winkel), obere Fahrbahn zieht den Boden nicht mit (Tal darunter), Brücke (Platte, Brüstung + blauer Handlauf an der
+  Bande, Pfeiler nie auf der unteren Fahrbahn, Widerlager), Geländer = Engstelle (grenzeBei), ueberfuehrungNah() = Sperrzone oben/unten
+  (Deko, Münzen, Laternen, Katalog-Listen). Höhenmodell 'gelaende' (alle anderen Strecken) unverändert (Tests bitgleich grün).
+  spline.js: indexBei(s), abschnitte(x, z, r) (Projektion je Abschnitt), naechster(…, fenster, globalAb).
+  Index-Kontinuität eingebaut: main.js (Fahrzeughöhe + Nicken mit f.index, Reset: Index aus dem Checkpoint-s, KI zurueckgesetzt(index),
+  Menü-Kamera hoeheBeiS), raceManager (resetPose.s, verfolgungSetzen(t, x, z, s)), schanze.js (hoehe/Flug/Landung mit Index – Landung nur
+  bei Überführung mit Index), polizei.js, pickups.js (Kugeln/Fässer/Felder aus s, Ölfleck mit Index, wirkt nicht auf der anderen Ebene),
+  muenzen.js (y aus s, nicht auf/unter der Überführung), driver.js (_andereEbene: Autos auf der anderen Ebene kein Gegner), collisions.js
+  (Auto↔Auto nur bei |Δy| < config.kollision.hoeheTrennung = 2 m), hud.js (Minimap: Brücke obenauf, heller). Kamera folgt schon anzeige.y.
+  Strecke 'alpen' (trackCatalog, Bauplan tests/bauplan/alpen.json; generator.js kann jetzt Höhenmarken ["Y", h] + Acht ohne 360°):
+  2.913 m, Acht: Start im Tal (y −5), unter der Brücke durch (s 346, y 9,6), Serpentinen mit 2 Haarnadeln (R 28), Pass y 40 (s 1298,
+  Gipfelkreuz), Felstunnel 100 m im Berg-Massiv (Fels + Schnee), Abfahrt mit Kehre (R 28), über die Brücke (s 2123, y 19,0, Δy 9,3 m,
+  rechtwinklig, Brücke 2068–2178), Talfahrt, Bergsee + Steinbrücke (2672–2722). Steigung max. 7,8 % (Regel für Alpen 10 %: vehicle.js kennt
+  keine Hangabtriebskraft, Steigung wirkt nur optisch). Welten klassisch/hindernisse/stunt/verrueckt/alles; Schanzen auf Start-Gerade und
+  Talfahrt-Gerade (≥ 90 km/h). Thema alpen (themes.js): Almwiesen, Nadelwald, Latschen, Felsen, Kühe braun-weiß mit Glocke, 4 Almhütten,
+  Gipfelkreuz, Bergsee mit Ufersteinen, Almblumen, Schneegipfel-Kranz am Horizont (22 Low-Poly-Kegel, Kulisse wie der Vulkan), Laternen;
+  Jahreszeiten wie Wald. Menü: 6 Streckenkarten in einer Reihe (nur styles.css: schmaler, Alpen-Karte mit Gipfel-Bild).
+  Tests: test_strecke (Alpen-Erwartung, Steigung je Strecke, 40-m-Ausnahme nur an der Überführung mit Δy ≥ 7 m, hoeheBeiS/hoeheAn an der
+  Kreuzung, Index-Kontinuität oben/unten, Bande, Tal ≥ 3 m, Stetigkeit, Listen nicht unter der Überführung), test_rundenzeit (Alpen mittel
+  normal 121,9 s, schnell 118 s), test_welten_ki (+ keine Höhensprünge > 1 m/Schritt, Alpen alle Welten 0 Resets, Δy ≤ 0,09 m/Schritt),
+  test_kollisionen (+ Autos übereinander kollidieren nicht, Gegenprobe), rennen_test alpen (3 KI × 3 Runden), screenshot_test alpen
+  (+ 40–46: Pass, Serpentinen, Überführung unten/oben/seitlich/von oben, Fahrten darüber/darunter (Höhe bleibt, Auto darunter unberührt),
+  Tunnel, See, Gipfelkreuz; 2 Iterationen angesehen: Blumen zu groß (wirkten wie Pfützen/Schnee) → klein; Ufersteine am See), menu_test
+  (6 Karten bei 1280×800 und 1440×900). Alle Node-Tests grün.
+  Schwächen: Berg-Massiv über dem Tunnel hat seitlich harte Kanten (Reichweite an anderen Streckenteilen begrenzt); hoeheAn(x, z) ohne
+  Index liefert an der Überführung immer den Boden (Aufrufer ohne Index – Deko, Regen-Spritzer – sehen die untere Ebene).
+- 12.10. Agent W4-J (Opus) – Fantasie-Kreuzung – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w4j_vorher, nachher: …/w4j_nachher (pokal_test 42/42 nach W4-J ebenfalls grün).
+  Strecke Fantasie neu als Acht (Bauplan tests/bauplan/fantasie.json: G260 K40/90 G130 K45/90 G?(405) K30/-270 G?(210) K35/90 G85, Gesamtdrehung 0°):
+  1.420 m (vorher 1.388, +2,3 %), Start-Gerade + Looping 1 und Ost-Gerade + Looping 2 (s 170/800) unverändert, die alten S-Kurven entfallen,
+  dafür unten rechts eine 270°-Schleife (R 30). Niveaugleiche Kreuzung („Bahnübergang") auf der Ost-Geraden 72 m nach Looping 2 (sA 898,8) mit
+  dem Schleifen-Ausgang (sB 1100,1) bei (215, 120): 88,9°, Δy 0,003 m (Höhenmodell 'gelaende' – gleiche Geländehöhe für beide). XL: 1797/2200, 88,8°.
+  Listen verschoben (alle ≥ 35 m von der Kreuzung, nicht in Looping-/Anlauf-Zonen): Kleber 220–255/385–440/980–1040/1180–1240, Öl 560, Ast 1260,
+  Bälle 340/660/1300, Wasser 600/1175, Stroh 295/1325, Turbo 680/1140, Schilde 390/1205.
+  trackBuilder.js: Katalog kreuzungen [{ s0, s1 }] → _kreuzungBerechnen (sA/sB/Winkel/Δy < 1 m, Bereiche a/b = ±15 m, halbW/halbL, 4 Masten),
+  kreuzungBei/kreuzungNah (Sperrzone), _querAbstand, _kreuzungUntergrund (querende Fahrbahn = strasse/rand statt Gras), _naechsterKont auch bei
+  Kreuzungen (Index-Kontinuität), dekoSperre (Kreis 36 m), Randsteine/Mittellinie auf der Kreuzung ausgespart, _kreuzungBauen (Kreuzungsplatte
+  polygonOffset 3 gegen Z-Fighting, Haltelinien, Regenbogen-Zauberkreis, 4 Warnlicht-Masten: Zuckerstangen-Mast, Andreaskreuz rot-weiß, Stern,
+  2 rote Leuchtkugeln + additiver Lichthof je Mast), Masten als Säulen (Bande), kreuzungWarnung/kreuzungAnimieren (abwechselnd, ruhig 1,2 Hz
+  gedämpft, bei Querverkehr < 60 m im anderen Abschnitt 3 Hz hell; dunkle Höfe unsichtbar). Zaun entfällt dort automatisch (zaunPunkte).
+  driver.js: _querverkehr – Autos der querenden Zufahrt (s der Rennleitung, ≤ 120 m) sind Querverkehr (nicht „Auto vor mir", nicht rammen);
+  Belegungszeiten der Kreuzungsfläche ± 0,5 s überlappen → später Einfahrender bremst auf Ankunft nach der Ausfahrt des anderen (Gleichstand: A
+  hat Vorfahrt); wer an/auf der Kreuzung ist oder nicht mehr anhalten kann, fährt durch; Warten ≠ Festfahren; nach 5 s Warten fährt die KI
+  trotzdem; stehende Autos auf der Kreuzung = normales Hindernis (ausweichen). Eigene Position mit _naechsterKont.
+  raceManager.js (Verfolgung/verfolgungSetzen) und collisions.js (Bande je Auto für den eigenen Abschnitt) mit _naechsterKont – nur wenn die
+  Strecke Kreuzungen hat. main.js: kreuzungAnimieren je Frame, Spieler-Meldung „🚦 Achtung Kreuzung! Links und rechts schauen!" (einmal je
+  Zufahrt, nur bei Querverkehr), Reset-Suche setzt nicht auf die Kreuzung. muenzen.js (Sperre ± 35 m je Abschnitt), themes.js (Laternen),
+  hud.js (Minimap: rotes Andreaskreuz). trackCatalog: Fantasie-Beschreibung „… eine Kreuzung mit Warnlicht …" (kürzer, Menü passt).
+  Tests: test_strecke (Kreuzung erkannt, 70–110°, |Δy| < 1 m, 40-m-Ausnahme nur an der Kreuzung, Index-Kontinuität A/B quer über die Kreuzung,
+  querende Fahrbahn = Straße, Bande, 4 Masten neben der Fahrbahn, Deko-Sperre, Warnlicht-Logik, Listen ≥ 35 m, XL ebenso) – alle Strecken grün;
+  test_rundenzeit Fantasie KI mittel normal 62,2 → 61,1 s (−1,8 %), schnell 59,0 → 57,0 s (−3,4 %), XL 93,1/80,5 s; test_welten_ki + W4-J-Teil:
+  a) 13 erzwungene Begegnungen je Variante alle durch, 0 Resets, nachgegeben in 3 (XL 7) Fällen, 0 Zusammenstöße KI↔KI; b) Auto parkt auf der
+  Kreuzung → KI auf A 3,9 s / B 6,4 s vorbei; c) 7 Stufen gemeinsam × 3 Runden (alle Welten + XL) alle im Ziel, 0 Resets (690 s Laufzeit gesamt).
+  Alle Node-Tests grün (test_kollisionen unverändert). Fingerabdruck (Spline, Checkpoints, Höhen, Untergrund, Bande, KI-Fahrt 20 s) von Wiese,
+  Wald, Wüste, Dino, Alpen vorher/nachher bitgleich. Playwright: screenshot_test fantasie +50–56 (Bilder tests/out/fantasie/ angesehen: Platte
+  ohne Flimmern, Randstein-Lücken sauber, Masten/Lichthof gut sichtbar), alle OK (1. Lauf parallel zu test_welten_ki: „Zu langsam"-Meldung
+  vor dem Auslesen abgelaufen – Lastproblem, allein grün); rennen_test fantasie OK (3 KI × 3 Runden, 10–11 Loopings); welten_test grün bis auf
+  die bekannte Abschlepp-Prüfung Wald/Stunt; menu_test 170 OK (1. Lauf: längere Fantasie-Beschreibung → Menü scrollte, Text gekürzt); xl_screenshot OK.
+  Schwächen: Fantasie hat jetzt nur noch 4 Kurven (Testgrenze 4) und weniger Kurvencharakter (S-Kurven weg); KI↔KI-Unfälle an der Kreuzung
+  kommen praktisch nicht vor (die KI gibt nach) – krachen tut es mit Spielern; wer auf der Kreuzung abbiegen will, stößt nach 23 m an eine
+  unsichtbare Bande (dort steht kein Zaun); das Warnlicht blinkt auch ohne Querverkehr (gedämpft), ist nie ganz aus; das Andreaskreuz auf
+  der Minimap wird vom Autopunkt verdeckt, wenn man drauf steht.
+- 12.10. W4 abgeschlossen (Fable-Prüfung): Alpen mit Überführung (W4-I) + Fantasie-Kreuzung mit Warnlicht (W4-J, Fantasie ist
+  dafür eine Acht mit 270°-Schleife, Loopings/Start unverändert, 1.420 m). Geprüft: alle 24 Node-Tests nacheinander grün
+  (test_ki beide Tempo-Klassen, test_welten_ki inkl. Kreuzungsteil), rennen_test alpen (3 KI × 3 Runden, 560 s), menu_test 170 OK,
+  Bilder Alpen 40–46 und Fantasie 50–56 angesehen (Brücke, Andreaskreuz/Blinklicht, Kreuzungsplatte ohne Flimmern).
+  → Version v10 (Alpen + Kreuzung). Sicherungen: Autorennen-Sicherung/w4j_vorher|nachher.
+  Offen für später: Fantasie-Acht als Variante „klassisch (ohne Kreuzung)" falls gewünscht; Minimap-Kreuz unter dem eigenen Auto;
+  unsichtbare Bande 23 m hinter der Kreuzung beim Abbiegen.
+- 12.10. Agent W5-1/2 (Opus) – Mehrspieler Server + Online-Modus (Geister) – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w5_vorher,
+  nachher: …/w5a_nachher. (Zweiter Anlauf: der erste Lauf hatte Server, Simulation, Netzcode, Menü und Tests schon gebaut, aber ohne
+  Doku/Startskripte/Node – geprüft, weitergeführt, Fehler behoben.)
+  Neue Dateien: server/server.js (HTTP nur Autorennen.html + src/ + vendor/, kein Listing/`..`/Dotfiles, nur GET/HEAD; WebSocket /ws, Räume
+  mit 4-Zeichen-Code ohne 0/O/1/I, max. 6 Menschen/30 Räume, lobby → laden → rennen → ergebnis, Herzschlag 5 s, 4-KB-Grenze, Nachrichten-
+  bremse; Spielschleife 60 Hz mit Zeitakkumulator, Zustand 20 Hz; Eingabe-Warteschlange je Spieler mit Folge-Nr/ack, überzählige Eingaben
+  werden nach 1 s Stau verworfen, > 45 sofort; `--oeffentlich` = Funnel-Adresse für Link/QR), server/simulation.js (vm-Lader wie tests/lade.js
+  + three.min.js + document-Stub, lädt auch src/main.js und rechnet mit Spiel.prototype.physikSchritt auf einem kopflosen Spiel → online
+  dieselben Regeln wie lokal inkl. Loopings, Schanzen, Anlauf, Kleber, Dynamik, Turbo/Schild/Ölfalle, Start-Boost, KI aus driver.js;
+  Geister = Kollisionen.autoAuto/loopingAbstand aus, solange kollisionen false; Schaden/Polizei/Münzen online aus; Gast weg → KI, Host weg →
+  Raum zu; Tasten-Hinweise für Spieler 2 (T/E) werden online zu R/Leertaste), server/PROTOKOLL.md, server/README.md, server/package.json +
+  node_modules/ws, server/bin/node-macos-arm64 (Node v24.21.0 LTS, 122 MB, offizielle signierte Binärdatei „Developer ID Application:
+  Node.js Foundation (HX7739G8FX)“ aus dem npm-Paket node-bin-darwin-arm64 – nodejs.org selbst war aus dem Container gesperrt; SHA-256
+  e4b5a3af…e79b, Lizenz NODE-LICENSE.txt), src/net/protokoll.js (R.Netz), client.js (Verbindung, Ping, Server-Uhr), vorhersage.js
+  (Vorhersage + Neuabgleich mit Replay ab ack, weich τ 0,12 s, > 3 m hart; Interpolationspuffer), qr.js (eigener QR-Encoder nach Nayuki,
+  MIT), online.js (Start/Code/Lobby/Ergebnis, Online-Rennen mit den bestehenden Szene/Auto/Kamera/HUD-Teilen; Stile per <style>, styles.css
+  unverändert), `Mehrspieler starten.command`, `Mehrspieler im Internet starten.command` (+ Funnel, beim Beenden `funnel --https=8443 off`).
+  Geändert: main.js (Zustand 'online': taste/item/reset/physikSchritt/Ton/adaptive Qualität leiten an spiel.online weiter, sonst bitgleich),
+  menu.js (5. Karte „🌐 Online“, von file:// ausgegraut), Autorennen.html (5 Script-Tags vor main.js), tests/menu_test.py (+5 Prüfungen).
+  Entscheidungen: Server rechnet mit dem echten main.js-Physikschritt (kein Nachbau → keine Abweichungen); Eingaben als ganze Zahlen
+  (0..100) → Vorhersage rechnet bitgleich; Link/QR nehmen die öffentliche Adresse, wenn der Host über localhost spielt; Stufe 2
+  (`kollisionen: true`) nur per Nachricht, Browser zeichnet dann deckend.
+  Tests: test_netz 44/44 (A Vorhersage = Server auf 6 Strecken/Welten/Wettern: 96,8–100 % der Abgleiche < 1 mm, Abweichungen nur an
+  Hindernissen/Dinos; B Geister/Stufe 2; C HTTP-Sperren 18 böse Pfade → 404; D kaputte Nachrichten; E 2 Clients Raum/Lobby/Start/20 Hz/ack/
+  Checkpoints/Ziel/Ergebnis; F Gast trennt → KI; G Host trennt, max. 6; H Ping localhost 0,03 ms; J Echtzeit mit 20–80 ms Zittern 15 s:
+  0 harte Korrekturen, Mittel 3 cm, max 0,95 m; I öffentliche Adresse), online_test 23/23 (2 Browser, QR per OpenCV gelesen = Link,
+  ?raum=, Code-Eingabe, Geister 0,6, 🌐-Ping, 20 s fahren, Positionen nach dem Anhalten 0,000/0,000 m gleich, Runde/Ziel, Ergebnis, Lobby,
+  Host geht; Bilder tests/out/online/ angesehen), menu_test 175/175 (170 + 5 W5), alle 22 tests/test_*.js nacheinander grün
+  (test_ki 72 s, test_welten_ki 707 s), rennen_test wiese OK (3 KI × 3 Runden im Ziel, keine JS-Fehler). Latenz lokal: Ping im Browser 1–6 ms (unter Last bis 25 ms).
+  Schwächen: im headless-Test (2 Software-WebGL-Seiten, 4–8 fps) 15–21 harte Korrekturen in 20 s (Eingaben kommen in Schüben; bei echten
+  30–60 fps nicht zu erwarten, siehe J); Sonderzustände (Looping, Rampe, Anlauf, Kleber) sind nicht vorhergesagt → eigener Wagen folgt
+  dort 50 ms hinter dem Server, beim Verlassen kurzer weicher Ruck; Hindernis-/Dino-Stöße beim eigenen Wagen erst mit der Korrektur;
+  online keine Pause; Wer stehen bleibt, ohne Gas zu geben, blockiert niemanden (Geister), aber das Rennen endet erst 60 s nach dem
+  ersten Menschen im Ziel. Die 122-MB-Node-Datei vergrößert den Spielordner (iCloud).
+  Offen: echter Handy-Test über Mobilfunk (W5-4, mit Touch aus W5-3), Stufe 2 (Kollisionen: andere Autos in der Vorhersage,
+  Menü-Schalter), Ping-abhängige Hinweise.
+- 12.10. Agent W5-3 (Sonnet) – Touch-Steuerung – fertig. Sicherung vorher: /home/claude/Autorennen-Sicherung/w5t_vorher, nachher: w5t_nachher.
+  Neu: src/ui/touch.js (Add-on, tut ohne Touch nichts: kein DOM, kein Haken; `?touch=0/1` überschreibt), tests/touch_test.py.
+  Geändert: Autorennen.html (Script-Tag nach input.js, viewport-Meta mit user-scalable=no + viewport-fit=cover, Web-App-Metas), ANLEITUNG.md
+  (Abschnitt „Auf Handy/Tablet spielen“), ERWEITERN.md (touch.js). input.js, main.js, menu.js, online.js, styles.css UNVERÄNDERT.
+  Umsetzung: Input.prototype.steuerung(0) eingehüllt (Maximum Tastatur/Touch; Spieler 1 bleibt Tastatur) → client/online lesen es unverändert;
+  Einzeltasten als echte KeyboardEvents mit den codes aus config.tasten (lokal main.taste, online rennTaste); Pointer Events mit
+  pointerId-Map, Wischen ◀→▶ schaltet um; Tasten ≥ 64 px (--tb = clamp(64px, 24vh, 124px)), HUD wird auf Touch verschoben (Karte rechts, Tacho links
+  über den Daumen); Neigung (📱, iOS-requestPermission per Click) optional; Menü: 2. Tippen auf gewählte Karte = weiter (nur allein), große
+  Zurück/Weiter-Leiste (vorhandene .m-nav per CSS) + „🏁 Los!“ im letzten Schritt, scrollbarer Inhalt, kleinere Schrift; Raumcode über die
+  vorhandenen Bildschirm-Tasten (größer); _startStufe +1 (pixelRatio 1,25); Hochformat-Overlay; ⛶ nur mit Fullscreen-API; Wake Lock im Rennen.
+  Abweichung von der Aufgabe: online zeigt die Pause-Taste als 🚪 (öffnet „Rennen verlassen?“) statt sie auszublenden, sonst käme ein Gast nicht aus dem Rennen.
+  Tests: touch_test 76/76 (Desktop ohne Touch: nichts im DOM, Steuerung/Startstufe unverändert; iPhone 13 + iPad quer: Menü nur per Tippen bis ins
+  Rennen, Tasten ≥ 64 px und ohne HUD-Überlappung, Multi-Touch Gas+Links = {gas:1, lenkung:-1} per CDP-Touch, Wischen, Loslassen, Gas fährt,
+  Item/Reset/Kamera → wurdeGedrueckt, Pause, Neigungs-Mathe, Hochformat-Hinweis; Bilder tests/out/touch/ angesehen und Layout nachgebessert),
+  menu_test ok, online_test 23/23, test_netz 44/44, rennen_test wiese ok, test_physik, test_ki ok.
+  Schwächen: nur Chromium-Emulation, kein echtes Gerät (iOS-Safari: Neigungs-Erlaubnis, Vollbild, Wake Lock, Safe-Area ungetestet; Neigung ohne Kalibrierung,
+  Vorzeichen nur rechnerisch geprüft); Modus-Karte springt beim ersten Tippen sofort weiter (vorhandenes Maus-Verhalten); Menü auf dem Handy
+  nur scrollbar statt neu gestaltet (Garage/Pokal/Online-Lobby nicht einzeln auf Touch-Größe geprüft); Item-Taste online immer blass (⭐), Wirkung entscheidet der
+  Server; Zu-zweit-Modus am Tablet: Touch steuert nur Spieler 1; Raumcode ohne native Tastatur (Bildschirm-Tasten des Spiels, kein <input>).
+- 12.10. W5 Stufe 1 abgeschlossen (Fable-Prüfung): Vorab-Test Funnel auf dem Mac mini bestanden (Port 443 durch NWES-serve belegt →
+  `Tailscale funnel --https=8443 8443`, öffentlich https://mac-mini-von-sebastian.tail39c1c2.ts.net:8443/; Tailscale-CLI nur unter
+  /Applications/Tailscale.app/Contents/MacOS/Tailscale; node auf dem mini nicht installiert → server/bin/node-macos-arm64 mitgeliefert).
+  Server + Online-Modus (Geister) W5-1/2, Touch W5-3. Geprüft: test_netz 44/44, online_test 23/23, menu_test 175 OK, touch_test 76/76
+  (Agent), test_strecke/test_kollisionen grün, Bilder Lobby/QR + iPhone-Rennen angesehen. → Version v11 (Online + Touch).
+  Offen W5-4: echter Handy-Test über Funnel (wss auf 8443), Stufe 2 Kollisionen online, iOS-Besonderheiten (Neigung, Vollbild).
+- 12.10. Übergabe geschrieben: UEBERGABE_2026-10-12.md (offenes Problem: Server auf dem mini startet nicht, localhost:8443 abgelehnt).
+- 12.10. Agent Rempeln online (W5 Stufe 2, Sonnet) – fertig. Arbeitsordner v12 (Kopie von v11, v11_original unberührt).
+  Ausgangsstand (vorher, v11-Kopie): alle 22 Node-Tests exit 0 (test_netz 44/44), online_test 23/23, menu_test 175 OK, touch_test 76/76.
+  Geändert: src/net/vorhersage.js (Stellvertreter, nur bei opt.kollisionen), src/net/online.js (Lobby-Zeile, Weitergabe), src/main.js (Einstellung
+  `kollisionen`, Standard false, nur gemerkt), tests/test_netz.js (Teil K + E), tests/online_test.py (Teil g), server/PROTOKOLL.md, server/README.md,
+  ANLEITUNG.md (Geister vs. Rempeln), ERWEITERN.md. server.js/simulation.js UNVERÄNDERT (einstellungenPruefen nimmt schon nur ein echtes `true`).
+  Menü: Host-Zeile „💥 Rempeln (gut bei Ping unter 100 ms)“ mit 👻 Geister / 💥 Rempeln unter „Deine Wahl“ (mittlere Spalte – rechts war für Fantasie +
+  Variante kein Platz mehr), ↑↓/←→/Klick wie die anderen Zeilen; Gäste sehen den Wert in der Zusammenfassung rechts („Rempeln an“/„Geister“).
+  raumErstellen schickt den zuletzt gewählten Wert mit (localStorage über spiel.einstellungen.kollisionen, Standard Geister).
+  Vorhersage: NetzVorhersage(opt.kollisionen, opt.andere [{nr, auto}]) hält je Gegner ein R.Vehicle als Stellvertreter (Fahrwerte per autoId aus
+  start.teilnehmer). abgleich(ich, anzeige, zustand.a) setzt sie auf die Server-Pose des Ack-Ticks; `_autoAuto` (nach der Bande, Bande nochmal
+  für den bewegten Wagen wie main.js) rückt sie je Folge-Nr um dt entlang ihrer Welt-Geschwindigkeit vor und ruft Kollisionen.autoAuto([eigener
+  Wagen, Gegner < 15 m], {countdown, rempeln:'sanft', dt}). Erster Entwurf (Stellvertreter in jedem Schritt NEU aus dem alten Zustand) war schlechter:
+  nach einem Stoß bekam der Gegner keine Beschleunigung und der eigene Wagen stieß ~5 Schritte lang gegen ein „unbewegtes“ Auto (Fehler 0,6 m statt 0) →
+  jetzt zustandsbehaftet bis zum nächsten Abgleich. Flug/Looping der Gegner (Flags) behandelt autoAuto selbst. Die Anzeige der anderen kommt weiter aus dem
+  NetzPuffer (Test prüft: Zustandsreihen bleiben bitgleich). Ohne kollisionen: kein Stellvertreter, kein Aufruf – Pose bitgleich zu v11.
+  Kleine Nebenkorrektur: online.js ignoriert einen nachzüglerischen Fehler „keinRaum“ nach „Raum zu“ (überschrieb den Host-Weg-Hinweis, nur sichtbar, wenn der Host mitten im Rennen geht).
+  Tests nachher: test_netz 52/52 (+8: bool-Prüfung Server, Rempeln-Schalter über Lobby, K: je Szenario ‚hinten‘ und ‚seitlich‘ Fehler gegen den Server bei 100 ms
+  Verzug – hinten: mit Stellvertretern Ø 0,000 / max 0,00 m, ohne max 1,06 m (21 Server-Stöße, 20 in der Vorhersage); seitlich: Ø 0,018 / max 0,04 m gegen ohne Ø 0,094 /
+  max 0,16 m; bitgleich zu v11 bei kollisionen aus; kein Rückfluss), online_test 29/29 (+6: Standard Geister, Host schaltet, Gast sieht Wert, Layout, localStorage, Start mit
+  Rempeln → alle Autos deckend + 2 Stellvertreter, Gast fährt ins stehende Host-Auto → 8 Stöße in der Vorhersage, Host-Auto in beiden Sichten 0,28 m auseinander),
+  menu_test 175 OK, touch_test 76/76, die übrigen 22 Node-Tests exit 0 – keine neuen Fehler. Bilder tests/out/online (14–18) bzw. Scratchpad angesehen.
+  Schwächen: Gegner fahren in der Vorhersage geradeaus (Lenken/Gas der letzten ~100 ms + Ping unbekannt) – bei Kurven-Rempeln bleibt ein Rest-Fehler bis zum nächsten
+  Zustand; die anderen werden ~100 ms + Ping/2 hinter dem (vorhergesagten) eigenen Wagen gezeichnet, der Stoß sieht deshalb leicht versetzt aus (Wagen stößt „vor“ dem sichtbaren
+  Gegner); Basis > 1,5 s alt → keine Stöße mehr in der Vorhersage; Szenarien im Test sind künstlich (2 Spieler, gerade Strecke), kein Test mit 6 Menschen/Netz-Zittern/Echt-Rempeln
+  ('echt' ist online nicht anwählbar); Browser-Test lief auf 2 Kernen mit Software-GL (4–6 fps, daher viele harte Korrekturen in den Zahlen – auch schon im Ausgangsstand), echtes Gefühl
+  bei 50–100 ms Ping ungetestet; Lobby-Zeile liegt in der Mitte statt bei den anderen Host-Zeilen (Platz).
+- 12.10. Agent Kurven-Vorhersage (v13, Sonnet) – fertig. Arbeitsordner v13 (Kopie von v12, Sicherung v12_fertig unberührt).
+  Ausgangsstand (vorher): test_netz 52/52, online_test 29/29, alle Node-Tests exit 0 (nur test_ki.js „Laufzeit < 60 s“ gerissen, 85/99 s, weil parallel zu
+  online_test gelaufen – keine Logik).
+  Geändert: src/net/vorhersage.js (Gierrate je Stellvertreter: `_gierSetzen`, `abgleich(ich, anzeige, andere, k)` merkt sich den vorigen Zustand selbst, `_autoAuto` dreht
+  heading += gier × dt vor dem Vorrücken; Option `gierrate:false` = v12 nur für Tests; Konstanten GIER_MAX 3,5 rad/s, GIER_TICKS_MAX 15), src/net/online.js (reicht
+  z.k als 4. Parameter durch), tests/test_netz.js (Teil K: Kurven-Szenarien + Gierrate-Einheitsprüfung + „gerade nicht schlechter“). Protokoll/Server UNVERÄNDERT.
+  Messwerte (K, 100 ms Verzug, Fehler der Vorhersage gegen den Server in m): Kurve seitlich (stärkste Wiese-Kurve ≈ 1 rad/40 m, beide Autopilot, 52 Stöße):
+  neu Ø 0,006 / max 0,07; v12 Ø 0,009 / max 0,21; ganz ohne Stellvertreter Ø 0,060 / max 0,59. Kurve hinten (110 Stöße): neu Ø 0,003 / max 0,01; v12 Ø 0,009 / max 0,06;
+  ohne Ø 0,035 / max 1,30. Gerade Strecke (hinten/seitlich): bitgleich zu v12 (Gierrate dort ≈ 0 bzw. gleiche Zahlen).
+  Tests nachher: test_netz 59/59 (+7), online_test 29/29, alle 20 übrigen Node-Tests exit 0 und ohne FEHL (test_ki jetzt auch grün, lief allein), test_welten_ki lief beim Abschluss noch (bis dahin alle Zeilen OK, 0 FEHL; berührt das Netz nicht).
+  Schwächen: Gierrate = Mittel der letzten 50 ms (3 Ticks) – wechselt der Gegner gerade die Lenkung, ist sie bis zum nächsten Zustand falsch; der Dreh-Impuls eines Stoßes
+  (drehImpuls) wird für Stellvertreter nicht nachgebildet, die Gierrate vor dem Stoß bleibt bis zum nächsten Abgleich; bei Drehen/Schleudern > 3,5 rad/s begrenzt;
+  Szenarien künstlich (2 Autos, Autopilot, Wiese), Verbesserung in Metern klein (max 0,21 → 0,07), weil die Stellvertreter nur ~100 ms vorrechnen; kein Test mit Paketverlust
+  (Lücke > 0,25 s → v12-Verhalten, nur Einheitsprüfung).
+
+## Runde 7 (12.10.2026) – Minimap-Kreuz über Autopunkten + Abschlepp-Prüfung lageunabhängig (Agent „Minimap/Test“)
+- Minimap (src/ui/hud.js): Das Andreaskreuz (Fantasie-Kreuzung) liegt weiter im vorgerenderten Streckenbild, ZUSÄTZLICH baut `Minimap.bauen` je Kreuzung ein kleines Sprite
+  (eintrag.kreuze = [{c, x, y}], einmalig, ≈ 14×14 px); `zeichnen()` legt es nach allen Autopunkten (KI, Streifenwagen, andere Spieler, eigener Punkt samt Hof) obenauf
+  (1 drawImage je Kreuz je Frame, kein Neuzeichnen von Linien). Das Kreuz besteht nur aus dünnen Linien (rot 2,2 px mit weißem Rand) → der Autopunkt bleibt als Fläche/Farbe erkennbar.
+  Hilfsfunktion `andreaskreuz(g, cx, cy, r, dpr)` für Bild + Sprite. Andere Strecken: kreuze = [] → keine Mehrarbeit. Test: tests/minimap_kreuz_screenshot.py (neu; Eigenes Auto auf der Kreuzung,
+  Ausschnitt 4× vergrößert, Pixelprobe) → tests/out/minimap_kreuz_vorher.png / _nachher.png (vorher: blauer Punkt verdeckt das Kreuz, Probe 0 rote Pixel; nachher rotes X über dem blauen Punkt, 7/7).
+  Tests: screenshot_test fantasie 23/23 OK (Minimap sichtbar, Andreaskreuz rot/weiß), menu_test 175 OK.
+- tests/welten_test.py, Abschlepp-Prüfung (Auto 3 liegengeblieben → 5 s still → 60 % → fährt weiter) – Ursachen der Flake (alle nur im Test, Spielcode unverändert):
+  (1) Messung „Fortschritt nach 8 s > 50 m“ ist lageabhängig: Das Abschleppen setzt am LETZTEN CHECKPOINT zurück (bis ~110 m hinter die Liegestelle); liegt dort/dahinter ein Wrack, Kleber, Looping,
+  eine Kreuzung, Düse, ein Ball oder ein anderes Auto, kriecht die KI (2–7 m/s) oder steht (Wald/Stunt „weiter 7“ am Wrack bei s 1520, Wiese/Stunt 40, Fantasie/Verrückt 46/0, Wüste/Hindernisse 41 in 20 s).
+  Ein „sauberes“ Startstück zu suchen (erster Versuch: Schnellvorlauf, bis Checkpoint + 180 m frei) scheitert auf Fantasie (zwischen Kleber/Looping/Kreuzung/Düsen/Bällen gibt es kein freies Stück) und lässt
+  das Rennen ins Ziel laufen (Fortschritt friert ein) → verworfen. Neu: Messfenster 20 s (Schritte à 0,5 s, Abbruch bei Erfolg), bestanden bei Fortschritt ≥ 10 m UND Tempo > 5 m/s; alles andere bleibt strikt
+  (gesperrt, 5 s still, 60 %, versetzt, Sperre weg, kein Reset-Fehler, Zähler).
+  (2) Ist Auto 3 zufällig schon natürlich liegengeblieben (Restzeit < 2,5 s), endet seine Sperre mitten in der Messung (tempoLiegen 7,4, nochGesperrt false, danach 55 %) → vorher abwarten (Feld `gewartet`).
+  (3) Steht Auto 3 noch am Checkpoint (nach einem natürlichen Abschleppen), setzt das zweite Abschleppen es an dieselbe Stelle → „versetzt“ false → vorher ≥ 5 m von der Reset-Pose wegfahren lassen.
+  Nebenbei (Bild-Prüfung ‚Spielerauto im Flug‘, einmal rot auf Wald/Stunt, kmh 1, Ursache nicht sicher bestätigt – vermutlich KI-Auto auf der Rampe): im BILD-Skript werden die KI-Autos für das Bild ≥ 400 m weg gesetzt.
+  Neu: tests/abschlepp_diag.py (n Versuche hintereinander, Fortschritts-/Tempo-Reihe je 0,5 s).
+  Läufe nachher: welten_test.py komplett 4× (je 188 Prüfungen) → 4× 188 OK, Exit 0; die 112 Abschlepp-Fälle (28 Kombinationen × 4) alle OK (Erfolg meist nach 1,5 s, max. 4,5 s; 6 Fälle mit Abwarten).
+  Zwischenstände (Prüfung gelegentlich rot, vorher): 3 Läufe mit verschiedenen Zwischenvarianten ergaben je 0–2 rote Abschlepp-Prüfungen (Wald/Stunt, Wiese/Verrückt, Wiese/Stunt, Fantasie/Verrückt, Wüste/Hindernisse, Wald/Klassisch, Fantasie/Fantasie).
+  Möglicher echter Spiel-Befund (nicht angefasst): Fantasie – wird die KI an Checkpoint 118 m zurückgesetzt, schafft sie den Looping bei 170 m aus dem Stand nicht immer (zu langsam, bleibt hängen, Driver setzt nochmal zurück);
+  vor Wracks kriecht sie nach dem Reset kurz (Ausweichen).
+- 12.10. Agent Kreuzungs-Zaun (v14, Sonnet) – fertig. Arbeitsordner v14 (Sicherung v13_fertig unberührt).
+  Ursache: Wer auf der Fantasie-Kreuzung abbiegt, bleibt dem Abschnitt zugeordnet, auf dem er herkam (Index-Kontinuität, W4-J) → die Bande des
+  ALTEN Abschnitts (grenzeBei = 23 m seitlich) gilt weiter und schneidet quer über die Querstraße. Der Zaun fehlt aber überall, wo die querende Fahrbahn
+  näher liegt (zaunPunkte: `n.abstand ≥ g − 0,05 && gleicher Abschnitt`) – also auf ±23 m um die Kreuzung. Gemessen (tests/kreuzung_bande_diag.js, Auto
+  von A/B in alle 4 Richtungen abgebogen): Stoß an der Bande bei 20,9–21,2 m von der Mitte (Karosserie-Ecke an 23 m), in allen 4 Ästen gleich, vorher kein Zaun.
+  Änderung (nur Grafik, Physik/collisions.js unverändert): trackBuilder.js `_kreuzungZaunOk(s, n)` + in `zaunPunkte` Punktmarke `kz`: In den Zwickeln zwischen den
+  Fahrbahnen (nächste Mittellinie gehört zur QUERENDEN Strecke, Abstand > Fahrbahn + Rand + 0,6 m, s innerhalb Bande + 8 m um die Kreuzung) steht der Zaun jetzt
+  genau an der Bande; `_zaunBauen` setzt an beiden Enden eines Zwickelstücks einen Pfosten. Gleiche zwei Meshes wie bisher (Latten-Band + Pfosten-InstancedMesh):
+  Draw-Calls unverändert (Strecke+Deko+Hindernisse 33 vorher/nachher), Pfosten 332 → 354, Lattenstücke 1324 → 1379 (+6 %). Kopfkommentar aktualisiert.
+  Die Fahrbahnen (geradeaus, beide Richtungen), Haltelinien, Kreuzungsplatte, Masten bleiben unberührt (Test: 0 Zaunpunkte auf einer Fahrbahn ± 60 m).
+  Tests neu: test_strecke +2 (Zwickelstücke A/B beide Seiten, an der Bande, nie auf einer Fahrbahn; kein Zaunpunkt auf der Fahrbahn), tests/zaun_test.js:
+  „Zaun steht nur dort, wo die Bande hält“ misst für Zwickelpunkte jetzt mit Index-Kontinuität (`_naechsterKont`, wie collisions.bande) statt global (sonst 55 falsche
+  Treffer); neu tests/kreuzung_bande_diag.js (Node: Bandenstoß beim Abbiegen) und tests/kreuzung_zaun_screenshot.py (Bilder k1–k8; Spieler mit Fahrhilfe „aus“,
+  weil die Lenkhilfe ein abgebogenes Auto sonst zurück auf den alten Abschnitt zieht).
+  Tests vorher → nachher: test_strecke 1039 → 1041 OK; test_kollisionen 53 → 53; test_ki 260 → 260 (je ~70–75 s allein); test_rundenzeit 242 → 242 (Ausgabe bitgleich);
+  test_welten_ki 154 → 154 OK, 0 FEHL, Ausgabe (Resets, Begegnungen, Stoß-Schritte) bis auf die Laufzeit identisch, 0 Resets wie vorher; zaun_test nachher alle OK (55 Zwickelpunkte geprüft);
+  screenshot_test fantasie 23 → 23 OK; welten_test fantasie 19 → 19 OK. leistung_test kennt Fantasie nicht (nur Wiese/Wald/Wüste, Zaun dort unverändert) – nicht gelaufen.
+  Bilder: tests/out/kreuzzaun/vorher/ und nachher/ (k4_schraeg: Zwickel-Zaun in allen 4 Ecken, k3_vogel von oben, k5 Fahrer geradeaus – Fahrbahn frei,
+  k1/k2 Fahrer an der Bande, k7/k8 echt gefahren: Auto stoppt bei 21,5 m); Zwischenstände iter1/iter2.
+  Schwächen: In den 4 STRASSENMÜNDUNGEN (Querstraße ~23 m von der anderen Fahrbahn) bleibt die Bande unsichtbar – der Zaun endet 0,6 m vor dem Randstein, die Lücke ist genau die
+  Straße. Ein Zaun quer über die Mündung würde die Fahrbahn des anderen Abschnitts (KI, Spieler geradeaus) optisch versperren, obwohl für sie keine Bande gilt. Wer abbiegt, sieht jetzt
+  also Zaun links und rechts der Querstraße, stößt aber in der Lücke weiter an. Echte Lösung wäre Physik (Bande an der Kreuzung für beide Abschnitte, Abschnittswechsel erlauben) – bewusst nicht angefasst.
+  An den Zwickel-Ecken kreuzen sich die Zäune beider Abschnitte wie ein X (entspricht der Physik: jede Bande gilt nur für ihren Abschnitt).
+
+## 12.10. Agent Öl/Sand (v15, Sonnet)
+Wunsch des Vaters: „durch Öl fahren → ein wenig schleudern, Sand → abbremsen“.
+- **Öl**: `vehicle.schritt` erkennt den Wechsel `untergrund → 'oel'` (`_ugAlt`) und ruft einmal `_untergrundEinfahrt()`: Drehimpuls über den vorhandenen `drehImpuls`-Mechanismus (Rempler), aber mit eigenen Werten
+  (`drehLenk` 0,8 = Gegenlenken wirkt gut, `drehAb` 3,2/s, `drehErhalt` 0,35 = nur 35 % der Welt-Bewegung bleiben → Auto rutscht nicht Dutzende Meter quer). Richtung: Lenkung (rechts → dreht rechts ein) →
+  Querbewegung → sonst deterministisch aus der Position (`floor(x·3+z·5) & 1`), KEIN Math.random. Stärke linear im Tempo (0 unter 22 km/h, 1 bei 100 km/h, Deckel ×1,2), Fahrhilfe „viel“ halbiert sie.
+  Gilt für Hindernis-Ölflecken UND Item-Ölflecken (beide setzen `untergrund = 'oel'`), für Spieler und KI.
+- **Sand** (`sandFleck`): vMaxFaktor 0,75 → 0,5, Rollwiderstand 6 → 8 mit `anfahrenRampe` (unter 8 m/s anteiliger Widerstand wie beim Abseits → kein Steckenbleiben), einmalig −20 % Tempo beim Einfahren.
+- **Config**: `physik.untergrund.sandFleck`, neu `physik.schleudern.{oel,sand}` (alles kommentiert), `hindernisse.oel.gefahr` 0,7 → 0,8, `hindernisse.sand.gefahr` 0,4 → 0,6.
+- **KI** (`ai/driver.js`): neu `FEST_KRIECHEN` – falsch herum UND < 2,5 m/s zählt als festgefahren (rückwärts frei, nach 3 Versuchen Reset). Grund: In test_welten_ki (wueste/hindernisse, schnell) wurde ein
+  KI-Auto nach Rempler/Abdrängen an die Bande im Sand gedrängt und kroch mit 1,3 m/s dauerhaft (nie „fest“, 600 s Zeitlimit). Altes Latent-Problem, nur durch geänderte Zeitpunkte sichtbar geworden.
+- **Online**: Die Vorhersage nutzt `strecke.abfrage().untergrund` (kennt Hindernis-Flecken), rechnet also dieselbe Einfahrt in `vehicle.schritt` mit; Item-Ölflecken (pickups) kennt sie weiter nicht (Server korrigiert).
+  `drehImpuls` wird synchronisiert, `drehLenk/drehAb/drehErhalt/_ugAlt` nicht (Protokoll unverändert).
+- **Messwerte** (Passat-Werte, Gas 0,5, 2,5 s im Öl, Gerade): 20 km/h 0°, 40 km/h 8°, 60 km/h 17°, 100 km/h 36°, 150–250 km/h 43° (Deckel); Fahrhilfe „viel“ bei 100 km/h 11°; Gegenlenken (P-Regler, 0,25 s Reaktion)
+  fängt auf −0,8° ab, Tempo 98 km/h. Sand (14 m): 100 km/h Vollgas → 77 km/h, Gas weg → 67; 60 → 43; Normal-Klasse 150 → 79 km/h (Deckel); schwächstes Auto (Multivan, Normal) aus 0/5 km/h in 5,1/4,5 s durch.
+- **Tests**: tests/test_hindernisse.js +17 Prüfungen (84 → 101). Vorher/nachher: physik 58/58, pickups 63/63, kollisionen 53/53, netz 59/59 (siehe Ergebnis unten), Rundenzeiten: Wald „Perfekte Fahrt“ 98,3/92,9 → 98,8/93,5 s (Sand/Öl auf Straße), Toleranzen unverändert.
+- **Schwächen**: (1) Die Schleuder-Konstanten sind nach Gefühl gewählt, nicht im echten Spiel gefahren (nur Node-Messung + oel_test.py). (2) Vorhersage: bei Item-Öl und nach Abgleich-Replay (drehLenk/drehAb fehlen im
+  Server-Zustand) kann die Drehung kurz anders ausklingen → weiche Korrektur. (3) KI weicht Öl/Sand nur über `gefahr` aus, kann aber bei 140+ km/h trotzdem in den Fleck geraten und schleudert dann wie ein Mensch (Gegenlenken macht sie nicht gezielt, die Streckenführung fängt sie meist ab).
+  (4) Sand: 8,0 Rollwiderstand ist mit dem Anfahr-Ramp-Trick gerade so fahrbar; ein langsames Auto mit Gas weg bleibt im Sand stehen (gewollt, Gas geben hilft).
+- 12.10. Agent Abschlepp-Reparatur (v15, Sonnet) – fertig. Arbeitsordner v15 (Sicherung v14_fertig unberührt). Wunsch des Vaters: „Abschleppwagen Reparatur alle 10 Prozent 1 Sekunde,
+  man kann ab 30 Prozent wieder losfahren oder warten bis 40 50 60 usw bis 100 Prozent.“
+  Entscheidung 10er-SPRÜNGE statt stetigem Hochlaufen: Für ein Kind ist „jede Sekunde ein Schritt: 10, 20, 30 …“ zählbar und deckt sich mit dem Wunsch; die Zahl, bei der man losfährt,
+  steht dann fest (30, 40 …) und sieht im HUD genau so aus wie der Wert, den das Auto behält. Stetiges 10 %/s hätte krumme Zahlen (34 %) erzeugt.
+  Ablauf (nur Schaden an, nur Abschleppen nach Liegenbleiben): liegengeblieben (5 s) → Ereignis 'abschleppen' (main.js setzt am Checkpoint zurück) → REPARATUR beginnt bei 0 %: Auto steht,
+  Treffer zählen nicht, alle reparaturJe10 (1 s) +10 % (Ereignis 'reparatur' → leises Pling je 10 %, steigende Tonhöhe, ab 30 % mit zweitem hellem Ton; Stufe/Fahrwerte laufen mit).
+  Mensch: unter losfahrenAb (30 %) ist Gas gesperrt (Eingabe → Bremse; HUD „Noch nicht! Ab 30 % kannst du losfahren“, rot), ab 30 % beendet Gas die Reparatur sofort (Wert bleibt),
+  ohne Gas läuft sie bis 100 % und endet (Meldung „Voll repariert! 💯“). Computer-Auto (kein Spieler oder Autopilot): wird nicht gefragt/gehalten, frei ab kiLosfahrenAb (60 %).
+  Dateien: src/physics/schaden.js (Zustand rep/repZeit/gasVersuch, _reparaturSchritt, reparatur(i), reparaturSteuerung(i, s), losfahrenAb(i), gesperrt(i) nur noch Liegen + KI-Reparatur, zaehlt() false in
+  der Reparatur, zustand() um reparatur/losfahrenAb/kannLosfahren/gasVersuch erweitert), src/config.js (NUR Abschnitt schaden: reparaturJe10 1, losfahrenAb 30, kiLosfahrenAb 60, reparaturTon true;
+  resetProzent 60 bleibt als Fallback, wirkt nur bei reparaturJe10 = 0), src/main.js (ein Hook vor dem Start-Boost: Mensch in Reparatur → reparaturSteuerung; _schadenEreignis: 'abgeschleppt' + Ton + „Voll repariert“),
+  src/ui/hud.js (eigenes Element .hud-reparatur, orange/rot/grün, im Split-Screen kleiner), src/audio/engine.js (reparaturTon), src/ui/menu.js (Tooltip Schaden), ANLEITUNG.md (Abschnitt Schaden),
+  tests/test_schaden.js (+28), tests/welten_test.py (Abschlepp-Prüfung angepasst), neu tests/reparatur_screenshot.py. vehicle.js/collisions.js nicht angefasst.
+  Tests vorher → nachher: test_schaden 42 → 70 OK (neu: Ablauf 0→10→20→30 je 1,0 s, Gas bei 20 % wirkungslos, Gas bei 30 % fährt + bleibt 30 %, Gas bei 50 % bleibt 50 %, ohne Gas 90 % nach 9,9 s / 100 % nach 10 s,
+  KI frei bei 60 % nach 6 s, Split-Screen unabhängig, Autopilot = KI, Schaden aus unverändert, reparaturJe10 = 0 = altes Verhalten; der alte Block „60 % nach Abschleppen“ läuft mit reparaturJe10 = 0);
+  test_ki 260 → 260; test_pokal 48 → 48; test_polizei 40 → 40; test_kollisionen 53 → 53 (test_ki unter Last einmal „Laufzeit < 60 s“ rot, allein 36 s → OK);
+  welten_test 188 → 188 OK, 0 FEHL (die 28 Abschlepp-Prüfungen angepasst: 5 s still → 0 % Reparatur, steht, KI gesperrt → nach 6,1 s 60 % frei, fährt weiter; Begründung: die KI hat nach dem Abschleppen
+  nicht mehr sofort 60 %, sondern erst nach der Reparatur; Erfolg „fährt weiter“ meist nach 2–3,5 s, einmal 8 s); menu_test 175 → 175 OK; schaden_screenshot vorher/nachher ALLE PRÜFUNGEN OK;
+  neu reparatur_screenshot.py 17/17 (echtes Spiel: Reparatur, Gasversuch, Losfahren bei 30 %, 100 % nach 10 s, KI, Split-Screen). Bilder: tests/out/reparatur/ (01 orange 20 %, 02 rot „Noch nicht!“,
+  03 grün 40 % „Gas = losfahren“, 04 Split-Screen 30 % / 20 %).
+  Schwächen: (1) Die KI steht jetzt 5 s + 6 s = 11 s statt 5 s (Wunsch „warten bis 60 %“) – Abschleppen wird für Computer-Autos teurer; falls zu hart: kiLosfahrenAb senken (z. B. 40). (2) Während der Reparatur
+  steht das Auto am Checkpoint auf der Strecke; fahren andere durch, kollidieren sie physisch (ohne Schaden für das Reparaturauto). (3) Die kurze „Abgeschleppt! 🔧“-Meldung und der Reparatur-Kasten stehen übereinander
+  (Meldung oben, Kasten darunter, getrennte Elemente). (4) Pling-Ton nur per Hörtest nicht geprüft (Audio-Kontext headless nicht abhörbar). (5) Garage-Rest (min. 30 %) zählt den aktuellen Wert, auch mitten in der Reparatur.
+
+## 12.10. Agent Hindernis-Menge (v15, Sonnet)
+Wunsch des Vaters: „viele oder sehr viele Hindernisse“.
+- **Einstellung** `hindernisMenge`: `'normal'` (Standard, bitgleich wie vorher – dann läuft gar kein Zusatz-Code) | `'viele'` (≈ ×2) | `'sehrViele'` (≈ ×3). Stufen/Abstände in `config.hindernisMenge`.
+  Menü: Zeile „🚧 Hindernisse: Normal / Viele / Sehr viele“ unter Welt/Variante, **Taste O** (H ist Debug-Anzeige), in Welt „Klassisch“ ausgegraut („Erst ab Welt Hindernisse“). Online: Host-Zeile in der Lobby, Gast sieht den Wert; Server prüft (`einstellungenPruefen`: nur die 3 Strings, sonst `'normal'`).
+- **Erzeugung** (`trackBuilder.js`, `zusatzErzeugen`): deterministisch (Seed = FNV-1a über `id|variante|menge` → mulberry32, kein `Math.random`), Server und alle Browser bauen dieselbe Strecke. Je Katalog-Eintrag (faktor−1)× neue Hindernisse gleichen Typs
+  (Öl, Sand, Baustelle, Ast, Wrack – nie brennend –, Strohballen), gleichmäßig über die Runde verteilt (je 1 Abschnitt, 40 Versuche, dann 40 über die ganze Runde). Katalog selbst bleibt unverändert, Extras stehen in Kopien (`hindernisZusatz` zählt gewollt/gesetzt/weggelassen).
+  Sperrzonen: Start/Ziel (120/70 m), Tunnel, Brücke, Überführung, Kreuzung, Looping, Schanze (+80 m), Spuren, Boost/Schilde/Bälle/Wasser/Dinos/Kleber; Mindestabstände 60 (Sperr) / 30 (Fleck) / 40 m (Stroh); Krümmungsgrenzen je Typ, keine Extras 70 m vor Haarnadeln (R < 32 m); immer ≥ 4,5 m freie Fahrbahn.
+- **Münzen** (`muenzen.js`): `hindernisFrei()` verschiebt Münzen aus Hindernissen auf eine freie Querposition oder lässt sie weg (gilt auch für normal – dort war vorher vereinzelt eine Münze im Hindernis).
+- **Anzahl** (Welt Hindernisse, normal | viele | sehrViele; Gesamt = Hindernisse + Wracks + Strohballen): wiese 7 | 14 | 21, wald 8 | 15 | 21, wueste 6 | 12 | 18, fantasie 2 | 4 | 6, dino 8 | 15 | 23 (+2 Lava), alpen 8 | 16 | 24.
+  Welt „Alles“: wiese 7|14|19, wald 8|14|15, wueste 6|12|17, fantasie 4|7|9, dino 8|12|13, alpen 8|14|18.
+- **Draw-Calls**: nicht vervielfacht (Hindernisse gemerged/instanziert); sehrViele auf der Wiese höchstens +4 (max 79 gegen 75). Ein Extra-Wrack kostet im Bild ca. 12 Meshes (frustum-culled).
+- **Tests**: `test_hindernisse.js` (Fingerprint normal bitgleich, ×2/×3, Determinismus, Zonen/Abstände/freie Spur, Münzen), `test_netz.js` (Block L: Server == Client mit sehrViele, Lobby), `test_welten_ki.js` (normal + sehrViele × beide Tempo-Klassen, 268 OK, 0 FEHL),
+  `menu_test.py`, `online_test.py` (Lobby-Zeile, Host/Gast bauen dieselbe Strecke), `screenshot_test.py` (menge_lauf M1–M4, Draw-Calls). Vorher/Nachher: alle `tests/test_*.js` grün, menu 0 Fehler, online 32/32 (vorher 28/29, Rempel-Flake unter Last), welten_test grün, touch 76/76, leistung OK.
+- **Schwächen**: (1) Absolute Zahlen bleiben mäßig (×3 eines kleinen Katalogs; Fantasie nur 2→6) – Faktor in `config.hindernisMenge.stufen` anhebbar. (2) In Stunt/Verrückt/Alles auf Wald/Dino/Alpen fallen viele Extras wegen der Sperrzonen weg (z. B. dino verrueckt sehrViele 7 von 16 gesetzt).
+  (3) Extra-Wracks brennen nie (Draw-Calls). (4) KI hatte bei wald/verrueckt und wueste/hindernisse vereinzelt 1 Reset (erlaubt ≤ 1). (5) Taste O statt H. (6) `.strecken-bild` im Menü von 5,2 auf 3,9 em verkleinert, damit 3 Zeilen unter den Karten passen; Lobby-Zeilenabstände leicht verengt.
+  (7) `test_netz`/`online_test`/`welten_test` flackern selten unter hoher CPU-Last (Zeitfenster), einzeln auf ruhiger Maschine grün.
+- **Nachbesserung (Hauptmodell-Prüfung: „zu wenig“)**: `viele` ≈ ×3, `sehrViele` ≈ ×5 und absolute Untergrenze. Ziel-Gesamtzahl = max(Katalog × Faktor, Streckenlänge / `meterPro`) mit `meterPro` 150 (viele) / 80 (sehrViele); Faktor, meterPro, `wrackMax`, Slalom in `config.hindernisMenge`.
+  Abstände verkleinert (Sperr 60 → 24 m, Fleck 30 → 10, Stroh 40 → 24); Zonen enger (Bälle ±16, Fontänen ±12, Haarnadel-Vorlauf 70 → 45), dafür vor Loopings 90 m Anlauf-Zone frei, Lava/Krater ± 55 m frei, Baustellen/Wracks nur auf fast geraden Stücken (1/150).
+  **Wracks gedeckelt** (höchstens +2, kosten ≈ 12 Draw-Calls), Rest billige Arten (Öl, Sand, Ast, wenige Baustellen, Strohballen nur in Welten mit Strohballen). **Slalom**: 30 % der Äste/Ölflecken bekommen 30 m dahinter einen Partner auf der Gegenseite (`hindernisZusatz.slalom`). Immer ≥ 4,5 m freie Spur (Test).
+- **Anzahl** Welt Hindernisse (normal | viele | sehrViele): wiese 7 | 21 | 41, wald 8 | 25 | 40, wueste 6 | 24 | 48, fantasie 2 | 9 | 13, dino 8 | 25 | 35 (+2 Lava), alpen 8 | 24 | 39.
+  Welt Alles: wiese 7|21|38, wald 8|21|27, wueste 6|23|40, fantasie 4|10|12, dino 8|18|22, alpen 8|24|32.
+- **Draw-Calls Wiese** (normal → sehrViele): max 77 → 87 (+10), Mittel 49,7 → 54,2. Menü: Hinweis „Erst ab Welt 🚧 Hindernisse.“ passt bei 1280×800 ohne Abschneiden/Scrollen (menu_test grün).
+- **Tests**: `test_welten_ki.js` 268 OK / 0 FEHL (normal + sehrViele × beide Tempo-Klassen); Resets höchstens 1 je Rennen. Anpassungen: abseits-Grenze bei Menge ≠ normal 10 % statt 3 % (KI weicht aus, XL bis 7,6 %), Krater-Ausweichen 40 % statt 25 %,
+  und das Gruppenrennen nutzt jetzt wie main.js die Anlauf-Hilfe (`R.Anlauf.kiHilfe/nachSchritt`, Neustart nach 2 s Stillstand vor dem Looping) – vorher blieb eine KI nach einem Rempler mit Tempo 0 vor dem Looping hängen (nur im Test, nicht im Spiel).
+  screenshot_test: Fahrersicht-Prüfung (≥ 3 Hindernisse in 110 m), `Rennspiel.spiel.rennen.zeit > 1,4` statt fester Wartezeit („LOS!“ weg). Alle `test_*.js`, menu 0 Fehler, online 32/32, welten_test, touch 76/76, screenshot, leistung grün.
+- **Schwächen neu**: Auf der Wiese (3000 m) ist 1 Hindernis je ≈ 75 m im Fahrerbild trotzdem nur 2–3 sichtbar (kleine Objekte, Nebel); Fantasie/Dino/Alles bleiben wegen Sperrzonen unter dem Wunsch (Fantasie 13 statt 18). Baustellen sind selten, weil sie ≈ 50 m belegen.
+
+## 13.10. Agent Sonder-Vorhersage (v16, Sonnet)
+Ziel: Das eigene Auto soll in Kleber, Anlauf-Bremse, Schanze/Flug und Looping nicht mehr dem Server mit ~50 ms Verzug folgen (verzögert/ruckelt), sondern wie sonst vorhergesagt werden.
+- **Prüfung je Sonderzustand**: Alle vier laufen im Server mit rein deterministischem Code (`world/kleber.js`, `track/anlauf.js`, `track/schanze.js`, `track/looping.js`, ohne Zufall, ohne Fremdeinfluss in den Sperrzonen) – die Vorhersage kann sie mit denselben Funktionen in derselben Reihenfolge wie `main.js physikSchritt` mitrechnen. Es fehlte nur der Zustand dieser Module beim Neuabgleich.
+- **Umsetzung** `src/net/vorhersage.js`: `_rechnen` (Eingabe → Kleber sperrt → Looping/Flug ersetzen `vehicle.schritt` → sonst `_fahren`: Untergrund `kleber`, Fahrschritt, Anlauf-Bremse, Kleber, Schanze, Looping-Einfahrt → Bande/Pflanzen/Rempeln → Höhe inkl. Rampe). `abgleich` übernimmt `ich.sz` (`_sonderLaden`), rechnet die unbestätigten Eingaben damit neu, gleicht den Looping-Winkel weich an (`korr.w`). `sonder` (= Server rechnet allein, Anzeige folgt dem Puffer wie v15) gilt nur noch für abgeschaltete Arten oder einen alten Server ohne `sz`.
+  Schalter `opt.sonderVorhersage`: `false` = v15 (nur Test) | fehlt/`true` = `SONDER_STANDARD` (alle vier an) | `{ kleber, anlauf, flug, looping }`. Art bleibt von selbst aus, wenn Strecke/Skript sie nicht hat (Wiese ohne Schanzen: Code läuft gar nicht, Test „Schalter ändert nichts“ bitgleich).
+- **Protokoll** (Version 2, rein additiv, `Netz.VERSION` 1 → 2, keine Versionsprüfung): `ich.sz` (nur wenn etwas nicht in Ruhe ist): `k` Kleber, `a` Anlauf, `f` Flug/Rampe, `l` Looping/Fall – je ein Zahlen-Array, **ungerundet** (erst mit gerundeten Zeiten löste der Kleber einen Tick früher/später aus als im Server: 0,33 m Sprung bei 20 m/s). Server: `Simulation._sonderZustand`. `ich.so` bleibt wie vorher. Beschreibung in `server/PROTOKOLL.md`. Alter Browser ignoriert `sz` (= v15), neuer Browser an altem Server verhält sich wie v15.
+- **Anzeige** `src/net/online.js`: Looping (Kreis-Pose, Fall-Animation mit `fallVon`) und Flug (`flug.nicken`) des eigenen Wagens kommen aus `V.lp` / `V.fz`; `anzeigen()` übernimmt `imLooping`/`imFlug`.
+- **Messung** (`tests/test_netz.js` Block M, Server und Vorhersage mit denselben Eingaben, Zustände 100 ms (6 Ticks) bzw. 200 ms verzögert, 20 Hz, Anzeige des Wagens gegen Server-Position desselben Ticks, Sonderfenster = `so` ± 0,5 s; Sprung = Abweichung der Bild-zu-Bild-Bewegung von der echten):
+
+  | Art (Strecke) | v15 Ø / max Fehler | v15 Sprung max, > 0,5 m | neu | 200 ms: v15 → neu |
+  |---|---|---|---|---|
+  | Kleber (Fantasie, Randstreifen) | 0,064 m / 1,62 m | 0,34 m, 0× | 0 / 0 / 0 | Ø 0,152 / max 3,57 m → 0 |
+  | Anlauf-Bremse (Fantasie) | 0,949 m / 1,35 m | 0,34 m, 0× | 0 / 0 / 0 | Ø 1,56 / max 2,25 m → 0 |
+  | Schanze/Flug (Wiese Stunt, gelenkt) | 2,94 m / 6,36 m | 4,03 m, 11× (1 hart) | 0 / 0 / 0 | Ø 4,83 / max 10,58 m → 0 |
+  | Looping (Fantasie) | 3,80 m / 6,82 m | 3,91 m, 6× | 0 / 0 / 0 | Ø 6,16 / max 10,98 m → 0 |
+  | Looping-Absturz + Fall-Animation | 1,15 m / 24,62 m | 20,76 m, 38× | 0 / 0 / 0 | Ø 1,17 / max 21,80 m → 0 |
+
+  Je Art wurde auch einzeln eingeschaltet gemessen (`{ art: true }`): überall ≥ 4× besser als v15 (Kleber 0 gegen 0,064 m, aber nur klein, weil das festgeklebte Auto steht). **Alle vier sind eingeschaltet.** Der Fehler 0 ist Absicht der Anordnung (gleicher deterministischer Code, keine Netz-Ausfälle, keine Hindernisse): im echten Betrieb gilt die übliche Vorhersage-Abweichung durch Zittern.
+  **M2** (echter Server in Echtzeit, 20–80 ms Zittern, `ich.sz` per JSON, Fantasie-Looping von Anlauf-Zone bis Ausfahrt): neu – 42 Abgleiche mit `so = 1`, 0 davon ohne Vorhersage, 0 harte Korrekturen, Ø 0,17 m (max ≈ 2 m, wie normales Fahren mit Zittern); v15 – alle 42 ohne Vorhersage, 1 hart.
+- **Browser** (`tests/online_test.py`, zwei neue Prüfungen): künstlicher `ich.sz`-Looping im Gast-Browser → Auto läuft im Looping (Winkel 0,3 → 1,6, `imLooping`, Kreis- und Kamera-Pose gültig, keine JS-Fehler), danach holt der echte Server-Zustand es zurück.
+- **Tests vorher/nachher**: `test_netz.js` 74 → 96 OK, 0 FEHL (Blöcke A–L unverändert grün und mit identischen Messwerten; neu M 21, M2 1); `online_test.py` vorher 30/32 (Rempel-/Runden-Flake unter Last, Fantasie-Runde: 11× „R“), nachher 33/33 (dort 2× „R“); `touch_test.py` 76/76 vorher und nachher; alle `tests/test_*.js` außer `test_welten_ki` Exit 0 vorher und nachher.
+- **Schwächen**: (1) Reset-Taste (R) in einem Sonderzustand setzt der Server um – die Vorhersage kennt sie nicht (harte Korrektur wie vorher). (2) Meldungen/Töne (Festgeklebt, Looping!, Sprung!) und Kleber-Optik kommen weiter vom Server (verzögert). (3) Hindernisse/Bälle/Öl im Sonderzustand rechnet nur der Server (liegen in Sperrzonen, selten). (4) Der Test ist deterministisch im Gleichschritt; Zittern mit Paketverlust zeigt nur M2 (1 Szenario). (5) `Anlauf.stellen()` (anlauf.js, nicht geändert) baut bei Strecken ohne Schanzen die Liste bei jedem Aufruf neu (Cache-Vergleich mit frischem `[]`) – harmlos, aber unnötig; `sz.a` sucht die Stelle deshalb über `art`/`nr`. (6) Beim Rennstart rechnet `NetzVorhersage` einmal `Anlauf.stellen` vor (≈ 0,1–0,3 s Rechenzeit headless, auf dem Mac ähnlich). (7) Im headless Browser bei 4 fps zählen die Statistiken viele harte Korrekturen (Last, nicht Sonderzustände) – vorher wie nachher.
+
+## 13.10. Agent Looping-Reset + Hindernisse (v16, Sonnet)
+Arbeitsordner v16 (Ausgangsstand v15_fertig, Sicherungen unberührt). Zwei Aufgaben; Server-/Netz-Dateien (server/*, net/online.js, net/vorhersage.js, test_netz.js) NICHT angefasst, Kreuzungs-Logik in trackBuilder.js nicht angefasst.
+**Aufgabe 1 – Reset kurz vor Looping/Schanze (Fantasie-Looping-Flake aus „Runde 7“)**
+- Ursache: Jeder Reset (Abschleppen, Reset-Taste R/T, KI festgefahren/falsch herum) setzt am letzten Checkpoint (alle ~120 m) zurück, Tempo 0. Liegt der Checkpoint näher als der Anlauf-Abstand
+  (Fantasie-Looping 160 m, Schanzen 150 m) vor der Stelle, reicht der Weg aus dem Stand nie für das Mindesttempo → die Anlauf-Bremse (anlauf.js) stoppt das Auto 10 m vor der Einfahrt; die KI wartet
+  2 s und setzt sich auf die Anlaufposition (das ist das „bleibt hängen, Driver setzt nochmal zurück“), der Spieler muss R drücken. Nicht Fantasie-spezifisch: alle Welten mit Loopings/Schanzen (Wiese/Wald/Wüste/Dino/Alpen Stunt+).
+  Gemessen (neu: tests/test_reset_anlauf.js, vorher): 48 von 388 Fällen (Checkpoint im Anlaufbereich × KI/Spieler-Vollgas × alle Strecken/Welten/Varianten/2 Tempo-Klassen) scheitern – z. B. Fantasie cp1 (52 m vor Looping 1), cp6 (90 m), XL cp13 (62 m).
+- Lösung (gemeinsam genutzt, Server rechnet main.js): `Anlauf.resetPosition(strecke, s, fahrzeuge, selbst)` (src/track/anlauf.js) – liegt die Reset-Stelle im Anlaufbereich einer Stelle, wird die Reset-Pose auf die
+  Anlaufposition (abstand vor der Einfahrt) vorverlegt, höchstens `config.anlauf.resetMaxZurueck` (150 m) hinter den Checkpoint; fehlt dadurch Anlaufweg, bekommt das Auto Start-Schwung
+  (v = sqrt(2·`resetSchwungA`(3)·Fehlweg), höchstens Mindesttempo). Frei von anderen Autos (8 m) und nicht auf der Kreuzung (je 10 m weiter zurück). Hook: main.js `zuruecksetzen` direkt nach `rennen.resetPose`
+  (nicht bei Startaufstellung vor dem ersten Checkpoint); gilt damit für Abschleppen, R/T, KI-Reset, online (Server nutzt dieselbe main.js). Die Anlauf-Bremse selbst und R-Taste → Anlaufposition bleiben unverändert.
+  Rückwurf Spieler gemessen (Reset-Punkt hinter dem Checkpoint): Fantasie max 108 m (XL 98 m), übrige Welten max 118 m, nie über resetMaxZurueck (150 m).
+- Test neu `tests/test_reset_anlauf.js` (Server-Simulation, echtes main.js; `--ohne-fix` zeigt das alte Verhalten): je Strecke/Welt/Variante/Tempo-Klasse jeder Checkpoint im Anlaufbereich, KI und Spieler (Vollgas, Pure-Pursuit-Lenkung)
+  aus dem Stand → Stelle ohne Anlauf-Bremse/Reset geschafft. Nachher 388/388 OK (vorher 340/388), dazu Schwung-Fall (Grenze 60 m): 100/100.
+**Aufgabe 2 – Hindernis-Menge Fantasie/Dino**
+- Ursache der geringen Zahlen (Zonen-Messung, Fantasie Länge 1231 m nutzbar, davon nur 360 m frei): Klebestreifen (Zone ±15 m, 326 m!), Looping (Anlauf 90 + 30 danach), Kreuzung (2 × 90 m), Bälle ±16, Wasser ±12; Dino: Spuren 374 m
+  (auch die breiten 3-Spur-Stücke), Tunnel 318, Lava ±55, Dinos ±25. Dazu wenige Versuche je Hindernis (40 + 40).
+- Änderungen (trackBuilder.js nur Hindernis-Extras `zusatzErzeugen`, config.js nur `hindernisMenge`): Rand-Abstände der Sperrzonen jetzt in `config.hindernisMenge.zonen` (Tunnel/Brücke 12, Kreuzung 12, Looping nach 14, Looping VOR 90 unverändert,
+  Schanze vor 70 / nach 50, Bälle 11, Wasser 8, Boost/Schild 8, Dinos 14, Lava 28, Spuren 45); breite Spuren (3 Spuren) sind keine Sperrzone mehr (nur enge); an Klebestreifen (Rand) dürfen Öl/Sand auf der ANDEREN Fahrbahnhälfte
+  stehen (seitlich versetzt, `kleberSeite`), alles andere + beidseitige Streifen bleiben gesperrt; Versuche global 40 → 120 (`maxVersucheGlobal`); Untergrenze `minGesamt` (viele 12, sehrViele 26) für kurze Strecken.
+  Keine neuen Bälle/Wasserstrahlen (Dynamik-Seed, Server-Abgleich → größeres Risiko); Typen bleiben Öl/Sand/Ast/Baustelle (Welt „Fantasie“ hat alle). Menge „normal“ bitgleich (Fingerabdruck-Test grün).
+- Anzahl Gesamt (Katalog + Zusatz) normal | viele | sehrViele, VORHER → NACHHER:
+  Fantasie/Fantasie 2 | 9 → 11 | 13 → 23; Fantasie Verrückt/Alles 4 | 9 → 11 | 10 → 22; Fantasie XL 2 | 22 → 21 | 39 → 39; Dino Hindernisse 10 | 27 → 27 | 37 → 43; Dino Stunt 10 | 22 → 25 | 24 → 37; Dino Verrückt/Alles 10 | 20 → 25 | 25 → 38.
+  Anteil gesetzt vom Ziel (sehrViele, Ziel 32): Dino 100 % / 84 % / 88 % / 88 % (vorher 44–47 % in Stunt/Verrückt/Alles). Übrige Welten (sehrViele): Wiese 41–42, Wald 37–41, Wüste 45–48, Alpen 40–41 – praktisch unverändert (±1 bis 7); Fantasie XL 37–39 → 36–39.
+- Test: tests/test_hindernisse.js angepasst (Zugaben aus config.zonen, Looping-Anlauf 90 m, nur enge Spuren) + neu: Fantasie sehrViele ≥ 20, Dino ≥ 80 % des Ziels; tests/screenshot_test.py: menge_lauf jetzt auch Fantasie (Welt „fantasie“) + Dino mit Bildern (M1–M4 in tests/out/fantasie).
+
+## 13.10. Fix Looping-Online-Test (v16, Sonnet)
+- Symptom: `online_test.py` 33/34, Prüfung „v16 Looping-Vorhersage im Browser“ (aktiv False, Winkel 0,3 unverändert, anzeigeWinkel 0, imLooping False).
+- Ursache: **Testaufbau, kein Spielfehler.** Weder Reset→Anlaufposition (anlauf.js/main.js) noch Kreuzung-abbiegen (trackBuilder/raceManager) sind beteiligt: `SONDER_ANZEIGE` wartete fest 500 ms und las dann den Zustand.
+  Unter Last (Software-GL/SwiftShader, zwei Seiten, parallel laufende Agenten/Tests) kommt in 500 ms mitunter kein einziges Spiel-Bild/kein Vorhersage-Schritt: Winkel bleibt 0,3, die Anzeige (`f.looping`) wurde nie nachgezogen. Mit zufälliger Last also flackernd (bei ruhigem Rechner grün; mit Diagnose-Ausgabe: aktiv, Winkel 0,82, alles ok).
+- Änderung (nur `tests/online_test.py`): feste Wartezeit ersetzt durch Abfrage alle 50 ms, bis `V.lp.winkel > w0 + 0,3`, `f.looping.aktiv` und Anzeigewinkel ≈ Vorhersagewinkel (höchstens 6 s; Zustands-Verarbeitung bleibt solange stillgelegt). Spielcode unverändert.
+- Tests: `online_test.py` 34/34 (2 saubere Läufe nacheinander; ein weiterer Lauf 33/34 nur wegen des bekannten Rempel-Flakes „Host-Auto 3,44 m statt < 3 m“, unrelated); `test_netz.js` 96 OK; `test_kreuzung_abbiegen.js`, `test_reset_anlauf.js` (388/388), `test_looping.js` grün.
+
+## 13.10. Agent Passat Variant Facelift (v17, Sonnet)
+- Aufgabe: Passat (id `passat`) von „VW Passat B8 Limousine“ zu **VW Passat B8 Variant Facelift (ab 2019)**, schwarz. Name im Spiel „VW Passat Variant“, modell „Passat B8 Variant Facelift“, karosserie jetzt `kombi`.
+- Maße (angurten.de): 4882 × 1832 (2083 mit Spiegeln) × 1477 mm, Radstand 2791, Spur 1584/1568, 235/45 R18, Überhang vorn 0,92 m. Modell gemessen 4,88 / 1,84 / 1,48 m. Physik: `fahrwerte.laenge` 4,78 → 4,88, `breite` 1,83; Handling-Werte unverändert (Kollisionsbox = laenge/breite).
+- Katalog (`src/cars/carCatalog.js`): Kombi-Dachlinie (dachHinten 0,885, dachAbfall 0,06, steile Heckklappe), 3 Seitenfenster (drittes Fenster läuft in die D-Säule aus), Alu-Reling über die ganze Dachlänge, Chrom-Fensterleiste + Chrom-Rahmen oben, Tornadolinie, Chrom-Schwellerleiste, Spiegel mit Blinker, 10-Speichen-Felge, Facelift-Front (LED-Leiste durchgehend zwischen den Scheinwerfern, 5 Chrom-Grillleisten mit Chromrahmen, VW-Emblem), geteilte Rückleuchten, PASSAT-Schriftzug + Emblem hinten, Chromleiste am Heck-Stoßfänger, dritte Bremsleuchte unter dem Dachspoiler, 2 trapezförmige Endrohre. Farbe 0x212429 (Deep Black).
+- carBuilder (`src/cars/carBuilder.js`), alles OPTIONAL mit Standard = bisheriges Verhalten: `fensterRahmen:'chrom'`, `tflY`, `grillLeisten`, `grillHoehe`, `grillY`, `grillRahmen`, `logo{y,r}` / `logoHeck{y,r}` (flache Emblem-Geometrie `bauLogo`), `schriftzug{text,y,h,b}` (Blockschrift `bauSchrift`, Buchstaben A E H I L O P S T U), `einlass:'chromrahmen'`, `rueck.form:'geteilt'` (xm/xf), `schwellerLeiste`, `spiegelBlinker`, `relingFarbe`, `relingEnden`, `heckLeiste{x,y}`, `dachBremsleuchte`, `diffusor:'glatt'` (ohne Rippen), `felgeSpeichen` (>5: Speichen als Einzelflächen), `leistenSeg` (gröbere Leistensegmente), neu `anbauFlach()` (einseitige Teile, 2 Dreiecke je Viereck).
+- Andere Autos bitgleich: Geometrie-Prüfsumme (FNV über Position+Farbe aller Meshes) aller 9 übrigen Autos vorher/nachher identisch; nur `passat` ändert sich.
+- Leistung Passat (Meshes = Draw-Calls je Auto): vorher 10 Meshes / 7069 Dreiecke → nachher 10 Meshes / 7887 Dreiecke (Limit im Test 8000; Rad 568 statt 598 Dreiecke je Rad, Limit 600). Karosserie-Material-Zusammenfassung wie bisher (1 Karosserie-Mesh + 2 Scheinwerfer + 2 Rücklichter + 4 Räder + Schatten).
+- Screenshots (Skript im Scratchpad, ?auto=passat in tests/autos_vorschau.html): `tests/out/passat/vorher_{front35,seite,heck215,front,heck,front_nah,heck_nah}.png`, `nachher_*` (gleiche Winkel), Zwischenstände `n1_*` … `n5_*`. Sicherung des alten Stands: `tests/sicherung_passat_limousine/` (carCatalog.js + carBuilder.js vor der Änderung).
+- Tests: `test_autos.js` angepasst (Passat-karosserie 'kombi'; Typ „limousine“ nicht mehr als Katalogauto Pflicht, dafür Prüfung TYP_STANDARD.limousine im Builder) – ALLE OK; `test_physik`, `test_kollisionen`, `test_ki`, `test_rundenzeit`, `test_garage.js` OK; `menu_test.py`, `garage_test.py` OK (0 FEHL, keine JS-Fehler).
+- Schwächen / Abweichungen vom Original: schwarz auf dunkler Beleuchtung wenig Kontrast, kein echter Lackglanz (gemeinsames Karosserie-Material); Scheinwerfer sind einfache helle Keile (keine LED-Struktur), Haube ohne Falzlinien; Heckleuchten nur als flache Formen ohne LED-Struktur, die Kotflügel-Leuchte wirkt an der Ecke kantig; Dachspoiler zu breit/blockig, keine Antenne, keine Heckscheibenwischer; Chrom wirkt bei diesem Licht grau; Schriftzug/Emblem nur grob (Block-Buchstaben, „VW“ nur angedeutet); Felgen als flache Speichen ohne Doppelspeichen-Form; Mitteleinlass vorn und Kennzeichen vereinfacht.
+
+## 13.10. Agent Multivan T6.1 (v17, Sonnet)
+- Aufgabe: Multivan (id `multivan`, karosserie `van`) nach Fotos (`tests/vorlagen/multivan/`) zum **VW T6.1 Multivan Edition** umgebaut, Kupferbronze, Dach + Dachkante schwarz (`kontrastdach` statt `zweifarbig`: Säulen/Kabine bleiben Lack). Name im Spiel „VW Multivan 6.1“, modell „T6.1 Multivan Edition“, farbe 0xcb975e, farbe2 0x15171a.
+- Maße (ultimatespecs.com, T6.1 L1H1): 4904 × 1904 × 1970 mm, Radstand 3000, Überhang vorn 0,99 m; Räder jetzt Radius 0,35 m, 235 breit, 19 Zoll, schwarze 10-Speichen-Felge (`felgeFarbe` 0x30333a). Physik: `fahrwerte.laenge` 4,97 → 4,90, `breite` 1,94 → 1,90 (Kollisionsbox = laenge/breite); Handling-Werte unverändert.
+- Proportionen (Seitenansicht zuerst): Gürtellinie 0,585 → 0,64 H (Fensterunterkante ≈ 1,26 m wie im Foto), Haube 0,60, Schweller 0,175, Frontscheibe 0,19 → 0,335 L, Fenster neu verteilt (Fahrertür / B-Säule / Schiebetür / hinten: [0.275,0.455], [0.487,0.715], [0.738,0.915]), Türfugen 0,298/0,471/0,726, Schiebetür-Schiene ab 0,726 L, Dach-Spoiler entfernt, Schiebetür-Griff vorn hinter der B-Säule.
+- carBuilder (`src/cars/carBuilder.js`), alles OPTIONAL, Standard = bisheriges Verhalten: `licht.blende` (dunkle Blende statt Punkten), `chromSpange{x,y,d}`, `grillUnten{y,h,b,n,seg}`, `stossBreite/stossHoehe/stossY`, `stossForm:'seiten'` + `stossInnen`, `nebelX`, `scheibenRand`, `seitenDeko{h}` (schwarz + roter Strich), `seitenLinie`, `seitenBlinker`, `schiebetuerGriffVorn`, `heckGlas{oben, wischer, bremsleuchte}` (Lackrahmen um die Heckscheibe, Wischer, dritte Bremsleuchte auf der Scheibe), `heckMulde`, `heckGriff`, `heckDeko`, `reflektoren`, `schriftzug2`, `schriftzug.x/.farbe`, `rueck.balken`; neue Helfer `anbauLeisteFlach`, `seitenFlaeche`, `heckScheibe`/`heckScheibeTeil`; neue Glyphen D, N, M, V (Schrift MULTIVAN / EDITION).
+- Andere Autos bitgleich: Geometrie-Prüfsumme (FNV über Position+Farbe, `tests/out/multivan` / Skript fp.py aus dem Scratchpad) aller 9 übrigen Autos (inkl. Passat) vorher/nachher identisch; nur `multivan` ändert sich.
+- Leistung Multivan (Meshes = Draw-Calls): vorher 10 Meshes / 6933 Dreiecke → nachher 10 Meshes / 7557 Dreiecke (Limit test_autos 8000; Rad 568 statt 598 Dreiecke je Rad, Limit 600).
+- Screenshots: `tests/out/multivan/vorher_{seite,front,heck,front35,heck215,front_nah,heck_nah}.png`, `nachher_*` (gleiche Winkel), `nachher_gross_*` (näher, auch linke/rechte Seite), Zwischenstände `n1_*` … `n4_*`. `tests/autos_vorschau.html` hat neuen Parameter `&dist=<m>` (Kamera-Abstand). Sicherung des alten Stands: `tests/sicherung_multivan_alt/` (carCatalog.js + carBuilder.js vor der Änderung).
+- Tests: `test_autos.js` angepasst (Multivan-Prüfung jetzt „Kupferbronze mit schwarzem Dach“ + T6.1-Maße) – ALLE OK; `test_physik`, `test_kollisionen`, `test_ki`, `test_rundenzeit`, `test_garage` OK; `menu_test.py` und `garage_test.py` OK (0 FEHL, keine JS-Fehler).
+- Abweichungen vom Original: Scheinwerfer nur eckige helle Flächen mit dunkler Blende (keine LED-Struktur), Frontgrill-Lamellen und Chrom wirken grau; VW-Emblem nur angedeutet, Schriftzüge (MULTIVAN/EDITION) winzig und kaum lesbar; EDITION seitlich nicht umgesetzt; Spiegel kantige schwarze Blöcke; Heckstoßfänger ohne Stufe (Unterkante der Karosserie liegt bei ~0,40 m, deshalb sitzen Dekorleiste/Reflektoren höher als im Foto); Heckleuchten ohne orange LED-Zeichnung; Felgen als flache Speichen ohne Doppelspeichen/Glanz; Seitenansicht liegt im Vorschau-Licht im Schatten (dunkler als im Foto); Schiebetür-Fenster/Heckfenster ohne Zwischenrahmen-Details, Dach ohne Reling.
+
+## 13.10. Agent Porsche 911 992.2 (v17, Sonnet)
+- Aufgabe: Porsche 911 (id `porsche-911`) nach Fotos (`tests/vorlagen/911/`) zum **Porsche 911 Carrera (992.2, ab 2024) Coupé in Enzianblau Metallic** umgebaut. Name im Spiel „Porsche 911 Carrera“, modell „911 Carrera (992.2)“, farbeName „Enzianblau“, farbe 0x4a66d6 (im Vorschau-Licht ≈ #2a3f9a-Eindruck; bewusst heller als der Datenblattwert, weil Lambert-Licht und Vertex-Farben den Lack abdunkeln), generischerName „Blauer Sportwagen“. Alte Id bleibt (Tests, Menü, Strecken, Garage).
+- Maße (Porsche-Datenblatt 992.2): 4542 × 1852 (2033 mit Spiegeln) × 1298 mm, Radstand 2450, Spur 1591/1557, Überhang vorn 0,98 m; Mischbereifung 235/40 ZR19 vorn (r 0,335, 235 breit) / 295/35 ZR20 hinten (r 0,357, 295 breit). Motor nur Doku: 3,0-l-Boxer-Biturbo, 394 PS @6500, 450 Nm, 7500/min, 294 km/h, 0–100 in 4,1 s. Physik: nur `fahrwerte.laenge` 4,55 → 4,54 und `breite` 1,85 (Kollisionsbox = laenge/breite); Handling-Werte (270 km/h, 7,4 m/s², Grip 0,88, 1450 kg …) unverändert.
+- Proportionen (Seitenansicht zuerst): Höhenprofil der Dachlinie gegen das Seitenfoto Bin für Bin gemessen (Skript im Scratchpad: Foto-Silhouette vs. maximale Höhe je 5 % Länge) – Windschutzscheibe 0,335–0,50 L, Dachscheitel 0,50–0,55 L, flach fallendes Fließheck bis 0,915 L, Haube 0,385 H an der Nase → 0,70 H am Wasserkasten; Hüften hinten (`huefteH` 0,095, breit 1,45) gegenüber vorn (0,03) – in der Draufsicht hinten deutlich breiter; Kotflügel vorn 0,14 / hinten 0,15 über der Haube (Haube in der Mitte −5 cm: „hochstehende Kotflügel“); Dach läuft hinten schmaler zu; engerer Radlauf (2 cm statt 5,5 cm Spalt).
+- Katalog (`src/cars/carCatalog.js`): runde Vierpunkt-LED-Scheinwerfer auf den Kotflügeln (x 0,78 · halbe Breite), Wappen auf der Haubenkante, Haubenfugen, 992.2-Front (zwei große Seiteneinlässe mit Lamellen, breiter Mittelschlitz mit Kennzeichen, schwarze Frontlippe), weiße LED-Streifen seitlich am Kotflügel, schwarze Fensterrahmen, Spiegel „sport“, durchgehendes Leuchtband hinten (dünner roter Streifen oben, helle Linie unten außen) mit weit gesperrtem „PORSCHE“ in Chrom, „911“ über dem Kennzeichen, breites Lamellengitter mit roter dritter Bremsleuchte und kleinem integrierten Spoiler, schwarzer Stoßfänger unten mit 2 trapezförmigen Endrohren (x 0,50) und orangen Reflektoren, silberne 5-Doppelspeichen-Felgen, rote Bremssättel (wie bei allen Autos).
+- carBuilder (`src/cars/carBuilder.js`), alles OPTIONAL, Standard = bisheriges Verhalten: `kotfluegelH`, `kotfluegelBreite`, `huefteVBreite`/`huefteHBreite`, `radSpalt`, `heckVerjuengung`, `fensterRahmen:'schwarz'`, `spiegelForm:'sport'`, `licht.vier` + `licht.z` (flacher runder LED-Scheinwerfer, folgt der Kotflügel-Oberfläche; neuer Helfer `flachSchraeg`), `einlass:'992'` (+ `einlassX/Y/B/H`, `mittelB/H`, `lippeY/B`), `logo.stil:'porsche'` / `logoHeck.stil` (Wappen), `haubenFugen{z0,x0,x1}`, `rueck.form:'band'` (+ `rot`), `schriftzug.luecke/.vor` (Buchstabenabstand, Abstand zur Fläche), neue Glyphen R, C, 9, 1, `diffusorX/Y/H`, `reflektoren.b/.h/.farbe`, `motorgitterB/N/Z1`, `motorgitterBremse`, `spoiler:'integriert'`, `seitenBlinker.z/.l/.h/.farbe/.schild`, `felgeSpeichen:'doppel'` (5 Doppelspeichen als 10 flache, nach außen breiter werdende Speichen: 568 statt 598 Dreiecke je Rad).
+- Andere Autos bitgleich: Geometrie-Prüfsumme (FNV über Position + Farbe aller Meshes, `fp.py` aus dem Scratchpad) aller 9 übrigen Autos (inkl. neuem Passat und Multivan) vorher/nachher identisch; nur `porsche-911` ändert sich.
+- Leistung Porsche (Meshes = Draw-Calls je Auto): vorher 10 Meshes / 7075 Dreiecke → nachher 10 Meshes / 6615 Dreiecke (Limit test_autos 8000; Rad 568 Dreiecke, Limit 600).
+- Screenshots (`tests/autos_vorschau.html?auto=porsche-911&winkel=…&hoehe=…&dist=…`): `tests/out/911/vorher_{seite,seiteR,front,heck,front35,heck215,oben,front_nah,heck_nah}.png`, `nachher_*` (gleiche Winkel/Abstände), `nachher_gross_*` (näher), Zwischenstände `n1_*` … `n8_*` (8 Iterationen; Seite + Draufsicht zuerst). Sicherung des alten Stands: `tests/sicherung_911_alt/` (carCatalog.js + carBuilder.js vor der Änderung).
+- Tests: `test_autos.js` um 3 Prüfungen für den 911 ergänzt (Enzianblau/992.2, Datenblatt-Maße + Kollisionsbox, Mischbereifung + Fahrwerte unverändert) – ALLE OK; `test_physik`, `test_kollisionen`, `test_ki`, `test_rundenzeit`, `test_garage` OK; `menu_test.py` und `garage_test.py` OK (0 FEHL, keine JS-Fehler).
+- Abweichungen vom Original / Schwächen: Lack ohne Metallic-Glanz (gemeinsames Karosserie-Material, Lambert), im Vorschau-Licht dunkler als im Foto; Haube ohne Falzlinien und Hauben-Sicke (nur zwei dünne Fugen); Scheinwerfer als flache Scheiben (kein Glasvolumen, Vierpunkt nur angedeutet); Seitenscheiben mit senkrechten Kanten (im Foto schräg), Spiegel eckige Kappe; Rückleuchten-Band wickelt nicht um die Ecken (endet bei 0,85 · halbe Breite, sonst ragt es über die gerundete Hecke); Heck-Stoßfänger unten ein schwarzer Block ohne Diffusor-Stufe; Schriftzug „Carrera“ fehlt (Glyphen zu grob), „911“ steht über dem weißen Kennzeichen statt in der Mulde; Felgen flach ohne Glanz/Tiefe, Bremsscheibe nur grau; die 4 Garage-Lackfarben (`config.js`) unverändert (Gelb, helles Blau, Grün, Anthrazit; Enzianblau ist nur die Standardfarbe).
+
+## 14.10. Agent Abschleppwagen + Werkstatt (v18, Sonnet)
+- Aufgabe: (1) sichtbarer Abschleppwagen, (2) Reparaturzeit 3 s je 10 %, (3) Werkstatt („Garage“) einmal pro Runde, +15 %/s. Nur mit „Schaden an“, online inaktiv (Server-Simulation hat `schaden = null`, neue Dateien stehen bewusst NICHT in der Server-Modulliste).
+- Abschleppwagen (`src/world/abschleppwagen.js`, `R.Abschleppwagen`): gelber Lkw mit Ladefläche, Kran und orangem Blinklicht. Ablauf (config `schaden.abschlepp`): Auto liegt bei 0 % → `liegenZeit` 5,5 s (vorher 5); Hupe/Event `abschleppwagen` bei 0,6 s; Anfahrt 2,5 s auf dem Spline von hinten (ease-out, 38 m); Aufladen 1,5 s (Kran hebt das Auto auf die Ladefläche, Seil folgt); Abfahrt mit Auto, in den letzten 0,35 s schrumpft das Auto (vereinfachte Überblendung); danach Reset am Checkpoint, Mesh wieder normal. Die Physik des Autos bleibt währenddessen eingefroren am Boden, nur das Mesh wird bewegt.
+- Reparatur: `reparaturJe10` 1 → **3** s je 10 % (`schaden.js` unverändert in der Logik). Losfahren ab 30 % = 9 s. KI: Bei 60 % wären das 18 s + 5,5 s Liegen/Abschleppen = **23,5 s** Stillstand, bei 40 % 17,5 s, bei 30 % 14,5 s – 60 % ist klar zu lang, deshalb `kiLosfahrenAb` 60 → **40** (begründet im Kommentar in `config.js`).
+- Werkstatt (`src/world/garage.js`, `R.Werkstatt`, Config-Abschnitt `werkstatt`, weil `config.garage` bereits die Auto-Garage ist): Platzsuche pro Strecke nur über `spline.punktBei/breiteBei/seitenabstand` und `strecke.abfrage/grenzeBei` (trackBuilder unverändert), ab s ≈ 70 m nach Start/Ziel auf gerader Stelle, Seite mit mehr Platz; 5 Suchstufen mit gelockerten Bedingungen (adaptive Parkflächenbreite ≥ 4,4 m, Gebäudetiefe ≥ 2,4 m), Gabelungen ±60 m ausgeschlossen. Gefunden auf allen 72 Kombinationen (Welt × Strecke), 61 in Stufe 1. Fläche zählt als „strasse“ (kein Gras-Bremsen), Zufahrtskeil 12 m davor als „rand“-Override, Gebäude/Schilder/Kegel mit Kollisionssäulen. HUD (`hud.js`, `.hud-werkstatt`): „Werkstatt voraus“, „hier anhalten!“, „Werkstatt: NN %“, „NN % ✔“, „schon benutzt / nächste Runde wieder“ – eigener Eintrag je Spieler (Split-Screen). Heilen: `Schaden.werkstattHeilen(i, prozent)` mit Bruchteil-Akku, nur bei Tempo < 1 m/s, nur einmal pro Runde (Rundenzähler), nur wenn nicht liegengeblieben/in Reparatur/100 %. KI (`kiSteuerung`): Pure-Pursuit-Zufahrt in zwei Seitenstufen, Tempo ≤ 11 m/s auf den letzten 30 m, kein Bremsen im Stand (sonst Rückwärtsfahrt), wartet bis ≥ 100 % (max. 9 s), sonst fährt sie vorbei (Schwelle `kiUnter` 40).
+- Geändert: `config.js` (schaden + werkstatt), `physics/schaden.js` (Event-Zeit, `werkstattHeilen`, `zustand()`-Felder), `main.js` (Erzeugung, Abbau, Hooks, KI-Zweig), `ui/hud.js` (Werkstatt-Anzeige), `Autorennen.html` (2 Script-Tags). Nicht angefasst: trackBuilder, trackCatalog, spline, raceManager.
+- Tests neu: `tests/test_garage_werkstatt.js` (Abschnitte A–I: 3 s je 10 %, Event-Reihenfolge/Zeiten, Ablauf-Funktion, Platz auf 72 Kombinationen, +15 %/s, nur im Stand, einmal pro Runde, KI nutzt sie bei < 40 %, fährt bei ≥ 40 % vorbei, Schaden aus → keine Wirkung, Server-Simulation ohne Absturz), `tests/garage_werkstatt_screenshot.py` (13 Prüfungen, Bilder `tests/out/garage/01…09_*.png`). Angepasst: `test_schaden.js` (3 s/40 %), `welten_test.py`, `reparatur_screenshot.py`.
+- Ergebnis nachher: test_schaden, test_pokal, test_polizei, test_kollisionen, test_netz, test_reset_anlauf, test_garage_werkstatt OK; reparatur_screenshot 17/0, garage_werkstatt_screenshot 13/0. test_ki: schon vorher rot (nur „Laufzeit < 60 s“, Maschine ausgelastet); nachher zusätzlich „[wiese|wueste/stunt] enge Stelle“ – Ursache vermutlich die parallele Gabelungs-Arbeit an trackBuilder/trackCatalog (dort geändert, hier nicht), nicht mit Schaden/Werkstatt belegt.
+- Schwächen: Auto-Wrack ist während des Abschleppens physikalisch eingefroren; Kamera folgt dem Lkw nicht, der Lkw kommt von hinten durchs Bild; Schrumpfen statt echter Überblendung; Gebäude auf schmalen Waldstrecken nur ~2,5 m tief; Platzsuche nutzt auf einigen Strecken die Lockerungsstufen 2–5; keine Minimap-Markierung; Schild zeigt „benutzt“ nur für den nächsten menschlichen Spieler; Sound nicht gehört (nur über Events ausgelöst).
+
+## 14.10. Agent Gabelung (v18, Sonnet)
+- Wunsch des Vaters: Auf zwei Strecken teilt sich die doppelspurige Straße in zwei Straßen und kommt danach wieder zusammen. Umgesetzt auf **Wiese** (s 1050 – 1390, ≈ 338 m) und **Wüste** (s 1030 – 1430, ≈ 398 m), je auf der langen, fast geraden Geraden (Krümmungsradius > 900 m). Andere Strecken unverändert (Daten-Fingerabdruck wald/fantasie/dino/alpen vorher/nachher identisch).
+- Modell (`src/track/trackBuilder.js`, Kopfkommentar „14.10. GABELUNG“): beide Äste = Mittellinie ± c(s); s und Fortschritt bleiben gemeinsam, deshalb funktionieren raceManager (Checkpoints, Runden, Platzierung), Minimap und Zielgerade unverändert. c wächst per Smoothstep von Breite/4 auf `versatz` (Wiese 10,5 m, Wüste 11,5 m), die Astbreite schrumpft von Breite/4 auf `astBreite`/2 (6 / 6,4 m = je 1 Spur); die zwei Halbstraßen berühren sich an Teilung und Zusammenführung, also ist dort die volle Straße. Längenunterschied der Äste ≈ 2·∫c·κ ds ≈ 0 (Δ < 0,1 m, beide Seiten gleich lang). Katalog: `gabelungen: [{ s0, s1, versatz, astBreite }]` (XL skaliert s0/s1, nicht Versatz/Breite).
+- Fahrphysik: `_naechsterWechsel`/`_gabelAnpassen` messen im Abschnitt relativ zum nächsten Ast (seitenabstand, abstand, `ast` ±1, `q0` = Abstand zur Mittellinie); `grenzeBei` = Astbreite/2 + Rand + 0,4 mit 25-m-Trichter davor/danach, `breiteBei` = Astbreite → Bande/Leitplanke hält jedes Auto auf seinem Ast, kein Abkürzen quer über die Insel (Test: 24 Fahrten mit 20–75 m/s, 10–80°). `collisions.js`: `kont` auch bei Gabelung. `main.js` (zuruecksetzen, Notfallsuche) nutzt `gabelQ`.
+- Rennlogik (`raceManager.js`): `t.ast` je Auto, `cpAst` = Ast beim letzten Checkpoint; `resetPose` setzt innerhalb der Gabelung auf den Ast des Checkpoints (nie auf die Insel).
+- KI (`ai/driver.js`): arbeitet weiter in der Mittellinien-Koordinate, `_ao(s)` = Astversatz; Astwahl deterministisch aus Fahrer-Parität + Runde + Gabel-Nr (kein zusätzlicher Zufallsaufruf), `astWunsch` erzwingt einen Ast (Tests); `tempoProfil` nimmt die Ast-Krümmung. Ergebnis: jede KI wechselt je Runde den Ast, beide Äste gleich schnell (Rundenzeit-Unterschied 0,0 s).
+- Grafik: 2 neue Meshes je Strecke („Gabelung“: zwei Asphaltbänder, Randsteine, Inselrasen/-sand · „Gabeldeko“: Leitplanken innen/außen, Prallkissen an beiden Spitzen, blaues Pfeilschild, Inseldeko: Wiese = Bäume, Büsche, Blumen, Steine; Wüste = Kakteen, Felsen, Gestrüpp, Sandhügel). Hauptstraße/Rand/Mittellinie/Zaun werden im Abschnitt ausgespart; an den Grenzpunkten volle Breite (`_breiteGeo`, sonst Keil an der Y-Spitze). Dekorsperre (Bäume/Kakteen usw.) für Äste, Rand, Insel + 12 m davor/danach; Münzen, Hindernis-Extras (Menge viele/sehrViele) und alle Katalog-Elemente ± 30 m ausgeschlossen. Minimap: `gabelMinimap` (zwei überhöhte Äste, `hud.js` +1 Zeile).
+- Katalog-Verschiebungen wegen der Sperrzone (Gabelung braucht freie Gerade): Wiese Baustelle 1107 → 305, enge Stelle (1 Spur) 1210–1330 → 1840–1950, Wasserstrahl 1900 → 1690; Wüste Baustelle 1102 → 945, enge Piste 1210–1400 → 2275–2355 (nur dort gerade genug; Schild 2380 → 2460), Boost 1000 → 1910 (vor der Schanze 2012: sonst unter 90 km/h Absprung in „sehrViele“).
+- Draw-Calls (Strecke + Deko + Hindernisse + Fahrer, screenshot_test): siehe unten „Messung“; Gabelung selbst +2 Meshes, Wiese 35, Wüste 36 (Limit 40).
+- Tests: neu `tests/test_gabelung.js` (Katalog/Länge/Sperrzonen aller Welten + XL, Ast-Längen, Abfrage Straße/Rand/Insel, nahtlose Spitzen, Bande, keine Abkürzung, KI je Ast + beide Äste, Checkpoints, Gruppenrennen 6 KI, Reset, Hindernis-Extras, Münzen, Deko, Minimap, Determinismus, andere Strecken ohne Gabelung) – ALLE OK. `test_strecke.js`: Breiten-Prüfung auf s = 900 statt 1200 und Übergang-Stetigkeit ohne Gabel-Abschnitt (dort ist breiteBei die Astbreite). Vorher schon rot (nicht von dieser Änderung): `test_hindernisse` (Fingerabdruck), `test_ki` (Laufzeit < 60 s auf der ausgelasteten Maschine), `test_rundenzeit` (Perfekte Fahrt Wiese/Wüste, Abstand 10,2/11,2 m: gleich vorher/nachher).
+- Screenshots: `tests/gabelung_screenshot.py` → `tests/out/gabelung/<wiese|wueste>_*.png` (Fahrersicht vor Teilung, Y-Spitze, beide Äste, Zusammenführung, Vogelsicht senkrecht/schräg, Nahaufnahmen von oben, Minimap). 2 Iterationen: erste zeigte einen Keil an Teilung/Zusammenführung (Hauptstraße lief auf Astbreite zusammen) – behoben.
+- Schwächen: Auto-Mitte kann beim Wechsel knapp auf der Insel-Randsteinfläche fahren (Bande greift erst an der Leitplanke); auf der Y-Spitze entscheidet das Vorzeichen des Seitenabstands (ohne Hysterese) welcher Ast „zählt“ – harmlos wegen gleicher Länge; Polizei-KI wählt den Ast nach Runde 0 (kein streckeFortschritt); die Minimap zeichnet die Äste überhöht (±4,6 px), nicht maßstäblich.
+
+## 14.10. Agent Passat Haube/Scheibe (v18, Sonnet)
+- Hinweis des Vaters: Übergang Motorhaube → Windschutzscheibe überarbeiten (Haube buckelig, Stufe am Scheibenfuß, Kotflügelbuckel, bullige Front). Ursache: `haubeH` 0,585 lag 10 cm unter `guertel` 0,655 (Stufe/Anstieg am Scheibenfuß, Haube über dem Rad niedrig → Kotflügel stand als Buckel heraus) und die Frontscheibe war oben stark gewölbt (Faktor 0,25 → steiler Knick am Fuß).
+- Änderung Katalog (nur `passat`): `nase` 0,50 → 0,545, `haubeH` 0,585 → 0,645 (Haube endet auf Gürtelhöhe, durchgehend gerade, nach vorn leicht abfallend), `dachVorn` 0,44 → 0,47 (flachere, längere Scheibe), neu `scheibeWoelb: 0.08`.
+- Änderung Builder (`kabinenHoehe`): neuer OPTIONALER Parameter `form.scheibeWoelb` (Wölbung der Frontscheibe, Standard 0,25 = altes Verhalten).
+- Andere Autos bitgleich: Geometrie-Prüfsumme (`node tests/fp_autos.js datei.json`, FNV über Position+Farbe aller Meshes) vorher/nachher identisch für alle 9 übrigen Autos; nur `passat` ändert sich. Leistung: 10 Meshes, 7888 → 7936 Dreiecke (Limit 8000).
+- Screenshots: `tests/passat_haube_screenshot.py <praefix>` → `tests/out/passat_haube/{vorher,n1,n2,n3,nachher}_{seite,seite_nah,seite_hoch,front35,front,front_nah}.png` (3 Iterationen: n1 Haube/Nase, n2 Scheibe flacher, n3 Nase). Sicherung alter Stand: `tests/sicherung_passat_haube/`.
+- Tests: test_autos, test_physik, test_kollisionen – ALLE OK.
+- Schwächen: Scheinwerfer-Oberkante ragt an den Ecken minimal über die Haubenkante; Front bleibt etwas spitz (eckVorn unverändert); Scheibe ohne Hutze/Wasserkasten.
+
+## 14.10. Fix enge Stelle (v18, Sonnet)
+- Meldung: test_ki „[wiese/stunt] / [wueste/stunt] enge Stelle befahren“ mit max −Infinity. Untersuchung: Test sucht die enge Stelle nicht an fester Position, sondern über `strecke.spurBei(n.s).spuren === 1` – folgt also der Katalog-Lage. In der Stunt-Welt ist `spuren: true`, `Strecke.spuren` enthält die enge Stelle (Wiese 1840–1950, Wüste 2275–2355, Breite 5 m), keine Schicht/Ausnahme entfernt sie. Beim erneuten Lauf mit dem aktuellen Stand (trackCatalog 04:38, trackBuilder 04:42) sind beide Prüfungen OK (Wiese max −0,25 m / ≥ 11,8 s, Wüste max −1,01 m / ≥ 9,2 s in der engen Stelle). Die Fehler stammten von einem Zwischenstand, den der Gabelungs-Agent danach noch korrigiert hat. Spiel und Test waren konsistent; Strecken und Test-Code für die enge Stelle wurden NICHT geändert.
+- test_hindernisse Fingerabdruck: war schon in v17 rot (90c5e661 → da0dd781; Ursache: Wrack-Maße aus carCatalog.js, andere Agenten, 5 Strecken), jetzt 2982b25d. Je Strecke gemessen: v17 → v18 ändern sich nur wiese und wueste (gewollte Katalog-Verschiebung Baustelle/enge Stelle/Wasserstrahl/Schild/Wrack-Hindernisse). Test auf 2982b25d aktualisiert, Begründung als Kommentar im Test. Achtung: der Wert hängt an carCatalog.js (Wrack-Maße) – ändert der parallele Auto-Agent die Maße, driftet er erneut.
+
+## 14.10. Agent Internet-Schalter (v19, Sonnet)
+- Wunsch: „Internet für Freunde“ (Tailscale Funnel) soll im Spiel (🌐 Online) von jedem Tailscale-Gerät an/aus schaltbar sein – ohne dem Spielserver Rechte zu geben (Mac mini mit Praxisdaten).
+- Design: Spielserver (Benutzer autorennen) schreibt nur `wunsch.json` (`--steuerung <Ordner>`, ohne = Funktion aus) und liest `status.json`; ein root-Helfer (`server/autostart/internet-schalter.sh`, LaunchDaemon alle 5 s) prüft die Wunsch-Datei streng (Eigentümer, ≤ 200 Byte, feste Regex, nur an/aus, Zeit ±120 s, einmalig; nie eval/Interpolation), ruft Tailscale mit festen Argumenten, Auto-Aus nach 4 h aus root-eigenem Zustand (`/var/db/autorennen-schalter`), schreibt status.json. **Abweichung vom Auftrag:** Steuerungs-Ordner gehört root (755), nur `wunsch.json` gehört autorennen – sonst könnte autorennen `status.json` durch einen Symlink ersetzen und root würde fremde Dateien überschreiben.
+- Recht (Protokoll 3, `schalterRecht` in `server/server.js`): Quelle 127.0.0.1/::1 + `Tailscale-User-Login` (genau einmal) + KEIN `Tailscale-Funnel-Request` + `X-Forwarded-For` (falls da) nur Tailscale-IPs + `Origin` (falls da) = Host/X-Forwarded-Host/--oeffentlich (Schutz gegen Cross-Site-WebSocket aus fremden Webseiten). Ohne Recht antwortet der Server immer identisch `{recht:false}`. Rate-Limit 1 Umschaltung / 5 s. Nur ein echtes `true` schaltet AN.
+- Browser (`src/net/online.js`): Zeile „🌐 Internet für Freunde: AN (noch 3:42 h) / AUS“ in der Startansicht von 🌐 Online, nur bei Recht; Einschalten braucht zweiten Tipp („Sicher?“), Ausschalten sofort, Taste I; Hinweis „Freunde ohne Tailscale können mitspielen, solange AN“. Verbindung wird schon beim Öffnen aufgebaut (und für den Raum weiterverwendet; `verbindung()` entdoppelt). Protokoll-Version 2 → 3 (rein additiv, alter Server: keine Abfrage).
+- Skripte: `installieren.command` (Ordner, Helfer nach /Library/PrivilegedHelperTools, LaunchDaemon `de.newweight.autorennen.schalter`, `--steuerung` beim Server, prüft `sudo Tailscale status`), `ausschalten.command` (entfernt beides), „Internet-Zugang AN/AUS.command“ rufen den Helfer (`sudo … an|aus`, gleiches Auto-Aus), Fallback auf altes Verhalten ohne Helfer.
+- Geändert: `server/server.js`, `src/net/protokoll.js`, `src/net/online.js`, `server/autostart/{installieren,ausschalten}.command`, die zwei Doppelklick-Dateien, `server/{PROTOKOLL,README}.md`, `ANLEITUNG.md`, Tests. Neu: `server/autostart/internet-schalter.sh`, `tests/test_schalter.sh`, `tests/schalter_ui_test.py`, `tests/tailscale_proxy_stub.js`. Alter Stand: `tests/sicherung_internet_schalter_alt/`.
+- Tests: `bash tests/test_schalter.sh` 34 OK (Stub-Tailscale; gültig/ungültig/bösartig „an; rm -rf /“, `$(…)`, riesige Datei, Symlink, falscher Eigentümer, zu alt/Zukunft, Oktal-Zahl, Auto-Aus 3:59:59/4:00, kein Wiederabspielen, AUS-Wiederholung, Ordner 777, status.json-Symlink, Sperre, Argument-Prüfung); `node tests/test_netz.js` Block J (J1–J12, 120 OK gesamt, 0 FEHL); `python3 tests/schalter_ui_test.py` 13/13; `bash -n` aller Skripte.
+- Nicht getestet (kein Tailscale/macOS hier): echte Tailscale-Header, `launchctl`, root-Zugriff der GUI-App-CLI, `stat -f`-Zweig des Helfers (nur der GNU-Zweig lief).
+
+## 14.10. Port-Umzug 8443 → 10000 (v19b, Hauptmodell)
+Anlass: Ein anderes Projekt auf dem mini braucht Tailscale-Port 8443 (Sebastian: „das andere ist wichtiger“). Funnel geht nur auf 443/8443/10000; 443 = NWES.
+- Tailscale außen jetzt **:10000** → intern weiter 127.0.0.1:8444. Adresse: https://mac-mini-von-sebastian.tail39c1c2.ts.net:10000/
+- installieren.command: entfernt die alte Autorennen-Freigabe auf :8443 NUR, wenn sie nachweislich auf 127.0.0.1:8444 zeigt
+  (serve status --json), sonst „Port 8443 nicht angefasst“. ausschalten/AN/AUS/internet-schalter.sh berühren nur noch :10000.
+- Handstarter (Mehrspieler starten / im Internet starten): Server-Port 8444, Funnel :10000; wenn Autostart läuft → Hinweis + Browser, kein Doppelstart.
+- server.js Standardport 8443 → 8444. Doku angepasst.
+- Tests: test_schalter.sh 34 OK, test_netz.js 120 OK. Mac-seitig (Tailscale/launchctl) ungetestet.
+
+## 14.10. Agent Kurvenschilder (v20, Sonnet)
+- Wunsch des Vaters: „Straßenschilder überall, wo angezeigt wird, wie schnell die Kurve zu fahren ist“. Umgesetzt auf ALLEN Strecken/Welten/Varianten (6 Strecken × 5 Welten, Wüste + Fantasie auch XL, Tempo-Klasse normal + schnell).
+- Neues Modul `src/world/schilder.js` (`R.Kurvenschilder`, Kopfkommentar dort): `berechnen(strecke, tempoKlasse)` (reine Logik, deterministisch, läuft in Node) + `bauen()` (1 Mesh „Kurvenschilder“, 1 Canvas-Textur-Atlas, Lambert + leichtes Emissive für Lesbarkeit). Einbindung: `trackBuilder.bauen()` +2 Zeilen (ruft `R.Kurvenschilder.bauen(this, this.tempoKlasse)`, falls geladen), `main.js streckeSzeneBauen` +1 Zeile (`strecke.tempoKlasse`), `Autorennen.html` +1 Script-Tag, `config.js` neuer Abschnitt `kurvenschilder` (`an: false` schaltet alles ab). NICHT in der Server-Modulliste (reine Grafik; der Server baut keine Strecken-Meshes).
+- Kurve = Bereich mit Radius < 200 m in gleicher Richtung (Krümmung aus dem Spline), nennenswert = Winkel ≥ 25° und `strecke.tempoBei` < 75 % des Höchsttempos der Klasse (260 km/h × tempoKlassen.vMax: normal 182, schnell 260). Tempo auf dem Schild = `tempoBei` an der engsten Stelle der Kurve, auf 10 km/h gerundet (höchstens Höchsttempo der Klasse). Schild 60–120 m vor Kurvenbeginn (≈ 2,4 s × Anfahrtstempo, Suche in 5-m-Schritten nach freiem Platz; Notlösung ab 30 m mit 12 m Sperrabstand). Kurven, die weniger als 75 m aufeinander folgen, teilen ein Schild (Doppelkurve Z 105 bzw. engstes Tempo); Kurvenfolgen > 280 m werden in Stücke geteilt (Schild ab 30 m davor, steht dann in der Vorgängerkurve).
+- Zeichen: Z 103 Kurve links/rechts, Z 105 Doppelkurve (weißes Dreieck, roter Rand, schwarzer Pfeil) über dem runden Tempo-Schild (Z 274 Stil: weiß, roter Rand, schwarze Zahl). Haarnadel (Winkel ≥ 130°, Tempo ≤ 80 km/h): 1–3 rot-weiß schräg gestreifte Leitpfeil-Tafeln (Z 625) an der Kurvenaußenseite. Mast + Rückseite grau, Tafeln blicken zur Fahrbahnmitte ca. 70 m davor.
+- Sperrzonen (vorhandene Helfer, ± 30 m, Notlösung ± 12 m): Tunnel, Brücke, Überführung (oben + unten), Kreuzung, Gabelung, Looping, Schanze (samt Anlauf), Boost-Feld, `dekoSperre`; Startbereich (70 m vor, 30 m hinter Start/Ziel); Mindestabstand 40 m zwischen Masten; nie in einer anderen Kurve (außer Kette). Findet sich für eine Gruppe kein Platz, wird die erste Kurve nicht angekündigt und das Schild gilt der nächsten (Wiese: Kurve direkt hinter der Gabelung, dafür bekommt die Haarnadel dahinter ihr Schild).
+- **Abweichung vom Auftrag (Lage):** Standard ist `lage: 'rand'` = 3,2 m neben dem Randstreifen (nie weiter weg als die Bande), NICHT außerhalb der Bande. Grund: Die Bande liegt je Strecke 16–26 m von der Straßenmitte (Zaun 10–18 m hinter dem Randstreifen); dort sind die Schilder selbst bei Maßstab 3 aus Fahrersicht winzig (Test: 22 px bei 56 m). Die Schilder haben keine Kollision (Auto fährt ggf. durch den Mast, Deko-Abstand ≥ 1,2 m geprüft). Wer sie hinter die Bande will: `config.kurvenschilder.lage = 'bande'`. An engen Stellen (Bande direkt an der Fahrbahn, Leitplanke) steht das Schild immer dahinter. Maßstab 3,0 (Dreieck 2,7 m Seite, Scheibe 1,8 m statt 0,9/0,6 m).
+- Anzahl Schilder je Strecke (Welt 1, normal / schnell gleich): wiese 11 (2 Haarnadeln, 6 Leitpfeile), wald 10 (2/6), wueste 8, wueste XL 7, fantasie 4 (1/3), fantasie XL 4 (1/3), dino 9 (1/3), alpen 9 (3/9). Unangekündigt bleiben: Wiese 1 Kurve (s 1400, direkt hinter der Gabelung), Dino 1, Alpen 2 (Tunnel/Brücke/Überführung/Schanze davor).
+- Draw-Calls (Meshes Strecke + Deko + Hindernisse, DRAW_CALLS wie screenshot_test, ohne → mit Schildern): wiese 23 → 24, wald 47 → 48, wueste 48 → 49, fantasie 33 → 34, dino 56 → 57, alpen 54 → 55 (jeweils +1; das alte Limit „≤ 40“ aus der Gabelung-Zeit wird von wald/wueste/dino/alpen schon ohne Schilder überschritten, nicht von dieser Änderung). Dreiecke +~150–300 je Strecke (Wiese 248).
+- Tests: neu `tests/test_schilder.js` (7 380 Prüfungen: alle Strecken × Welten × Varianten × Klassen; jede Strecke hat Schilder, jede nennenswerte Kurve hat eins davor (≤ 2 Ausnahmen), Abstand 60–120 m / Notlösung, Tempo = gerundetes tempoBei und ≤ Klassen-Höchsttempo, rechts + nicht auf der Fahrbahn, keine Sperrzone/Startbereich, Mindestabstand, Leitpfeile Außenseite, deterministisch, genau 1 Mesh + Geometrie passt, an=false → nichts, `--deko`: Abstand zu Deko ≥ 1,2 m) – ALLE OK. test_strecke, test_gabelung, test_kreuzung_abbiegen, zaun_test vorher und nachher OK, test_netz 120 OK / 0 FEHL (ein erster Lauf unter Last zeigte 3 FEHL, der Wiederholungslauf `netz_voll.txt` ist grün; `tests/out/schilder/vorher_node.txt`, `nachher_node.txt`). `tests/schilder_screenshot.py` (Fahrersicht 90/50/25 m vor dem Schild + Leitpfeile, `--aus` für den Vergleich).
+- Screenshots: `tests/out/schilder/<strecke>_{s0,s1}_{90m,50m,25m}.png`, `<strecke>_hn<nr>_*.png` (Haarnadel), `<strecke>_leit<nr>.png` (Leitpfeil-Tafeln), `atlas_alpen.png` (Textur-Atlas). Iterationen: (1) Maßstab 2,0 + Lage hinter der Bande → Schilder zu klein; (2) Lage am Rand, Maßstab 2,2; (3) Maßstab 3,0, dickerer Pfeil, mehr Emissive. Gruppenregel zuerst 110 m (zu große Gruppen, nur jede 3. Kurve ein Schild) → 75 m + Kettenteilung.
+- Schwächen: Doppelkurve zeigt nur einen S-Pfeil (kein echtes Z 105 mit zwei Pfeilspitzen); Tempo-Schild trägt kein „km/h“; Mast hat keine Kollision (Auto fährt hindurch); Schilder gelten nur rechts (Gegenverkehr gibt es nicht); Tafeln blicken fest zur Fahrbahnmitte (aus sehr spitzem Winkel schlecht lesbar); die Zahl ist auf der Fahrbahn-Ideallinie berechnet, nicht je Auto; bei Tempo-Klasse „normal“ ist die Schwelle niedriger (182 km/h) – derzeit hat das keinen Einfluss, weil alle Kurven der Strecken < 110 km/h haben.
+
+## 14.10. Agent T-Roc + Dach (v20, Sonnet)
+- Aufgabe 1 – T-Roc Cabrio nach Fotos (Facelift, R-Line „Edition Blue“): Katalog `troc-cabrio` neu: Mattblau `0x4d6fe0` (Lambert = matt; wirkt im Spiel ≈ #3a56a8–#4a68b8), schwarze 19-Zoll-Felgen (10 Speichen, Reifenradius 0,335 m, 235 mm), schmale LED-Scheinwerfer + durchgehende LED-Leiste durch den Grill (ohne Chromleiste), VW-Logo, R-Line-Front (neuer `einlass: 'rline'`: breiter Wabeneinlass hinter dem Kennzeichen, zwei große Seiteneinlässe mit LED-Streifen, silberne Lippe), schwarze Spiegel, dunkle Sitze, Überrollbügel, Rückleuchten durchgehend rot (neu `rueck.verbinder`: Leuchtlinie zwischen den Leuchten), Lippe, Diffusor + Trapez-Endrohre, Kennzeichen tiefer, flacheres Verdeckpaket (`verdeckFlach`). Maße unverändert (4268 × 1811 × 1522, Radstand 2630; meinauto.de: „4,27 m“, 17/18/19 Zoll bestätigt).
+- Lack „Gulf“: `lackVarianten.gulf` = hellblau `0x95d9f2` + orange `0xffa02a` (neu `form.gulfStreifen`: zwei Streifen über Haube und Heckdeckel, Seitenstreifen über dem Schweller).
+- Aufgabe 2 – Dach: Geometrie `baueDach()` in `carBuilder.js` (Kabinen-Schleife mit Stoff schwarz, Türscheiben + kleine Seitenscheibe, kleine Heckscheibe, 2 Glasdreiecke vor der Tür) als eigenes Mesh `dach` in Gruppe `dachGruppe` (Drehpunkt hinten); `setzeDach(auto, p)` klappt es über die Senkrechte nach hinten, wird dabei kürzer, legt sich auf das Verdeckfach und verschwindet (p = 0 → unsichtbar). Überrollbügel = eigenes Mesh `ueberrollbuegel`, nur bei offenem Dach. **Neues Modul `src/cars/dach.js`** (Zustand, Animation 2 s, Tasten, Hinweis; Kopfkommentar = API). `main.js`: genau 1 Zeile in `frame()` (`R.dach.frame`); `Autorennen.html`: 1 Script-Zeile; `hud.js` unverändert (Hinweis über `_meldung`).
+- Tasten (Belegung in `src/input.js` geprüft: Spieler 1 = Pfeile, Spieler 2 = WASD): nur im Stand (< 0,5 m/s). Einzel: **↑ + ↓**; zu zweit Spieler 1 ↑+↓ oder ←+→, Spieler 2 W+S oder A+D. Touch: ▲ + ▼ gleichzeitig (kostenlos, da `steuerung(0)` die Touch-Tasten enthält). In Fahrt: „Erst anhalten! ✋“. Hinweis zu Rennbeginn „🚗 Dach auf/zu: ↑+↓ im Stand“ (WASD-Spieler: „A+D“). Neu in `input.js`: `dachGeste`, `dachFlanke` (merkt die Geste schon im keydown → auch bei niedrigen fps), keine Änderung an `steuerung()`/Fahrphysik. Online: Dach nur lokale Optik (nicht übertragen, Mitspieler/Gegner offen).
+- Aufgabe 3 – API Gegner: `auto.optionen = { dach: 'offen'|'zu', lack: 'blau'|'gulf' }` oder `R.carBuilder.bauen(auto, { dach, lack })` (opt überschreibt auto.optionen; Garage-`farbe` überschreibt den Lack zuletzt); Katalogeintrag nie verändern: `Object.assign({}, auto, { optionen: {…} })`. `main.fahrzeugHinzufuegen` liest `auto.optionen` bereits über `bauen` – die Gegnerauswahl muss nur das abgeleitete Auto übergeben. Dokumentiert in `carCatalog.js` (Kopf) und `dach.js`. `R.dach.setze(mesh, 'zu', true)` setzt ein Dach nachträglich ohne Animation.
+- Andere Autos bitgleich: `tests/fp_autos.js` vorher/nachher (`tests/out/troc/fp_vorher.json` / `fp_nachher.json`) – nur `troc-cabrio` ändert sich (c0f84de4 → 9b781852); alle 9 übrigen identisch. Troc: 5767 → 7262 Dreiecke (Limit 8000), 10 → 12 Meshes (Limit 12; sichtbar gezeichnet: 11 bei offenem Dach, 11 bei geschlossenem). `test_autos.js`: Soll-Meshzahl für Autos mit `form.dach` = 12 (Dach + Überrollbügel), sonst unverändert.
+- Screenshots: `tests/troc_screenshot.py <praefix> [&dach=zu&lack=gulf]` → `tests/out/troc/<praefix>_{front35,seite,heck215,front0}.png` (+ `troc_montage.py`, `troc_dach_anim.py` = Klappfolge p = 1…0 von hinten und seitlich). Vorher: `vorher_*`; Iterationen `n1_*` (erste Fassung), `n2_*` (Überrollbügel nur offen, hellere Scheiben, LED-Leiste), `n3_*`; `a1–a3_anim` (Klappbewegung: erst ragte das Dach über das Heck, dann Drehpunkt nach vorn); Ergebnis `nachher_*`, `nachher_zu_*`, `nachher_gulf_*`, `nachher_gulf_zu_*`, `nachher_anim.png`. `autos_vorschau.html` neu: `&dach=zu|offen|0..1`, `&lack=gulf`. Alter Stand: `tests/sicherung_troc_alt/` (carCatalog, carBuilder, input, hud, main, config, Autorennen.html).
+- Tests: `test_autos` ALLE OK, `test_physik` OK, `test_kollisionen` OK, `test_garage` OK, `test_hindernisse` OK; neu `python3 tests/dach_test.py` (API/Optionen, Start offen, Hinweis, ↑+↓ im Stand zu/auf, Einzeltasten wirkungslos, Eingabe während der Bewegung ignoriert, in Fahrt abgelehnt + Meldung, Zweispieler A+D / ←+→ / ↑+↓ / W+S je Spieler getrennt, nur T-Roc hat Dach, keine JS-Fehler) – ALLE OK. `menu_test.py`: bei hoher Maschinenlast (load ≈ 8) nicht stabil – bis zum Rennstart alles OK; „Auto zwei: Spieler 1 dreht mit Period/Comma um 90°“ und ein 20-s-Timeout beim Rennstart treten **identisch mit dem alten Stand** auf (Kontrolllauf auf Kopie mit `sicherung_troc_alt`), Start-Timeout dort 15 → 90 s erhöht.
+- Abweichungen/Schwächen: (1) „Spieler 1 = A und D“ im Auftrag: im Spiel ist Spieler 1 = Pfeile, A/D gehört Spieler 2 – daher je Spieler die eigenen Gegentasten (siehe oben). (2) Klappbewegung vereinfacht (ein starres Dach, das hochschwingt, kürzer wird und sich ablegt – kein echtes Z-Falten). (3) Roll-Bügel stehen offen als zwei schlanke Bügel mit Querstange sichtbar (am Foto sind sie flacher). (4) Gulf: kein Dachstreifen, Streifen nur Haube/Heck/Seite. (5) Beim Ziehen von ↑+↓ rollt das stehende Auto kurz rückwärts (Bremse = Rückwärtsgang, bestehendes Verhalten); bei < 0,5 m/s klappt es trotzdem, bei längerem Halten über der Schwelle kommt „Erst anhalten!“. (6) Tempo online (`f.vehicle.vLaengs`) nicht getestet – Online-Rennen nicht ausprobiert.
+
+## 14.10. Agent Bug Auto im Grünen (v20, Sonnet)
+- Meldung des Vaters: „Beim Passat verschwindet das Auto manchmal im Grünen, wenn nicht auf der Straße.“ Vermutung war: Gelände-Mesh höher als `hoeheAn`. Gemessen (neu: `tests/test_gelaende_hoehe.js`, echtes Mesh: Boden-Gitter + Böschung + Brücken-Senke, 4 Karosserie-Ecken, Auto längs/45°/quer, 2…25 m neben dem Rand, bis zur Bande): **auf Wiese, Wald, Wüste, Dino ist die Geländehöhe in Ordnung** (Mesh − hoeheAn ≤ 0,04 m, Ecken ≤ 0,11 m); die Vermutung stimmt nur teilweise (Alpen). Es gibt zwei echte Ursachen:
+- **Ursache 1 (Hauptursache, alle Strecken mit Büschen): weiche Pflanzen-Kollider.** `Kollisionen.pflanzen()` lässt das Auto durch Büsche/Farne/Gestrüpp/Kakteen „durchfahren“ (nur Tempo × 0,7) – bis in die Mitte. Ein Busch ist bis 2,3 m hoch und 5 m breit → das Passat-Dach (1,48 m) liegt dann im Busch, das Auto ist unsichtbar (Bild `tests/out/gruen/vorher_busch_*.png`). Messung vorher: Dach-Mitte im Busch bei **460 von 3760** Fahrten (Wiese), 59/7680 (Wüste), 20/2640 (Alpen), 10/12000 (Wald).
+- **Ursache 2 (Alpen): Auto stand im Hang.** (a) Böschungs-Mesh (`_boeschungBauen`): die Querreihen sind nur an 12 Stützstellen exakt; dazwischen liegt die Sehne – besonders in Serpentinen, wo sich die Streifen benachbarter Abschnitte überlagern (bis 10 m breite Dreiecke über steilem Hang): Fläche bis **0,62 m über** `hoeheAn`. (b) Das Auto stand ohne Querneigung mit der Mitte auf `hoeheAn`: am Hang (bis 50 % Neigung) versank die Bergseite der Karosserie (Ecken bis **1,22 m**).
+- **Fix 1** (`physics/collisions.js`): `pflanzenSammeln` merkt für weiche Kollider den Körper (Ellipsoid ≈ 0,85 der Geometrie-Box: Mitte, Halbhöhe, waagrechter Halbmesser; Riesenfarn = dünner Stamm mit weitem Schirm zählt wie ein Baum, kein Körper). `pflanzen()`: durchfahren bleibt (Tempo × 0,7, kein Schaden), aber die **Auto-Mitte bleibt außerhalb des Kerns** = Querschnitt des Busches auf `config.pflanzen.dachRef`-Höhe (Standard 0,95 m = niedrigstes Dach, Formel), am Hang mit Höhenkorrektur (Fixpunkt-Iteration), +10 cm Sicherheit; Tempo-Anteil nach innen wird entfernt. Dieselbe Funktion nutzen Server (`server/simulation.js`) und Vorhersage (`net/vorhersage.js`) → Netz bleibt konsistent, nichts Neues in `v.y`/Protokoll.
+- **Fix 2** (`track/trackBuilder.js`): (a) `_boeschungBauen` teilt jedes Viereck adaptiv (Mitte weicht > `BOESCHUNG_TOL` 4 cm von `bodenHoehe` ab → 4 Teile, höchstens 4 Stufen, nicht unter 1,2 m Kante): Mesh − wahre Höhe jetzt ≤ 0,05 m. Preis: Alpen-Böschung 31.000 → 66.000 Dreiecke, Bauzeit 0,6 → 1,6 s (ein Mesh, Draw-Calls unverändert). (b) neu `Strecke.abseitsGewicht(nah)` (0 auf der Fahrbahn, smoothstep über den Randstreifen, 1 ab 1,5 m dahinter → „sanfter Übergang Rand → Gras“) und `Strecke.gelaendePose(…)`: liest `hoeheAn` (dieselbe Funktion wie Physik/Server) an den 4 Karosserie-Ecken → Nicken, Querneigung, Anhebung (keine Ecke und nicht die Mitte unter dem Gelände, +3 cm). (c) `main.js` (Anzeige-Schleife, 1 Block): blendet Nicken/Querneigung/Höhe mit dem Gewicht ein; auf der Straße (Gewicht 0), in der Luft/auf der Rampe und im Looping unverändert. **Nur Anzeige:** `v.y = hoeheAn` für Physik, Server, Vorhersage bleibt.
+- Messwerte (Auto-Unterkante vs. Gelände abseits, max. Versinken): vorher Wiese 0,036 · Wald 0,081 · Wüste **0,108** · Fantasie **0,109** · Dino 0,079 · Alpen **1,221** m → nachher Wiese −0,020 · Wald 0,010 · Wüste 0,007 · Fantasie 0,077 · Dino 0,005 · Alpen 0,059 m (Grenze 0,1). Schweben (Auto über Mesh) überall ≤ 0,09 m. Dach im Busch: nachher **0 von 3760 / 12000 / 7680 / 8800 / 2640** (Wiese/Wald/Wüste/Dino/Alpen), 10 Autos × 8 Anfahrten je weichem Kollider.
+- Tests: neu `tests/test_gelaende_hoehe.js` (A: Versinken < 0,1 m + Schweben < 0,3 m je Strecke, B: Dach nie im Busch, alle 10 Autos; ~2–4 min je Strecke, `node tests/test_gelaende_hoehe.js [streckenId]`). Grün: test_physik, test_strecke, test_netz (120 OK), test_rundenzeit, test_gabelung, test_kollisionen, zaun_test, test_schaden, test_hindernisse, test_looping, test_schanze; `screenshot_test.py` wiese + alpen (26 OK, 0 FEHL). test_ki: nur „Laufzeit < 60 s“ rot (72 s auf der ausgelasteten Maschine, wie schon in v18 vermerkt), sonst OK.
+- Screenshots: `python3 tests/gruen_screenshot.py` → `tests/out/gruen/{vorher,nachher}_{busch_seite,busch_hinten,busch_oben,hang_seite,hang_hinten}.png` (Passat im größten Busch der Wiese; Passat am Alpen-Hang s = 747). „vorher“ = Kopie des Projekts mit dem alten Stand von `collisions.js`/`trackBuilder.js`/`main.js` aus `tests/sicherung_gruen_alt/` (dort liegt auch `config.js`).
+- Nicht gelöst / Schwächen: (1) andere Spieler im Online-Spiel (ohne `f.nah`) werden nicht ans Gelände angepasst (nur Anzeige, Gewicht 0). (2) Das Auto kann weiter mit Front/Heck in den Busch hineinragen (nur die Mitte bleibt draußen) – Kamera hinter einem Busch sieht ihn vor dem Auto. (3) Riesenfarn-Schirme (Dino) und Baumkronen können das Dach überdecken (kein Körper am Boden). (4) Unter Überführungen/Brücken-Senken nicht geprüft (Höhe hängt dort vom Streckenindex ab). (5) Querneigung am Hang kann bei 50 % Gefälle bis ~26° gehen (gewollt: Auto liegt auf dem Hang).
+
+## 14.10. Agent Polizei-Passat + Gegner (v20, Sonnet)
+- Wünsche des Vaters: (1) Polizei steht beim Stopp immer NEBEN dem Auto, (2) Polizeiauto = Passat mit Licht und Polizei-Lackierung, (3) alle Gegner nur Passat / Multivan / 911 / T-Roc, bunt gemischt, T-Roc offen/zu.
+- **Streifenwagen = Passat Variant** (`src/cars/carCatalog.js`): Katalogeintrag `polizei` wird jetzt als Kopie des Passat-Eintrags gebaut (Form/Abmessungen identisch, Passat-Eintrag unverändert), id `polizei`, `waehlbar: false` (war und bleibt nicht wählbar), Fahrwerte wie bisher (vMax 62 m/s …, Länge/Breite 4,88/1,83). `optionen: { lack: 'polizei', lichtbalken: true }`; `lackVarianten.polizei`: Silber-Weiß `0xe8eaed`, Blau `0x1d4fb0` (Flankenband = Ring-Segmente 1+2 über `flankenStreifen`), schwarze Fensterrahmen/-leiste, ohne Dachreling und ohne PASSAT-Schriftzug, `polizeiDekor: true`.
+- **carBuilder** (`src/cars/carBuilder.js`): neue Optionen `lichtbalken` (true/false → `form.blaulicht`, bestehender Lichtbalken mit blinkendem Blaulicht), `optionen.farbe` (Hauptlack, auch über `auto.optionen`; Garage-`farbe` wie bisher), `form.polizeiDekor` → neues Mesh `polizeiDekor` (1 Draw-Call): Canvas-Textur 1024×512 mit „POLIZEI“ (weiß auf der blauen Flanke beidseitig, blau auf der Haube – von vorn lesbar –, blau auf der Heckklappe), Atlas-UV, `MeshLambertMaterial` transparent mit polygonOffset (kein Z-Kampf), im Node-Test (ohne `document`) unsichtbar. Geometrie: Seiten über `seitenX`, Haube über `obenY`, Heck über `flaecheZ`. Kopfkommentar ergänzt.
+- **„Immer neben dem Auto“** (`src/world/polizei.js`, `src/config.js`): neue reine Funktionen `parkAbstand` / `parkPose` / `parkSteuerung` (neu: gleicht Tempo des Ziels an, auch beim Abbremsen, schwenkt erst auf den letzten Metern seitlich ein) / `einparken` (weiches Gleiten ≤ 5 m längs / ≤ 3 m quer auf Parkpose, Richtung und Tempo des Ziels, Zeitkonstante 0,2 s – kein Teleport, max. 0,4 m je Schritt) / `parkSeiteWaehlen`. Parkpose: parallel, Karosserie-Abstand `nebenLuecke` 0,8 m (alt: 3,8 m Mitte ≈ 2 m Lücke, nicht parallel), `versatzVor` 0,4 m. Seitenwahl: Platz auf der Fahrbahn über die 4 Ecken (`strecke.abfrage` + `breiteBei`), Auto in der Lücke −4 (knapp daneben −1), bisherige Seite +1,5 (nur wenn sie auf die Fahrbahn passt) → meist zur Fahrbahnmitte; nach 1 s „fern“ wird die Seite neu bewertet (z. B. Verkehr dazwischen). Config: `nebenAbstand` entfällt, neu `nebenLuecke`, `versatzVor`, `einparkRate`. Wegfahren: unverändert (Freigabe → normaler Fahrer, startet aus der Parkposition mit dem Tempo des Ziels).
+- **Online**: Polizei gibt es online weiterhin nicht (`spiel.polizei = null`, Server-Simulation ohne Polizei) – dort ist nichts zu synchronisieren; Server und Client laden dieselben `src/`-Dateien, Test belegt bitgleiches Einparken im Server-Kontext. Computer-Füller online: gleiche Gegnerauswahl (siehe unten), `teilnehmerInfo[i].optionen` (nur Computer) geht an die Clients, `online.js` baut damit Lack/Dach.
+- **Gegnerauswahl**: `R.carCatalog.gegnerAutos(anzahl, { seed, spielerIds })` – nur Passat, Multivan, 911, T-Roc (alle 4 Modelle reihum in gemischter Reihenfolge, ab 4 Gegnern alle vertreten); abgeleitete Kopien `Object.assign({}, auto, { optionen })`, Katalog unverändert. T-Roc: dach offen/zu und lack blau/gulf je zufällig (Test: je ~50 %). Passat/Multivan/911: 4 zusätzliche Lackfarben je Modell (`GEGNER_FARBEN`), keine Doppel je Modell (solange die Palette reicht), nie die Standardfarbe, wenn ein Spieler dasselbe Modell fährt. Seed = Strecke | Gegnerzahl | Spielerautos (`opt.gegnerSeed` überschreibt) → gleiches Rennen = gleiches Feld. `main.js` (`streckeAufbauen`) und `server/simulation.js` nutzen sie; Spielerwahl unverändert (alle 9 Autos). Formel/BMW/AMG/RS6/Mini sind nur noch Spielerautos.
+- Fairness (`tests/test_gegner_fair.js`, KI mittel allein, 2 Runden, normal/schnell, Wiese + Fantasie): Runde 2 Passat 115,1 / Multivan 120,7 / 911 109,2 / T-Roc 118,0 s (Wiese normal), Spanne 9–14 %, alle im Ziel, kein Reset, 0 % abseits. Vorher konnten Formel (280 km/h) und Mini im Feld stehen.
+- Andere Autos bitgleich: `tests/fp_autos.js` vorher/nachher (`tests/out/polizei/fp_vorher.json` / `fp_nachher.json`): nur `polizei` ändert sich (ca2e9869 12 Meshes 6988 Dreiecke → 8be05108 13 Meshes 7791 Dreiecke); die 9 übrigen identisch. Limits: Dreiecke ≤ 8000 ok; Meshes: Streifenwagen 13 (Passat 10 + 2 Blaulicht + 1 Dekor) – `test_autos.js`: Limit für Autos mit `polizeiDekor`-Mesh 13, Blaulicht-Erkennung jetzt über `userData.blaulicht` (nicht mehr `form.blaulicht` im Katalog). Draw-Calls Spiel (screenshot_test Wiese) 48–85, Polizei +13 je Streifenwagen.
+- Tests: `test_autos` ALLE OK, `test_physik` OK, `test_kollisionen` OK, `test_hindernisse` OK, `test_schaden` OK, `test_garage` OK, `test_dynamik` OK, `test_netz` OK, `test_rundenzeit` OK (beide Tempo-Klassen), `test_ki`: nur „Laufzeit < 60 s“ rot (77,8 / 76,3 s unter Last; Baseline-Lauf unter Last 200,9 / 121,9 s, sonst identisch), `test_polizei` (angepasst: Park-Steuerung quer 2,62 m ± 0,1, längs 0,4, Abstand 0,6–1 m) OK, neu `tests/test_polizei_neben.js` (18 Einpark-Läufe: beide Seiten × Ziel bremst 0/20/40 m/s × 3 Richtungen → parallel < 0,05 rad, Abstand 0,80 m, kein Sprung > 0,4 m, nie Überlappung; Seitenwahl auf allen 6 Strecken × Standard/Stunt-Welt, 3892 Stopps: Parkpose auf der Fahrbahn bzw. die bessere Seite, bei klarem Unterschied immer die mit mehr Platz; Server-Kontext bitgleich; Gegnerauswahl: nur 4 Modelle, deterministisch, T-Roc-Mischung, Farben ohne Doppel) ALLE OK, neu `tests/test_gegner_fair.js` OK. Browser: `dach_test.py`, `garage_test.py` ALLE OK. `polizei_test.py`: Fehler nur bei den zeitabhängigen Prüfungen (HUD-Countdown / „Spieler steht“ je nach Lauf) – identisch am alten Stand (Kopie mit `sicherung_polizei_alt`: „Countdown zählt herunter“ rot in beiden Läufen); alle übrigen Prüfungen OK. `menu_test.py`: unter Last 20-s-Timeout beim Rennstart (wie in v20 T-Roc dokumentiert), 50 Prüfungen vorher OK.
+- Screenshots (`tests/out/polizei/`): vorher `vorher_*` (Stopp-Szene: Streifenwagen 3,8 m neben/hinter dem Spieler, nicht parallel; Start), Iterationen (nur `n4_*` aufgehoben; n1 = erste Fassung mit grauer Schrift, n2 = Seitenwahl querte durch den Verkehr, Wagen 28° schräg, n3/n4 = Bonus für die bisherige Seite + Neubewertung nach 1 s: parallel), Ergebnis `nachher_*` (Streifenwagen schräg vorn / Seite / Heck / Front mit Blaulicht Phase 1+2, Stopp-Szene hinten / oben / seitlich / schräg, Startaufstellung oben + vorn mit gemischten Gegnern). Skript `tests/polizei_screenshot.py <praefix>`. Alter Stand: `tests/sicherung_polizei_alt/` (carCatalog, carBuilder, polizei, main, driver).
+- Abweichungen/Schwächen: (1) Online gibt es keine Polizei (war schon so) – „online gleich“ gilt nur für Logik-Dateien und Gegnerauswahl. (2) Auf sehr engen Stunt-Spuren (5 m) ragt der Streifenwagen bei mittig haltendem Ziel bis ≈ 1,5 m über den Fahrbahnrand (Randstreifen/Leitplanke); dort gibt es keine Seite mit vollem Platz. (3) Im Gedränge direkt nach dem Start kann die Parkseite kurz wechseln (Neubewertung nach 1 s), dann gleitet er erst ein. (4) Die Gegner-Lackfarben sind eine feste Palette je Modell (5 Stück), die Garage-Farben der Spieler bleiben unberücksichtigt; die Ergebnisliste/Online-Lobby zeigt weiter die Katalogfarbe. (5) Streifenwagen hat 13 statt 12 Meshes (Dekor als eigener Draw-Call, Canvas-Textur nötig). (6) `polizei_test.py` „Countdown zählt herunter“ ist am alten und neuen Stand zeitabhängig rot (4-s-Stopp läuft während des Wartens ab).
+
+## 14.10. Agent Motorsounds (v21, Sonnet)
+- Wunsch des Vaters: „Die Sounds auch zu den Autos, z. B. 6-Zylinder hört sich anders an als der 150-PS-Diesel im Bus.“ Jedes Auto hat jetzt ein eigenes Klangprofil; alles bleibt WebAudio-Synthese (keine Audiodateien, keine Lizenzfragen).
+- **Neu `src/audio/motorProfile.js`** (`R.MotorProfile`: `fuer(auto|id)`, `rpmGang`, `zuendFrequenz`, `alle`): Zylinder, Bauart, Leerlauf/Abregeln, Gänge + Übersetzungen, Schaltpunkte, Klangparameter. Kopfkommentar mit allen Fakten + Quellen. **Zündfrequenz = U/min / 60 × Zylinder / 2.**
+- **`src/audio/engine.js`** (Motorteil neu, Effekte/Wetter/Sirene unverändert): Slot-Kette je Motor = Zündimpuls-Oszillator (PeriodicWave je Profil) + leicht verstimmter Zweitoszillator (Schwebung → „sägend“) + halbe Ordnung (Viertakt-Brummen) → Auspuff-Resonanz (peaking) → Tiefpass; dazu Nagel-Rauschen, im Takt der Zündfrequenz zerhackt (Diesel), Turbo-Pfeifen (Ladedruck mit Verzögerung), Gras/Sand-Rauschen wie bisher. Gangmodell mit Hysterese: Schaltpunkt hängt am Gas (Diesel schaltet früh ~3900, 911 spät ~7000), Hochschalten = Drehzahl fällt hörbar + kurz Zugkraft weg, Runterschalten mit Zwischengas, Anfahren mit schleifender Kupplung. Gas weg: leiser/dumpfer; 911/AMG/M4/RS6 knallen dezent (nur Spieler, höchstens alle 1,2 s), Turbo-Ablassen „Pssht“. Tonhöhen-Zittern im JS gerechnet (Audio-Rate-Modulation war 3× teurer). Nicht gebrauchte Zweige werden vom Graph getrennt (Browser rechnet nur angeschlossene Nodes): Klopf-Zweig nur wo klopf ≥ 0,1, Turbo nur bei Turbo-Autos, Bodenrauschen nur auf Gras/Sand, freie Slots komplett.
+- **Einbindung:** `Autorennen.html` +1 Script (`motorProfile.js` vor `engine.js`); `main.js` und `net/online.js` je 1 Zeile (`motorAnlegen(i, { spieler, auto: f.auto })`); `config.js` neuer Abschnitt `sound.motor` (`lautstaerke`, `maxKi` 2, `hoerweite` 60, `knallen`, `turbo`). API alt weiter gültig (ohne `auto` → Passat-Profil). `motorInfo()` liefert zusätzlich `profil`, `zylinder`, `gaenge`, `boost`. Master-Lautstärke/Aus unverändert (localStorage `rennspiel.ton`).
+- **Zweispieler/CPU:** Slots 5 → 4 (2 Spieler + 2 Computer-Motoren statt 3; `maxKi` einstellbar). Computer-Motoren: Pegel ≈ nah² × 0,5, dumpfer, Klopfen ×0,7, Turbo ×0,5, kein Knallen. Messung (Offline-Render, ausgelastete 2-Kern-Maschine): 4 Motoren 10 s Audio in 0,6–1,1 s (6–11 % Echtzeit; alter Motor 5–9 %, Zwischenstand mit Audio-Rate-LFO lag bei 26 %); JS ≈ 4–11 µs je `motorUpdate`, `tonAktualisieren` mit 6 Autos ≈ 33 µs je Bild. Pegel (RMS Vollgas) -25…-17 dBFS, alter Motor -20…-18, Spitzen ≤ 0,6, keine Sprünge in den WAVs.
+- **Daten je Auto** (Details/Quellen: Kopf von `motorProfile.js`): Passat Variant B8 Facelift 2.0 TDI 4-Zyl. Diesel 1968 cm³ 150 PS @3500–4000, 7-DSG (auto-data.net) · Multivan 2.0 TDI 4-Zyl. 150 PS @3000–3750, 7-DSG (auto-data.net, ADAC; Katalog führt „T6.1“, der Auftrag „T7“ – gleicher Motor) · 911 Carrera 992.2 Boxer-6 3,0 Biturbo 388 hp @6500, Grenze 7500, 8-PDK 4,89 … 0,61 (Porsche Newsroom) · T-Roc Cabrio 1.5 TSI 4-Zyl. 150 PS @5000, 7-DSG (ADAC) · M4 Competition Reihen-6 510 PS @6250, 8-Gang (auto-data.net) · AMG GT V8 3982 cm³ 639 PS, 9-Gang (autozeitung.de) · RS6 V8 4,0 TFSI 600 PS, 8-Gang (nur Suchtreffer, nicht im Detail geprüft) · Mini Cooper 3-Zyl. 1,5 l ≈136 PS (autohled.cz) · Formel: Annahme V10-Hochdreher 18 000/min (nicht belegt) · Polizei = Passat-Profil. Alles andere (Leerlauf, Abregeldrehzahl M4/AMG/RS6/Formel, Übersetzungen außer 911, Klangparameter) sind begründete Annahmen.
+- **Tests:** neu `tests/test_sound.py` (96 Prüfungen, ALLE OK): OfflineAudioContext rendert je Auto 3,2 s bei 2000/4000/6000 U/min + „typisch“ + 22-s-Fahrt (Vollgas 0 → vMax, Gas weg, rollen) → WAV nach `tests/out/sound/`; FFT: Spitze bei Drehzahl/60 × Zylinder/2 (alle 30 Fälle, Top-5-Spitzen sind Vielfache von f/2), alle 45 Autopaare im 1/3-Oktav-Spektrum ≥ 2 dB verschieden (kleinster Abstand Passat–Multivan 3,9 dB, sonst ≥ 10 dB), Diesel nagelt im Takt (50 Hz bei 1500 U/min), Gangwechsel nur hoch mit Drehzahlabfall ≥ 7 %, kein Pendeln im Rollen, Knallen nur bei 911/AMG/M4/RS6 (Differenz mit/ohne), Pegel, 2 Spieler + 3 KI → 4 Slots / 2 KI hörbar, CPU, keine neuen Nodes. Neu `tests/sound_spiel_test.py` (11 OK; echtes Spiel, Zweispieler 911 + Multivan, Profile je Fahrzeug, Pause stumm, CPU). `tests/audio_test.py` angepasst (2 statt 3 KI hörbar, 7 Gänge, Zündfrequenz 25–200 Hz): 19 geprüft, 0 fehlgeschlagen. `test_physik.js` OK, `test_garage.js` OK. `menu_test.py` / `garage_test.py`: Screenshot-Timeout unter Last (Maschine load ≈ 10, Browser < 1 Bild/s) – nicht auswertbar, wie in v20 vermerkt.
+- Alter Stand: `tests/sicherung_motorsound_alt/` (engine.js, audio_test.py, Autorennen.html, main.js, online.js, config.js).
+- **Schwächen / offen:** (1) Klang nur gemessen, nicht gehört – Feinabstimmung nach Gehör (Parameter je Profil in `motorProfile.js`, ein Wert pro Zeile). (2) Passat und Multivan sind sich ähnlich (gleicher Motor, nur dumpfer/rauer). (3) Cockpit-Drehzahlmesser (`R.cockpit.drehzahl`) hat sein eigenes Gangmodell und wird NICHT benutzt – Schaltpunkte von Nadel und Ton können abweichen (Redline Passat 4500 / T-Roc 6500 / 911 7500 wurden angeglichen; Formel: Cockpit 12 500, Ton 18 000). Wer sie synchronisieren will: `R.MotorProfile.rpmGang` nutzen oder in `motorUpdate` `d.drehzahl` (U/min) übergeben – das überschreibt die Drehzahl. (4) Rückwärtsfahrt: Motor im Leerlauf (Tempo wird als 0 behandelt wie bisher). (5) Online sieht jeder Client den Klang aller Autos aus `f.auto` – Mitspieler-Autos klingen nach deren Katalogauto. (6) Gegner-T-Roc mit Dach zu/offen klingt gleich.
+
+## 14.10. Agent Brettspiele (v21, Sonnet)
+- Wunsch des Vaters: 4 gewinnt und Schach „genauso von außen spielbar“ über den Mac mini. Original-Swift-Apps waren nicht lesbar (iCloud) → nach Standardregeln neu gebaut, kindgerecht; Farben/Texte zentral in `spiele/gemeinsam/konstanten.js` (später an die Originale angleichbar). Details/Bedienung/Dateien: `spiele/README.md`.
+- **Neu**: `spiele/` (Startseite `index.html`; `vier-gewinnt/`, `schach/`, `gemeinsam/` = konstanten, stil.css, rahmen.js (Menü, Computer-Stufe, Online-Lobby mit Raumcode/Link/QR, Spielfenster, Ende-Tafel, Revanche), netz.js (Wiederverbinden), `vier-regeln.js`, `vier-ki.js`, `schach-regeln.js`, `schach-ki.js` – alle Regeldateien UMD, im Server per `require`), `server/brettspiele.js` (Räume, Zugprüfung, Revanche mit Farbtausch, Wiederverbinden, Zuschauer, Aufräumen, Limits). Schach-Computer im Web Worker (`schach/ki-worker.js`, Rückfall ohne Worker). QR-Code: `src/net/qr.js` wiederverwendet.
+- **Eingriffe in Bestehendes (alle klein)**: `server/server.js` (frisch gelesen, 7 Ersetzungen: `require('./brettspiele')`, `ERLAUBT` + `'spiele'`, `dateiFuer`: Pfad auf `/` endend → `index.html`, 301-Weiterleitung `/spiele` → `spiele/` (und `/spiele/schach`, `/spiele/vier-gewinnt`), `brett`-Instanz in `starten()`, Upgrade-Zweig `pfad === '/ws-brett'` → `brett.upgrade`, `brett.schliessen()`; Pfad-Traversal-Schutz unverändert; Autorennen-Protokoll `/ws` nicht angefasst), `src/ui/menu.js` (Konstante `WEITERE_SPIELE` + 1 Einfügung im Kopf: Knopf „🎲 Weitere Spiele“ → `spiele/`, nur bei http/https), `src/ui/styles.css` (`.weitere-spiele`), `server/README.md` (1 Zeile), `server/PROTOKOLL.md` (Abschnitt „/ws-brett“ **angehängt**), `ANLEITUNG.md` (Abschnitt „🎲 Weitere Spiele“ vor „Auf Handy/Tablet“).
+- **4 gewinnt**: 7×6, zu zweit / Computer (Minimax + Alpha-Beta, Tiefe 2 + 30 % Zufall / 4 / 7) / online; fallende Steine mit Aufprall, Gewinnreihe pulsiert (andere Steine blass), Touch + Maus + Tasten 1–7 / ←→ Enter, Rückgängig (offline).
+- **Schach**: vollständige Regeln (Rochade, en passant, Umwandlung mit Auswahl, Matt/Patt, 50 Züge und Dreifach-Wiederholung automatisch, unzureichendes Material), Zugvorschläge (grüne Punkte, Schlagfelder als Ring), letzter Zug gelb, König im Schach rot, Zugbewegung animiert, Brett drehen, Brett dreht sich für Schwarz (online/Computer); Computer 3 Stufen (Tiefe 1 mit Wackeln + 20 % Zufall / 3 / bis 6 in ≈ 2,5 s). Figuren = Unicode (gefüllte Zeichen, Farbe per CSS, `\uFE0E` gegen Emoji-Darstellung).
+- **Online**: Namen nur aus Tierliste (kein Freitext, wie Autorennen), Code 4 Zeichen ohne 0/O/1/I, Link `?raum=ABCD` + QR, Zuschauer (max. 8), Aufgeben (mit Rückfrage), Revanche (Farben tauschen), Wiederverbinden (Token im `sessionStorage`, auch nach „Neu laden“; Raum bleibt 10 min ohne verbundene Leute, 3 h ohne Nachricht), Limits 40 Räume / 60 Verbindungen / 512 Byte / 30 Nachrichten je s (300 → Trennung). Server autoritativ (prüft Platz, Reihenfolge, Legalität), keine Dateizugriffe.
+- **Tests (alle grün)**: `node tests/test_brett_regeln.js` 74 OK (Perft Start 1–4 = 20/400/8902/197281, Kiwipete 1–3 = 48/2039/97862, dazu Position 3/4/5; Matt/Patt/50-Züge/Wiederholung/Material, e.p./Rochade/Umwandlung inkl. Rückgängig, KI findet Matt in 1 und schlägt die ungedeckte Dame, 4g-Gewinner in 4 Richtungen, Unentschieden, KI blockt/gewinnt); `node tests/test_brett_netz.js` 71 OK (HTTP + Traversal-Fälle, Räume, illegale Züge, Narrenmatt, 4g-Reihe, Revanche, Wiederverbinden, Zuschauer, Aufräumen, Limits, Rate-Limit, Autorennen-`/ws` unberührt); `python3 tests/brett_ui_test.py` 64 OK (Playwright: Startseite, Link im Autorennen-Menü, beide Spiele lokal/Computer/online mit 2 Browser-Kontexten, Netzabbruch + Neu laden, Zuschauer, Handy-Größe 390 px ohne Querscroll, keine JS-Fehler). **`node tests/test_netz.js` (Autorennen) 120 OK / 0 FEHL** – ein erster Lauf zeigte bei Maschinenlast (load ≈ 9, zwei Läufe gleichzeitig) 1 FEHL im Block E („ack höchstens 30 hinter dem Gesendeten“), der Wiederholungslauf allein war grün.
+- Screenshots (mit dem Read-Tool angesehen, Optik nachgebessert): `tests/out/brett/` – `startseite`, `autorennen_menue`, `vier_*` (Menü, Stufe, fallend, Gewinnreihe, Ende, online A/B, Computer), `schach_*` (Auswahl, Rochade, Matt, Umwandlung, Computer, online A/B/Ende/Aufgabe, Lobby, Warten mit QR), `mobil_*`. Iterationen: Spielfeld-Größe an die Fensterhöhe angepasst (Brett größer), Gewinnreihe hervorgehoben (andere Steine blass), Geisterstein oben war gequetscht (Höhe), Menüs vertikal mittig, Textschlüssel `schach` kollidierte (Spielname vs. „Schach!“) → `istSchach`.
+- Schwächen/offen: (1) Server auf dem Mac mini muss neu gestartet werden (neue Server-Datei). (2) Schachuhr nicht eingebaut (Wunsch: „optional, aus“); kein Remis-Angebot online (nur Aufgeben). (3) Figuren sind Unicode-Zeichen: Aussehen hängt vom Gerät ab (in Chromium/Linux gut, auf Mac/iPad nicht geprüft; bei Bedarf SVG in `GLYPH`). (4) Kein Ziehen per Drag & Drop (Antippen + Antippen). (5) Computerstärke nur grob geprüft (Schach schwer = Tiefe 6/2,5 s, kein Elo-Test). (6) `/ws-brett` prüft keinen `Origin` (wie `/ws`; ein Raum ist über den Code geschützt, kein Schalter-Recht). (7) Namen nur Tierliste – falls der Vater echte Namen will, bräuchte es Freitext (bewusst nicht gebaut). (8) Online-Revanche tauscht immer die Farben; Zuschauer sehen die neue Runde automatisch.
+
+
+## 14.10. Agent Cockpit/Spiegel/Wischer (v21, Sonnet)
+- Neue Module (reine Add-ons, Script-Tags vor `hud.js`): `src/ui/cockpit.js` (Instrumente + Rahmen + Drehzahl-API), `src/ui/rueckspiegel.js` (Rückbild), `src/render/wischer.js` (Wischer + Tropfen). Eingriffe in Bestehendes: `hud.js` 4 Zeilen (`this.cockpit = R.cockpit.fuerHud(this, el)` im Konstruktor, `groesse`, `update`, `zerstoeren`), `main.js` 2 Zeilen in `zeichnen()` (`R.rueckspiegel.zeichnen(this, i, x, breite, h)` nach dem Rendern jeder Ansicht), `Autorennen.html` 3 Script-Zeilen, `config.js` neuer Abschnitt `cockpit`. `cameras.js`, Physik, Netz, Server unverändert. Alter Stand: `tests/sicherung_cockpit_alt/` (main, hud, styles, config, cameras, Autorennen.html, ANLEITUNG, ERWEITERN).
+- **Instrumente** (HUD-Canvas unten Mitte, nur Anzeige): `vw` = VW „Digital Cockpit Pro“ (Passat, Polizei-Passat, Multivan, T-Roc Cabrio): zwei runde dunkle Instrumente links Drehzahl (x1000, Mitte Gang „D5“), rechts km/h (Zahl in der Mitte), blauer Fortschrittsbogen + weißer Zeiger, rote Zone; zwischen ihnen Platz und Runde (keine zweite Minimap). `porsche` = 911 „Classic“ mit fünf Rundinstrumenten: Mitte großer Drehzahlmesser (rot-oranger Zeiger, rote Zone ab 7500, Digital-Tacho + Gang darin), links Gang (PDK) + Runde, rechts Platz + Öl-Temperatur (Öl ist reine Deko, steigt mit der Drehzahl). Alle anderen Autos (BMW, AMG, RS6, Mini, Formel): alter Tacho unverändert. Quellen (grob nachempfunden): VW Newsroom (10,25 Zoll, 1280×480, Ansicht „Classic“ = Rundinstrumente), Porsche Newsroom (911: 12,6-Zoll-Curved-Display, „Classic“-Ansicht im Fünftuben-Design mit zentralem Drehzahlmesser). Alter Tacho wird nur bei VW/Porsche-Stil versteckt; Handy/Touch (`html.t-rennen`): alte Anzeige, kein Spiegel (unten Mitte liegen dort die Touch-Tasten).
+- **Drehzahl-API** (für den Sound-Agenten, NICHT in den Ton eingebaut): `R.cockpit.drehzahl(auto, v, vMax?)` → 1/min, zustandslos aus Tempo v (m/s) + simuliertem Gang; `R.cockpit.getriebe(auto, v, vMax?)` → `{ rpm, gang (−1 = R), gaenge, leerlauf, rot, skala, anteil }`; `R.cockpit.motor(auto)`. `auto` = Katalogeintrag oder id; `vMax` = `vehicle.daten.vMax` (Tempo-Klasse/Garage), sonst Katalogwert. Tabellen `MOTOREN`/`AUTO_MOTOR`: Passat/Polizei/Multivan Diesel 7-Gang-DSG Rot 4500 (Skala 6); T-Roc Benziner 7-Gang Rot 6500 (Skala 8); 911 PDK 8 Gänge Rot 7500 (Skala 8); M4/AMG/RS6 8-Gang Rot 7000; Mini 6-Gang Rot 6500; Formel 8-Gang Rot 12500. Höchster Gang erreicht bei Höchsttempo 92 % von Rot, Hochschalten bei 80–90 % von Rot, Leerlauf 800 (Formel 3500), Anfahren: Drehzahl steigt mit Kupplungsschleifen. Nadel wird weich nachgeführt (nur Anzeige).
+- **Rückspiegel**: Kamera am Auto (Höhe +1,3 m, Blick +180°), `WebGLRenderTarget` 288 px breit (Höhe nach Seitenverhältnis), nur jedes 2. Bild neu; Textur links/rechts gespiegelt als Fläche in den Spiegel-Ausschnitt (Viewport/Scissor, +1 Draw-Call); Rahmen = DOM (`.hud-spiegel`) über den Instrumenten. Eigenes Auto ausgeblendet, Schatten-Karte nicht neu gerechnet, Wetter-Partikel (Layer 10+) fehlen im Spiegel, Sichtweite 220 m. Standard-Position `x 50, y 71.5, b 25, h 8.5` (Prozent). **Zweispieler: Spiegel standardmäßig aus** (`spiegel.zweispieler: 'aus'`; `'an'` rendert je Hälfte mit Takt ×1,5). Adaptive Qualität des Spiels wirkt mit: Stufe 1 keine Deko im Spiegel, Stufe 2 halber Takt, Stufe 3 kein Spiegel.
+- **Wischer** (`config.cockpit.wischer`): nur bei `wetterArt` regen/schnee/hagel, Standard **nur in der Fahrersicht** (Kamera-Taste C bis man im Auto sitzt; `modi: ['cockpit','verfolger','weit']` = überall), Feld = unterer Teil der Windschutzscheibe (`unten 35 %`, `hoehe 34 %`), zwei schwarze Arme (Drehpunkte x 31/69 %, 128° Schwenk), Takt je Art (Regen 1,5 s, Schnee 2,4 s, Hagel 1,1 s, Wind bis −30 %), Tropfen/Flocken (Regen 150, Schnee 90, Hagel 70 max.) werden vom Wischersektor gelöscht. Canvas in 0,6-facher Auflösung, 30 Hz; ohne Niederschlag versteckt und ohne Zeichenarbeit.
+- **Positionen ändern**: alles in `config.cockpit` als Prozentzahlen (`x`/`y` = Mitte, `b`/`h` = Größe; ohne `h` quadratisch), dokumentiert in `ANLEITUNG.md` („Cockpit, Rückspiegel, Wischer“) und `ERWEITERN.md`. Zweispieler: `zweispielerFaktor` 1,25 (skaliert Größe und Abstände um den Punkt unten Mitte), Porsche eigener Faktor 1,0 (sonst überdeckt er die Minimap).
+- **Leistung** (ehrlich): Der Container hat 2 Kerne bei Last ≈ 10 (andere Agenten), Software-GL 0,5–1 fps – echte fps-Vorher/Nachher-Messungen sind hier NICHT aussagekräftig (Phasen A/B/C streuten ±30 %, B langsamer als A, C schneller als A: reines Rauschen; Skripte `tests/cockpit_fps.py`, `tests/cockpit_cpu.py` bleiben für den Mac). Verwertbar sind: (1) JS-Zeit `cockpit.update` (Instrumente + Wischer + Rahmen) **0,44 ms** je Aufruf, Zeichnen höchstens 30 Hz und nur bei geänderten Werten; (2) Last des Spiegels als Draw-Calls/Dreiecke je Spiegel-Bild (Zusatz zum Hauptbild, Solo, mit Deko): Wiese +38 DC/+103 k Dreiecke (71→109 DC), Wald +47/+180 k (60→107), Wüste +40/+120 k, Fantasie +51/+188 k, Dino +38/+170 k, Alpen +43/+182 k; ohne Deko (`spiegel.deko: false`) ca. −10 DC und −40…−110 k Dreiecke weniger. Bei Takt 2 trifft das jedes 2. Bild (≈ +25…40 % Dreiecke/Draw-Calls im Mittel). Zweispieler mit Spiegel je Hälfte: 86 → 242 DC, 431 k → 986 k Dreiecke → deshalb Standard aus. **Auf dem Mac prüfen** (Taste H zeigt fps): wenn merklich, `spiegel.takt: 3`, `spiegel.deko: false` oder `spiegel.an: false`.
+- **Tests**: neu `node tests/test_cockpit.js` (Drehzahl/Gang für alle 10 Autos: Leerlauf, ≤ Rot, alle Gänge, Gang steigt, Höchsttempo knapp unter Rot, Stile, Rechteck-Umrechnung, Wischer-Hilfen, Config-Plausibilität) ALLE OK; neu `python3 tests/cockpit_anzeigen_test.py` (Stil/Teile je Auto, alter Tacho nur bei „standard“, Tacho zeichnet das Tempo, Spiegel zeigt Bild + abschaltbar + Position per Config änderbar, Wischer nur bei Niederschlag + nur Cockpit-Modus + räumt Tropfen ab, Zweispieler ohne Spiegel / mit Option, cockpit.an=false → alter Tacho, keine JS-Fehler) ALLE OK (Bilder `tests/out/cockpit/`). Der alte `tests/cockpit_test.py` (Kamera-Roll W3) bleibt unverändert: 5/5 OK. Regression: `test_physik`, `test_autos`, `test_kollisionen`, `test_garage`, `test_hindernisse`, `test_wetter` ALLE OK (vorher und nachher); `screenshot_test.py wiese` läuft durch (Bilder `tests/out/wiese/`); `menu_test.py`: 50 Prüfungen OK, 0 FEHL, danach 20-s-Timeout beim Rennstart (Last, wie in v20 dokumentiert, nicht von diesem Stand verursacht). Die Test-Warteschleifen rufen `hud.update()` von Hand auf, weil die Spielschleife unter Last < 1 Bild/s schafft.
+- **Screenshots** (`tests/out/cockpit/`): Iteration 1 `t1_*`, `t2_*` (erste Fassung: Zahlen kollidierten mit den Strichen, „x1000/min“ auf der 0; Zweispieler: Instrumente überlappten, Wischer-Feld lag über dem Armaturenbrett), Iteration 2 `t3_*`–`t6_*` (Skala neu, Zweispieler-Anker unten Mitte, Porsche-Faktor, Wischerfeld an den Fuß der Scheibe, Spiegel mit/ohne Deko `t5_*`), Ergebnis: `passat_cockpit`, `multivan_cockpit`, `troc-cabrio_cockpit`, `porsche-911_cockpit`, `bmw-m4_cockpit` (alte Anzeige), `spiegel_an/aus/oben`, `regen/schnee/hagel_cockpit`, `wischer_regen/schnee/hagel` (Wischer mitten im Schwenk, Tropfen teils abgeräumt), `regen_verfolger(_wischer_an)`, `zwei_*`, `cockpit_aus`.
+- Schwächen/offen: (1) fps nicht messbar (siehe oben) – bitte auf dem Mac prüfen. (2) Spiegel zeigt keine Wetter-Partikel/Regen; in Tunneln dunkelt der Spiegel wie die Hauptansicht. (3) Wischer sind eine 2D-Überlagerung (keine echte Scheibe): in Verfolger-/Weit-Sicht (nur mit `wischer.modi`) wirken sie fremd. (4) Öl-Temperatur im Porsche ist Deko; „Gang“ ist simuliert (Physik hat kein Getriebe). (5) Der Spiegel schaut mit fester Höhe/Blick ab Autoposition, ohne Kurvenneigung; im Looping/auf Rampen nicht angepasst. (6) Sound nutzt `R.cockpit.drehzahl` noch nicht – Hinweis an den Audio-Agenten oben. (7) Zweispieler-Cockpit-Kamera von Spieler 2 zeigt beim Multivan das Auto-Innere schwarz (bestehendes Verhalten, nicht angefasst).
+
+## 14.10. Agent Restpunkte+Ruckeln (v21, Sonnet)
+**Geändert:** (1) Tempo-Schild: „km/h“ klein unter der Zahl, Doppelkurve-Pfeil (Z 105) neu gezeichnet, S-Pfeil zur ersten Kurve (`src/world/schilder.js`, Atlas angepasst). (2) Schild-Masten fest: `R.Kurvenschilder.einbauen(strecke, tempoKlasse)` legt je Schild/Leitpfeil eine Säule r 0,12 m in `strecke.saeulen` (Config `kurvenschilder.mastKollision/mastRadius`); gleiche `Kollisionen.bande`-Logik, leichter Schaden, auch im Server (`server/simulation.js`). (3) Polizei online: Server rechnet `R.Polizei` autoritativ (Streifenwagen = Zusatz-Fahrzeuge hinter den Teilnehmern), Zustand `po/pz/ps`, `ich.ps`; Vorhersage hält während des Stopps; Client zeigt Streifenwagen mit Blaulicht + Countdown; Lobby-Zeile „Polizei“. `Netz.VERSION` 4 (additiv, `server/PROTOKOLL.md`). (4) Ruckeln: `Spiel._vorwaermen()` (main.js) schickt vor dem Countdown alle Shader/Geometrien/Texturen einmal zur GPU (frustumCulled aus, 1x1-Scissor), auch online (`online.js`); Config `grafik.vorwaermen`.
+**Ruckel-Messung** (`tests/ruckeln_test.py`, Software-GL, nur JS-Zeit ohne render + neue Shader/Texturen/Geometrien im Rennen; 30 s je Szenario, 3 Strecken x solo/zwei, 2700 Frames):
+- vorher: 80 Ruckler-Frames = 2,96 % (Geometrie-Uploads im Rennen +8..+15 je Lauf, Shader +1..+13, Streckenbau bis 2,9 s, erster Frame bis 7,5 s)
+- nachher: 11 = 0,41 % (Geometrie im Rennen +0 überall, Shader im Rennen nur +1 bei Wiese solo, erster Frame max 139 ms, Bau 1,4-2,1 s inkl. Vorwärmen 0,5-1,7 s)
+- JS-Max pro Frame ist wegen paralleler Agenten/Last unbrauchbar (Sekundenwerte „Rest“ in beiden Läufen), 33-ms-Anteil ist die belastbare Zahl. Echte GPU-Zeit nicht messbar (SwiftShader).
+**Tests:** test_netz 120/0 (einmal unter Last 1 FEHL, Wiederholung grün), test_physik, test_kollisionen, test_polizei, test_schilder (7374), neu test_schildmast (67), test_polizei_online (18), tests/online_polizei_test.py (9/9). test_polizei_neben angepasst (Erwartung „keine Polizei online“ gilt nur ohne Einstellung).
+**Schwächen:** ein einzelner Shader-Variantenbau bei Wiese solo ~1,1 s nach Start (lambert, onBeforeCompile-Variante, Ursache nicht gefunden); GC-Spitzen (~16 MB) bleiben; Version-3-Browser kennt Masten/Polizei nicht (Vorhersage nur dort leicht abweichend). Backup vorher: /tmp/claude-0/v21_vorher.
+
+## 14.10. Agent 4 gewinnt Port (v21, Sonnet)
+- Wunsch des Vaters: Browser-Version von 4 gewinnt soll sich wie seine Swift-App verhalten/aussehen („zu 95 % übernehmen“). `VierGewinnt.swift` (832 Zeilen) + `NEUERUNGEN_v2.1.md` komplett gelesen; Mapping Swift-Funktion → JS in `spiele/vier-gewinnt/PORTIERUNG.md`. Alte Fassung gesichert: `spiele/vier-gewinnt/_alt_standardregeln/` (index.html, vier-ui.js, vier-ki.js, vier-regeln.js, LIESMICH).
+- **1:1 übernommen**: Hauptmenü (Titel „4 Gewinnt“ mit Verlauf, Vorschau-Brett 280×120, Karten „Spieler vs Spieler / Zu zweit am gleichen Computer“, „oder“, „Spieler vs Computer / Gegen die KI spielen“, „Spielstärke:“ mit Regler 1–10 und Namen Sehr leicht … Experte, „▶  Spiel starten“, Farben/Maße/Ränder), Spielfenster (dunkel 0,07/0,07/0,15, Zeile „Spieler vs. KI (Stärke N)“, Status „🔴 Rot ist dran“ in Spielerfarbe, Brett als Canvas: Farben, Hover-Spalte, Schatten + Glanz, Spaltennummern oberhalb, Feldgröße nach `cellSize`-Formel, Schrift wächst mit dem Fenster, Knöpfe Menü/Neu/⛶ Vollbild per Fullscreen-API), Spielende: Status „… gewinnt! 🎉“ / „Unentschieden!“ und nach 0,7 s Dialog „Spiel beendet“ (Neues Spiel / Hauptmenü), **KI**: Minimax/Alpha-Beta, Bewertungsfunktion (100/10/1), Spalten 0–6, Gewinn ±1 000 000, Tiefe = Regler (2…9), kein Zufall – in `spiele/gemeinsam/vier-ki.js` neu geschrieben (Index-Raster statt Struct-Kopien, gleiches Ergebnis), läuft im Web Worker (`ki-worker.js`) mit Rückfall ohne Worker.
+- **Add-on Online**: dritte Menükarte „Online spielen / Mit Freunden, per Raumcode“ im Stil der App; Tiername, Raum erstellen (Rot/Gelb/Zufall), Code/Link `?raum=`/QR, Zuschauen, Revanche mit Farbtausch, Aufgeben, Wiederverbinden. `server/brettspiele.js` und `/ws-brett` unverändert (Server prüft Züge); `gemeinsam/netz.js`, `rahmen.js`, `stil.css`, `konstanten.js` nicht angefasst (Schach nutzt sie weiter, 4 gewinnt nicht mehr).
+- **Weggelassen (5 %)**: Menüleiste/⌘Q/Dock/Zoomen, gemerkte Fenstergröße, SF-Symbols (→ SVG), Fall-Animation und Siegreihen-Markierung (hat die Swift-App nicht), Rückgängig und Seitenwahl (Swift: Mensch = Rot). Kürzel im Browser: N neues Spiel, M/Esc Menü, F Vollbild, Zahlen 1–7 (Zusatz). Behoben gegenüber Swift: verspäteter KI-Zug nach „Menü“ wird verworfen.
+- **Tests**: `node tests/test_vier_swift.js` 15 OK (wörtliche Swift-Übersetzung als Referenz mit BigInt-Int64: 160 Zufallsstellungen Tiefe 2–5 und 3 ganze Partien → jeder Zug identisch), `node tests/test_brett_regeln.js` 74 OK (4g-KI-Teil auf die neue KI angepasst), `node tests/test_brett_netz.js` 71 OK, neu `python3 tests/vier_port_ui_test.py` 75 OK (Menü-Texte/-Farben, Regler, Spiel zu zweit, Gewinn/Remis/Dialog, Hover/Spaltenwahl, Größen-Formel bei 5 Fenstergrößen, Vollbild, Computer = gleiche Züge wie Swift-Logik, Rechnen im Worker, Abbruch beim Menü, Online mit 2 Browsern inkl. Revanche/Zuschauer/Netzabbruch/Neuladen/Aufgeben, Handy 390 px), `python3 tests/brett_ui_test.py` 46 OK (4g-Teile ausgelagert in den neuen Test, ruft ihn am Ende auf).
+- Screenshots (mit dem Read-Tool angesehen): `tests/out/vier_port/` – `menue_1000`, `zweit_*` (440×700, 380×420, 1500×950, Vollbild, Ende, Unentschieden), `computer_*`, `online_*` (Lobby, Warten mit QR, A/B, Ende, Aufgabe, Zuschauer), `mobil_*`. Erste Fassung war schon nah dran an den Swift-Maßen; keine Nachbesserung nötig außer Testkorrekturen.
+- Schwächen/offen: (1) Optik nur gegen den Swift-Code verglichen, nicht gegen die laufende Mac-App (kein macOS hier) – Schrift (Systemschrift), Regler und Dialog sind Nachbauten. (2) Tiefe 9 braucht im Browser auf leerem Brett ≈ 4 s (Swift kompiliert schneller), Seite bleibt dank Worker bedienbar; von `file://` fällt der Worker weg (Seite hängt dann während der Berechnung). (3) `gemeinsam/stil.css` enthält noch die alten `.v-…`-Regeln der Vorversion (ungenutzt, harmlos). (4) Startseite `spiele/index.html` zeigt weiter den Titel „4 gewinnt“ aus `konstanten.js` (Swift: „4 Gewinnt“).
+
+## 14.10. Agent Schach-Kern Port (v21, Sonnet)
+- Auftrag: Nicht-UI-Logik der Swift-Schach-App 1:1 als Vanilla-JS-Module in `spiele/schach/kern/` (UMD, Worker-tauglich, kein DOM). Bestehende `spiele/schach/*`, `3d/`, `gemeinsam/` unberuehrt.
+- Module: modelle, brett, profile, akademie (+daten), eroeffnungsbuch (87), wissen (49 Begriffe/33 Partien), ki (Stufen 1-10), tutorial, analyse, coach, bewertung (Zugwert 1-15), jobs/worker, partie (Spielsteuerung mit Ereignissen), `kern-alles.js` (Buendel). Daten per Konverter aus Swift, Texte woertlich. Paw Patrol ersetzt durch Hunde-Team.
+- Doku: `API.md`, `PORTIERUNG.md` (Mapping, Abweichungen, Zeiten).
+- Tests: `node tests/test_schach_kern.js` 192 OK (Perft Startstellung/Kiwipete/Stellungen 3-5 korrekt, Gleichheit der Optimierung mit Referenz auf 3161 Stellungen); `tests/test_schach_kern_leistung.js`: Stufe 10 ca. 4,8 s je Stellung, Stufe 5 ca. 0,4 s.
+- Abweichungen: Rochade prueft Turmfarbe; FEN beachtet Rochade/Zaehler; Swift-`detectSkewer` ist tot (1:1 uebernommen, Korrekturschalter vorhanden).
+- Offen: Oberflaeche fehlt (spaeterer Agent); Swift-Geschwindigkeit nicht vergleichbar gemessen.
+
+## 14.10. Agent Schach-3D Port (v21, Sonnet)
+**Neu (nur Ordner `spiele/schach/3d/`, bestehende `spiele/schach/*` unverändert):** `schach3d.js` (Klasse `Schach3D`: Szene, Kamera, Eingabe, Stellung, Markierungen, adaptive Qualität), `kampf3d.js` (Zug-Animation + 6 Kampfszenen + Effekte), `figuren3d.js` (Staunton-Figuren + Hunde-Team), `aktionen.js` (SCNAction-Ersatz), `animation2d.js` (2D-Zuganimation), `demo.html`, `API.md`, `PORTIERUNG.md`. Three.js r160 aus `/vendor/three.min.js`. Tests: `tests/schach3d_test.py` (43 Prüfungen), `tests/schach3d_shots.py`, `tests/schach3d_nah.py`; Bilder `tests/out/schach3d/`.
+**API:** `new Schach3D(container, {hunde, kampf, autoWenden, thema, qualitaet})`: `setzeStellung(grid8x8|null)` (Zeile 0 = Reihe 8 wie im Swift-Board), `markiere(ziele, schlaege, extras?)`, `animiereZug(zug) -> Promise`, `wenden()`, `autoWenden(b)`, `hunde(b)`, `kampf(b)`, `namensschild(pos,text)`, `onFeldKlick(cb)`, `groesseAnpassen()`, `zerstoeren()`; dazu `setzeThema`, `kameraZuruecksetzen`, `kameraSetzen`, `qualitaet`, `statistik`. Details `spiele/schach/3d/API.md`.
+**1:1 übernommen:** Figurenprofile/Maße, alle Hunderassen mit Accessoires (Krone, Diadem, Burghut, Bischofsmütze, Federbusch), Halsband + Plakette, Billboard-Köpfe (auch beim Salto korrekt), Kameradaten, Zoom/Drehen/Neigen/Pinch, Raycast-Klick, Markierungen, Friedhof, Namensschilder, Rochade/Umwandlung/en passant, Zeiten/Höhen aller Kampfszenen (Springer Salto + Splitter + Staubring, Turm Rammbock + Wurf, Läufer Hieb + Zerfall, Dame Aufstieg + violette Implosion, Bauer/König Stoß + Versinken), Funken, Blitz, Wackeln, „WUFF!/WAU!/KLAFF!“.
+**Bewusst anders (5 %):** kein Paw Patrol (2D-Show-Modus nutzt „Bruno schnappt sich Luna!“); Tisch-Spiegelung, Bloom und SSAO entfallen (Ersatz: Holz mit Umgebungsreflexion, weiche Schatten, ACES); Splitter mit eigener Mini-Physik, Teilchen als Points; Kamera-Ziel dreht mit; Regeln kennt `Schach3D` nicht (Zug wird mechanisch abgeleitet). Vollständige Liste: `PORTIERUNG.md`.
+**Leistung:** Figuren = Klone einer Vorlage (Geometrie/Material geteilt, Teile pro Material verschmolzen), Felder = 1 InstancedMesh, Rendern nur bei Änderung. Startstellung klassisch 76 Draw-Calls / 73 k Dreiecke, Hunde 236 / 153 k (Hauptbild). Qualitätsstufen hoch/mittel/niedrig (Schatten 2048/1024/512, Pixel-Ratio 2/1,5/1, Teilchen 100/70/40 %), `auto` misst fps in Animationen. **Echte fps sind im Container nicht messbar** (Software-GL, 2 Kerne) – bitte auf iPad/MacBook prüfen (`s3.statistik()`, `?q=mittel` in `demo.html`).
+**Optik-Iterationen** (`tests/out/schach3d/`): (1) erster Wurf: Tisch zeigte Jalousie-Streifen, Ebenholz zu dunkel, Staub kaum sichtbar → Bohlen-Holztextur, `envMapIntensity` Ebenholz 1,9, größere Teilchen; (2) Lichtschwert dicker + Glanzebene, größere Funken, Demo-Aufbau Läufer-Szene bereinigt (zerstörte die Grundstellung); (3) Nahaufnahmen (`nah_*`), Kampf-/Wenden-Serien vor/nach geprüft, 2D-Brett auf Handybreite angepasst (Horizontalscroll). Bilder: `klassisch`, `hunde`, `kampf_<typ>_<klassisch|hunde>_<ms>`, `wenden_mitte`, `gewendet`, `gewendet_hunde`, `phone`, `anim2d_*`.
+**Tests:** `schach3d_test.py` 43/43 OK, keine JS-Fehler; Kampfszenen aller 6 Angreifer klassisch + Hunde, Abbruch durch neuen Zug, `setzeStellung` während Animation, Auto-Wenden, kürzester Wenden-Weg.
+**Schwächen/offen:** (1) fps nicht gemessen (siehe oben). (2) Ohne passende Systemschrift fehlen Schachsymbole (Plaketten/2D); auf Mac/iPad vorhanden, im Linux-Container mit DejaVu Sans ok. (3) Hochformat/Handy: Brett füllt nur ~2/3 der Breite (wie im Swift-Original, FOV 59° horizontal) – Pinch zoomt. (4) Splitter ohne Kollision untereinander. (5) Integration in `schach-ui.js` ist NICHT erfolgt (Auftrag: nur neuer Ordner); Einbindung per Script-Tags laut API.md.
+
+## 14.10. Agent Schach-Oberfläche Port (v21, Sonnet)
+- Auftrag: Oberfläche der Swift-Schach-App (`SchachSpiel.swift` ~3489–3806, 5942–6314, 6314–8297 + NEUERUNGEN_Version2/3) im Browser nachbauen und mit Kern (`kern/`) und 3D-Brett (`3d/`) verbinden. Alte Oberfläche gesichert: `spiele/schach/_alt_standardregeln/` (index.html, schach-ui.js, ki-worker.js; weiter lauffähig). Server (`server/brettspiele.js`, `/ws-brett`) und `gemeinsam/` **nicht angefasst**.
+- Neu in `spiele/schach/`: `index.html` (lädt Three.js, `3d/*`, `kern/kern-alles.js`, Netz/QR), `schach-brett2d.js` (6 Brett-Farbthemen, EvalBar, Mini-Brett, 2D-Brett als Canvas mit Highlights/Ringen/Tipp-Pfeil/Namensschildern, eigene Hundeköpfe), `schach-app.js` (Hauptmenü mit 4 Karten + Online-Karte, Namensdialog, Spielfenster, Schalterleiste 💬🎨🐶🧊💥🔄💡↻↶, Statuszeile, Coach-Blase mit Tipp in 2 Stufen + Pfeil, Zugwert 1–15 mit Bewertungsbalken, Zugliste, Zurücknehmen, Umwandlungsdialog, Akademie mit Profilen/10 Stufen/Aufgaben/Sterne, Training mit Coach, Auto-Wenden, ☰-Menü mit Tastenkürzeln), `schach-online.js` (Zusatz: Lobby, Warteraum mit Code/QR/Link, Revanche mit Farbtausch, Aufgeben, Zuschauen, Wiederverbinden), `schach-app.css`.
+- KI/Coach laufen im Web Worker (`kern/worker.js`), genau eine Partie + ein Worker für alle Modi; ohne Worker (`file://`) Rückfall auf Hauptthread.
+- **Online:** Protokoll unverändert, Server prüft Züge (Standardregeln – maßgeblich online). 3D/2D, Hunde, Kampf, Farben, Wenden lokal wählbar; Coach/Tipp, Zugwert, Bewertungsbalken, Zurücknehmen online **aus** (Fairness), Namen nur Tierliste.
+- **Abweichungen (5 %):** kein Paw Patrol → eigenes Hunde-Team (Bruno/Luna/Brocken/Wurzel/Falko/Welpen, 2D selbst gezeichnet, 3D aus `3d/`); Menüleiste → ☰-Menü mit Einzeltasten; SF-Symbols → SVG, NSAlert → HTML-Dialog; Zugliste-Streifen und 2D-Brett zentriert als Zusatz; 3D ohne Tisch-Spiegelung/Bloom/SSAO. Liste vollständig in `spiele/schach/PORTIERUNG.md`.
+- **Tests:** vorher/nachher unverändert grün: `test_schach_kern.js` 192, `test_brett_regeln.js` 74, `test_brett_netz.js` 71, `test_netz.js` 120 (Autorennen). `tests/schach_port_ui_test.py` (neu, 61 Prüfungen: Menü, Computer Stufe 1/5/10, Tipp 2 Stufen, Zugwert, Zurücknehmen, Umwandlung per Taste/Klick, 3D an/aus, Hunde, Kampf, Wenden, Auto-Wenden, Akademie-Aufgabe falsch/richtig, Training, Online mit 2 Browsern inkl. Matt/Revanche/Aufgeben/Reload-Wiederverbinden, Handy 390 px Touch, quer, iPad, keine JS-Fehler); `brett_ui_test.py` ruft ihn mit auf; `vier_port_ui_test.py`, `schach3d_test.py` weiter grün (75/75 bzw. 43/43); `brett_ui_test.py` 7/7 inkl. Schach-Port 61/61.
+- **Screenshots** `tests/out/schach_port/` (01–39, angesehen): Menü, Namensdialog, 3D/2D, Tipp 1/2, Hunde 2D/3D, Wenden, Zugwert, Dropdown, Akademie, Training, Online-Lobby/Warteraum/Spiel, Handy, iPad. Mehrere Optik-Iterationen (Brettgröße mit Analysefeld, Handy-Schalterleiste, Blasenposition).
+- **Test-Hinweis:** Die 3D-Teile laufen im Container in Software-GL (SwiftShader) – der Gesamttest braucht 15–20 Minuten; Online-Teile wechseln deshalb auf 2D. Echte Geschwindigkeit auf Mac/iPad nicht messbar.
+- **Offen/Schwächen:** (1) Optik nur gegen den Swift-Code verglichen, nicht gegen die laufende Mac-App (kein macOS). (2) Systemschrift/Schachsymbole je nach Gerät leicht anders. (3) Tastenkürzel ohne ⌘. (4) Übrig gebliebene Test-Server früherer Läufe (node server.js --port …) laufen noch im Container.
+
+## 14.10. Agent Prüffunde F1–F8 behoben (v21, Sonnet)
+- Auftrag: nur minimale Korrekturen laut `/home/claude/pruefung_v21.md`; Originale vorher in `tests/sicherung_pruef_fix_alt/` (gleiche Pfade). **F4 bewusst nicht geändert** (Entscheidung des Vaters).
+- **F1** `server/autostart/internet-schalter.sh`: Handaufruf mit Argument (an|aus) → Exit 1, wenn der Zielzustand nicht erreicht wurde; Exit 3 bei belegter Sperre (Funktion `sperre_belegt`). Dienst-Modus (ohne Argument) unverändert Exit 0. `🌐 …AN.command` / `🔒 …AUS.command` zeigen bei Fehler bzw. Sperre eine verständliche Meldung. `tests/test_schalter.sh` um 5 Exit-Code-Fälle erweitert (6 #TEST-Zeilen unverändert).
+- **F2** `🌐 Internet-Zugang AN.command`: Fallback ohne Helfer ersetzt durch Meldung „erst installieren.command ausführen“ (einfacher/sicherer als sudo-nohup-Konstrukt: kein Funnel ohne verlässliches Auto-Aus).
+- **F3** `Mehrspieler im Internet starten.command`: einmal `sudo -v` mit Erklärung; `funnel` start/off mit sudo; Warnung, wenn der Funnel-Prozess nach 3 s schon beendet ist. Status-Abfrage bleibt ohne sudo.
+- **F5** `server/brettspiele.js`: `raumVerlassen(c)` schließt beim Raumwechsel einen Raum sofort, wenn der Wechselnde allein war (Gegenplatz nie besetzt, keine Zuschauer); höchstens 8 Verbindungen je Adresse (X-Forwarded-For; lokale Verbindungen ohne Header zählen nicht). Neue Fälle in `tests/test_brett_netz.js`.
+- **F6** `src/cars/dach.js`: Flanke wird immer abgeholt (auch Pause/Fahrt) und verworfen; Umschalten nur bei Flanke UND Stand (<0,5 m/s); „Erst anhalten!“ erst nach ≥ 0,3 s Spielzeit gemeinsamem Halten, in Fahrt höchstens 1× je 10 s. `input.js` unverändert. `tests/dach_test.py` +2 Fälle (kurzes Gas+Bremse-Tippen, Pause) und Wartebedingung für die Meldung (Headless-Spielzeit ist langsamer als Wanduhr).
+- **F7** `src/ui/rueckspiegel.js`: Spiegel-Render in try/finally, Zustand wird immer zurückgesetzt.
+- **F8** `server/server.js` `dateiFuer`: Segmente `vorlage_swift` oder mit `_` am Anfang → 404 (grep: nichts Benötigtes verweist darauf, nur Kommentare). Test in `tests/test_brett_netz.js`.

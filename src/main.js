@@ -307,7 +307,8 @@
       // Runde 4: Wetter/Jahreszeit/Wind (Standard Sommer/klar/0 = wie bisher)
       this.wetter = null;
       if (R.Wetter) {
-        this._wetterSeed = Math.floor(Math.random() * 1e9);
+        // v22: online kommt der Seed vom Server (Megastrecke: gleiche Zonen bei allen); offline wie bisher zufällig
+        this._wetterSeed = e.wetterSeed !== undefined ? (e.wetterSeed >>> 0) : Math.floor(Math.random() * 1e9);
         this.wetter = new R.Wetter(this.szene, {
           jahreszeit: e.jahreszeit || 'sommer', wetter: e.wetter || 'klar',
           wind: { staerke: e.windStaerke === undefined ? 0 : e.windStaerke, richtung: e.windRichtung === undefined ? 'zufall' : e.windRichtung },
@@ -1156,6 +1157,33 @@
       for (let t = 0; t < sekunden; t += dt) this.physikSchritt(dt);
     }
 
+
+    /**
+     * 14.10. (v22) Polizei freikaufen (Doppeltipp Rückwärts bzw. online Eingabe-Bit f): beendet den Stopp von Teilnehmer i sofort gegen
+     * config.polizei.freikaufKosten (Standard 10) Münzen. Guthaben = Garage-Konto des Fahrers (R.Garage; die Münzen des laufenden Rennens
+     * sind dort schon gutgeschrieben, sie zählen also zuerst/mit; der Rennzähler im HUD sinkt entsprechend). Auf dem Server (this.netzKonto,
+     * vom Browser beim Laden gemeldet) wird dieses Guthaben benutzt und dort abgezogen; der Browser bucht sein Garage-Konto nach dem Ereignis 'freikauf' ab.
+     * @returns {'ok'|'zuwenig'|'nein'}
+     */
+    polizeiFreikaufen(i) {
+      const po = this.polizei, f = this.fahrzeuge[i], t = this.rennen && this.rennen.teilnehmer[i];
+      if (!po || !f || !t || !po.logik.gesperrt(i)) return 'nein';
+      const kosten = po.c.freikaufKosten;
+      const netz = this.netzKonto && f.spielerNr >= 0;
+      const guthaben = netz ? (this.netzKonto[f.spielerNr] || 0) : (R.Garage ? R.Garage.konto(t.name) : 0);
+      if (guthaben < kosten) { this._meldung(i, 'Zu wenig Münzen (' + kosten + ' nötig)', 1500); return 'zuwenig'; }
+      if (netz) this.netzKonto[f.spielerNr] = guthaben - kosten;
+      else if (!R.Garage.abbuchen(t.name, kosten).ok) return 'zuwenig';
+      po.freikaufen(i);
+      if (this.muenzen && this.muenzen.abziehen(i, kosten) > 0) {
+        const hd = this.huds[f.spielerNr];
+        if (hd && hd.muenzenSetzen) hd.muenzenSetzen(this.muenzen.anzahlVon(i), 0);
+      }
+      this._meldung(i, '💰 −' + kosten + ' – weiter!', 1500);
+      if (this.freikaufHoerer) this.freikaufHoerer(i, kosten, netz ? this.netzKonto[f.spielerNr] : null);
+      return 'ok';
+    }
+
     /**
      * Ein fester Physikschritt (1/60 s). Reihenfolge (Runde 4, verbindlich):
      *   1. Eingabe je Auto: Spieler (Tastatur) / Computerfahrer (KI, Autopilot); Countdown → kein Gas.
@@ -1442,6 +1470,11 @@
           if (e.typ === 'oel') { this._meldung(e.nr, 'Öl-Fass! 🛢️ (' + (spieler && this.fahrzeuge[e.nr].spielerNr === 1 ? 'E' : 'Leertaste') + ')', 1400); if (spieler) pickups.ton('oelAuf'); }
           else if (e.typ === 'oelGelegt') { /* KI legt Öl: keine Meldung, Überraschung */ }
           else if (e.typ === 'turbo') { this._meldung(e.nr, 'TURBO! 🔥', 1200); if (spieler) pickups.ton('turbo'); }
+          else if (e.typ === 'schildPlus') {      // 14.10. (v22): zweite Kugel bei vorhandenem Schild → Schild bleibt, Gesundheit +10 Prozentpunkte
+            const plus = this.schaden && this.schaden.an ? this.schaden.heilen(e.nr, ((R.config.stunt && R.config.stunt.schild) || {}).zweiteHeilung === undefined ? 10 : R.config.stunt.schild.zweiteHeilung) : 0;
+            this._meldung(e.nr, plus > 0 ? '🛡️ +' + plus + ' % 🔧' : '🛡️ Schild bleibt', 1200);
+            if (spieler) pickups.ton('schild');
+          }
           else { this._meldung(e.nr, 'Schutzschild! 🛡️', 1200); if (spieler) pickups.ton('schild'); }
         }
       }
@@ -1486,6 +1519,13 @@
         }
         this._feststeckenPruefen(f, dt, countdown);
       });
+      // 14.10. (v22): Doppeltipp Rückwärts während des Polizei-Stopps = freikaufen (10 Münzen). Jeden Schritt abfragen (Flag verfällt sonst nicht).
+      if (polizei && rennen && this.input && this.input.rueckwaertsDoppel) {
+        for (let i = 0; i < this.fahrzeuge.length; i++) {
+          const f = this.fahrzeuge[i];
+          if (f.istSpieler && !f.autopilot && f.spielerNr >= 0 && this.input.rueckwaertsDoppel(f.spielerNr) && rennen.gasErlaubt && polizei.gesperrt(i)) this.polizeiFreikaufen(i);
+        }
+      }
       if (polizei && rennen) polizei.schritt(dt, rennen.gasErlaubt);   // Runde 5b: Ziel, Nähe, Anhalten, Freigabe
       if (rennen) rennen.schritt(dt);
       if (rennen && strecke && strecke.kreuzungen && strecke.kreuzungen.length) this._abbiegenPruefen();   // 13.10. (v16): falsch abgebogen
@@ -1806,6 +1846,8 @@
         const s = L.spots[k], f = spieler.length === 1 ? spieler[0] : spieler[k];
         const an = !!f && this.zustand !== 'menue' && !!f.nah && (L.nacht || st.imTunnel(f.nah.s, 8));
         this._lichtSchalten(s, an);
+        // 14.10. (v22): tagsüber im Tunnel gehen auch die Leuchten (Scheinwerfer/Rücklichter/Lichtkegel) des Spielerautos an
+        if (f && f.mesh && R.carBuilder.setzeLicht && !(this.tageszeitDaten && this.tageszeitDaten.autoLicht) && !!f.mesh.userData.lichtAn !== an) R.carBuilder.setzeLicht(f.mesh, an);
         if (!an) continue;
         const d = f.anzeige, r = d.richtung(), seite = spieler.length === 1 ? (k === 0 ? -0.7 : 0.7) : 0;
         const rx = -r.z, rz = r.x;            // rechts

@@ -284,6 +284,20 @@
       return plus;
     }
 
+    /**
+     * 14.10. (v22) Zweite Schild-Kugel bei vorhandenem Schild (world/pickups.js 'schildPlus'): Fahrzeug i um `prozent` Prozentpunkte heilen (max. 100 %).
+     * Nicht bei Schaden aus / liegengeblieben / in der Abschlepp-Reparatur. Meldet 'heilen'. → tatsächlich geheilte Prozentpunkte (0 = nichts).
+     */
+    heilen(i, prozent) {
+      const z = this.z[i];
+      if (!this.an || !z || z.liegengeblieben || z.rep || z.punkte >= 100) return 0;
+      const vorher = z.punkte;
+      this._punkteSetzen(i, Math.min(100, vorher + Math.max(0, prozent)));
+      const plus = z.punkte - vorher;
+      if (plus > 0) this._melden('heilen', i, { plus });
+      return plus;
+    }
+
     /** Mensch (Spieler ohne Autopilot) oder Computer-Auto? Entscheidet über die Losfahr-Schwelle. */
     _mensch(i) { const f = this.fahrzeuge[i]; return !!(f && f.istSpieler && !f.autopilot); }
     /** Ab wie viel Prozent darf Fahrzeug i losfahren (Mensch losfahrenAb, Computer kiLosfahrenAb)? */

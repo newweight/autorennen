@@ -124,7 +124,8 @@ function autopilot(st, v, idx) {
   pruefe('L Server: hindernisMenge nur normal/viele/sehrViele; alles andere (undefined, null, 5, {}, [], „Viele“, „constructor“) → normal',
     w('normal') === 'normal' && w('viele') === 'viele' && w('sehrViele') === 'sehrViele' &&
     [undefined, null, 5, {}, ['viele'], 'Viele', 'constructor', '__proto__', ''].every(x => w(x) === 'normal'));
-  const faelle = [['wiese', 'hindernisse', ''], ['wald', 'stunt', ''], ['wueste', 'verrueckt', 'xl'], ['dino', 'alles', ''], ['alpen', 'hindernisse', ''], ['fantasie', 'alles', 'xl']];
+  const faelle = [['wiese', 'hindernisse', ''], ['wald', 'stunt', ''], ['wueste', 'verrueckt', 'xl'], ['dino', 'alles', ''], ['alpen', 'hindernisse', ''], ['fantasie', 'alles', 'xl'],
+    ['wiese', 'alles', 'xl'], ['wald', 'stunt', 'xl'], ['dino', 'alles', 'xl'], ['alpen', 'alles', 'xl']];   // v22: XL für alle Strecken (Variante wird übertragen, Server == Client)
   for (const menge of ['viele', 'sehrViele']) for (const [id, welt, variante] of faelle) {
     const sim = new Simulation({ einstellungen: { streckeId: id, welt, variante, hindernisMenge: menge, gegner: 1, runden: 1 },
       spieler: [{ fahrer: 'Jonas', auto: 'passat', hilfe: 'aus' }], seed: 99 });

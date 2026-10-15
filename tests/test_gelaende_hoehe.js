@@ -60,7 +60,7 @@ const passat = AUTOS.find(a => a.id === 'passat');
 const streckenListe = R.trackCatalog.filter(d => !nurId || d.id === nurId);
 const ergA = [];
 for (const daten of streckenListe) {
-  const st = new R.Strecke(daten, {});
+  const st = new R.Strecke(daten, { variante: process.env.VARIANTE || '' });   // v22: VARIANTE=xl node tests/test_gelaende_hoehe.js alpen
   const th = (R.themes && R.themes[st.thema]) || {};
   const meshes = [st._bodenBauen(th.boden !== undefined ? th.boden : 0x5f9e3a, th.boden2)];
   if (st.sModell) meshes.push(st._boeschungBauen(th));
@@ -117,7 +117,7 @@ for (const daten of streckenListe) {
 // ============================================================ B) Büsche
 // Busch-Körper = Ellipsoid aus der Geometrie-Box der Instanz (Icosaeder ≈ 0,85 der Box). Dach-Mitte des Autos auf Dachhöhe.
 function buschTest(daten, welt, jahreszeit) {
-  const st = new R.Strecke(daten, { welt });
+  const st = new R.Strecke(daten, { welt, variante: process.env.VARIANTE || '' });
   const deko = R.themes.dekoBauen(daten.thema, st, jahreszeit);
   const kol = R.Kollisionen.pflanzenSammeln(st, deko);
   const weichNamen = new Set(R.config.pflanzen.weich);

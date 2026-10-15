@@ -25,6 +25,7 @@ const MODULE = [
   'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/looping.js', 'src/track/schanze.js',
   'src/track/anlauf.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
   'src/world/kleber.js', 'src/world/polizei.js', 'src/race/raceManager.js', 'src/race/startBoost.js', 'src/ai/driver.js', 'src/net/protokoll.js',
+  'src/track/megastrecke.js',   // v22: Megastrecke (Add-on, nach Wetter/Themen/Strecke geladen)
   'src/main.js',
 ];
 
@@ -152,7 +153,7 @@ class Simulation {
       strecke, wetter, dynamik, pickups, schaden: null, polizei: null, muenzen: null, kameras: [], stoesse: [],
       fahrzeuge: [], tageszeitDaten: tz || null, tempoKlasse: e.tempoKlasse, _physikZeit: 0, _hindernisVersion: 0,
       einstellungen: { rempeln: 'sanft', tageszeit: e.tageszeit },
-      huds: [], pausiert: false, zustand: 'rennen',
+      huds: [], pausiert: false, zustand: 'rennen', netzKonto: spieler.map(() => 0),
     });
     this.sim = sim;
     this.eingaben = spieler.map(() => ({ gas: 0, bremse: 0, lenkung: 0 }));
@@ -227,6 +228,19 @@ class Simulation {
 
   /** Steuerung für Spieler nr setzen (bereits dekodiert: { gas, bremse, lenkung }). */
   eingabeSetzen(nr, s) { const z = this.eingaben[nr]; if (z) { z.gas = s.gas; z.bremse = s.bremse; z.lenkung = s.lenkung; } }
+
+  /** v22 (additiv, Protokoll-Version bleibt 4): vom Browser gemeldetes Münzen-Guthaben von Spieler nr (für das Freikaufen bei der Polizei). */
+  kontoSetzen(nr, k) { if (this.sim.netzKonto && nr >= 0 && nr < this.sim.netzKonto.length) this.sim.netzKonto[nr] = k; }
+
+  /** v22: Freikaufen (Eingabe-Bit f) von Spieler nr: nur wenn von der Polizei angehalten; der Server prüft und zieht ab (sim.polizeiFreikaufen). */
+  freikaufen(nr) {
+    const sim = this.sim;
+    if (!sim.polizei || !sim.rennen || !sim.rennen.gasErlaubt) return;
+    const i = sim.fahrzeuge.findIndex(f => f.istSpieler && f.spielerNr === nr);
+    if (i < 0) return;
+    const erg = sim.polizeiFreikaufen(i);
+    if (erg === 'ok') this.ereignisse.push({ an: nr, art: 'freikauf', kosten: sim.polizei.c.freikaufKosten, konto: sim.netzKonto[nr] });
+  }
 
   /** Item / Reset-Taste von Spieler nr (wie Tasten im lokalen Spiel). */
   item(nr) { this.sim.itemEinsetzen(nr); }

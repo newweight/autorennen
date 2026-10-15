@@ -249,6 +249,9 @@
         e.fahrer[0] = ich.fahrer; e.autoIds[0] = ich.auto; e.fahrhilfe[0] = ich.hilfe;
         if (!this.basis) this.spiel.einstellungenSpeichern();
       }
+      // 14.10. (v22): Geht ein Gast im Rennen oder in der Ergebnistafel, schickt der Server allen die neue Spielerliste (zustand 'rennen'/'ergebnis').
+      // Das darf Rennen/Tafel der anderen NICHT beenden – nur bei zustand 'lobby' (Host hat „Zur Lobby“ gedrückt) wird abgebaut. Ältere Server ohne zustand: wie bisher.
+      if (this.phase && m.zustand && m.zustand !== 'lobby') return;
       if (this.phase) this.rennenAbbauen();        // Host hat „Zur Lobby“ gedrückt
       if (neu) this.fokus = 0;
       this.ansicht = 'lobby';
@@ -666,6 +669,7 @@
       spiel.einstellungen = Object.assign({}, this.basis, {
         streckeId: e.streckeId, welt: e.welt, variante: e.variante, jahreszeit: e.jahreszeit, wetter: e.wetter, windStaerke: e.windStaerke,
         windRichtung: e.windRichtung, tageszeit: e.tageszeit, hindernisMenge: e.hindernisMenge, tempoKlasse: e.tempoKlasse, runden: e.runden, gegner: e.gegner,
+        wetterSeed: m.wetterSeed,   // v22: Megastrecke – gleicher Seed wie der Server → gleiche Zonen
         schaden: false, polizei: e.polizei === true, rempeln: 'sanft', modus: 'solo', spielart: 'rennen',
       });
       if (spiel.menue) spiel.menue.verstecken();
@@ -732,7 +736,7 @@
       vp.setzen(p0.x, p0.z, p0.heading); vp.y = strecke.hoeheAn(p0.x, p0.z);
       this.puffer = new R.NetzPuffer();
       if (this.verb) this.verb.uhrNeu();
-      this.n = 0; this.t0 = null; this.empfangen = false; this._letzteS = null; this.itemFlag = false; this.resetFlag = false;
+      this.n = 0; this.t0 = null; this.empfangen = false; this._letzteS = null; this.itemFlag = false; this.resetFlag = false; this.freikaufFlag = false;
       this.startTick = null; this.dynTick = 0; this._gestartet = false; this.warSonder = false;
       this.schattenListe = spiel.fahrzeuge.slice(0, this.nT).map(f => ({ vehicle: f.schatten, istSpieler: false }));
       this._pingZeit = 0;
@@ -747,7 +751,12 @@
       if (spiel.tunnelLichter) spiel._tunnelLichterVorkompilieren();
       spiel.groesse();
       try { if (spiel._vorwaermen) spiel._vorwaermen(); } catch (e) { }
-      if (this.verb) this.verb.senden({ t: 'geladen' });
+      if (this.verb) {
+        // v22 (additiv, Protokoll-Version bleibt 4): Münzen-Guthaben des eigenen Fahrers (Garage-Konto) melden – der Server braucht es nur zum Freikaufen bei der Polizei
+        let k = 0;
+        try { const nm = spiel.rennen.teilnehmer[du].name; if (R.Garage && nm) k = R.Garage.konto(nm); } catch (err) { k = 0; }
+        this.verb.senden({ t: 'geladen', k: Math.max(0, Math.min(99999, Math.floor(k) || 0)) });
+      }
     }
 
     /** Geister-Darstellung: alle Materialien des Autos als Kopie halbtransparent (Cache-Materialien bleiben unberührt). */
@@ -897,6 +906,9 @@
       const spiel = this.spiel, r = spiel.rennen, hud = spiel.huds[0];
       const t = r.teilnehmer[m.nr];
       if (m.art === 'start') this._start(m.k);
+      else if (m.art === 'freikauf') {         // v22 (additiv, Protokoll-Version bleibt 4): Server hat den Stopp gegen Münzen beendet → Garage-Konto abbuchen
+        try { const nm = r.teilnehmer[this.du].name; if (R.Garage && nm) R.Garage.abbuchen(nm, m.kosten); } catch (err) { /* egal */ }
+      }
       else if (m.art === 'meldung') { if (hud) hud.meldung(m.text, String(m.text).indexOf('\n') >= 0 ? 3200 : 1500); }
       else if (m.art === 'runde' && t) {
         t.runde = m.runde;
@@ -948,6 +960,11 @@
       }
       const mein = fz[this.du], meinT = r.teilnehmer[this.du];
       let sd = this._letzteS || { gas: 0, bremse: 0, lenkung: 0 };
+      // v22 (additiv, Protokoll-Version bleibt 4): Doppeltipp Rückwärts (↓ oder S, Touch ▼) während des Polizei-Stopps → Wunsch „freikaufen“ (Bit f), der Server prüft und zieht ab
+      if (spiel.input && spiel.input.rueckwaertsDoppel && !this.dialog) {
+        const d0 = spiel.input.rueckwaertsDoppel(0), d1 = spiel.input.rueckwaertsDoppel(1);
+        if ((d0 || d1) && spiel.polizei && spiel.polizei.gesperrt(this.du)) this.freikaufFlag = true;
+      }
       const DT = R.config.physik.schritt;
       if (this.empfangen && this.verb) {
         // Eingaben im Echtzeit-Takt (60 je Sekunde), unabhängig von der Bildrate: langsame Geräte schicken pro
@@ -971,7 +988,8 @@
           const msg = { t: 'eingabe', n: this.n, g: kod.g, b: kod.b, l: kod.l };
           if (this.itemFlag) msg.i = 1;
           if (this.resetFlag) msg.r = 1;
-          this.itemFlag = this.resetFlag = false;
+          if (this.freikaufFlag) msg.f = 1;
+          this.itemFlag = this.resetFlag = this.freikaufFlag = false;
           this.verb.senden(msg);
           V.schritt(this.n, sd, { countdown: r.zustand === 'countdown', imZiel: meinT.imZiel });
         }

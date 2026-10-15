@@ -570,6 +570,7 @@ Rennspiel.config = {
       radius: 2.6,             // m Aufsammel-Abstand (Auto-Mitte ↔ Kugel)
       wiederDa: 10,            // s bis die Kugel wieder erscheint
       hoehe: 1.3,              // m schwebt über der Straße
+      zweiteHeilung: 10,       // 14.10. (v22): Prozentpunkte Gesundheit, wenn man mit vorhandenem Schild eine weitere Kugel nimmt (Schild bleibt)
     },
     // Runde 6 (W3-H): Ölfalle. Ölfässer (Pickup) stehen 35 m hinter jeder Schild-Kugel auf der Gegenseite (nur wo es Schilde gibt:
     // Welt Verrückt/Alles). Aufsammeln → 1 Item; Taste legt 8 m hinter dem Auto einen Ölfleck (Untergrund 'oel': grip 0,25, schlingern).
@@ -630,6 +631,8 @@ Rennspiel.config = {
     naheZeit: 1.5,               // s am Stück nah dran
     vorZiel: 1,                  // m: Streifenwagen-Mitte darf höchstens so weit vor der Front des Ziels sein („neben/hinter")
     stoppDauer: 4,               // s angehalten (v15: vorher 10 s – Wunsch Sebastian)
+    freikaufKosten: 10,          // 14.10. (v22): Münzen, um beim Stopp durch Doppeltipp Rückwärts (↓ / S / Touch ▼) sofort weiterzufahren
+    freikaufFenster: 0.5,        // s: größter Abstand der zwei Tipps
     schonfrist: 30,              // s danach lässt er dieses Auto in Ruhe
     kiRadius: 300,               // m: kein Spieler so nah → auch KI-Autos anhalten
     zielWahl: 1,                 // s: so oft wird das Ziel neu gewählt
