@@ -815,7 +815,7 @@
     if (!f0.cabrio || !dh) return null;
     const t = (v) => M.zF + v * M.L;
     const f2 = Object.assign({}, f0, { cabrio: false, heckTyp: 'stufe', dachHinten: dh.hinten, heckscheibeEnde: dh.ende,
-      heckGlasAb: dh.heckGlasAb, dachAbfall: 0, heckVerjuengung: dh.heckVerjuengung !== undefined ? dh.heckVerjuengung : 0.08, tumble: 0.1, schwarzeSaeulen: true });
+      heckGlasAb: dh.heckGlasAb, dachAbfall: dh.abfall || 0, heckVerjuengung: dh.heckVerjuengung !== undefined ? dh.heckVerjuengung : 0.08, tumble: 0.1, schwarzeSaeulen: true });
     const M2 = Object.assign({}, M, { f: f2, zWS: M.zDV - 0.03, zDH: t(dh.hinten), zEnd: t(dh.ende),
       fenster: (dh.fenster || []).map(([a, b]) => [Math.max(a * M.L + M.zF, M.zDV - 0.02), t(b)]),
       glas: 0x3b4d62, dach: FARBE.VERDECK, saeuleA: FARBE.SCHWARZ, saeuleB: FARBE.VERDECK, saeuleC: FARBE.VERDECK, leiste: M.lack });
@@ -1258,7 +1258,8 @@
       quader(S, M.lack, 0, obenY(K, zs, 0) + 0.012, zs, 2 * bs, 0.014, 0.13, -0.07);
     } else if (f.spoiler === 'lippe') {
       const z = M.zR - 0.07, y = obenY(K, z, 0);
-      quader(S, f.kontrastdach ? M.dach : M.lack, 0, y + 0.015, z, 2 * halbBreite(M, z, 0.3) * 0.8, 0.025, 0.12, -0.2);
+      const sl = f.lippe || {};   // optional (T-Roc): flachere, niedrigere Lippe direkt auf der Heckklappe { dy, dick, tief, neig }
+      quader(S, f.kontrastdach ? M.dach : M.lack, 0, y + (sl.dy !== undefined ? sl.dy : 0.015), z, 2 * halbBreite(M, z, 0.3) * 0.8, sl.dick || 0.025, sl.tief || 0.12, sl.neig !== undefined ? sl.neig : -0.2);
     } else if (f.spoiler === 'aktiv') {
       const z = M.zR - 0.17, y = obenY(K, z, 0) + 0.018, b = 2 * halbBreite(M, z, 0.3) * 0.8;
       quader(S, M.lack, 0, y, z, b, 0.022, 0.2, -0.1);

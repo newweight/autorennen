@@ -1185,6 +1185,36 @@
     }
 
     /**
+     * 15.10. (v24): Cabrio-Dach bei Niederschlag – Teil des Physikschritts je Auto mit Verdeck (cars/dachregel.js, config.dachRegen):
+     * Nässe an der Position (wetter.nass), Klappzeit/Uhr zählen, Geste (f.dachGeste, gesetzt von dach.js bzw. – online – vom Server aus dem Eingabe-Bit d),
+     * Strafe anwenden (Schaden an: schaden.treffer 'nass'; sonst eigener Wert dl.gesund), Meldungen an Menschen. Einmal je Auto und Schritt, VOR der Eingabe.
+     */
+    _dachVorab(i, f, dl, dt, rennen, schaden) {
+      const D = R.DachRegel, v = f.vehicle, t = rennen && rennen.teilnehmer ? rennen.teilnehmer[i] : null;
+      const laeuft = !!rennen && rennen.gasErlaubt && !(t && t.imZiel);
+      const nass = this.wetter && this.wetter.nass ? this.wetter.nass(v) : false;
+      const ev = D.schritt(dl, dt, nass, laeuft);
+      const mensch = f.istSpieler && !f.autopilot;
+      if (mensch && ev) {
+        if (ev === 'nass') { const a = D.anzeige(dl, false, this.netzKonto ? 0 : f.spielerNr); if (a) this._meldung(i, a.text, 3200); }   // Server: jeder Spieler steuert mit den Pfeilen (↑+↓)
+        else if (ev === 'zu') this._meldung(i, 'Dach ist zu ✔', 1400);
+        else if (ev === 'auf') this._meldung(i, 'Dach ist offen', 1200);
+      }
+      if (f.dachGeste) { f.dachGeste = false; D.geste(dl, v.vLaengs); }
+      if (dl.faellig) {
+        if (schaden) {
+          const z = schaden.z[i], verl = schaden.treffer(i, 'nass', 99);
+          if (verl > 0) { dl.faellig = false; if (mensch) this._meldung(i, '💧 Nass! −' + verl + ' %', 2400); }
+          else if (!z || z.liegengeblieben || z.rep || z.punkte <= 0) dl.faellig = false;   // liegengeblieben/Reparatur: nichts mehr zu holen (Uhr läuft normal weiter)
+          // sonst Abklingzeit nach einem anderen Treffer: im nächsten Schritt erneut versuchen
+        } else {
+          const ab = D.strafeAnwenden(dl);
+          if (mensch) this._meldung(i, ab > 0 ? '💧 Nass! −' + ab + ' %' : '💧 Nass! (Auto ' + dl.gesund + ' %)', 2400);
+        }
+      }
+    }
+
+    /**
      * Ein fester Physikschritt (1/60 s). Reihenfolge (Runde 4, verbindlich):
      *   1. Eingabe je Auto: Spieler (Tastatur) / Computerfahrer (KI, Autopilot); Countdown → kein Gas.
      *   2. gesperrt?  Schaden: liegengebliebenes Auto bekommt nur Bremse (KI wird nicht gefragt → kein KI-Reset).
@@ -1229,6 +1259,14 @@
       this.fahrzeuge.forEach((f, i) => {
         if (f.ausgeschieden) return;          // Runde 6 (W3-F): ausgeschieden („Letzter fliegt raus") – steht geparkt
         const v = f.vehicle;
+        // --- 15.10. (v24): Cabrio-Dach bei Regen/Schnee/Hagel (cars/dachregel.js): Klappzeit, Nässe, Strafuhr, Geste; nur Autos mit Verdeck ---
+        const dl = f.dachL !== undefined ? f.dachL : (f.dachL = R.DachRegel ? R.DachRegel.neu(f.auto) : null);
+        let dachPlan = null;
+        if (dl) {
+          this._dachVorab(i, f, dl, dt, rennen, schaden);
+          if (rennen && (f.driver || f.autopilot) && !f.polizei && (!f.istSpieler || f.autopilot) && !(schaden && schaden.gesperrt(i)) && !(polizei && polizei.gesperrt(i)))
+            dachPlan = R.DachRegel.kiPlan(f, dl, strecke, dt);    // KI-Cabrio: bei Nässe anhalten und Dach schließen (null = normal fahren)
+        }
         // --- 1./2. Eingabe (liegengeblieben: nur Bremse, Computerfahrer wird nicht gefragt) ---
         let s = { gas: 0, bremse: 0, lenkung: 0 };
         const fahrer = f.driver || f.autopilot || f.polizeiFahrer;       // Computerfahrer (KI, Autopilot, Polizei)
@@ -1237,6 +1275,7 @@
         else if (f.polizei) { if (polizei) s = polizei.steuerung(i, dt, rennen); }   // Runde 5b: Streifenwagen
         else if (f.istSpieler && tn[i] && tn[i].imZiel) s = { gas: 0, bremse: v.vLaengs > 0.3 ? 0.6 : 0, lenkung: 0 };   // im Ziel: ausrollen (v23: nur bremsen, solange es vorwärts rollt – sonst fuhr es nach dem Stand rückwärts)
         else if (f.istSpieler && f.spielerNr >= 0 && !f.autopilot) s = this.input.steuerung(f.spielerNr);
+        else if (dachPlan && dachPlan.art === 'halten') s = R.DachRegel.halt(v);   // v24: KI-Cabrio steht, Dach schließt (Fahrer nicht fragen: kein „festgefahren“)
         else if (fahrer && rennen && werkstatt && (s = werkstatt.kiSteuerung(i, f, dt, rennen, schaden))) { /* 14.10. (v18): Computer-Auto fährt zur Werkstatt / steht dort */ }
         else if (fahrer && rennen) {
           const t = tn[i];
@@ -1246,9 +1285,12 @@
           umgebung.rempeln = rempeln;   // Runde 6: KI ab profi darf bei 'echt' gezielt rempeln
           s = fahrer.steuerung(dt, umgebung);
           if (fahrer.brauchtReset) { this.zuruecksetzen(i); fahrer.zurueckgesetzt(f.index); return; }   // W4-I: Index aus dem Reset
+          if (dachPlan && dachPlan.art === 'bremsen') s = R.DachRegel.kiBremsen(s, v, dachPlan);   // v24: KI-Cabrio bremst bis zum Haltepunkt (Lenkung vom Fahrer)
         }
         // --- Runde 7: Abschlepp-Reparatur: Mensch steht, Gas erst ab losfahrenAb (30 %) – beendet dann die Reparatur ---
         if (schaden && schaden.reparatur(i)) s = schaden.reparaturSteuerung(i, s);
+        // --- 15.10. (v24): Dach klappt → das Auto steht (kein Gas, bremsen nur bis Stand); Losfahren wird verhindert bis fertig ---
+        if (dl && dl.rest > 0) s = R.DachRegel.halt(v);
         // --- Runde 6 (D3): Start-Boost bewerten (Gas-Eingabe VOR der Countdown-Sperre), „Zu früh" sperrt das Gas 1 s ---
         const sb = this.startBoost;
         if (sb && !f.polizei && !f.autopilot && sb.offen(i)) {
@@ -1313,7 +1355,8 @@
         const xAlt = v.x, zAlt = v.z;
         const fk = pickups ? pickups.faktoren(i) : null, dd = v.daten;
         const fs = sb ? sb.faktoren(i) : null;           // Runde 6: Start-Boost multipliziert zusätzlich (beide nacheinander)
-        const fvm = (fk ? fk.vMax : 1) * (fs ? fs.vMax : 1), fbe = (fk ? fk.beschleunigung : 1) * (fs ? fs.beschleunigung : 1);
+        const dfk = dl && !schaden && dl.gesund < 100 ? R.DachRegel.faktoren(dl) : null;   // v24: Nässe-Schaden ohne Schadensystem (Stufen-Faktoren)
+        const fvm = (fk ? fk.vMax : 1) * (fs ? fs.vMax : 1) * (dfk ? dfk.vMax : 1), fbe = (fk ? fk.beschleunigung : 1) * (fs ? fs.beschleunigung : 1) * (dfk ? dfk.beschleunigung : 1);
         const turbo = fvm !== 1 || fbe !== 1;
         const vm0 = dd.vMax, b0 = dd.beschleunigung;
         if (turbo) { dd.vMax = vm0 * fvm; dd.beschleunigung = b0 * fbe; }

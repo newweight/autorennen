@@ -490,6 +490,17 @@
         return u;
       }
 
+      /** 15.10. (v24): Niederschlag (Regen, Schnee, Hagel) in der Zone, in der das Fahrzeug fährt? (Cabrio-Dach-Regel, cars/dachregel.js; nur Funktion von x, z) */
+      nass(v) {
+        const st = this.strecke;
+        if (!st || !v) return false;
+        const n = st.spline.naechster(v.x, v.z, v._megaIdx === undefined ? -1 : v._megaIdx);
+        v._megaIdx = n.index;
+        const p = profilBei(this.zonen, n.s, this._pNass || (this._pNass = {}));
+        const art = erscheinung(p.a).art;
+        return art === 'regen' || art === 'schnee' || art === 'hagel';
+      }
+
       // ---------- Aussehen
       anwenden(thema, licht) {
         const erg = super.anwenden(thema, licht);

@@ -65,11 +65,11 @@ window.Rennspiel = window.Rennspiel || {};
         tueren: 2, verkleidung: true, spiegelFarbe: 'schwarz', felgeFarbe: 0x1a1b1e, felgeSpeichen: 10,
         licht: { form: 'schmal', x: 0.72, y: 0.545, b: 0.36, h: 0.075 }, tfl: 'leiste', grill: 'leiste', grillChrom: false, tflH: 0.02, tflVor: 0.034, tflN: 10, einlass: 'rline', nebel: false,
         logo: { y: 0.0, r: 0.065 }, logoHeck: { y: 0.60, r: 0.05 },
-        rueck: { form: 'eckig', y: 0.585, h: 0.095, x0: 0.16, x1: 0.96, verbinder: true }, spoiler: 'lippe',
+        rueck: { form: 'eckig', y: 0.585, h: 0.095, x0: 0.16, x1: 0.96, verbinder: true }, spoiler: 'lippe', lippe: { dy: 0.008, dick: 0.02, tief: 0.09, neig: -0.07 },
         diffusor: true, diffusorX: 0.80, diffusorH: 0.12, endrohre: { n: 2, form: 'trapez', x: 0.70, r: 0.05 },
         kennzeichenY: 0.275, kennzeichenHY: 0.40, sitzFarbe: 0x2a2c32, ueberrollbuegel: true,
         // Verdeck (geschlossen): schwarzer Stoff, kleine Heckscheibe, Türscheiben + Seitenscheibe hinten
-        dach: { hinten: 0.69, ende: 0.885, fenster: [[0.0, 0.60], [0.645, 0.725]], heckGlasAb: 0.62 },
+        dach: { hinten: 0.79, ende: 0.935, abfall: 0.03, fenster: [[0.0, 0.60], [0.645, 0.775]], heckGlasAb: 0.50, heckVerjuengung: 0.05 },
       },
       fahrwerte: {
         vMax: 230 / 3.6, beschleunigung: 4.8, bremsen: 20, rueckwaertsMax: 8,

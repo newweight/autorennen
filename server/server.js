@@ -378,7 +378,7 @@ function starten(opt) {
         const n = m.n;
         if (!Number.isInteger(n) || n <= c.letzteN || n > c.letzteN + 100000) return;
         c.letzteN = n;
-        const e = { n, s: N.eingabeDekodieren(m), i: m.i === 1, r: m.r === 1, f: m.f === 1 };
+        const e = { n, s: N.eingabeDekodieren(m), i: m.i === 1, r: m.r === 1, f: m.f === 1, d: m.d === 1 };   // d: v24 Dach-Geste
         c.eingaben.push(e);
         if (c.eingaben.length > 45) {        // > 3/4 s gepuffert (Paketstau, sehr langsames Gerät): Älteste verwerfen, Tasten-Flanken behalten
           c.erw = null;                      // v23: neu ausrichten (eingabeTick)
@@ -386,6 +386,7 @@ function starten(opt) {
           if (weg.some(x => x.i)) c.eingaben[0].i = true;
           if (weg.some(x => x.r)) c.eingaben[0].r = true;
           if (weg.some(x => x.f)) c.eingaben[0].f = true;
+          if (weg.some(x => x.d)) c.eingaben[0].d = true;
         }
         return;
       }
@@ -452,7 +453,7 @@ function starten(opt) {
   }
 
   // --- Eingaben je Tick ---
-  const flankenAnwenden = (sim, c, e) => { if (e.r) sim.reset(c.simNr); if (e.i) sim.item(c.simNr); if (e.f) sim.freikaufen(c.simNr); };
+  const flankenAnwenden = (sim, c, e) => { if (e.r) sim.reset(c.simNr); if (e.i) sim.item(c.simNr); if (e.f) sim.freikaufen(c.simNr); if (e.d) sim.dachGeste(c.simNr); };
 
   /**
    * v23 (Online-Ruckeln): Eingabe nach INDEX statt „eine Eingabe je Tick aus der Warteschlange“.
@@ -538,6 +539,7 @@ function starten(opt) {
         if (weg.some(x => x.i)) c.eingaben[0].i = true;
         if (weg.some(x => x.r)) c.eingaben[0].r = true;
         if (weg.some(x => x.f)) c.eingaben[0].f = true;
+        if (weg.some(x => x.d)) c.eingaben[0].d = true;
         c.verworfen = (c.verworfen || 0) + weg.length;
       }
       c.minQ = Infinity; c.qTicks = 0;

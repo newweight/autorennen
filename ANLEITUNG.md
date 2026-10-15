@@ -15,7 +15,7 @@
 | Spieler 2 | W | S | A D | T |
 
 Weitere Tasten: **Space** (Spieler 1) bzw. **E** (Spieler 2) legt eine Ölfalle (nur mit Ölfass-Item), **G** im Modus-Schritt öffnet die Garage, **C** Kamera (Verfolger / Cockpit / weit), **M** Ton an/aus, **Esc** Pause, **H** Leistungs-Anzeige (fps), **F** Vollbild.
-**Dach auf/zu** (nur VW T-Roc Cabrio, fährt offen los): im **Stand** beide Gegentasten gleichzeitig – allein **↑ + ↓** (zu zweit auch ← + →), Spieler 2 **W + S** oder **A + D**; am Handy ▲ + ▼ zusammen. Dauert 2 Sekunden. In Fahrt kommt „Erst anhalten!“. Online sieht nur du selbst das Dach.
+**Dach auf/zu** (nur VW T-Roc Cabrio, fährt offen los): im **Stand** beide Gegentasten gleichzeitig – allein **↑ + ↓** (zu zweit auch ← + →), Spieler 2 **W + S** oder **A + D**; am Handy ▲ + ▼ zusammen. Dauert 3 Sekunden, das Auto bleibt dabei stehen (Gas gesperrt, Meldung „Dach schließt … 3“). In Fahrt kommt „Erst anhalten!“. Online sieht jeder das echte Dach. Siehe **Cabrio und Regen**.
 Im Menü: Pfeile oder WASD bewegen, **Enter** weiter, **Esc** zurück – oder mit der Maus klicken.
 Bei der Fahrer- und Autowahl bewegt Spieler 1 mit den Pfeilen, Spieler 2 mit WASD.
 
@@ -147,6 +147,13 @@ ist die Karte „🌐 Online“ grau („Online geht nur über ‚Mehrspieler st
 **🌐 Internet für Freunde im Spiel an/aus (nur auf dem Mac mini mit dem Autostart-Dienst):** Menü → 🌐 Online → Zeile „Internet für Freunde“ → *Einschalten* (zweimal tippen)
 oder Taste **I**. Das sieht und kann nur, wer im eigenen Tailscale-Netz ist (Papas/Mamas Handy, Laptop). Nach 4 Stunden geht es von selbst aus. Freunde ohne Tailscale
 können nur mitspielen, solange es AN ist. Einrichtung/Prüfung: `server/README.md` (Abschnitt Internet-Schalter).
+
+## ☔ Cabrio und Regen
+- Bei **Regen, Schnee oder Hagel** (auf der Megastrecke: wenn das Auto in so eine Wetterzone fährt; Rennstart bei Regen: schon im Countdown) wird das offene T-Roc Cabrio nass. Meldung „🌧️ Regen! Dach zu: ↑+↓ im Stand“.
+- **Dach schließen:** anhalten, ↑ + ↓ gleichzeitig (Spieler 2: W + S, Handy ▲ + ▼). 3 Sekunden steht das Auto still („Dach schließt … 3“), danach „Dach ist zu ✔“.
+- **Sonst** verliert das Auto, solange es nass ist und das Dach offen, **alle 60 Sekunden 10 %** („💧 Nass! −10 %“). Die Uhr startet beim Nasswerden, oben steht „Dach zu! noch 45 s“ (ab 10 s rot). Beim Schließen ruht die Uhr. Bei trockenem Wetter darf das Dach wieder auf.
+- **Computer-Gegner** mit offenem Cabrio bremsen bei Nässe an einem sicheren Platz am Rand (nie in Tunnel, auf Brücke/Überführung, Kreuzung, Looping, Schanze, Gabelung, vor Start/Ziel), schließen 3 Sekunden das Dach und fahren weiter. Im Countdown tun sie es schon vor dem Start.
+- Nur das T-Roc Cabrio hat ein Dach; andere Autos (auch Formel) sind nicht betroffen. Ohne Schadensystem zeigt das HUD den Wert „❤️ Auto n %“ (nie unter 10 %).
 
 ## 🎲 Weitere Spiele (4 gewinnt, Schach)
 

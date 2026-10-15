@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Test Cabrio-Verdeck (14.10. v20): python3 tests/dach_test.py
-Prüft: Start offen · Hinweis „Dach auf/zu“ · ↑+↓ im Stand klappt zu (Animation ≈ 2 s) und wieder auf · in Fahrt NICHT, Meldung „Erst anhalten!“
+Prüft: Start offen · Hinweis „Dach auf/zu“ · ↑+↓ im Stand klappt zu (Animation ≈ 3 s) und wieder auf · in Fahrt NICHT, Meldung „Erst anhalten!“
 · einzelne Taste tut nichts · Zweispieler: A+D nur beim WASD-Spieler, ←+→ nur beim Pfeil-Spieler · Optionen-API (dach/lack) · keine Verdeck bei anderen Autos
 · Fahrphysik unverändert (gleiche Position nach gleicher Zeit mit/ohne Dach-Eingabe im Stand)."""
 import sys, os
@@ -72,7 +72,7 @@ with sync_playwright() as pw:
     pruefe('↑+↓ im Stand: Dach fährt zu (Animation läuft)', z == 'faehrt' and 0 <= p_mitte < 1, f'{z} p={p_mitte:.2f}')
     kombi(page, ['ArrowUp', 'ArrowDown'])   # während der Fahrt des Dachs ignoriert
     warte(page, 0, 'zu')
-    pruefe('nach der Klappzeit (2 s Spielzeit): Dach zu (p = 1), zweite Eingabe während der Bewegung wurde ignoriert', page.evaluate(ZUSTAND, 0) == 'zu' and page.evaluate(P, 0) == 1, page.evaluate(P, 0))
+    pruefe('nach der Klappzeit (3 s Spielzeit): Dach zu (p = 1), zweite Eingabe während der Bewegung wurde ignoriert', page.evaluate(ZUSTAND, 0) == 'zu' and page.evaluate(P, 0) == 1, page.evaluate(P, 0))
     kombi(page, ['ArrowUp', 'ArrowDown'])
     warte(page, 0, 'offen')
     pruefe('↑+↓ erneut: Dach wieder offen (unsichtbar)', page.evaluate(ZUSTAND, 0) == 'offen' and not page.evaluate(SICHTBAR, 0))

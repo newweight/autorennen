@@ -689,6 +689,7 @@
         const p = plaetze[i], basis = katalog.find(a => a.id === t.autoId) || katalog[0];
         const auto = t.optionen ? Object.assign({}, basis, { optionen: Object.assign({}, basis.optionen || {}, t.optionen) }) : basis;   // v20: Lack/Dach der Computer-Füller
         const f = spiel.fahrzeugHinzufuegen(auto, p.x, p.z, p.heading, null);
+        f.dachL = R.DachRegel ? R.DachRegel.neu(auto) : null;     // v24 (15.10.): Dach-Zustand je Cabrio – der Server rechnet, hier nur Anzeige (zustand.dz / ich.dz)
         f.vehicle.y = strecke.hoeheAn(p.x, p.z);
         spiel._vorherAngleichen(f);
         f.istSpieler = i === du; f.spielerNr = i === du ? 0 : -1;
@@ -732,6 +733,7 @@
       const andere = this.kollisionen ? m.teilnehmer.map((t, i) => (i === du ? null : { nr: i, auto: katalog.find(a => a.id === t.autoId) || katalog[0] })).filter(Boolean) : [];
       this.vorhersage = new R.NetzVorhersage({ strecke, auto: mein.auto, tempoKlasse: e.tempoKlasse, fahrhilfe: m.teilnehmer[du].hilfe,
         umwelt: () => (spiel.wetter ? spiel.wetter.umwelt() : undefined), kollisionen: this.kollisionen, andere, rempeln: 'sanft' });
+      if (this.vorhersage.dz) mein.dachL = this.vorhersage.dz;     // v24: der eigene Dach-Zustand IST der der Vorhersage (Klappzeit/Gas-Sperre), HUD und Optik lesen ihn
       const vp = this.vorhersage.vp, p0 = plaetze[du];
       vp.setzen(p0.x, p0.z, p0.heading); vp.y = strecke.hoeheAn(p0.x, p0.z);
       this.puffer = new R.NetzPuffer();
@@ -740,7 +742,7 @@
       this.takt = new R.NetzEingabeTakt();                       // v23: Eingabe-Schritte 1:1 zum Physikschritt
       this._bildZeit = performance.now(); this._hintergrund = false; this._versteckt = 0;
       this._wachpostenAn();
-      this.n = 0; this.t0 = null; this.empfangen = false; this._letzteS = null; this.itemFlag = false; this.resetFlag = false; this.freikaufFlag = false;
+      this.n = 0; this.t0 = null; this.empfangen = false; this._letzteS = null; this.itemFlag = false; this.resetFlag = false; this.freikaufFlag = false; this.dachFlag = false;
       this.startTick = null; this.dynTick = 0; this._gestartet = false; this.warSonder = false;
       this.schattenListe = spiel.fahrzeuge.slice(0, this.nT).map(f => ({ vehicle: f.schatten, istSpieler: false }));
       this._pingZeit = 0;
@@ -865,6 +867,14 @@
         if (ich.zz !== null && ich.zz !== undefined) t.zielZeit = ich.zz;
         if (ich.zp) t.zielPlatz = ich.zp;
         if (this.vorhersage.hart) { this.vorhersage.anzeigen(v); spiel._vorherAngleichen(f); this.vorhersage.hart = false; }
+      }
+      // v24 (15.10., additiv): Dach der anderen Cabrios (zustand.dz = [[Nr, ziel, Rest]]) – dach.js klappt das Mesh passend; das eigene Dach kommt aus ich.dz (Vorhersage)
+      if (z.dz) {
+        for (const e of z.dz) {
+          const g = spiel.fahrzeuge[e[0]];
+          if (!g || e[0] === this.du || !g.dachL) continue;
+          g.dachL.ziel = e[1] ? 1 : 0; g.dachL.rest = e[2] > 0 ? e[2] : 0;
+        }
       }
       // Pickups (Turbo, Schild, Ölfässer, Ölflecken) für die Anzeige übernehmen
       const pu = spiel.pickups;
@@ -994,9 +1004,11 @@
           if (this.itemFlag) msg.i = 1;
           if (this.resetFlag) msg.r = 1;
           if (this.freikaufFlag) msg.f = 1;
-          this.itemFlag = this.resetFlag = this.freikaufFlag = false;
+          if (this.dachFlag) msg.d = 1;                      // v24: Dach-Geste (↑+↓ im Stand) – der Server entscheidet, die Vorhersage rechnet mit
+          const dachGeste = this.dachFlag;
+          this.itemFlag = this.resetFlag = this.freikaufFlag = this.dachFlag = false;
           this.verb.senden(msg);
-          V.schritt(this.n, sd, { countdown: r.zustand === 'countdown', imZiel: meinT.imZiel });
+          V.schritt(this.n, sd, { countdown: r.zustand === 'countdown', imZiel: meinT.imZiel, dach: dachGeste });
         }
       }
       const tick = this.verb ? this.verb.serverTick() : null;
@@ -1042,6 +1054,9 @@
           if (V.hart) { spiel._vorherAngleichen(mein); V.hart = false; }
         }
       }
+      // v24: Strafuhr (nur Anzeige) zwischen den Server-Zuständen mitzählen; Wert und Strafe kommen vom Server (ich.dz, Meldung)
+      const dz = V.dz;
+      if (dz && dz.nass && dz.ziel === 0 && !(dz.rest > 0) && r.zustand === 'laeuft' && !meinT.imZiel) dz.uhr = Math.max(0, dz.uhr - dt);
       v_letzte(mein.vehicle, sd);       // Motorton/Bremslicht
       // --- andere Autos: hinter dem Server interpolieren (Verzug adaptiv ≥ 100 ms, hinter dem neuesten Zustand begrenzt extrapolieren) ---
       if (tick !== null && anzTick !== null) {

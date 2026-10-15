@@ -376,6 +376,32 @@
     }
 
     /**
+     * 15.10. (v24): Cabrio-Dach (R.DachRegel, cars/dachregel.js): eigene Zeile unter der Meldung – beim Klappen „☂️ Dach schließt … 3“ (grün),
+     * bei Nässe mit offenem Dach im Countdown der Hinweis „🌧️ Regen! Dach zu: ↑+↓ im Stand“, im Rennen die Strafuhr „☔ Dach zu! noch 45 s“
+     * (blau, ab 10 s rot); ohne Schadensystem darunter „❤️ Auto 80 %“, sobald die Nässe etwas gekostet hat. Sonst unsichtbar.
+     */
+    _dachAnzeigen(r, t, dl) {
+      let e = this.eDach;
+      if (!e) {
+        e = document.createElement('div');
+        e.className = 'hud-dach';
+        Object.assign(e.style, { position: 'absolute', left: '50%', top: '24%', transform: 'translateX(-50%)', whiteSpace: 'pre', textAlign: 'center',
+          fontSize: '1.9em', fontWeight: '900', color: '#fff', padding: '.22em .85em', borderRadius: '1em', border: '.08em solid #fff',
+          pointerEvents: 'none', display: 'none', textShadow: '0 .06em .12em rgba(0,0,0,.4)' });
+        this.el.appendChild(e);
+        this.eDach = e;
+      }
+      const a = t && t.imZiel ? null : R.DachRegel.anzeige(dl, !!r.gasErlaubt, this.nr);
+      let text = a ? a.text : '';
+      if (text && !this.schaden && dl.gesund < 100) text += '\n❤️ Auto ' + dl.gesund + ' %';
+      else if (!text && !this.schaden && dl.gesund < 100 && dl.nass && !(t && t.imZiel)) text = '❤️ Auto ' + dl.gesund + ' %';
+      setzeText(e, text);
+      const farbe = !a ? 'rgba(30,90,200,.9)' : a.art === 'klappt' ? 'rgba(25,140,70,.92)' : (r.gasErlaubt && dl.uhr <= 10 ? 'rgba(210,40,40,.94)' : 'rgba(30,90,200,.92)');
+      if (e._farbe !== farbe) { e._farbe = farbe; e.style.background = farbe; }
+      setzeAnzeige(e, !!text);
+    }
+
+    /**
      * Runde 6 (W3-G): Münzzähler „🪙 n" unter Name/Runde (n = in diesem Rennen gesammelt); plus > 0 → kurzes „+1"-Hüpfen.
      * null = verstecken (Rennen ohne Münzen).
      */
@@ -519,6 +545,7 @@
       if (this.schaden) this._gesundheitAnzeigen();
       if (this.werkstatt && this.schaden) this._werkstattAnzeigen();       // 14.10. (v18)
       if (this.polizei && this.ePolizei) this._polizeiAnzeigen();
+      if (f && f.dachL && R.DachRegel) this._dachAnzeigen(r, t, f.dachL);   // 15.10. (v24): Cabrio-Dach bei Regen
       if (this.pickups && this.eItem) this._itemAnzeigen();
       if (this.minimap) this.minimap.zeichnen(r.teilnehmer, t, this.polizei ? this.polizei.minimapPunkte() : null);
       if (this.cockpit) this.cockpit.update();

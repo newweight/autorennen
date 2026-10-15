@@ -59,6 +59,9 @@
       this.fk = [1, 1];            // Turbo × Start-Boost (vom Server)
       this.gasSperre = false;
       this.polizeiRest = 0;        // v4: Rest der Polizei-Anhaltung (s), vom Server in ich.ps
+      // v24 (15.10.): Cabrio-Dach (cars/dachregel.js): Klappzeit/Ziel für die Gas-Sperre beim Schließen – Start per Eingabe-Bit d (Geste im Stand),
+      // Zustand vom Server in ich.dz; null = Auto ohne Verdeck
+      this.dz = R.DachRegel && opt.auto ? R.DachRegel.neu(opt.auto) : null;
       this.sonder = false;         // Server rechnet gerade allein (Looping, Flug, …)
       this.korr = { x: 0, z: 0, y: 0, h: 0, w: 0 };   // w = Looping-Winkel (rad), nur mit Looping-Vorhersage
       this.tauKorr = 0.25;          // v23: Abklingzeit der Korrektur nach einem Abgleich (s); v22b: 0,12
@@ -94,7 +97,7 @@
 
     /** Ein vorhergesagter Schritt. s = { gas, bremse, lenkung } (bereits wie gesendet quantisiert). */
     schritt(n, s, ctx) {
-      this.offen.push({ n, s: { gas: s.gas, bremse: s.bremse, lenkung: s.lenkung }, cd: !!ctx.countdown, ziel: !!ctx.imZiel });
+      this.offen.push({ n, s: { gas: s.gas, bremse: s.bremse, lenkung: s.lenkung }, cd: !!ctx.countdown, ziel: !!ctx.imZiel, d: !!ctx.dach });
       if (this.offen.length > 240) this.offen.shift();
       if (!this.sonder) this._rechnen(this.offen[this.offen.length - 1], true);
     }
@@ -104,9 +107,16 @@
       const v = this.vp, st = this.strecke, dt = R.config.physik.schritt;
       const kz = this.kz, az = this.az, fz = this.fz, lp = this.lp;
       let s = e.s;
+      // v24 (15.10.): Cabrio-Dach wie main.js _dachVorab: Klappzeit herunterzählen, dann die Geste (nur im Stand) → beim Klappen steht das Auto
+      const dz = this.dz;
+      if (dz) {
+        if (dz.rest > 0) { dz.rest -= dt; if (dz.rest <= 1e-9) dz.rest = 0; }
+        if (e.d) R.DachRegel.geste(dz, v.vLaengs);
+      }
       // v4 (14.10.): von der Polizei angehalten → wie main.js polizei.haltSteuerung (Vorrang vor allem anderen): nur Bremse bis zum Stillstand
       if (this.polizeiRest > 0) s = { gas: 0, bremse: v.vLaengs > 0.3 ? 1 : 0, lenkung: 0 };
       else if (e.ziel) s = { gas: 0, bremse: v.vLaengs > 0.3 ? 0.6 : 0, lenkung: 0 };   // v23: wie main.js (nur bremsen, solange es vorwärts rollt)
+      if (dz && dz.rest > 0) s = R.DachRegel.halt(v);                  // v24: Dach klappt → Gas gesperrt, bremsen bis Stand (wie main.js)
       if (e.cd || this.gasSperre) s = { gas: 0, bremse: s.bremse, lenkung: s.lenkung };
       if (kz && R.Kleber.gesperrt(kz)) s = NULL_S;                      // festgeklebt: Eingabe ignorieren (wie main.js)
       if (lp && (lp.aktiv || lp.fallen)) {
@@ -288,6 +298,7 @@
       this.fk = ich.fk || [1, 1];
       this.gasSperre = !!ich.gs;
       this.polizeiRest = ich.ps > 0 ? ich.ps : 0;
+      if (this.dz && ich.dz) { const d = ich.dz, z = this.dz; z.ziel = d[0] ? 1 : 0; z.rest = d[1] > 0 ? d[1] : 0; z.nass = !!d[2]; z.uhr = d[3]; z.gesund = d[4]; }   // v24
       // Looping-Anzeigewinkel vor dem Abgleich merken (für den weichen Übergang)
       const lpAlt = this.lp && this.lp.aktiv && !warSonder ? { L: this.lp.looping, w: this.lp.winkel + this.korr.w } : null;
       this.sonder = this._sonderLaden(ich);

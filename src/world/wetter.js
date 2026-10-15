@@ -214,6 +214,12 @@
     /** Umwelt für vehicle.schritt (immer dasselbe Objekt, keine Allokation). */
     umwelt() { return this._umwelt; }
 
+    /**
+     * 15.10. (v24): Niederschlag (Regen, Schnee, Hagel) an der Position des Fahrzeugs? Normale Strecken: Wetter des Rennens; die Megastrecke
+     * überschreibt das je Zone (track/megastrecke.js). Für die Cabrio-Dach-Regel (cars/dachregel.js); rein, gleiche Antwort auf Server und im Browser.
+     */
+    nass(vehicle) { const a = this.wetterArt; return a === 'regen' || a === 'schnee' || a === 'hagel'; }
+
     /** Wind relativ zum Auto (für HUD und Tests). Wiederverwendetes Objekt. */
     windFuer(vehicle) { return windRelativ(this._umwelt, vehicle.heading, this._windErg); }
 

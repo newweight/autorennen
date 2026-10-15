@@ -21,7 +21,7 @@ const WURZEL = path.join(__dirname, '..');
 // Reihenfolge wie in Autorennen.html (ohne Ton, Eingabe, Autos-Grafik, Kameras, HUD, Menü)
 const MODULE = [
   'vendor/three.min.js',
-  'src/config.js', 'src/physics/vehicle.js', 'src/physics/collisions.js', 'src/physics/schaden.js', 'src/cars/carCatalog.js',
+  'src/config.js', 'src/physics/vehicle.js', 'src/physics/collisions.js', 'src/physics/schaden.js', 'src/cars/carCatalog.js', 'src/cars/dachregel.js',
   'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/looping.js', 'src/track/schanze.js',
   'src/track/anlauf.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
   'src/world/kleber.js', 'src/world/polizei.js', 'src/race/raceManager.js', 'src/race/startBoost.js', 'src/ai/driver.js', 'src/net/protokoll.js',
@@ -243,6 +243,12 @@ class Simulation {
     if (erg === 'ok') this.ereignisse.push({ an: nr, art: 'freikauf', kosten: sim.polizei.c.freikaufKosten, konto: sim.netzKonto[nr] });
   }
 
+  /** v24 (15.10., Eingabe-Bit d): Dach-Geste (↑+↓ im Stand) von Spieler nr – der nächste Physikschritt prüft Stand/Klappzeit autoritativ (main.js _dachVorab). */
+  dachGeste(nr) {
+    const f = this.sim.fahrzeuge.find(x => x.istSpieler && x.spielerNr === nr);
+    if (f && f.dachL !== null) f.dachGeste = true;
+  }
+
   /** Item / Reset-Taste von Spieler nr (wie Tasten im lokalen Spiel). */
   item(nr) { this.sim.itemEinsetzen(nr); }
   reset(nr) {
@@ -313,6 +319,10 @@ class Simulation {
       return a;
     });
     const z = { t: 'zustand', k: this.tick, rz: r.zustand, cd: rd(r.countdown, 3), zt: rd(r.zeit, 3), a: autos };
+    // v24 (15.10., additiv): Dach-Zustand der Cabrios: dz = [[Teilnehmer-Nr, ziel 0 offen/1 zu, Rest der Klappzeit s]] – fehlt, wenn kein Auto ein Verdeck hat
+    const dz = [];
+    for (let i = 0; i < this.nT; i++) { const dl = sim.fahrzeuge[i].dachL; if (dl) dz.push([i, dl.ziel, rd(dl.rest, 2)]); }
+    if (dz.length) z.dz = dz;
     // v4 (14.10.): Polizei. po[k] = Streifenwagen k im Format von `a` (x, z, y, richtung, tempo, lenkung, flags, nicken, neigung, 0, 0, 0, 0, resetZaehler),
     // ps = [[Teilnehmer-Nr, Rest der Anhaltung in s]] (nur wer gerade angehalten ist), pz = Ziel (Teilnehmer-Nr oder −1) je Streifenwagen
     const po = sim.polizei;
@@ -345,6 +355,7 @@ class Simulation {
     if (i < 0) return null;
     const f = sim.fahrzeuge[i], v = f.vehicle, t = sim.rennen.teilnehmer[i];
     const fk = sim.pickups ? sim.pickups.faktoren(i) : null, fs = sim.startBoost ? sim.startBoost.faktoren(i) : null;
+    const dl = f.dachL, dfk = dl && dl.gesund < 100 ? R.DachRegel.faktoren(dl) : null;     // v24: Nässe-Schaden (Tempo/Beschleunigung) steckt in fk
     const lp = f.looping, fz = f.flug, az = f.anlauf, kz = f.kleber;
     const sonder = !!((lp && (lp.aktiv || lp.fallen)) || (fz && (fz.aktiv || fz.rampe)) || (az && (az.bremst || (R.Anlauf && R.Anlauf.aktiv(az)))) ||
       (kz && R.Kleber && R.Kleber.gesperrt(kz)));
@@ -352,13 +363,15 @@ class Simulation {
     const sz = this._sonderZustand(f);
     const erg = {
       nr: i, v: R.Netz.fahrzeugLesen(v), idx: f.index, bi: v._bandeIndex === undefined ? -1 : v._bandeIndex, bs: v._buschSperre || 0,
-      fk: [(fk ? fk.vMax : 1) * (fs ? fs.vMax : 1), (fk ? fk.beschleunigung : 1) * (fs ? fs.beschleunigung : 1)],
+      fk: [(fk ? fk.vMax : 1) * (fs ? fs.vMax : 1) * (dfk ? dfk.vMax : 1), (fk ? fk.beschleunigung : 1) * (fs ? fs.beschleunigung : 1) * (dfk ? dfk.beschleunigung : 1)],
       gs: sim.startBoost && sim.startBoost.gasSperre(i) ? 1 : 0,
       so: sonder ? 1 : 0,
       rh: f.resetHinweis ? 1 : 0, fh: f.falschHerum ? 1 : 0,
       rs: t.rundenStart, rzn: t.rundenzeiten.map(x => R.Netz.rund(x, 3)), bz: t.bestzeit, zz: t.zielZeit, zp: t.zielPlatz || 0,
     };
     if (sz) erg.sz = sz;
+    // v24 (15.10., additiv): Dach des eigenen Autos [ziel, Klappzeit-Rest (ungerundet), nass 0/1, Strafuhr s, Gesundheit %] – die Vorhersage sperrt damit das Gas beim Klappen
+    if (dl) erg.dz = [dl.ziel, dl.rest, dl.nass ? 1 : 0, dl.uhr, dl.gesund];
     // v4: Rest der Polizei-Anhaltung (ungerundet: die Vorhersage zählt ihn im selben Takt herunter und ersetzt die Eingabe durch Bremsen)
     if (sim.polizei) { const rest = sim.polizei.logik.rest(i); if (rest > 0) erg.ps = rest; }
     return erg;

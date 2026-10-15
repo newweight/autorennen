@@ -300,10 +300,10 @@ Rennspiel.config = {
     trefferVerlust: 5,         // Prozentpunkte je Treffer
     brandVerlust: 10,          // Prozentpunkte bei Treffer eines brennenden Wracks
     // Runde 6 (W1-A4/A5): auto 2 → 1 m/s; neu pflanze (Baum/Fels zwischen Straße und Zaun)
-    mindest: { bande: 3, auto: 1, hindernis: 0, brand: 0, ball: 0, wasser: 0, stroh: 0, pflanze: 0 },
+    mindest: { bande: 3, auto: 1, hindernis: 0, brand: 0, ball: 0, wasser: 0, stroh: 0, pflanze: 0, nass: 0 },
     // Runde 6: eigene Verluste je Art (fehlt eine Art: trefferVerlust); drehung = Zuschlag, wenn ein Rempler das
     // Auto in Drehung versetzt (kommt im selben Treffer dazu → −8 %)
-    verluste: { bande: 3, pflanze: 3 },
+    verluste: { bande: 3, pflanze: 3, nass: 10 },   // 15.10. (v24): nass = offenes Cabrio-Dach bei Regen/Schnee/Hagel (config.dachRegen)
     drehungVerlust: 3,
     abklingZeit: 0.7,
     stufeJe: 20,
@@ -513,6 +513,18 @@ Rennspiel.config = {
   //   → Stufe 5 bei 200 km/h ohne Gegenlenken ≈ 3–4 m Versatz in 3 s, Stufe 1 ≈ 0,7 m (kaum).
   // vMaxJeStufe: Gegenwind −3 %, Rückenwind +3 % Höchsttempo je Stufe (Projektion auf die Fahrtrichtung).
   wind: { staerkeStandard: 0, staerkeMax: 5, richtungStandard: 'zufall', seitK: 0.019, gierK: 0.000036, vMaxJeStufe: 0.03 },
+
+  // --- 15.10. (v24): Cabrio-Dach bei Niederschlag (src/cars/dachregel.js, Verdrahtung in main.js physikSchritt; Anleitung: ANLEITUNG.md „Cabrio und Regen“) ---
+  // Gilt für jedes Auto mit Verdeck (Katalog form.dach = T-Roc Cabrio) bei Regen, Schnee und Hagel (wie die Scheibenwischer; Nebel/Sandsturm zählen nicht).
+  // Offenes Dach bei Niederschlag: alle strafeAlle s −strafeProzent % Gesundheit (Schaden an: Schadensystem, Art 'nass'; Schaden aus/online: eigener
+  // Wert dachL.gesund mit denselben Stufen-Faktoren auf Tempo und Beschleunigung, nie unter mindestGesund %). Dach schließen/öffnen = dauer s Stillstand
+  // (Gas gesperrt, das Auto steht), nur im Stand (< stand m/s). KI-Cabrios (Gegner mit Dach offen) halten bei Niederschlag an einer geeigneten Stelle an.
+  dachRegen: { an: true, dauer: 3, strafeAlle: 60, strafeProzent: 10, stand: 0.5, mindestGesund: 10,
+    kiBremsPlan: 6,          // m/s²: geplante Verzögerung der KI beim Anhalten (Nässe → vorsichtig, weit unter der Bremsleistung)
+    kiVorlauf: 70,           // m: Reserve hinter dem Bremsweg bis zum frühesten Haltepunkt (Zeit, um an den Fahrbahnrand zu fahren)
+    kiSchritt: 15,           // m: Suchschritt für den Haltepunkt
+    kiMaxSuche: 900,         // m: weiter voraus wird kein Haltepunkt gesucht (dann weiterfahren und später erneut)
+    kiHaltZeit: 12 },        // s: höchstens so lange bremsen, dann zählt „fast steht“ (< 2 m/s) schon als Haltepunkt (nie ewig im Stau)
 
   // --- Runde 6 (W2-D): Tageszeit 'tag' (Standard = Licht wie bisher, bitgleich) | 'daemmerung' | 'nacht' ---
   // Nur Optik (world/wetter.js anwenden, main.js Scheinwerfer/Laternen). Farben je Thema überschreibbar (Schlüssel = Themenname).
