@@ -16,4 +16,4 @@ W8 Feuerwerk an Start/Ziel, wenn der Spieler als Erster ins Ziel kommt (offline 
 W9 Tribüne an Start/Ziel auf JEDER Strecke (bisher nur Wiese/Wüste/Fantasie), Wald/Dino/Alpen/Mega ergänzen.
 W10 Tiere queren die Straße, je nach Strecke: Wiese Kühe, Wald Rehe, Alpen Bären, Dino Dinos (Wüste/Fantasie: Kamel/Einhorn?) – gelegentlich, auch schräg (nicht nur quer), Kollision = kleiner Rempler/Bremsen, kindgerecht, deterministisch (online Server).
 Reihenfolge: erst A/B/C abschließen + Gegenlesen + sichern v28a, dann W7–W10 als v28b.
-Status: [x] W1 [x] W2 [x] W3 [x] W4 (Räder versanken 5–9 cm in sichtbaren Flächen → radBodenPose) [x] W5 [x] W6 [x] Gegenlesen [x] gesichert v28a · [ ] W7 [ ] W8 [ ] W9 [ ] W10
+Status: [x] W1 [x] W2 [x] W3 [x] W4 (Räder versanken 5–9 cm in sichtbaren Flächen → radBodenPose) [x] W5 [x] W6 [x] Gegenlesen [x] gesichert v28a · [x] W7 [x] W8 [x] W9 [x] W10 · v28b Gegenlesen: Tier-Sperrzonen F1/F2 gefixt · W4c: Hänger (radBodenPose geparkte Verkehrswagen) + Abschleppwagen-Räder gefixt

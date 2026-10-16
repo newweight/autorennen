@@ -461,7 +461,7 @@ with sync_playwright() as p:
     # Einstellungen-Schritt (solo)
     page.click('[data-a="schritt:4"]'); page.wait_for_timeout(300)
     zl = page.evaluate('Rennspiel.spiel.menue.zeilen()')
-    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'tageszeit', 'jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'rempeln', 'geister', 'krankenwagen', 'abschleppwagen', 'start'], zl)
+    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'tageszeit', 'jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'rempeln', 'geister', 'krankenwagen', 'abschleppwagen', 'tiere', 'start'], zl)
     pj = texte('[data-a="fokus:5"] .pille')
     pruefe('Jahreszeit-Pillen (Wiese): Frühling, Sommer, Herbst, Winter, Zufall; Sommer aktiv', len(pj) == 5 and 'Sommer' in pj[1] and 'Zufall' in pj[4]
            and 'Sommer' in texte('[data-a="fokus:5"] .pille.aktiv')[0], pj)
@@ -565,6 +565,11 @@ with sync_playwright() as p:
     pruefe('Maus: Krankenwagen aus, Abschleppwagen bleibt an', E().get('krankenwagen') is False and E().get('abschleppwagen') is True)
     page.click('[data-a="wert:abschleppwagen:aus"]'); page.click('[data-a="wert:geister:aus"]')
     pruefe('Verkehr-Zeile: 3 Gruppen je Aus/An (6 Pillen)', page.locator('[data-a^="wert:geister:"], [data-a^="wert:krankenwagen:"], [data-a^="wert:abschleppwagen:"]').count() == 6)
+    taste('ArrowDown')
+    t0 = E().get('tiere'); taste('ArrowLeft'); t1 = E().get('tiere'); taste('ArrowRight'); t2 = E().get('tiere')
+    pruefe('Tastatur: Tiere (Standard an) ← = aus, → = an', [t0, t1, t2] == [True, False, True], [t0, t1, t2])
+    page.click('[data-a="wert:tiere:aus"]'); t3 = E().get('tiere'); page.click('[data-a="wert:tiere:an"]')
+    pruefe('Maus: Tiere-Pillen Aus/An', t3 is False and E().get('tiere') is True, [t3, E().get('tiere')])
     taste('ArrowDown')
     pruefe('Tastatur: ↓ erreicht Start (Fokus-Ring), Schaden wieder an', page.locator('.start-knopf.fokus').count() == 1 and E()['schaden'] is True)
     # Layout ohne Überlauf: solo/zwei × Tafel zu/auf × 1280×800 / 1440×900

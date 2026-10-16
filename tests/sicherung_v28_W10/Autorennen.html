@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Jonas Hot Steering Wheel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0e183a">
+<link rel="stylesheet" href="src/ui/styles.css">
+</head>
+<body>
+<canvas id="spiel"></canvas>
+<div id="ui">
+  <div id="huds"></div>
+  <div id="trenner"></div>
+  <div id="debug"></div>
+</div>
+
+<!-- Bibliothek (lokal, offline) -->
+<script src="vendor/three.min.js"></script>
+<!-- Spielmodule – Reihenfolge wichtig -->
+<script src="src/config.js"></script>
+<script src="src/audio/motorProfile.js"></script>
+<script src="src/audio/engine.js"></script>
+<script src="src/audio/publikum.js"></script>
+<script src="src/input.js"></script>
+<!-- W5-3: Touch-Steuerung (tut auf Geräten ohne Touch nichts) -->
+<script src="src/ui/touch.js"></script>
+<script src="src/physics/vehicle.js"></script>
+<script src="src/physics/collisions.js"></script>
+<script src="src/physics/schaden.js"></script>
+<script src="src/cars/carCatalog.js"></script>
+<script src="src/cars/carBuilder.js"></script>
+<script src="src/cars/dachregel.js"></script>
+<script src="src/cars/dach.js"></script>
+<script src="src/render/cameras.js"></script>
+<script src="src/track/spline.js"></script>
+<script src="src/track/trackCatalog.js"></script>
+<script src="src/track/trackBuilder.js"></script>
+<script src="src/track/looping.js"></script>
+<script src="src/track/schanze.js"></script>
+<script src="src/track/anlauf.js"></script>
+<script src="src/world/themes.js"></script>
+<script src="src/world/wetter.js"></script>
+<script src="src/world/dynamik.js"></script>
+<script src="src/world/pickups.js"></script>
+<script src="src/world/kleber.js"></script>
+<script src="src/world/abschleppwagen.js"></script>
+<script src="src/world/garage.js"></script>
+<script src="src/world/schilder.js"></script>
+<script src="src/world/tribuenen.js"></script>
+<script src="src/world/muenzen.js"></script>
+<script src="src/race/raceManager.js"></script>
+<script src="src/race/startBoost.js"></script>
+<script src="src/race/sterne.js"></script>
+<script src="src/race/pokal.js"></script>
+<script src="src/ai/driver.js"></script>
+<script src="src/world/lichtPool.js"></script>
+<script src="src/world/polizei.js"></script>
+<script src="src/world/verkehr.js"></script>
+<script src="src/ui/rueckspiegel.js"></script>
+<script src="src/render/wischer.js"></script>
+<script src="src/ui/cockpit.js"></script>
+<script src="src/ui/hud.js"></script>
+<script src="src/ui/autoVorschau.js"></script>
+<script src="src/ui/garage.js"></script>
+<script src="src/ui/menu.js"></script>
+<!-- v22: Megastrecke (Add-on): hängt Strecke 'mega' an den Katalog, MegaWetter/Deko/Bodenfarbe je Zone; ändert keine bestehende Strecke -->
+<script src="src/track/megastrecke.js"></script>
+<!-- W5 Mehrspieler (online nur über server/server.js; von der Festplatte bleibt alles wie bisher) -->
+<script src="src/net/protokoll.js"></script>
+<script src="src/net/qr.js"></script>
+<script src="src/net/client.js"></script>
+<script src="src/net/vorhersage.js"></script>
+<script src="src/net/online.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>

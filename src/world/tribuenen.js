@@ -53,6 +53,19 @@
       dach: [0xff4fa3, 0x37d6c8, 0xffd93b, 0x8a5cff], blende: 0xffd93b, bande: [0xff4fa3, 0x37d6c8, 0xffd93b, 0x8a5cff], banner: 2, fahnen: [5, 6, 7],
     },
   };
+  // v28 W9: Wald (Holz), Dino (Stein + Palmen), Alpen (Holz, Alpen-Fahnen) – nur Start/Ziel-Tribüne (config.tribuenen.nurStart)
+  THEMEN.wald = {
+    beton: 0x9a7448, betonDunkel: 0x5e4630, stahl: 0x4a3524, sitze: [0x2f7a3c, 0xc98a3a, 0x8a5a2b, 0xe8dcc0],
+    dach: [0x7a4a26, 0x5e4630, 0x8a5a2b], blende: 0xe8dcc0, bande: [0x2f7a3c, 0xe8dcc0, 0x7a4a26, 0xe8dcc0], banner: 3, fahnen: [8, 9, 10], holz: true,
+  };
+  THEMEN.dino = {
+    beton: 0xa89f91, betonDunkel: 0x6f675b, stahl: 0x5a4a38, sitze: [0xd96f2b, 0x6aa84f, 0xf2c14e, 0xe9e1cf],
+    dach: [0x4f9a3c, 0x7da63a, 0x3c7a34], blende: 0xe9e1cf, bande: [0x6aa84f, 0xe9e1cf, 0xd96f2b, 0xe9e1cf], banner: 4, fahnen: [11, 12], palmen: true,
+  };
+  THEMEN.alpen = {
+    beton: 0xa5784a, betonDunkel: 0x6b4a2c, stahl: 0x5a3d22, sitze: [0xc8322a, 0xf4f4f4, 0x2f6fd0, 0x3f7a3c],
+    dach: [0x7a4a26, 0xa5593a, 0x6b4a2c], blende: 0xf4f4f4, bande: [0xf6f6f6, 0x2f6fd0, 0xf6f6f6, 0xc8322a], banner: 5, fahnen: [13, 14, 15], holz: true,
+  };
   const FARBEN_ZUSCHAUER = [0xe53935, 0x1e88e5, 0xfdd835, 0x43a047, 0xffffff, 0xff7043, 0x8e24aa, 0x00acc1, 0xf06292, 0x212121, 0xffb300, 0x7cb342];
 
   // ------------------------------------------------------------------ Themen-Abschnitte (Megastrecke: je Abschnitt ein Thema)
@@ -119,6 +132,7 @@
     const us = []; for (let i = 0; i <= nu; i++) us.push(-hl - 1 + (laenge + 2) * i / nu);
     const vs = [-1.5, tiefe + 1.5, 0, tiefe * 0.5, tiefe];
     const rad = st.seitenabstandMax + 8;
+    const hangMax = (C.nurStart || []).indexOf(st.thema || (st.daten && st.daten.thema)) >= 0 ? num(C.startMaxHang, 4.5) : num(C.maxHang, 2.2);   // v28 W9: Alpen-Hang am Start
     let yMax = -Infinity, yMin = Infinity;
     const punkte = [];
     const usR = [us[0], us[us.length - 1]].concat(us.slice(1, -1));          // Ecken zuerst (schnelles Ausscheiden)
@@ -131,7 +145,7 @@
       if (st.senkeTiefe(x, z) > 0.01) return nein('senke');
       const h = st.hoeheAn(x, z);
       if (h > yMax) yMax = h; if (h < yMin) yMin = h;
-      if (yMax - yMin > num(C.maxHang, 2.2)) return nein('hang');
+      if (yMax - yMin > hangMax) return nein('hang');
     }
     return { s, seite, laenge, reihen, tiefe, x: X, z: Z, tx, tz, ox, oz, yBasis: yMax, yMin, q0 };
   }
@@ -147,9 +161,11 @@
     const seed = textSeed(String(d.id || st.name || '') + ':' + Math.round(L)) ^ 0x7b1b0e;
     const rnd = mulberry32(seed);
     // Anzahl je Bereich (normale Strecke: ein Bereich; Megastrecke: je Themenabschnitt)
+    const nurStart = C.nurStart || [];
     const refL = num(C.refLaenge, 3300), basis = num(C.anzahl, 5);
     const soll = bereiche.map((b) => {
       const len = b.s1 - b.s0, roh = Math.round(basis * len / refL);
+      if (nurStart.indexOf(b.thema) >= 0) return b.mega ? 0 : 1;          // v28 W9: Wald/Dino/Alpen: nur die Start/Ziel-Tribüne
       return b.mega ? Math.max(num(C.megaMin, 2), Math.min(roh, num(C.anzahlMax, 8))) : Math.max(num(C.anzahlMin, 5), Math.min(roh, num(C.anzahlMax, 8)));
     });
     const kurven = (R.Kurvenschilder && R.Kurvenschilder.kurvenSuchen ? R.Kurvenschilder.kurvenSuchen(st) : [])
@@ -177,7 +193,7 @@
 
     // 1) Start/Ziel (nur eine je Strecke): möglichst genau an der Ziellinie, rechts vor links
     let startDa = false;
-    for (const off of [0, 8, -8, 16, -16, 28, -28, 42, -42, 60, -60, 80, -80]) {
+    for (const off of [0, 8, -8, 16, -16, 28, -28, 42, -42, 60, -60, 80, -80, 100, -100, 125, -125, 150, -150]) {
       const pl = versuche('start', off, [1, -1]);
       if (pl) { gewaehlt.push(pl); startDa = true; break; }
     }
@@ -341,12 +357,12 @@
   }
 
   // ------------------------------------------------------------------ Textur-Atlas (Banner, Fahnen, Werbetafeln)
-  const ATLAS = 1024;
+  const ATLAS = 1024, ATLAS_H = 2048;     // v28 W9: Atlas 1024×2048 (neue Banner y 768/896/1024, neue Fahnen y 1152/1280)
   /** Zellen: Banner (1024×128) bei y 0/128/256 je Thema, Fahnen (128×128) bei y 384, Werbetafeln (256×128) bei y 512. */
   function atlasBauen(text) {
-    const cv = document.createElement('canvas'); cv.width = ATLAS; cv.height = ATLAS;
+    const cv = document.createElement('canvas'); cv.width = ATLAS; cv.height = ATLAS_H;
     const g = cv.getContext('2d');
-    g.fillStyle = '#ffffff'; g.fillRect(0, 0, ATLAS, ATLAS);
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, ATLAS, ATLAS_H);
     const schrift = (t, x, y, w, h, farbe, rand, groesse) => {
       g.save(); g.textAlign = 'center'; g.textBaseline = 'middle';
       let px = groesse || h * 0.62; g.font = 'bold ' + px + 'px Arial, Helvetica, sans-serif';
@@ -366,6 +382,14 @@
       } else if (muster === 'duenen') {
         g.fillStyle = 'rgba(255,255,255,0.18)';
         for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(80 + i * 190, y + 150, 90, Math.PI, 0); g.fill(); }
+      } else if (muster === 'baeume') {
+        g.fillStyle = 'rgba(10,50,20,0.35)';
+        for (let i = 0; i < 12; i++) { const bx = 40 + i * 88; g.beginPath(); g.moveTo(bx - 34, y + 150); g.lineTo(bx, y + 40); g.lineTo(bx + 34, y + 150); g.fill(); g.beginPath(); g.moveTo(bx - 26, y + 110); g.lineTo(bx, y + 14); g.lineTo(bx + 26, y + 110); g.fill(); }
+      } else if (muster === 'palmen') {
+        g.strokeStyle = 'rgba(40,90,30,0.5)'; g.lineWidth = 7;
+        for (let i = 0; i < 8; i++) { const bx = 70 + i * 130; for (let a = 0; a < 5; a++) { const w = -2.6 + a * 0.55; g.beginPath(); g.moveTo(bx, y + 128); g.quadraticCurveTo(bx + Math.cos(w) * 30, y + 128 + Math.sin(w) * 60 - 20, bx + Math.cos(w) * 58, y + 128 + Math.sin(w) * 40 + 6); g.stroke(); } }
+      } else if (muster === 'raute') {
+        for (let i = -1; i < 17; i++) for (let j = 0; j < 3; j++) { g.fillStyle = (i + j) % 2 ? 'rgba(255,255,255,0.55)' : 'rgba(35,95,200,0.55)'; const cx = i * 64 + (j % 2) * 32, cy = y + j * 48 + 8; g.beginPath(); g.moveTo(cx, cy - 32); g.lineTo(cx + 32, cy); g.lineTo(cx, cy + 32); g.lineTo(cx - 32, cy); g.fill(); }
       } else if (muster === 'sterne') {
         const cols = ['#ffd93b', '#37d6c8', '#ff4fa3', '#ffffff'];
         for (let i = 0; i < 24; i++) { g.fillStyle = cols[i % 4]; const sx = 20 + i * 42, sy = y + (i % 2 ? 18 : 108); g.beginPath(); g.arc(sx, sy, 8, 0, 7); g.fill(); }
@@ -377,9 +401,12 @@
     banner(0, '#c62828', '#1565c0', '#ffffff', '#101830', 'zielflagge');
     banner(128, '#e08a2c', '#a8431c', '#fff6dd', '#4a1d0c', 'duenen');
     banner(256, '#8a5cff', '#ff4fa3', '#fff36b', '#2b0f55', 'sterne');
+    banner(768, '#2f7a3c', '#7a4a26', '#fff6dd', '#15301a', 'baeume');
+    banner(896, '#b8a98a', '#6f8f3a', '#fff6dd', '#3d3320', 'palmen');
+    banner(1024, '#1f5fb8', '#c8322a', '#ffffff', '#0f1f45', 'raute');
     // --- Fahnen (8 Zellen à 128×128)
     const fahne = (i, farben, art) => {
-      const x = i * 128, y = 384;
+      const x = (i % 8) * 128, y = i < 8 ? 384 : 1152 + ((i - 8) >> 3) * 128;
       g.save(); g.beginPath(); g.rect(x, y, 128, 128); g.clip();
       g.fillStyle = farben[0]; g.fillRect(x, y, 128, 128);
       g.fillStyle = farben[1];
@@ -393,6 +420,9 @@
     fahne(0, ['#d33b2f', '#ffffff'], 'diag'); fahne(1, ['#2f6fd0', '#f2c200'], 'balken'); fahne(2, ['#2f9e5a', '#ffffff'], 'kreis');
     fahne(3, ['#d98e3b', '#fff0cf'], 'diag'); fahne(4, ['#8c3b1e', '#f0c27a'], 'karo');
     fahne(5, ['#ff4fa3', '#37d6c8', '#ffd93b'], 'kreis'); fahne(6, ['#37d6c8', '#8a5cff'], 'diag'); fahne(7, ['#ffd93b', '#ff4fa3'], 'kreuz');
+    fahne(8, ['#2f7a3c', '#e8dcc0', '#7a4a26'], 'kreis'); fahne(9, ['#7a4a26', '#e8dcc0'], 'diag'); fahne(10, ['#3f6b34', '#c98a3a'], 'balken');    // Wald
+    fahne(11, ['#d96f2b', '#f2e6c0'], 'diag'); fahne(12, ['#6aa84f', '#e9e1cf'], 'karo');                                                           // Dino
+    fahne(13, ['#2f6fd0', '#ffffff'], 'karo'); fahne(14, ['#c8322a', '#ffffff'], 'kreuz'); fahne(15, ['#ffffff', '#2f6fd0', '#c8322a'], 'kreis');   // Alpen
     // --- Werbetafeln (4 Zellen à 256×128)
     const tafel = (i, t, c1, c2, sc) => {
       const x = i * 256, y = 512;
@@ -407,11 +437,11 @@
     else if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
     tex.anisotropy = 4; tex.needsUpdate = true;
     const inset = 0.5 / ATLAS;
-    const zelle = (x, y, w, h) => [x / ATLAS + inset, 1 - (y + h) / ATLAS + inset, (x + w) / ATLAS - inset, 1 - y / ATLAS - inset];   // u0, v0, u1, v1
+    const zelle = (x, y, w, h) => [x / ATLAS + inset, 1 - (y + h) / ATLAS_H + inset / 2, (x + w) / ATLAS - inset, 1 - y / ATLAS_H - inset / 2];   // u0, v0, u1, v1
     return {
       textur: tex,
-      banner: (i) => zelle(0, i * 128, ATLAS, 128),
-      fahne: (i) => zelle(i * 128, 384, 128, 128),
+      banner: (i) => i < 3 ? zelle(0, i * 128, ATLAS, 128) : zelle(0, 768 + (i - 3) * 128, ATLAS, 128),
+      fahne: (i) => i < 8 ? zelle(i * 128, 384, 128, 128) : zelle((i - 8) * 128, 1152, 128, 128),
       tafel: (i) => zelle(i * 256, 512, 256, 128),
     };
   }
@@ -535,6 +565,11 @@
       const nbd = Math.max(3, Math.round(t.laenge / 3)), wb = t.laenge / nbd;
       for (let b = 0; b < nbd; b++) box(-hl + b * wb, -hl + (b + 1) * wb, 0.2, 1.1, 0.1, 0.34, th.bande[(b + t.nr) % th.bande.length], 1, 1);
       box(-hl, hl, 1.1, 1.18, 0.06, 0.38, th.stahl, 1, 1);
+      if (th.holz) {                                                   // v28 W9: Holz – Rundholz-Pfosten vor der Bande, Querbalken an der Rückwand
+        const np = Math.max(3, Math.round(t.laenge / 3.6));
+        for (let k = 0; k <= np; k++) { const u = -hl + t.laenge * k / np; box(u - 0.13, u + 0.13, yRel0, 1.35, 0.02, 0.28, 0x6b4a2c, 1, 1); }
+        for (let r = 0; r < n; r += 2) box(-hl, hl, rowTop(r) - 0.02, rowTop(r) + 0.02, rowV0(r) + rt - 0.03, rowV0(r) + rt + 0.01, 0x3d2a18, 1, 1);
+      }
       // Dach (teilweise): schräge Platte über den hinteren Reihen
       const rf = Math.min(n - 2, Math.max(1, Math.floor(n * 0.3)));
       const ru = Math.min(hl + 0.6, hl * t.dach + 0.6);
@@ -571,7 +606,19 @@
       const masten = [{ u: -(hl + 0.35), v: vorne + 0.2 }, { u: hl + 0.35, v: vorne + 0.2 }];
       if (t.laenge > 29 || t.thema === 'fantasie') masten.push({ u: -(hl + 0.35), v: D - 0.3 }, { u: hl + 0.35, v: D - 0.3 });
       masten.forEach((m, mi) => {
-        box(m.u - 0.07, m.u + 0.07, 0.2, mastH, m.v - 0.07, m.v + 0.07, 0xd8d8d8, 1, 1);
+        box(m.u - 0.07, m.u + 0.07, 0.2, mastH, m.v - 0.07, m.v + 0.07, th.palmen ? 0x7a5a36 : th.holz ? 0x6b4a2c : 0xd8d8d8, 1, 1);
+        if (th.palmen && (masten.length > 2 ? mi < 2 : mi === 0)) {           // v28 W9: Dino – Mast als Palme: dicker Stamm + 8 Wedel
+          box(m.u - 0.2, m.u + 0.2, 0.2, 1.2, m.v - 0.2, m.v + 0.2, 0x7a5a36, 1, 0.85);
+          box(m.u - 0.12, m.u + 0.12, 1.2, mastH + 0.2, m.v - 0.12, m.v + 0.12, 0x8a6a40, 1, 1);
+          const hoch = mastH + 0.2;
+          for (let a = 0; a < 8; a++) {
+            const w = a * 0.7854 + (mi % 2) * 0.3, du = Math.cos(w), dv = Math.sin(w), pu = -dv, pv = du, L = 3.3, sink = 1.5;
+            const P = (k, wid, dy) => W(m.u + du * L * k + pu * wid, hoch + dy, m.v + dv * L * k + pv * wid);
+            const gr = a % 2 ? 0x2f8a3c : 0x4fa83c;
+            M.hexa([P(0, -0.2, 0), P(0, 0.2, 0), P(1, 0.55, -sink), P(1, -0.55, -sink), P(0, -0.2, 0.1), P(0, 0.2, 0.1), P(1, 0.55, -sink + 0.1), P(1, -0.55, -sink + 0.1)], farbeVon(gr), 0);
+          }
+        }
+        if (th.palmen && (masten.length > 2 ? mi < 2 : mi === 0)) return;     // Palme statt Fahne
         if (C.fahnen === false) return;
         const cell = atlas.fahne(th.fahnen[(mi + t.nr) % th.fahnen.length]);
         const fw = 2.2, fh = 1.35, innen = m.u < 0 ? 1 : -1;       // Fahne weht zur Tribünenmitte hin

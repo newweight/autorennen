@@ -57,7 +57,7 @@ def foto(page, name, warte=250):
     # die Kamera folgt nur bei laufendem Spiel: von Hand nachführen (springt sonst nicht zur neuen Position)
     page.evaluate("() => { const s = Rennspiel.spiel, k = s.kameras[0]; s.fahrzeuge.forEach(f => { const v = f.vehicle, a = f.anzeige; a.x = v.x; a.y = v.y; a.z = v.z; a.heading = v.heading; a.nicken = v.nicken; a.neigung = v.neigung; if (f.mesh) { f.mesh.position.set(v.x, v.y, v.z); f.mesh.rotation.y = v.heading; } }); k.folge(k.ziel, k.quelle); for (let i = 0; i < 6; i++) k.update(0.1); s.huds.forEach(h => h.update()); }")
     page.wait_for_timeout(warte)
-    page.screenshot(path=os.path.join(out, name))
+    page.screenshot(path=os.path.join(out, name), timeout=180000)
 
 with sync_playwright() as p:
     browser = p.chromium.launch(args=ARGS)

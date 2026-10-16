@@ -386,7 +386,9 @@ Rennspiel.config = {
   // Lage hinter der Bande (abstandBande m), nie in Sperrzonen. an: false schaltet Tribünen UND Publikum-Akustik ab.
   tribuenen: {
     an: true,
-    themen: ['wiese', 'wueste', 'fantasie'],     // Strecken-Themen mit Tribünen (Megastrecke: nur diese Abschnitte)
+    themen: ['wiese', 'wueste', 'fantasie', 'wald', 'dino', 'alpen'],     // Strecken-Themen mit Tribünen (Megastrecke: diese Abschnitte)
+    nurStart: ['wald', 'dino', 'alpen'],         // v28 W9: diese Themen bekommen NUR die Start/Ziel-Tribüne (Megastrecke: deren Abschnitte keine; die Tribüne am Mega-Start steht im Start-Abschnitt)
+    startMaxHang: 4.5,                           // m: größter Höhenunterschied der Standfläche für diese Start-Tribünen (Alpen-Hang)
     anzahl: 5, refLaenge: 3300, anzahlMin: 5, anzahlMax: 8, megaMin: 2,   // Anzahl = anzahl × Länge / refLaenge (mindestens anzahlMin, höchstens anzahlMax)
     kurvenAnteil: 0.4, kurvenMin: 2, kurveWinkelMin: 35,                 // Kurventribünen: Anteil, Mindestzahl, Mindest-Kurvenwinkel (°)
     laenge: [30, 40], reihen: [5, 8],            // m / Sitzreihen
@@ -732,6 +734,12 @@ Rennspiel.config = {
     lichtAbstand: 45,                     // m: Lichtkegel/Blaulicht-Schein nur so nah an einer Spieler-Kamera
     blinkHz: 3,
   },
+
+  // --- 16.10. (v28 W10): Tiere queren die Straße (src/world/tiere.js). Einstellung `tiere` An/Aus (Standard AN, abschaltbar). Kühe (Wiese), Rehe (Wald),
+  //     Bären + Steinböcke (Alpen), Dinos (Dino), Kamele (Wüste), Einhörner (Fantasie), Mega je Abschnitt. Etwa alle 60–90 s ein Auftritt, gerade oder schräg
+  //     (20–70°), nie in Sperrzonen, nie < 40 m vor einem Auto. Kontakt: Tempo × 0,7, kein Schaden. Nicht die alten Dino-Wildtiere (config.tiere). Werte:
+  //     siehe STANDARD in tiere.js (hier nur Überschreibungen), z. B. tierverkehr: { abstand: [60, 90], tempoFaktor: 0.7 }
+  tierverkehr: { standardAn: true },
 
   // --- Runde 6 (W3-G): Münzen auf der Strecke + Garage (Logik: src/world/muenzen.js, src/ui/garage.js) ---
   // Münzen: anzahlMin–anzahlMax je Strecke, auf Geraden Reihen à `reihe` Stück (Abstand reiheAbstand m), in Kurven

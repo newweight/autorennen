@@ -129,7 +129,7 @@
       if (this.streckeDaten().mega) z.push('wind', 'schaden');     // v22 Megastrecke: Jahreszeit/Wetter würfelt jede Zone selbst
       else z.push('jahreszeit', 'wetter', 'wind', 'schaden');
       z.push( 'tempo', 'polizei', 'rempeln');   // Runde 5: Tempo-Klasse, 5b: Polizei, 6: Rempeln
-      if (this.e.spielart !== 'elimination') z.push('geister', 'krankenwagen', 'abschleppwagen');      // 15.10. (v25): Geisterfahrer + Verkehr (v28 W1: Krankenwagen und Abschleppwagen je einzeln; stehen links unten; hinten angehängt, damit die Fokus-Nummern der bisherigen Zeilen gleich bleiben)
+      if (this.e.spielart !== 'elimination') z.push('geister', 'krankenwagen', 'abschleppwagen', 'tiere');      // 15.10. (v25): Geisterfahrer + Verkehr (v28 W1: Krankenwagen und Abschleppwagen je einzeln; stehen links unten; hinten angehängt, damit die Fokus-Nummern der bisherigen Zeilen gleich bleiben)
       z.push('start');
       return z;
     }
@@ -396,7 +396,7 @@
         if (dx) e.polizei = dx > 0;
       } else if (zeile === 'geister') {
         if (dx) e.geisterfahrer = dx > 0;
-      } else if (zeile === 'krankenwagen' || zeile === 'abschleppwagen') {      // v28 (W1): je Fahrzeugart An/Aus (← aus, → an)
+      } else if (zeile === 'krankenwagen' || zeile === 'abschleppwagen' || zeile === 'tiere') {      // v28 (W1): je Fahrzeugart An/Aus (← aus, → an); W10: Tiere
         if (dx) this.wertSetzen(zeile, dx > 0 ? 'an' : 'aus');
       } else if (zeile === 'tageszeit') {      // Runde 6 (W2-D): Tag → Dämmerung → Nacht
         const l = Object.keys(R.config.tageszeit || { tag: 1 }), i = l.indexOf(e.tageszeit || 'tag');
@@ -418,6 +418,7 @@
       else if (zeile === 'tempo' && R.config.tempoKlassen[k]) e.tempoKlasse = k;
       else if (zeile === 'polizei') e.polizei = k === 'an';
       else if (zeile === 'geister') e.geisterfahrer = k === 'an';
+      else if (zeile === 'tiere') e.tiere = k === 'an';      // v28 (W10): Tiere queren die Straße
       else if (zeile === 'krankenwagen' || zeile === 'abschleppwagen') {      // v28 (W1)
         e[zeile] = k === 'an';
         e.verkehr = e.krankenwagen || e.abschleppwagen ? 'wenig' : 'aus';      // abgeleiteter Altwert (alte Spielstände/Server)
@@ -793,8 +794,21 @@
         pillenL('tempo', '🏎️', 'Tempo', [{ k: 'normal', text: 'Normal' }, { k: 'schnell', text: 'Schnell (220–270 km/h)' }],
           e.tempoKlasse === 'schnell' ? 'schnell' : 'normal', 'Normal ≈ 155–190 km/h, leichter zu fahren – Schnell = volle Leistung') +
         // Runde 5b: Polizei (Streifenwagen hält dich 10 s an, wenn er dich einholt)
-        pillenL('polizei', '🚓', 'Polizei', [{ k: 'aus', text: 'Aus' }, { k: 'an', text: 'An' }], e.polizei ? 'an' : 'aus',
-          'Ein Streifenwagen jagt dich – holt er dich ein, musst du 10 s anhalten') +
+        // v28 (W10): in derselben Zeile Tiere (🐄 queren die Straße: Kühe, Rehe, Bären, Dinos … je nach Strecke, manchmal schräg; Standard An) – eigene Fokus-Zeile 'tiere', Unterstreichung zeigt die Gruppe;
+        // nicht im Modus „Letzter fliegt raus“ (dort nur Polizei wie bisher)
+        (e.spielart === 'elimination'
+          ? pillenL('polizei', '🚓', 'Polizei', [{ k: 'aus', text: 'Aus' }, { k: 'an', text: 'An' }], e.polizei ? 'an' : 'aus',
+            'Ein Streifenwagen jagt dich – holt er dich ein, musst du 10 s anhalten')
+          : (() => {
+            const gf = z[this.fokus], imPT = gf === 'polizei' || gf === 'tiere';
+            const u = (zeile) => (gf === zeile ? 'text-decoration:underline;text-decoration-thickness:.12em;text-underline-offset:.2em;' : '');
+            const pille = (zeile, k, text, an) => `<span class="pille${an ? ' aktiv' : ''}" data-a="wert:${zeile}:${k}">${text}</span>`;
+            return `<div class="zeile viele${imPT ? ' fokus' : ''}" ${fz(imPT ? gf : 'polizei')} title="Polizei: ein Streifenwagen jagt dich – holt er dich ein, musst du 10 s anhalten. Tiere: Kühe, Rehe, Bären, Dinos … queren die Straße, manchmal schräg (kleiner Stoß, kein Schaden)">` +
+              `<div class="z-label"><span style="${u('polizei')}" data-a="fokus:${z.indexOf('polizei')}">🚓 Polizei</span></div><div class="z-wert">` +
+              pille('polizei', 'aus', 'Aus', !e.polizei) + pille('polizei', 'an', 'An', !!e.polizei) +
+              `<span class="z-label" style="${u('tiere')}margin:0 0 0 .7em;font-size:.95em" data-a="fokus:${z.indexOf('tiere')}">🐄 Tiere</span>` +
+              pille('tiere', 'aus', 'Aus', e.tiere === false) + pille('tiere', 'an', 'An', e.tiere !== false) + `</div></div>`;
+          })()).replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele') +
         // Runde 6: Rempeln (sanft = nur abprallen, echt = Autos drehen sich / werden abgedrängt); etwas flacher (passt in 1440×900)
         pillenL('rempeln', '🌀', 'Rempeln', [{ k: 'sanft', text: 'Sanft' }, { k: 'echt', text: 'Echt' }], e.rempeln === 'echt' ? 'echt' : 'sanft',
           'Sanft: Autos prallen nur ab – Echt: Autos drehen sich oder werden von der Bahn geschubst')

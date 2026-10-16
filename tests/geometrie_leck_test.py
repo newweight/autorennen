@@ -5,7 +5,7 @@
 import asyncio, os, sys, json, subprocess, socket, time, collections
 from playwright.async_api import async_playwright
 os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', '/opt/pw-browsers')
-BASIS = '/home/claude/v27'; OUT = os.path.join(BASIS, "tests/out/p4")
+BASIS = '/home/claude/v28'; OUT = os.path.join(BASIS, "tests/out/p4")
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required']
 STRECKE = sys.argv[1] if len(sys.argv) > 1 else 'mega'
 VERKEHR = sys.argv[2] if len(sys.argv) > 2 else 'viel'

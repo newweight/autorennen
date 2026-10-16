@@ -24,7 +24,7 @@ const MODULE = [
   'src/config.js', 'src/physics/vehicle.js', 'src/physics/collisions.js', 'src/physics/schaden.js', 'src/cars/carCatalog.js', 'src/cars/dachregel.js',
   'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/looping.js', 'src/track/schanze.js',
   'src/track/anlauf.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/tribuenen.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
-  'src/world/kleber.js', 'src/world/polizei.js', 'src/world/verkehr.js', 'src/race/raceManager.js', 'src/race/startBoost.js', 'src/ai/driver.js', 'src/net/protokoll.js',
+  'src/world/kleber.js', 'src/world/polizei.js', 'src/world/verkehr.js', 'src/world/tiere.js', 'src/race/raceManager.js', 'src/race/startBoost.js', 'src/ai/driver.js', 'src/net/protokoll.js',
   'src/track/megastrecke.js',   // v22: Megastrecke (Add-on, nach Wetter/Themen/Strecke geladen)
   'src/main.js',
 ];
@@ -112,6 +112,9 @@ function einstellungenPruefen(roh, spielerAnzahl) {
     // v28 (W1, additiv): Krankenwagen/Abschleppwagen je einzeln (nur ein echtes true schaltet ein); fehlen beide Felder (alter Client), gilt `verkehr` 'wenig'/'viel' → beide an.
     // `verkehr` bleibt als abgeleiteter Wert ('wenig' wenn einer an, sonst 'aus') in den Einstellungen, damit alte Clients weiter etwas Sinnvolles anzeigen.
     krankenwagen, abschleppwagen, verkehr: krankenwagen || abschleppwagen ? 'wenig' : 'aus',
+    // v28 (W10, additiv): Tiere queren die Straße (Server simuliert, Protokoll zustand.ti); nur ein echtes true schaltet ein – ein alter Browser kennt `ti` nicht und sendet nichts
+    // (sonst gäbe es unsichtbare Tiere); der neue Browser sendet `tiere` (Standard true) in den Raum-Einstellungen
+    tiere: r.tiere === true,
     // 12.10. Hindernis-Menge: nur 'normal' | 'viele' | 'sehrViele' (unbekannt, Zahl, null … → 'normal'); alle Browser bauen dieselbe Strecke
     hindernisMenge: c.hindernisMenge && c.hindernisMenge.stufen && typeof r.hindernisMenge === 'string' &&
       Object.prototype.hasOwnProperty.call(c.hindernisMenge.stufen, r.hindernisMenge) ? r.hindernisMenge : ((c.hindernisMenge && c.hindernisMenge.standard) || 'normal'),
@@ -243,6 +246,12 @@ class Simulation {
       sim.verkehr.einsetzen(strecke, teilnehmer.length, { geister: e.geisterfahrer, krankenwagen: e.krankenwagen === true, abschleppwagen: e.abschleppwagen === true });
       sim.verkehr.idx.forEach((i) => { sim.fahrzeuge[i].netReset = 0; });
     }
+    // v28 (W10): Tiere queren die Straße – autoritativ im Server (src/world/tiere.js); Zustand `ti` im Zustand
+    sim.tiere = null;
+    if (e.tiere === true && R.Tiere) {
+      sim.tiere = new R.Tiere(sim);
+      sim.tiere.einsetzen(strecke, teilnehmer.length, { seed });
+    }
     // Reset-Zähler (Clients interpolieren nicht über einen Sprung hinweg)
     const zurueck = sim.zuruecksetzen, zurAnlauf = sim._zurAnlauf;
     sim.zuruecksetzen = function (i) { const f = this.fahrzeuge[i]; if (f) f.netReset++; return zurueck.call(this, i); };
@@ -363,6 +372,8 @@ class Simulation {
     // v25 (15.10., additiv): vk[k] = Verkehrswagen k (Geisterfahrer, Krankenwagen, Abschleppwagen in dieser Reihenfolge) im Format von `a` mit 14 Zahlen;
     // flags: 1 bremst · 2 aktiv (sonst geparkt/unsichtbar) · 4 Lichthupe. Fehlt, wenn kein Verkehr eingestellt ist.
     if (sim.verkehr) z.vk = sim.verkehr.zustandKodieren();
+    // v28 (W10, additiv): ti[k] = Tier-Platz k im Format von `a` (14 Zahlen; flags: 2 aktiv · 4 steht · 8 erschrocken; 0 = leer, hinten abgeschnitten). Fehlt, wenn Tiere aus sind.
+    if (sim.tiere) z.ti = sim.tiere.zustandKodieren();
     if (pu) {
       z.pu = {
         k: pu.kugeln.map(k => (k.da ? 1 : 0)).join(''), f: pu.faesser.map(k => (k.da ? 1 : 0)).join(''),

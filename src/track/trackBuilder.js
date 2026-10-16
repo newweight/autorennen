@@ -696,7 +696,8 @@
     radAufstand(mesh) {
       const raeder = mesh && mesh.userData && mesh.userData.raeder;
       if (!raeder || !raeder.length) return [];
-      return raeder.map((rad) => {
+      // v28b (W4c): Abschleppwagen (verkehr.js) führt Stellvertreter-Räder ohne geometry → überspringen (→ < 3 Räder → radBodenPose ok=false)
+      return raeder.filter((rad) => rad && rad.geometry).map((rad) => {
         const g = rad.geometry; if (!g.boundingBox) g.computeBoundingBox();
         const h = rad.parent || rad;
         return { x: h.position.x, y: h.position.y, z: h.position.z, r: (g.boundingBox.max.y - g.boundingBox.min.y) / 2, w: g.boundingBox.max.x - g.boundingBox.min.x };
@@ -2162,19 +2163,73 @@
       const p = this.spline.punktBei(0);
       const weite = this.breite / 2 + this.randBreite + 1.2;
       const mastMat = new THREE.MeshLambertMaterial({ color: 0xdedede });
-      const mastGeo = new THREE.BoxGeometry(0.5, 7, 0.5);
+      const mastGeo = new THREE.BoxGeometry(0.5, 9, 0.5);     // v28 W7: 7 → 9 m, damit der höhere Balken (2,4 m) mit der Schrift Platz hat
       [-1, 1].forEach((seite) => {
         const x = p.x + p.nx * weite * seite, z = p.z + p.nz * weite * seite;
         const mast = new THREE.Mesh(mastGeo, mastMat);
-        mast.position.set(x, this.hoeheAn(x, z) + 3.5, z);
+        mast.position.set(x, this.hoeheAn(x, z) + 4.5, z);
         g.add(mast);
       });
-      const banner = new THREE.Mesh(new THREE.BoxGeometry(weite * 2 + 0.5, 1.4, 0.3),
+      const bannerH = 2.4, bannerB = weite * 2 + 0.5;          // v28 W7: Balken 1,4 → 2,4 m hoch (Schrift „START · ZIEL" groß lesbar)
+      const banner = new THREE.Mesh(new THREE.BoxGeometry(bannerB, bannerH, 0.3),
         new THREE.MeshLambertMaterial({ color: 0xe0352b }));
-      banner.position.set(p.x, this.hoeheAn(p.x, p.z) + 6.6, p.z);
+      banner.position.set(p.x, this.hoeheAn(p.x, p.z) + 7.4, p.z);
       banner.rotation.y = headingAus(p.tx, p.tz);
       g.add(banner);
+      const schild = this._startZielSchild(bannerB, bannerH);
+      if (schild) { schild.position.copy(banner.position); schild.rotation.y = banner.rotation.y; g.add(schild); }
       return g;
+    }
+
+    /**
+     * v28 W7: Schrift auf dem Startbalken. EIN Mesh, EIN Material (MeshBasic, Canvas-Textur): zwei Vierecke (vorn + hinten) knapp
+     * vor/hinter dem Balken. Vorderseite (blickt den Anfahrenden entgegen) „START · ZIEL", Rückseite „ZIEL"; weiß auf dunkel,
+     * Schachbrett-Rand oben und unten. +1 Draw-Call je Strecke.
+     */
+    _startZielSchild(b, h) {
+      if (typeof document === 'undefined') return null;      // Node-Tests ohne DOM: Balken bleibt rot ohne Schrift
+      let tex;
+      try {
+        const cv = document.createElement('canvas');
+        cv.width = 2048; cv.height = 1024;
+        const c = cv.getContext('2d');
+        if (!c) return null;
+        const seite = (y0, text, schrift) => {
+          const H = 512, rand = 56, feld = 28;
+          c.fillStyle = '#14161c'; c.fillRect(0, y0, 2048, H);
+          for (let r = 0; r < 2; r++) for (let i = 0; i < 2048 / feld; i++) {
+            c.fillStyle = (i + r) % 2 ? '#f6f6f6' : '#111111';
+            c.fillRect(i * feld, y0 + r * feld, feld, feld);
+            c.fillRect(i * feld, y0 + H - (r + 1) * feld, feld, feld);
+          }
+          c.fillStyle = '#ffffff'; c.textAlign = 'center'; c.textBaseline = 'middle';
+          c.font = '900 ' + schrift + 'px Arial, Helvetica, sans-serif';
+          c.fillText(text, 1024, y0 + H / 2 + 8, 1900 - rand);
+        };
+        seite(0, 'START \u00b7 ZIEL', 300);      // obere Hälfte der Textur = Vorderseite
+        seite(512, 'ZIEL', 330);                  // untere Hälfte = Rückseite
+        tex = new THREE.CanvasTexture(cv);
+        tex.anisotropy = 4;
+        if (THREE.SRGBColorSpace !== undefined && 'colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
+        else if (THREE.sRGBEncoding !== undefined) tex.encoding = THREE.sRGBEncoding;
+      } catch (e) { return null; }
+      const x = b / 2, y = h / 2, z = 0.17;
+      // Vorderseite: Normale +z (blickt gegen die Fahrtrichtung), Lesrichtung +x; Rückseite: Normale −z, x gespiegelt
+      const pos = new Float32Array([
+        -x, -y, z,  x, -y, z,  x, y, z,  -x, y, z,
+         x, -y, -z, -x, -y, -z, -x, y, -z,  x, y, -z]);
+      const uv = new Float32Array([
+        0, 0.5,  1, 0.5,  1, 1,  0, 1,
+        0, 0,    1, 0,    1, 0.5, 0, 0.5]);
+      const nor = new Float32Array([0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1]);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      geo.setIndex([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex }));
+      m.name = 'StartZielSchild';
+      return m;
     }
     /**
      * v14: Darf der Zaunpunkt an Bogenlänge s trotz „querende Fahrbahn näher“ stehen? n = nächste Stelle der Mittellinie

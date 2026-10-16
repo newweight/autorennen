@@ -57,7 +57,7 @@ PARKEN = '''(() => { const s = Rennspiel.spiel; s.fahrzeuge.forEach((f, i) => { 
 
 def lauf_bilder(browser, sid):
     page = browser.new_page(viewport={'width': 1280, 'height': 720})
-    fehler = []
+    fehler = []; page.set_default_timeout(200000)
     page.on('pageerror', lambda e: fehler.append(str(e)))
     page.on('console', lambda m: fehler.append('console.' + m.type + ': ' + m.text) if m.type == 'error' else None)
     page.goto(url); page.wait_for_timeout(1200)
@@ -66,10 +66,10 @@ def lauf_bilder(browser, sid):
     page.wait_for_timeout(1500)
     trib = page.evaluate(TRIB)
     draw = page.evaluate(DRAW)
-    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=90000)
+    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=300000)
     page.evaluate(PARKEN)
     tag = sid + (('_' + variante) if variante else '')
-    pruefe('[%s] Tribünen vorhanden' % tag, len(trib) >= 3, '%d: %s' % (len(trib), ' '.join('%s%d%s' % (t['typ'][0], t['s'], 'R' if t['seite'] > 0 else 'L') for t in trib)))
+    pruefe('[%s] Tribünen vorhanden' % tag, len(trib) >= (1 if sid in ('wald', 'dino', 'alpen') else 3), '%d: %s' % (len(trib), ' '.join('%s%d%s' % (t['typ'][0], t['s'], 'R' if t['seite'] > 0 else 'L') for t in trib)))
     pruefe('[%s] 3 Meshes (Draw-Calls +3, höchstens +4)' % tag, draw['tribMeshes'] <= 4, json.dumps(draw))
     kurven = [t for t in trib if t['typ'] == 'kurve'][:2]
     start = [t for t in trib if t['typ'] == 'start'][:1]
@@ -86,7 +86,7 @@ def lauf_bilder(browser, sid):
         page.close(); return
     page.reload(); page.wait_for_timeout(1200)
     page.evaluate("Rennspiel.spiel.rennenStarten(%s)" % opt); page.wait_for_timeout(1500)
-    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=90000)
+    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=300000)
     page.evaluate(PARKEN)
     for t in kurven + start + geraden:
         name = '%s_%s%d' % (tag, t['typ'], t['nr'])

@@ -229,7 +229,7 @@
         v.senden(Object.assign({ t: 'raumErstellen', einstellungen: { streckeId: e.streckeId, welt: e.welt, variante: e.variante, runden: e.runden,
           gegner: e.gegner, schwierigkeit: e.schwierigkeit, tempoKlasse: e.tempoKlasse, jahreszeit: e.jahreszeit, wetter: e.wetter,
           tageszeit: e.tageszeit, kollisionen: e.kollisionen !== false, hindernisMenge: e.hindernisMenge, polizei: e.polizei === true,
-          geisterfahrer: e.geisterfahrer === true, krankenwagen: e.krankenwagen === true, abschleppwagen: e.abschleppwagen === true,
+          geisterfahrer: e.geisterfahrer === true, krankenwagen: e.krankenwagen === true, abschleppwagen: e.abschleppwagen === true, tiere: e.tiere !== false,      // v28 (W10): Tiere queren die Straße (Standard an)
           verkehr: e.krankenwagen === true || e.abschleppwagen === true ? 'wenig' : 'aus' } }, this.meineWahl()));      // v25: Verkehr (additiv); v28 W1: Krankenwagen/Abschleppwagen je einzeln, `verkehr` nur noch abgeleitet für alte Server   // Stufe 2: zuletzt gewählt (Standard Geister)
       } catch (err) { this.ansicht = 'start'; this.hinweis = 'Keine Verbindung zum Server 😕'; this.zeichnen(); }
     }
@@ -543,6 +543,7 @@
       if (zeile === 'geisterfahrer') return { wert: e.geisterfahrer ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '👻 An' }] };   // v25 (15.10.)
       if (zeile === 'krankenwagen') return { wert: R.Verkehr.ausEinstellung(e).krankenwagen ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '🚑 An' }] };      // v28 (W1)
       if (zeile === 'abschleppwagen') return { wert: R.Verkehr.ausEinstellung(e).abschleppwagen ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '🛻 An' }] };
+      if (zeile === 'tiere') return { wert: e.tiere === true ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '🐄 An' }] };      // v28 (W10)
       if (zeile === 'tageszeit') return { wert: e.tageszeit, liste: [{ k: 'tag', text: '☀️ Tag' }, { k: 'daemmerung', text: '🌇 Dämmerung' }, { k: 'nacht', text: '🌙 Nacht' }] };
       return { wert: null, liste: [] };
     }
@@ -589,6 +590,12 @@
         e.geisterfahrer = k === 'an';
         const lok = this.basis || this.spiel.einstellungen;
         lok.geisterfahrer = e.geisterfahrer;
+        if (!this.basis) this.spiel.einstellungenSpeichern();
+      }
+      else if (zeile === 'tiere') {      // v28 (W10): Tiere queren die Straße
+        e.tiere = k === 'an';
+        const lok = this.basis || this.spiel.einstellungen;
+        lok.tiere = e.tiere;
         if (!this.basis) this.spiel.einstellungenSpeichern();
       }
       else if (zeile === 'krankenwagen' || zeile === 'abschleppwagen') {      // v28 (W1): je Fahrzeugart einzeln An/Aus
@@ -672,7 +679,8 @@
         const w = R.Verkehr.ausEinstellung(this.lobby.einstellungen);
         const sch = (id, an, text, titel) => `<span class="pille${an ? ' aktiv' : ''}" data-a="wert:${id}:${an ? 'aus' : 'an'}" title="${titel}: ${an ? 'an – Klick = aus' : 'aus – Klick = an'}">${text}</span>`;
         return `<div class="on-zeile"><div class="on-label">🚦 Verkehr</div><div class="on-werte">` +
-          sch('geisterfahrer', w.geister, '👻 Geister', 'Geisterfahrer') + sch('krankenwagen', w.krankenwagen, '🚑 Kranken', 'Krankenwagen') + sch('abschleppwagen', w.abschleppwagen, '🛻 Abschlepp', 'Abschleppwagen') + `</div></div>`;
+          sch('geisterfahrer', w.geister, '👻 Geister', 'Geisterfahrer') + sch('krankenwagen', w.krankenwagen, '🚑 Kranken', 'Krankenwagen') + sch('abschleppwagen', w.abschleppwagen, '🛻 Abschlepp', 'Abschleppwagen') +
+          sch('tiere', this.lobby.einstellungen.tiere === true, '🐄 Tiere', 'Tiere queren die Straße') + `</div></div>`;      // v28 (W10)
       };
       const meine = zeile('fahrer', '🧑 Fahrer') + zeile('auto', '🚗 Auto') + zeile('hilfe', '🛟 Fahrhilfe');
       let rechts;
@@ -692,7 +700,7 @@
           `🗺️ ${esc(daten.name)} · ${wi.emoji || '🌍'} ${esc(wi.name || e.welt || '')}${e.variante ? ' · 📏 XL' : ''}<br>` +
           `🔁 ${e.runden} Runden · 🤖 ${e.gegner} Computer (${esc(S.name || e.schwierigkeit)})<br>` +
           (e.hindernisMenge && e.hindernisMenge !== 'normal' && this.hindernisMengeAktiv() ? `🚧 Hindernisse: ${esc(((c.hindernisMenge.stufen[e.hindernisMenge]) || {}).name || e.hindernisMenge)}<br>` : '') +
-          `🏎️ ${e.tempoKlasse === 'schnell' ? 'Schnell' : 'Normal'} · ${J ? J.emoji + ' ' + J.name : '🎲'} · ${W ? (W.emoji || '☀️') + ' ' + W.name : '🎲'} · ${T[e.tageszeit] || ''}${e.polizei ? ' · 🚨 Polizei' : ''}${e.geisterfahrer ? ' · 👻 Geisterfahrer' : ''}${R.Verkehr.ausEinstellung(e).krankenwagen ? ' · 🚑 Krankenwagen' : ''}${R.Verkehr.ausEinstellung(e).abschleppwagen ? ' · 🛻 Abschleppwagen' : ''}<br>` +
+          `🏎️ ${e.tempoKlasse === 'schnell' ? 'Schnell' : 'Normal'} · ${J ? J.emoji + ' ' + J.name : '🎲'} · ${W ? (W.emoji || '☀️') + ' ' + W.name : '🎲'} · ${T[e.tageszeit] || ''}${e.polizei ? ' · 🚨 Polizei' : ''}${e.geisterfahrer ? ' · 👻 Geisterfahrer' : ''}${R.Verkehr.ausEinstellung(e).krankenwagen ? ' · 🚑 Krankenwagen' : ''}${R.Verkehr.ausEinstellung(e).abschleppwagen ? ' · 🛻 Abschleppwagen' : ''}${e.tiere === true ? ' · 🐄 Tiere' : ''}<br>` +
           `💥 Schaden: aus (online) · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister'}</div>`;
       }
       return `<div class="on-lobby">` +
@@ -738,7 +746,7 @@
         streckeId: e.streckeId, welt: e.welt, variante: e.variante, jahreszeit: e.jahreszeit, wetter: e.wetter, windStaerke: e.windStaerke,
         windRichtung: e.windRichtung, tageszeit: e.tageszeit, hindernisMenge: e.hindernisMenge, tempoKlasse: e.tempoKlasse, runden: e.runden, gegner: e.gegner,
         wetterSeed: m.wetterSeed,   // v22: Megastrecke – gleicher Seed wie der Server → gleiche Zonen
-        schaden: false, polizei: e.polizei === true, geisterfahrer: e.geisterfahrer === true, krankenwagen: R.Verkehr.ausEinstellung(e).krankenwagen, abschleppwagen: R.Verkehr.ausEinstellung(e).abschleppwagen, verkehr: e.krankenwagen === true || e.abschleppwagen === true || e.verkehr === 'wenig' || e.verkehr === 'viel' ? 'wenig' : 'aus', rempeln: 'sanft', modus: 'solo', spielart: 'rennen',
+        schaden: false, tiere: e.tiere === true, polizei: e.polizei === true, geisterfahrer: e.geisterfahrer === true, krankenwagen: R.Verkehr.ausEinstellung(e).krankenwagen, abschleppwagen: R.Verkehr.ausEinstellung(e).abschleppwagen, verkehr: e.krankenwagen === true || e.abschleppwagen === true || e.verkehr === 'wenig' || e.verkehr === 'viel' ? 'wenig' : 'aus', rempeln: 'sanft', modus: 'solo', spielart: 'rennen',
       });
       if (spiel.menue) spiel.menue.verstecken();
       spiel.ergebnisAnzeige.verstecken(); spiel.pauseAnzeige.verstecken();
@@ -786,6 +794,15 @@
         spiel.verkehr.einsetzen(strecke, this.nT, vw);
         try { spiel.verkehr.vorkompilieren(spiel.renderer, spiel.szene, spiel.menueKamera); } catch (err) { /* nur Optik */ }
       }
+      // v28 (W10): Tiere online – der Server rechnet (Erscheinen, Pfad, Kontakt), hier nur Anzeige (Slots aus zustand.ti, Glättung wie Verkehr)
+      spiel.tiere = null;
+      if (e.tiere === true && R.Tiere) {
+        spiel.tiere = new R.Tiere(spiel);
+        spiel.tiere.nurAnzeige = true;
+        spiel.tiere.einsetzen(strecke, this.nT, {});
+        const tg = spiel.tiere.bauen();
+        if (tg) spiel.szene.add(tg);
+      }
       spiel._blauPoolAnlegen(1);      // v26c: fester Blaulicht-Licht-Pool (Lichtzahl bleibt nach dem Rennstart konstant)
       const mein = spiel.fahrzeuge[du];
       spiel.kameraHinzufuegen(mein);
@@ -801,6 +818,7 @@
       const links = hud.el.querySelector('.hud-links');
       this.pingEl = el('div', 'hud-netz', links || hud.el);
       this.pingEl.textContent = '🌐 … ms';
+      if (R.Feuerwerk) R.Feuerwerk.verbinden(spiel);   // v28 W8: Feuerwerk, wenn ein Mensch Erster wird (Server-Ergebnis → 'ziel'-Ereignis), nur Client-Optik
       if (R.Audio) {
         const A = R.Audio; spiel._tonCd = -1;
         spiel.fahrzeuge.forEach((f, i) => A.motorAnlegen(i, { spieler: f.istSpieler, auto: f.auto }));   // 14.10. (v21): Klangprofil je Auto
@@ -1163,6 +1181,18 @@
               if ((a0[6] & 2) && (a1[6] & 2) && a0[13] === a1[13]) this.anz.pose(k, f.vehicle, 'vk');
               else { const w = f.vehicle; w.x = a1[0]; w.z = a1[1]; w.y = a1[2]; w.heading = a1[3]; w.vLaengs = a1[4]; w.lenkung = a1[5]; w.nicken = a1[7]; w.neigung = a1[8]; }
               if (f.netRs !== a1[13]) { f.netRs = a1[13]; spiel._vorherAngleichen(f); }
+            }
+          }
+          // v28 (W10): Tiere (ti) – Plätze im Format von `a`; dieselbe Glättung (NetzAnzeige.pose), beim Auftauchen/anderem Reset-Zähler KEIN Interpolieren aus dem Nichts
+          const tw = spiel.tiere;
+          if (tw) {
+            const ta = um.a.ti || [], tb = um.b.ti || [], tn = um.t > 0.5 ? tb : ta;
+            tw.zustandAnwenden(tn);
+            for (let k = 0; k < tw.slots.length; k++) {
+              if (!tw.slots[k].aktiv) continue;
+              const a0 = ta[k], a1 = tb[k];
+              if (a0 && a1 && (a0[6] & 2) && (a1[6] & 2) && a0[13] === a1[13]) this.anz.pose(k, tw.slots[k], 'ti');
+              else tw.poseAus(k, tn[k] || a1 || a0);
             }
           }
           // v4: Streifenwagen (po) – gleiche Interpolation wie die anderen Autos

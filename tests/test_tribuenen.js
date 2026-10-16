@@ -1,5 +1,5 @@
 // Zuschauertribünen (15.10., v25): node tests/test_tribuenen.js [streckenId] [--deko] [--mega]
-// Prüft für Wiese, Wüste, Fantasie × alle Welten × Varianten (Normal/XL) (+ Wald/Dino/Alpen: keine Tribünen; + Megastrecke: nur Wiese/Wüste/Fantasie-Abschnitte):
+// Prüft für Wiese, Wüste, Fantasie × alle Welten × Varianten (Normal/XL) (+ Wald/Dino/Alpen: NUR Start/Ziel-Tribüne (v28 W9); + Megastrecke: nur Wiese/Wüste/Fantasie-Abschnitte + Start):
 //  A) Anzahl ≈ 5 (4–8; XL bis 8), genau 1 Start/Ziel-Tribüne (s nahe 0), ≥ 2 Kurventribünen an der Kurvenaußenseite (Kurve ≥ 35°, Seite = Außenseite),
 //  B) Lage: ganz hinter der Bande (Abstand zu ALLEN Streckenteilen ≥ Bande + 0,8 m an allen Rasterpunkten), Mindestabstand zweier Tribünen,
 //     keine Sperrzonen (Tunnel, Brücke, Überführung, Kreuzung, Gabelung, Looping, Schanze, Turbo-Feld, Hindernisse), nicht an Engstellen,
@@ -9,7 +9,7 @@
 //  D) Kollider: Säulen 'tribuene' auf der Vorderkante, hinter der Bande (Auto kommt normal nicht hin), Auto in der Säule wird herausgeschoben,
 //  E) deterministisch (zweiter Aufbau identisch), F) Server baut dieselben Tribünen und Säulen (Simulation), G) Grafik: 3 Meshes,
 //     Draw-Calls +3, Dreiecke im Rahmen, Zuschauer-Instanzen > 0, H) an=false → nichts, I) (--deko) keine Deko-Instanz auf einer Tribüne,
-//  J) Themen ohne Tribünen (wald, dino, alpen) bekommen keine.
+//  J) Wald, Dino, Alpen: genau die Start/Ziel-Tribüne (v28 W9).
 const S = require('../server/simulation.js');
 const nurId = process.argv.slice(2).find((a) => !a.startsWith('--'));
 const mitDeko = process.argv.includes('--deko');
@@ -34,13 +34,14 @@ function pruefeStrecke(daten, welt, variante, tag) {
     pruefe(`${tag} Thema ohne Tribünen → keine`, liste.length === 0, `n=${liste.length}`);
     return st;
   }
-  const lo = mega ? 6 : C.anzahlMin - 1, hi = mega ? 12 : C.anzahlMax;
-  pruefe(`${tag} Anzahl ≈ 5 (${lo}–${hi})`, liste.length >= lo && liste.length <= hi, `n=${liste.length}`);
+  const nurStart = !mega && (C.nurStart || []).indexOf(st.thema || daten.thema) >= 0;       // v28 W9: Wald/Dino/Alpen: nur Start/Ziel
+  const lo = nurStart ? 1 : mega ? 6 : C.anzahlMin - 1, hi = nurStart ? 1 : mega ? 12 : C.anzahlMax;
+  pruefe(`${tag} Anzahl ${nurStart ? '= 1 (nur Start/Ziel)' : '≈ 5'} (${lo}–${hi})`, liste.length >= lo && liste.length <= hi, `n=${liste.length}`);
   const starts = liste.filter((t) => t.typ === 'start');
   pruefe(`${tag} genau 1 Start/Ziel-Tribüne`, starts.length === 1, `n=${starts.length}`);
-  if (starts.length) pruefe(`${tag} Start/Ziel-Tribüne nahe der Ziellinie (≤ 80 m)`, Math.abs(sp.differenzS(starts[0].s, 0)) <= 80 + 1e-6, `s ${starts[0].s.toFixed(0)}`);
+  if (starts.length) pruefe(`${tag} Start/Ziel-Tribüne nahe der Ziellinie (≤ 80 m)`, Math.abs(sp.differenzS(starts[0].s, 0)) <= (nurStart ? 150 : 80) + 1e-6, `s ${starts[0].s.toFixed(0)}`);
   const kurven = liste.filter((t) => t.typ === 'kurve');
-  pruefe(`${tag} ≥ 2 Kurventribünen`, kurven.length >= 2, `n=${kurven.length}`);
+  if (!nurStart) pruefe(`${tag} ≥ 2 Kurventribünen`, kurven.length >= 2, `n=${kurven.length}`);
   kurven.forEach((t) => {
     pruefe(`${tag} Kurve ${t.nr}: Kurvenaußenseite`, t.seite === (t.kurve.dir > 0 ? -1 : 1), `dir ${t.kurve.dir}, Seite ${t.seite}`);
     pruefe(`${tag} Kurve ${t.nr}: Kurvenwinkel ≥ ${C.kurveWinkelMin}°`, t.kurve.winkel >= C.kurveWinkelMin, `${t.kurve.winkel}°`);
@@ -56,7 +57,7 @@ function pruefeStrecke(daten, welt, variante, tag) {
     const hl = t.laenge / 2, rad = st.seitenabstandMax + 8;
     const W = (u, v) => [t.x + t.tx * u + t.ox * v, t.z + t.tz * u + t.oz * v];
     pruefe(`${tag} T${t.nr} Länge/Reihen im Rahmen`, t.laenge >= 20 && t.laenge <= C.laenge[1] + 1e-6 && t.reihen >= C.reihen[0] && t.reihen <= C.reihen[1], `${t.laenge} m, ${t.reihen} Reihen`);
-    pruefe(`${tag} T${t.nr} Thema passt`, C.themen.indexOf(t.thema) >= 0, t.thema);
+    pruefe(`${tag} T${t.nr} Thema passt`, C.themen.indexOf(t.thema) >= 0 && (mega || t.thema === (st.thema || daten.thema)), t.thema);
     // B: Abstand zu allen Streckenteilen (auch fremden Abschnitten), Bande, Engstellen
     let minAb = Infinity, ok = true, hMin = Infinity, hMax = -Infinity, senke = false, deko = false;
     const nu = Math.ceil(t.laenge / 2), vs = [-1.5, 0, t.tiefe * 0.25, t.tiefe * 0.5, t.tiefe * 0.75, t.tiefe, t.tiefe + 1.5];
@@ -185,7 +186,9 @@ if (mitMega) {
     const st = pruefeStrecke(daten, 'hindernisse', '', '[mega]');
     const bereiche = T.bereicheVon(st);
     pruefe('[mega] Tribünen nur in Wiese/Wüste/Fantasie-Abschnitten', st.tribuenen.every((t) => bereiche.some((b) => t.s >= b.s0 && t.s < b.s1)));
-    pruefe('[mega] Themen der Tribünen ∈ {wiese, wueste, fantasie}', st.tribuenen.every((t) => ['wiese', 'wueste', 'fantasie'].indexOf(t.thema) >= 0), st.tribuenen.map((t) => t.thema[0]).join(''));
+    pruefe('[mega] Themen der Tribünen ∈ {wiese, wueste, fantasie} (Wald/Dino/Alpen-Abschnitte nur Start/Ziel)', st.tribuenen.every((t) => ['wiese', 'wueste', 'fantasie'].indexOf(t.thema) >= 0), st.tribuenen.map((t) => t.thema[0]).join(''));
+    const s0 = st.tribuenen.filter((t) => t.typ === 'start');
+    pruefe('[mega] Tribüne am Mega-Start (Start/Ziel, ≤ 150 m von s=0)', s0.length === 1 && Math.abs(st.spline.differenzS(s0[0].s, 0)) <= 150, s0.map((t) => t.s.toFixed(0)).join(','));
   }
 }
 // H: aus
@@ -196,16 +199,17 @@ if (!nurId || nurId === 'wiese') {
   const l = T.einbauen(st), g = T.bauen(st);
   pruefe('[wiese] an=false → keine Tribünen, keine Säulen, keine Grafik', l.length === 0 && !g && !st.saeulen.some((c) => c.art === 'tribuene'));
   C.an = true;
-  // J: Themen ohne Tribünen
+  // J: Wald/Dino/Alpen: genau die Start/Ziel-Tribüne (v28 W9)
   for (const id of ['wald', 'dino', 'alpen']) {
     const d = R.trackCatalog.find((t) => t.id === id); if (!d) continue;
     const s2 = new R.Strecke(d, {}); R.Kurvenschilder.einbauen(s2, 'normal');
-    pruefe(`[${id}] keine Tribünen (Thema nicht gewünscht)`, T.einbauen(s2).length === 0);
+    const l2 = T.einbauen(s2);
+    pruefe(`[${id}] genau 1 Tribüne, Typ start, Thema ${id}`, l2.length === 1 && l2[0].typ === 'start' && l2[0].thema === id, l2.map((t) => t.typ + ':' + t.thema).join(','));
   }
 }
 // F: Server
-if (!nurId || nurId === 'wiese' || nurId === 'wueste' || nurId === 'fantasie') {
-  for (const id of ['wiese', 'wueste', 'fantasie']) {
+if (!nurId || ['wiese', 'wueste', 'fantasie', 'wald', 'dino', 'alpen'].indexOf(nurId) >= 0) {
+  for (const id of ['wiese', 'wueste', 'fantasie', 'wald', 'dino', 'alpen']) {
     if (nurId && id !== nurId) continue;
     for (const variante of ['', 'xl']) {
       const sim = new S.Simulation({ einstellungen: { streckeId: id, runden: 1, gegner: 1, schwierigkeit: 'mittel', windStaerke: 0, variante }, spieler: [{ fahrer: 'Jonas', auto: 'passat' }], seed: 5 });
