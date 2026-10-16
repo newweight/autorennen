@@ -61,15 +61,27 @@ class JitterProxy {
   verbindung(c) {
     const s = net.connect(this.zielPort, '127.0.0.1');
     c.setNoDelay(true); s.setNoDelay(true);
+    // P4 (16.10.): feste Warteschlange je Richtung mit EINEM Timer (statt setTimeout je Paket). Grund (P3 S6 n05): Node-Timer mit verschiedenen Laufzeiten,
+    // aber (fast) gleichem Fälligkeitszeitpunkt oder gekürzten Bruchteil-Millisekunden feuern nicht in Einfügereihenfolge → der TCP-Strom wurde verwürfelt
+    // (Skripte kamen kaputt an). Die Reihenfolge der Pakete bleibt jetzt immer erhalten; nur der Fälligkeitszeitpunkt (FIFO, monoton) streut.
     const leitung = (von, nach) => {
-      let letzte = 0;
+      let letzte = 0, timer = null; const warte = [];
+      const schieben = () => {
+        timer = null;
+        const jetzt = jetztMs();
+        while (warte.length && warte[0].t <= jetzt + 0.25) { const e = warte.shift(); if (!nach.destroyed) nach.write(e.buf); }
+        if (warte.length) timer = setTimeout(schieben, Math.max(1, Math.ceil(warte[0].t - jetzt)));
+      };
       von.on('data', (buf) => {
         const jetzt = jetztMs();
         const t = Math.max(letzte, this.freigabe(jetzt));          // FIFO (TCP): ein später Block hält alle folgenden zurück → Burst
         letzte = t;
-        if (t - jetzt < 0.5 && !this.p.basis) { if (!nach.destroyed) nach.write(buf); return; }
-        setTimeout(() => { if (!nach.destroyed) nach.write(buf); }, Math.max(0, t - jetzt));
+        if (!timer && !warte.length && t - jetzt < 0.5 && !this.p.basis) { if (!nach.destroyed) nach.write(buf); return; }     // Profil „keins“: sofort
+        warte.push({ t, buf });
+        if (!timer) timer = setTimeout(schieben, Math.max(0, Math.ceil(t - jetzt)));
       });
+      const aus = () => { if (timer) { clearTimeout(timer); timer = null; } warte.length = 0; };
+      von.on('close', aus); nach.on('close', aus);
     };
     leitung(c, s); leitung(s, c);
     const zu = () => { c.destroy(); s.destroy(); };

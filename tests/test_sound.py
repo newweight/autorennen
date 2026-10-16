@@ -4,7 +4,7 @@
   1. Zündfrequenz: je Auto bei 2000/4000/6000 U/min liegt im FFT eine Spitze bei Drehzahl/60 × Zylinder/2 (Prominenz >= 6 dB über dem Umfeld),
      die stärksten Spitzen sind ganzzahlige Vielfache von f/2.
   2. Autos klingen verschieden: 1/3-Oktav-Spektren je Profil (bei 55 % Drehzahlbereich) – jedes Paar weicht im Mittel >= 2 dB ab
-     (Streifenwagen = Passat-Profil ausgenommen); Diesel-Klopfen: Passat/Multivan haben Pulse im Takt der Zündfrequenz, Formel hat den hellsten Klang.
+     (Streifenwagen = Passat-Profil und Krankenwagen = Multivan-Profil ausgenommen); Diesel-Klopfen: Passat/Multivan haben Pulse im Takt der Zündfrequenz, Formel hat den hellsten Klang.
   3. Pegel: Spitze < 0,9 (kein Übersteuern), RMS zwischen -34 und -10 dBFS, nie lauter als das lauteste Referenzprofil + 3 dB.
   4. Fahrt (Vollgas 0 -> vMax, dann Gas weg): Gänge nur hoch, Zahl der Schaltvorgänge = Gänge - 1, Drehzahl fällt beim Schalten,
      Rollphase ohne Pendeln (Schaltvorgänge <= Gänge), Drehzahl nie über Abregeldrehzahl.
@@ -127,7 +127,8 @@ with sync_playwright() as p:
     page.goto(url); page.wait_for_timeout(300)
 
     ids = page.evaluate('Rennspiel.MotorProfile.alle().map(p => p.id)')
-    pruefe('Profile für alle 10 Katalogautos', set(ids) == {'passat', 'polizei', 'multivan', 'porsche-911', 'troc-cabrio', 'bmw-m4', 'amg-gt', 'audi-rs6', 'mini-cooper', 'formel'}, ids)
+    # P4 (16.10.): seit v25 zusätzlich Verkehr-Profile krankenwagen (Multivan-Basis) und abschleppwagen (motorProfile.js:101–102) → 12 Profile
+    pruefe('Profile für alle 10 Katalogautos + Krankenwagen + Abschleppwagen', set(ids) == {'passat', 'polizei', 'multivan', 'porsche-911', 'troc-cabrio', 'bmw-m4', 'amg-gt', 'audi-rs6', 'mini-cooper', 'formel', 'krankenwagen', 'abschleppwagen'}, ids)
     kat = os.path.join(hier, '..', 'src', 'cars', 'carCatalog.js')
     txt = open(kat, encoding='utf-8').read()
     import re
@@ -165,12 +166,16 @@ with sync_playwright() as p:
     for i in range(len(namen)):
         for j in range(i + 1, len(namen)):
             d = float(np.sqrt(np.mean((T[namen[i]] - T[namen[j]]) ** 2)))
+            if {namen[i], namen[j]} == {'multivan', 'krankenwagen'}:
+                # P4 (16.10.): Krankenwagen = Multivan-Profil ist gewollt („Multivan-Basis“, motorProfile.js:101) → Paar ausgenommen (Abstand nur ausgeben)
+                print(f'   ausgenommen (gewollt gleiches Profil): multivan/krankenwagen {d:.2f} dB')
+                continue
             paare.append((d, namen[i], namen[j]))
             if d < 2.0: schwach.append((namen[i], namen[j], round(d, 2)))
     paare.sort()
     print('   kleinste Abstände (dB, RMS über 1/3-Oktaven):', [(a, b, round(d, 1)) for d, a, b in paare[:4]])
     print('   größte Abstände:', [(a, b, round(d, 1)) for d, a, b in paare[-3:]])
-    pruefe('alle 45 Auto-Paare unterscheiden sich im Spektrum um >= 2 dB (RMS)', not schwach, schwach)
+    pruefe(f'alle {len(paare)} Auto-Paare (11 Profile ohne Polizei, ohne Paar Multivan/Krankenwagen) unterscheiden sich im Spektrum um >= 2 dB (RMS)', not schwach, schwach)
     dpp = float(np.sqrt(np.mean((T['polizei'] - T['passat']) ** 2)))
     pruefe(f'Polizei = Passat-Profil (gleicher Klang, Abstand {dpp:.1f} dB)', dpp < 2.0)
     def zentroid(x):

@@ -92,7 +92,7 @@ for (const daten of R.trackCatalog) {
     gesamt += e.erg.length; gesamtOk += e.erg.length - schlecht.length;
     const txt = `[${daten.id}/${welt}${variante ? '/' + variante : ''}/${tempo}] ${e.erg.length / 2} Checkpoints im Anlauf-Bereich × KI+Spieler`;
     pruefe(txt + ': Stelle ohne Anlauf-Bremse/Reset geschafft, Reset-Punkt ≤ ' + MAX_ZURUECK + ' m hinter Checkpoint',
-      schlecht.length === 0 && maxZ <= MAX_ZURUECK,
+      schlecht.length === 0 && maxZ <= MAX_ZURUECK + 1e-6,   // P4 (16.10.): Gleitkomma-Toleranz, Dino XL liegt bei 150,0000 m (knapp darüber)
       `max zurück ${maxZ.toFixed(0)} m` + (schlecht.length ? ', ' + schlecht.length + ' schlecht: ' + schlecht.map(x => `cp${x.cp}/${x.wer}/${x.art}${x.nr} ${x.grund} (d ${x.dVorStelle.toFixed(0)}/${x.abstand} m)`).join('; ') : ''));
   }
 }

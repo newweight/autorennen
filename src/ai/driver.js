@@ -89,6 +89,12 @@
   const LANGSAM_FENSTER_ZEIT = 2.5; // s × Tempo
   const LANGSAM_FAKTOR = 0.6;      // Zieltempo höchstens 60 %, bis vorbei (nicht anhalten)
   const KRIECH_TEMPO = 2.5;
+  // v27 F5: Gegenverkehr (Geisterfahrer) – früh (ab ~80 m) auf die abgewandte Seite, Tempo leicht runter
+  const GEGEN_FENSTER = 80;        // m (Mindestfenster)
+  const GEGEN_ZEIT = 4;            // s × Annäherungstempo – bei hoher Annäherung noch früher
+  const GEGEN_MIN_TEMPO = 8;       // m/s entgegen der Streckenrichtung (nur wer vorwärts in seiner Nase-Richtung fährt)
+  const GEGEN_VOR = 50;            // m – Ausweichversatz schon so weit vor dem Treffpunkt voll
+  const GEGEN_FAKTOR = 0.85;       // Zieltempo-Faktor, solange Gegenverkehr voraus ist
   const NEBEN = 4.5;               // m Längsabstand: darunter fährt das andere Auto neben mir        // m/s, wenn ein stehendes Auto direkt vor der Nase ist
   const RAMPE_MIN = 18;            // m Einblend-Strecke (mindestens)
   const RAMPE_ZEIT = 1.1;          // s × Tempo Einblend-Strecke
@@ -374,27 +380,38 @@
       const fenster = Math.max(AUSWEICH_MIN, AUSWEICH_ZEIT * Math.max(0, tempo));
       const fensterLangsam = Math.max(LANGSAM_FENSTER_MIN, LANGSAM_FENSTER_ZEIT * Math.max(0, tempo), fenster);
       const andere = u.andere || [];
-      let gasWeg = false, bremsNoetig = 0, langsamVoraus = false, kriechen = false;
+      let gasWeg = false, bremsNoetig = 0, langsamVoraus = false, kriechen = false, gegenVoraus = false;
       const gesehen = new Set();
       let naechsterAndererQ = null, naechsterAbstand = Infinity;
       this.hindernisse = [];
+      const tMe = sp.punktBei(n.s);   // v27 F5b: eigene Streckenrichtung – für das billige Vorsortieren ferner Autos
       for (const o of andere) {
         const ov = o.vehicle;
         if (!ov || ov === v) continue;
         if (quer && quer.quer.has(ov)) continue;     // W4-J: Querverkehr (kreuzt, fährt nicht vor mir) – eigene Regel oben
         const dx = ov.x - v.x, dz = ov.z - v.z, abst = Math.hypot(dx, dz);
-        if (abst > fensterLangsam + 15) continue;
+        let fernGegen = false;
+        if (abst > fensterLangsam + 15) { if (abst > Math.max(GEGEN_FENSTER, GEGEN_ZEIT * (Math.max(0, tempo) + (ov.vLaengs || 0))) + 15 || !(ov.vLaengs > 0)) continue; fernGegen = true; }
+        // v27 F5b: fern (kein Gegenverkehr möglich, wenn schwächer als GEGEN_MIN_TEMPO oder mit meiner Streckenrichtung unterwegs) → vor dem teuren naechster aussortieren
+        if (fernGegen) { const w0 = ov.weltGeschwindigkeit(); if (w0.x * w0.x + w0.z * w0.z < GEGEN_MIN_TEMPO * GEGEN_MIN_TEMPO || w0.x * tMe.tx + w0.z * tMe.tz > 0) continue; }
         const on = sp.naechster(ov.x, ov.z, this.index);
+        // v27 F5: Gegenverkehr = Geschwindigkeit entgegen der Streckenrichtung (Skalarprodukt mit der Tangente < 0), fährt vorwärts in seiner Nase-Richtung
+        let gegen = false, vGegen = 0;
+        if (ov.vLaengs > 0) {
+          const wgo = ov.weltGeschwindigkeit(), tp = sp.punktBei(on.s), dotG = wgo.x * tp.tx + wgo.z * tp.tz;
+          if (dotG < -GEGEN_MIN_TEMPO) { gegen = true; vGegen = dotG; }
+        }
+        if (fernGegen && !gegen) continue;
         if (this._andereEbene(ov, on)) continue;     // W4-I: Auto auf der anderen Ebene (Überführung) – kein Gegner hier
         const oq = this.ast ? on.seitenabstand - this._ao(on.s) : on.seitenabstand;   // 14.10. (v18): relativ zur Astmitte
         if (abst < naechsterAbstand) { naechsterAbstand = abst; naechsterAndererQ = oq; }
         const voraus = sp.differenzS(on.s, n.s);
-        const vo = ov.vLaengs || 0;
+        const vo = gegen ? vGegen : (ov.vLaengs || 0);
         // Direkt neben mir (Längsabstand < NEBEN): nie als "stehendes" Auto behandeln – sonst
         // kriechen zwei sich berührende Autos gemeinsam (das eine bremst, das andere wird mitgezogen)
         const neben = Math.abs(voraus) < NEBEN;
         const langsam = Math.abs(vo) < LANGSAM_TEMPO && !neben;
-        if (voraus > (langsam ? fensterLangsam : fenster)) continue;
+        if (voraus > (langsam ? fensterLangsam : (gegen ? Math.max(fenster, GEGEN_FENSTER, GEGEN_ZEIT * (Math.max(0, tempo) - vGegen)) : fenster))) continue;
         // schon neben/knapp hinter mir: nur weiter beachten, wenn ich ihm gerade ausweiche
         // oder es direkt neben mir fährt (dann auseinander, sonst verhaken sich die Autos)
         if (voraus <= 0 && (voraus < -6 || (!this.seitenMerk.has(ov) && !neben))) continue;
@@ -402,7 +419,7 @@
         if (!langsam && voraus > AUSWEICH_MIN && tempo - vo < 1) continue;
         const linie = this._grundVersatz(on.s);
         const inMeinerSpur = Math.abs(oq - qMe) < 2.2;
-        const blockiert = Math.abs(oq - linie) < AUSWEICH_SEITE ||
+        const blockiert = gegen || Math.abs(oq - linie) < AUSWEICH_SEITE ||   // v27 F5: Gegenverkehr wechselt die Spur – immer ausweichen, bis vorbei
           (voraus < AUSWEICH_MIN && inMeinerSpur) || (neben && inMeinerSpur);
         if (!blockiert) continue;
 
@@ -419,9 +436,12 @@
         }
         this.seitenMerk.set(ov, seite);
         gesehen.add(ov);
-        const ziel = clamp(oq + seite * abstand, -grenze, grenze);
-        this.hindernisse.push({ d: voraus, ziel, langsam });
+        // v27 F5: Gegenverkehr wechselt selbst die Spur – deshalb ganz an den Rand der abgewandten Seite, nicht relativ zu seiner aktuellen Lage
+        const ziel = gegen ? seite * grenze : clamp(oq + seite * abstand, -grenze, grenze);
+        // Gegenverkehr: Treffpunkt statt Position des anderen Autos (beide fahren aufeinander zu) – so setzt das Ausweichen früh genug ein
+        this.hindernisse.push({ d: gegen && voraus > 0 ? voraus * Math.max(tempo, 5) / (Math.max(tempo, 5) - vGegen) : voraus, ziel, langsam, vor: gegen ? GEGEN_VOR : undefined });
         if (langsam && voraus > -6) langsamVoraus = true;
+        if (gegen && voraus > 0) gegenVoraus = true;
 
         // Kein Rammen: direkt vor mir in der Spur → stehendes Auto: nur noch kriechen
         // (lenkt dabei vorbei, kein Stau), fahrendes Auto: Gas weg / bremsen
@@ -528,6 +548,7 @@
       }
       soll *= hindernisFaktor;
       if (quer && quer.soll < soll) soll = quer.soll;   // W4-J: Querverkehr vorbeilassen
+      if (gegenVoraus) soll *= GEGEN_FAKTOR;
       if (langsamVoraus) soll *= LANGSAM_FAKTOR;   // vorsichtig vorbei, aber weiterfahren
       if (kriechen) soll = Math.min(soll, KRIECH_TEMPO);
       this.zieltempo = soll;

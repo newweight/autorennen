@@ -430,7 +430,7 @@
     _daten(f, ziel, i) {
       const v = f.vehicle, o = ziel || {};
       o.x = v.x; o.z = v.z; o.heading = v.heading; o.laenge = v.daten.laenge || 4.5; o.breite = v.daten.breite || 1.8;
-      o.s = f.nah ? f.nah.s : this.spiel.strecke.spline.naechster(v.x, v.z, f.index >= 0 ? f.index : undefined).s;
+      o.s = f.nah ? f.nah.s : f.ausgeschieden ? 0 : this.spiel.strecke.spline.naechster(v.x, v.z, f.index >= 0 ? f.index : undefined).s;
       return o;
     }
 
@@ -443,7 +443,7 @@
       for (let i = 0; i < this.n; i++) {
         const f = fz[i], t = tn[i], o = this._daten(f, autos[i], i);
         autos[i] = o;
-        o.runde = t ? t.runde : 0; o.istSpieler = !!f.istSpieler; o.imZiel = !!(t && t.imZiel);
+        o.runde = t ? t.runde : 0; o.istSpieler = !!f.istSpieler; o.imZiel = !!(t && t.imZiel) || !!f.ausgeschieden;   // P4 F1: ausgeschiedene nie als Ziel
         o.frei = !(f.vehicle.imLooping || f.vehicle.imFlug || (f.looping && (f.looping.aktiv || f.looping.fallen)) || (f.flug && f.flug.aktiv) ||
           (sch && sch.gesperrt(i)) || (f.kleber && R.Kleber && R.Kleber.gesperrt(f.kleber)));
         o.schild = !!(pk && pk.hatSchild(i));

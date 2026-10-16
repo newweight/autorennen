@@ -363,7 +363,9 @@ for (const daten of R.trackCatalog) {
     }
     // Fingerabdruck-Verlauf: 90c5e661 (bis v16) → da0dd781 (v17: Wrack-Maße kommen aus src/cars/carCatalog.js, neue Autos Passat/Multivan/911 ändern wiese/wald/wueste/dino/alpen)
     // → 2982b25d (14.10. v18: gewollte Katalog-Verschiebungen der Gabelung, nur wiese + wueste; Rest unverändert, je Strecke gemessen).
-    pruefe('Menge normal: bitgleich zum Stand vor der Funktion (' + n + ' Strecken × Welten × Varianten, Fingerabdruck)', fnv(alles) === '2982b25d', fnv(alles));
+    // → 52661751 (16.10. P4: Gabelung Dino (v25, gewollt). Je-Eintrag-Vergleich gegen tests/sicherung_v25_gabel_alt/trackBuilder.js+trackCatalog.js: es unterscheiden sich NUR die 8 Dino-Einträge
+    //   (dino × hindernisse/stunt/verrueckt/alles × normal/xl); alle übrigen 48 Fingerabdrücke je Strecke identisch. (Der Gesamtwert der Sicherungsdateien ist 2ceca225, nicht 2982b25d – andere Quelle nicht rekonstruierbar, daher nur der Je-Eintrag-Vergleich.))
+    pruefe('Menge normal: bitgleich zum Stand vor der Funktion (' + n + ' Strecken × Welten × Varianten, Fingerabdruck)', fnv(alles) === '52661751', fnv(alles));
     pruefe('Menge: ohne Option = „normal“ = unbekannter Wert (→ Standard)', gleichOpt);
     pruefe('Menge: Gültigkeit (unbekannt, Zahl, null, Objekt → normal; die drei Namen bleiben)', R.Strecke.hindernisMengeGueltig('viele') === 'viele' && R.Strecke.hindernisMengeGueltig('sehrViele') === 'sehrViele' &&
       R.Strecke.hindernisMengeGueltig('normal') === 'normal' && [undefined, null, 5, {}, ['viele'], 'constructor', '__proto__', ''].every(x => R.Strecke.hindernisMengeGueltig(x) === 'normal'));
@@ -488,7 +490,9 @@ for (const daten of R.trackCatalog) {
       }
       if (d.id === 'dino') {
         const gesetzt = zus.hindernisse + zus.wracks + zus.strohballen - zus.slalom;
-        pruefe(name + ' Dino: mindestens 80 % des Ziels gesetzt', gesetzt >= 0.8 * zus.gewollt - 1e-9, gesetzt + ' von ' + zus.gewollt + ' (' + Math.round(100 * gesetzt / zus.gewollt) + ' %)');
+        // P4 (16.10.): 80 % → 60 %. Die gewollte Gabelung auf Dino (v25) sperrt eine Zone für Hindernisse; gemessen sehrViele: 24/32 (75 %) stunt, 22/32 (69 %) verrückt/alles.
+      // Dino ist 2753 m lang, normal hat 8 Hindernisse, sehrViele (Anzahl-Prüfung oben, Dino/hindernisse) 38; auch 22 gesetzte bleiben spielbar viele (~2,75 × normal) -> 60 % als Untergrenze.
+      pruefe(name + ' Dino: mindestens 60 % des Ziels gesetzt (Gabelung sperrt Zone)', gesetzt >= 0.6 * zus.gewollt - 1e-9, gesetzt + ' von ' + zus.gewollt + ' (' + Math.round(100 * gesetzt / zus.gewollt) + ' %)');
       }
       // Münzen: keine in Hindernissen (Radius 0,5 m)
       const m = new R.Muenzen(a), sp2 = a.spline;

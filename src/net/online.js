@@ -833,20 +833,22 @@
 
     /** Geister-Darstellung: alle Materialien des Autos als Kopie halbtransparent (Cache-Materialien bleiben unberührt). */
     geist(mesh) {
-      const kopien = new Map(), ud = mesh.userData || {};
+      const kopien = new Map(), istKopie = new Set(), ud = mesh.userData || {};
+      const ein = (m) => {
+        if (istKopie.has(m)) return m;     // v27 F6b: schon eine Geister-Kopie (setzeLicht ruft ein() erneut auf) – unverändert zurück, keine Kopie der Kopie
+        if (m === ud.bremslichtMaterial) { m.transparent = true; m.opacity = 0.6; return m; }
+        if (!kopien.has(m)) {
+          const k = m.clone();
+          k.transparent = true; k.opacity = (m.opacity === undefined ? 1 : m.opacity) * 0.6;
+          kopien.set(m, k); istKopie.add(k); this.geisterMat.push(k);
+        }
+        return kopien.get(m);
+      };
       mesh.traverse((o) => {
         if (!o.material) return;
-        const ein = (m) => {
-          if (m === ud.bremslichtMaterial) { m.transparent = true; m.opacity = 0.6; return m; }
-          if (!kopien.has(m)) {
-            const k = m.clone();
-            k.transparent = true; k.opacity = (m.opacity === undefined ? 1 : m.opacity) * 0.6;
-            kopien.set(m, k); this.geisterMat.push(k);
-          }
-          return kopien.get(m);
-        };
         o.material = Array.isArray(o.material) ? o.material.map(ein) : ein(o.material);
       });
+      ud.geistKopie = ein;     // v27 F6: carBuilder.setzeLicht wendet die Geister-Kopie nach dem Licht-Schalten erneut an (gleiche Kopien, werden mit geisterMat freigegeben)
     }
 
     rennenAbbauen() {

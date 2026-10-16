@@ -412,7 +412,7 @@
       for (let i = 0; i < this.n; i++) {
         const f = fz[i], t = tn[i];
         let o = l[i]; if (!o) o = l[i] = {};
-        o.x = f.vehicle.x; o.z = f.vehicle.z; o.s = f.nah ? f.nah.s : this.strecke.spline.naechster(o.x, o.z, f.index >= 0 ? f.index : undefined).s;
+        o.x = f.vehicle.x; o.z = f.vehicle.z; o.s = f.nah ? f.nah.s : f.ausgeschieden ? 0 : this.strecke.spline.naechster(o.x, o.z, f.index >= 0 ? f.index : undefined).s;
         o.prog = t ? t.fortschritt : 0; o.mensch = !!f.istSpieler; o.fertig = !!(t && t.imZiel) || !!f.ausgeschieden; o.v = f.vehicle.vLaengs; o.nr = i;
       }
       void L;

@@ -178,9 +178,13 @@ function laufe(id, autoId) {
     }
     if (frei >= 2) {
       ges.A++;
-      const okA = wegA >= Math.min(4, frei - 1.0) && vMin < -1.5;
+      // P4 (16.10.): Zwickel mit knappem Platz (frei < 5 m, z. B. wiese@2493: Auto steht am Ende bei Seitenabstand 22,5 von 25 m Bande) –
+      // dort begrenzt die Bande (Auto hat 2,2 m halbe Länge, `frei` rechnet nur mit 1,0 m Rand) den Weg: Erwartung ≥ 2,0 m statt frei−1 (= 2,5 m).
+      // Gemessen 2,3 m, vMin −4,2 m/s; keine Tribüne beteiligt (kein Tribünen-Kreis < 12 m). Alle anderen Fälle unverändert.
+      const soll = (sz.art === 'zwickel' && frei < 5) ? Math.min(2.0, frei - 1.0) : Math.min(4, frei - 1.0);
+      const okA = wegA >= soll && vMin < -1.5;
       if (okA) ges.Aok++;
-      pruefe(bez + ': nur Bremse → rückwärts heraus (≥ ' + Math.min(4, frei - 1).toFixed(1) + ' m in 3,5 s)', okA, `Schein-Tempo ${j.vl.toFixed(1)} m/s, Weg ${wegA.toFixed(1)} m (frei ${frei} m), vMin ${vMin.toFixed(1)}, untergrund ${v.untergrund}`);
+      pruefe(bez + ': nur Bremse → rückwärts heraus (≥ ' + soll.toFixed(1) + ' m in 3,5 s)', okA, `Schein-Tempo ${j.vl.toFixed(1)} m/s, Weg ${wegA.toFixed(1)} m (frei ${frei} m), vMin ${vMin.toFixed(1)}, untergrund ${v.untergrund}`);
     }
 
     // B) Reset (R): offline spielerZuruecksetzen / online Simulation.reset (Server)

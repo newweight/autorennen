@@ -2199,6 +2199,11 @@
     if (an) { const fl = fahrlichtMesh(auto); if (fl) fl.visible = true; }
     else if (ud.fahrlicht) ud.fahrlicht.visible = false;
     (ud.scheinwerfer || []).forEach((m) => { m.material = an ? scheinwerferAnMaterial() : scheinwerferMaterial(); });
+    // v27 F6: Online-Geister (online.js geist()) – halbtransparente Kopien nach dem Schalten erneut anwenden (sonst leuchten Scheinwerfer/Fahrlicht deckend)
+    if (ud.geistKopie) {
+      (ud.scheinwerfer || []).forEach((m) => { m.material = ud.geistKopie(m.material); });
+      if (an && ud.fahrlicht) ud.fahrlicht.material = ud.geistKopie(ud.fahrlicht.material);
+    }
     const bm = ud.bremslichtMaterial;
     if (bm && bm.fog !== !an) { bm.fog = !an; bm.needsUpdate = true; }
     setzeBremslicht(auto, false);

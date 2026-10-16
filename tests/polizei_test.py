@@ -71,10 +71,27 @@ with sync_playwright() as p:
     if stopp:
         # 3 s weiter (Polizei parkt daneben), dann Bild mit HUD
         # Runde 6: nach dem Anhalten bremst der Spieler noch aus (Rempeln/Abseits-Physik) → bis zu 6 s vorspulen, bis er steht
-        page.evaluate('() => { const s = Rennspiel.spiel; s.pausiert = false; s.schnellvorlauf(3); s.kameras[0]._erstesMal = true; }')
+        # P4 (16.10.): Countdown früh messen. Der Stopp dauert 4 s (stoppDauer), der Spieler steht erst bei rest ≈ 1 s (bremst ~3 s aus) – dann ist die Anzeige schon „1 s“ und
+        # nach 3 s weiterem Vorspulen weg. Deshalb: Messung A direkt nach Stopp-Beginn (rest 3–4 s), Messung B nach 1 s Vorspulen (rest 2–3 s), erst danach wie bisher auf „steht“ warten.
+        HUD_DA = "() => { const e = document.querySelector('.hud-polizei'); return !!e && e.style.display !== 'none' && e.textContent.indexOf('Anhalten') >= 0; }"
+        page.evaluate('() => { Rennspiel.spiel.pausiert = false; }')
+        try: page.wait_for_function(HUD_DA, timeout=15000)      # HUD wird nur in laufenden Bildern (20 Hz) aktualisiert, SwiftShader braucht für die ersten Bilder lange
+        except Exception: pass
+        page.evaluate('() => { Rennspiel.spiel.pausiert = true; }')
+        zA = page.evaluate(ZUSTAND)
+        page.evaluate('() => { const s = Rennspiel.spiel; s.pausiert = false; s.schnellvorlauf(1); }')
+        try: page.wait_for_function("(alt) => { const e = document.querySelector('.hud-polizei'); return !!e && e.textContent !== alt; }", arg=zA['hud'], timeout=15000)
+        except Exception: pass
+        page.evaluate('() => { Rennspiel.spiel.pausiert = true; }')
+        zB = page.evaluate(ZUSTAND)
+        pruefe('Countdown zählt herunter (früh gemessen, rest 4 s → 1 s später kleiner, Anzeige „Anhalten… N s“ ändert sich)',
+               zA['gesperrt'] and zB['gesperrt'] and 'Anhalten' in zA['hud'] and 'Anhalten' in zB['hud'] and zB['hud'] != zA['hud'] and zB['rest'] < zA['rest'] - 0.5, (zA['rest'], zA['hud'][:22], zB['rest'], zB['hud'][:22]))
+        # P4 (16.10.): Der Stopp dauert 4 s (rest zählt 4 → 0). Früher 3 s fest vorspulen + Echtzeit-Warten (pausiert blieb false) → erster Schnappschuss erst bei rest ≈ 0,8,
+        # nach weiteren 3 s war die Anzeige weg. Jetzt: in 0,5-s-Schritten nur so lange vorspulen, bis er steht (< 3 km/h), dann Spiel anhalten, bevor gewartet wird.
+        page.evaluate('() => { const s = Rennspiel.spiel; s.pausiert = false; s.kameras[0]._erstesMal = true; s.schnellvorlauf(1); s.pausiert = true; }')
         for _ in range(6):
             if abs(page.evaluate(ZUSTAND)['kmh']) < 3: break
-            page.evaluate('() => Rennspiel.spiel.schnellvorlauf(0.5)')
+            page.evaluate('() => { const s = Rennspiel.spiel; s.pausiert = false; s.schnellvorlauf(0.5); s.pausiert = true; }')
         # HUD läuft mit 20 Hz in frame(); SwiftShader braucht für die ersten Frames mit Blaulicht-Lichtern lange → warten
         try: page.wait_for_function("() => { const e = document.querySelector('.hud-polizei'); return e && e.textContent.indexOf('Anhalten') >= 0; }", timeout=8000)
         except Exception: pass
@@ -87,12 +104,8 @@ with sync_playwright() as p:
         pruefe('HUD zeigt „🚨 Polizei! Anhalten… N s"', 'Polizei! Anhalten' in z1['hud'] and ' s' in z1['hud'], z1['hud'])
         pruefe('Spieler steht (< 3 km/h)', abs(z1['kmh']) < 3, z1['kmh'])
         pruefe('Streifenwagen daneben (≤ 12 m), Phase halt', z1['abstand'] is not None and z1['abstand'] <= 12 and z1['phase'] == 'halt', (z1['abstand'], z1['phase']))
-        page.evaluate('() => { const s = Rennspiel.spiel; s.pausiert = false; s.schnellvorlauf(3); }')
-        page.wait_for_timeout(400)
-        z2 = page.evaluate(ZUSTAND)
-        pruefe('Countdown zählt herunter', z2['hud'] != z1['hud'] and 'Anhalten' in z2['hud'] and z2['rest'] < z1['rest'], (z1['hud'], z2['hud']))
         page.evaluate('() => { const s = Rennspiel.spiel; s.pausiert = false; s.schnellvorlauf(4.5); }')
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(800)      # P4: HUD läuft mit 20 Hz, SwiftShader braucht länger, bis die Anzeige verschwindet
         z3 = page.evaluate(ZUSTAND)
         pruefe('nach 10 s frei (Freigabe), HUD-Countdown weg', not z3['gesperrt'] and z3['stat']['freigaben'] >= 1 and 'Anhalten' not in z3['hud'], z3)
         page.evaluate('() => { const s = Rennspiel.spiel; s.schnellvorlauf(8); s.pausiert = true; }')

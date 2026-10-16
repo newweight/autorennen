@@ -71,7 +71,9 @@ with sync_playwright() as p:
       return { n: m ? m.anzahl : 0, instanzen: mesh ? mesh.count : 0, hud: document.querySelector('.hud-muenzen') ? document.querySelector('.hud-muenzen').textContent : null }; })()""")
     pruefe('Münzen liegen auf der Wiese (20–40, eine InstancedMesh)', 20 <= info['n'] <= 40 and info['instanzen'] == info['n'], info)
     pruefe('HUD zeigt „🪙 0" beim Start', info['hud'] and '🪙 0' in info['hud'], info['hud'])
-    # Bild: Spieler kurz vor der ersten Münzreihe (Rennen angehalten)
+    # P4 (16.10.): erst den Countdown abwarten – die große „3“ verdeckte genau die Münzreihe (Projektion x≈636–640, y≈298–324), siehe tests/out/p3/urteile.md S7
+    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft" && Rennspiel.spiel.rennen.zeit > 1.2', timeout=60000)   # auch „LOS!“ (hud.js:551, zeit < 1 s) ist dann weg
+    # Bild: Spieler kurz vor der ersten Münzreihe (nach dem Countdown, direkt versetzt)
     page.evaluate("""(() => { const s = Rennspiel.spiel, m = s.muenzen, r = m.liste.find(k => k.reihe >= 0), sp = s.strecke.spline, p = sp.punktBei(r.s - 22);
       const v = s.fahrzeuge[0].vehicle; v.setzen(p.x + p.nx * r.q, p.z + p.nz * r.q, Rennspiel.headingAus(p.tx, p.tz)); v.y = s.strecke.hoeheAn(v.x, v.z);
       s._vorherAngleichen(s.fahrzeuge[0]); s.kameras[0]._erstesMal = true; })()""")
@@ -168,7 +170,9 @@ with sync_playwright() as p:
     pruefe('Rennen: KI-Auto unverändert (kein Pink)', m1['lack'] != PINK and m1['anteil'] == 0, m1)
     std = page.evaluate("(() => { let k = null; Rennspiel.carBuilder.bauen(Rennspiel.carCatalog.finde('troc-cabrio')).traverse(o => { if (o.name === 'karosserie') k = o; }); return k.geometry.uuid; })()")
     pink_geo = page.evaluate("(() => { let k = null; Rennspiel.spiel.fahrzeuge[0].mesh.traverse(o => { if (o.name === 'karosserie') k = o; }); return k.geometry.uuid; })()")
-    pruefe('Cache: Standard-Cabrio hat eigene Geometrie (unverändert blau)', std != pink_geo and page.evaluate("Rennspiel.carBuilder.bauen(Rennspiel.carCatalog.finde('troc-cabrio')).userData.lackFarbe") == 0x1f7bff)
+    # P4 (16.10.): Standardfarbe aus dem Katalog lesen (T-Roc „Edition Blue“ = 0x4d6fe0, früher hart 0x1f7bff)
+    katalog_farbe = page.evaluate("Rennspiel.carCatalog.finde('troc-cabrio').farbe")
+    pruefe('Cache: Standard-Cabrio hat eigene Geometrie (unverändert in der Katalogfarbe)', std != pink_geo and page.evaluate("Rennspiel.carBuilder.bauen(Rennspiel.carCatalog.finde('troc-cabrio')).userData.lackFarbe") == katalog_farbe, hex(katalog_farbe))
     vm = page.evaluate(VMAX, 0); vk = page.evaluate(VMAX, 1)
     pruefe('Upgrade Motor 1: vMax × 1,04, Reifen 1: grip × 1,04', abs(vm['verh'] - 1.04) < 1e-6 and abs(vm['grip'] - 1.04) < 1e-6, vm)
     pruefe('KI ohne Upgrades (vMax × 1)', abs(vk['verh'] - 1) < 1e-9, vk)

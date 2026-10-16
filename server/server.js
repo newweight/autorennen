@@ -193,6 +193,8 @@ function starten(opt) {
   const autoIds = R.carCatalog.waehlbare().map(a => a.id);
   const hilfen = Object.keys(R.config.fahrhilfen);
   let verbindungen = 0;
+  const MAX_PRO_IP = 8, MAX_RAEUME_PRO_IP = 5, TEUER_MS = 3000, BEITRITT_FENSTER_MS = 10000, BEITRITT_FEHLER = 5;   // v27 F4
+  const proIp = new Map();
 
   const srv = http.createServer(httpAntwort);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false, clientTracking: true });
@@ -201,10 +203,18 @@ function starten(opt) {
     try { pfad = new URL(req.url, 'http://x').pathname; } catch (e) { /* ungültig */ }
     if (pfad === Brett.PFAD) return brett.upgrade(req, socket, kopf);       // Brettspiele (eigenes Protokoll, eigene Limits)
     if (pfad !== N.PFAD || verbindungen >= 80) { socket.write('HTTP/1.1 404 Not Found\r\n\r\n'); socket.destroy(); return; }
+    // v27 F4: Limit je Adresse (wie Brettspiele MAX_PRO_IP): Schlüssel = erste X-Forwarded-For-Adresse; lokale Verbindungen ohne Header zählen nicht
+    let ipKey = null;
+    const xff = req.headers && req.headers['x-forwarded-for'];
+    if (typeof xff === 'string' && xff.trim()) ipKey = xff.split(',')[0].trim().slice(0, 64);
+    if (ipKey && (proIp.get(ipKey) || 0) >= MAX_PRO_IP) { socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n'); socket.destroy(); return; }
     const bew = schalterBewertung(req, oeffentlichHost);
     if (!steuerung) bew.recht = false;                     // Funktion aus: nie Recht (der Grund „ohneSteuerung“ wird nur Tailnet-Geräten erklärt, s. schalterAntwort)
     schalterProtokoll(bew, req);
-    wss.handleUpgrade(req, socket, kopf, (ws) => wss.emit('connection', ws, req, bew));
+    wss.handleUpgrade(req, socket, kopf, (ws) => {
+      if (ipKey) { ws.ipKey = ipKey; proIp.set(ipKey, (proIp.get(ipKey) || 0) + 1); }
+      wss.emit('connection', ws, req, bew);
+    });
   });
 
   // v26 Diagnose: pro Kombination (Ergebnis + Header-Namen) nur EINMAL eine Zeile ins Protokoll (höchstens 30) – ohne Namen/Adressen/Werte.
@@ -353,8 +363,11 @@ function starten(opt) {
       case 'schalterUmschalten':
         return schalterUmschalten(c, m.an);
       case 'raumErstellen': {
+        if (Date.now() - (c.erstelltAm || 0) < TEUER_MS) return fehler(c.ws, 'zu_schnell', 'Bitte einen Moment warten');   // v27 F4 (M2/H1)
+        c.erstelltAm = Date.now();
         if (raum) verlassen(c, 'neuer Raum');
         if (raeume.size >= 30) return fehler(c.ws, 'voll', 'Zu viele Räume – später nochmal');
+        if (c.ws.ipKey) { let n = 0; for (const r of raeume.values()) if (r.host && r.host.ws && r.host.ws.ipKey === c.ws.ipKey) n++; if (n >= MAX_RAEUME_PRO_IP) return fehler(c.ws, 'voll', 'Zu viele Räume von dieser Adresse'); }   // v27 F4 (H2)
         const code = zufallsCode(new Set(raeume.keys()));
         const neu = { code, host: c, spieler: [c], zustand: 'lobby', einstellungen: einstellungenPruefen(m.einstellungen || {}, 1), sim: null };
         raeume.set(code, neu);
@@ -368,9 +381,13 @@ function starten(opt) {
         return;
       }
       case 'raumBeitreten': {
+        // v27 F4 (M2): höchstens 5 Fehlversuche je 10 s je Verbindung
+        const jetztB = Date.now();
+        c.beitrittFehler = (c.beitrittFehler || []).filter(t => jetztB - t < BEITRITT_FENSTER_MS);
+        if (c.beitrittFehler.length >= BEITRITT_FEHLER) return fehler(c.ws, 'zu_schnell', 'Zu viele falsche Codes – kurz warten');
         const code = N.codeNormal(m.code);
         const ziel = code && raeume.get(code);
-        if (!ziel) return fehler(c.ws, 'unbekannt', 'Diesen Raum gibt es nicht');
+        if (!ziel) { c.beitrittFehler.push(jetztB); return fehler(c.ws, 'unbekannt', 'Diesen Raum gibt es nicht'); }
         if (ziel === raum) return lobbySenden(ziel);
         if (ziel.spieler.length >= N.MAX_SPIELER) return fehler(c.ws, 'voll', 'Der Raum ist voll (6 Spieler)');
         if (ziel.zustand === 'laden' || ziel.zustand === 'rennen') return fehler(c.ws, 'laeuft', 'Dort läuft gerade ein Rennen – gleich nochmal versuchen');
@@ -423,6 +440,8 @@ function starten(opt) {
         if (c !== raum.host) return fehler(c.ws, 'nurHost', 'Nur der Host startet das Rennen');
         if (raum.zustand !== 'lobby' && raum.zustand !== 'ergebnis') return;
         if (raum.spieler.some(d => d !== raum.host && !d.bereit)) return fehler(c.ws, 'nichtBereit', 'Noch nicht alle sind bereit');
+        if (Date.now() - (c.startAm || 0) < TEUER_MS) return fehler(c.ws, 'zu_schnell', 'Bitte einen Moment warten');   // v27 F4 (H1)
+        c.startAm = Date.now();
         rennenStarten(raum);
         return;
       case 'geladen':
@@ -478,7 +497,10 @@ function starten(opt) {
       if (!m || typeof m !== 'object' || Array.isArray(m) || typeof m.t !== 'string') return fehler(ws, 'json', 'Ungültige Nachricht');
       try { nachricht(c, m); } catch (e) { console.error('Fehler bei Nachricht', m.t, e && e.stack); fehler(ws, 'intern', 'Interner Fehler'); }
     });
-    ws.on('close', () => { verbindungen--; verlassen(c, 'Verbindung zu'); });
+    ws.on('close', () => {
+      verbindungen--; verlassen(c, 'Verbindung zu');
+      if (ws.ipKey) { const n = (proIp.get(ws.ipKey) || 1) - 1; if (n <= 0) proIp.delete(ws.ipKey); else proIp.set(ws.ipKey, n); }
+    });
     ws.on('error', () => {});
     c.herz = setInterval(() => {
       if (!c.lebt) { ws.terminate(); return; }

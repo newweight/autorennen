@@ -179,6 +179,7 @@
         } else if (a.vFaktor > 1) a.vFaktor = Math.max(1, a.vFaktor - auslaufRate * dt);
         if (a.platzt > 0) a.platzt = Math.max(0, a.platzt - dt);
         if (v.imLooping || v.imFlug) continue;     // über der Straße: nichts aufsammeln
+        if (f && f.ausgeschieden) continue;        // P4 F1: ausgeschiedene Autos stehen geparkt bei x/z=100000 – keine Spline-Gesamtsuche (~3 s/Schritt)
         if (!this.felder.length && !this.kugeln.length && !this.faesser.length) continue;
         const n = sp.naechster(v.x, v.z, a.index);
         a.index = n.index; a.s = n.s;

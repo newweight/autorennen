@@ -279,6 +279,14 @@
       this.szene.children.slice().forEach((o) => {
         if (o.isLight && !o.userData.tunnelLicht) return;     // Sonne/Himmel bleiben, Tunnel-Lichter gehören zur Strecke
         this.szene.remove(o);
+        if (autoMeshes.has(o) && o.userData && o.userData.autoId === 'abschleppwagen') {
+          // P4 F3: Verkehrs-Abschleppwagen (Sonderbau, je Rennen neu gebaut, kein Katalog-Cache) → voll freigeben
+          o.traverse((c) => {
+            if (c.geometry) c.geometry.dispose();
+            if (c.material) (Array.isArray(c.material) ? c.material : [c.material]).forEach(freigeben);
+          });
+          return;
+        }
         if (autoMeshes.has(o)) {
           // Auto-Geometrien/-Materialien liegen im Katalog-Cache; nur der Schatten-Quad gehört dem Auto
           o.traverse((c) => { if (c.name === 'schatten' && c.geometry) c.geometry.dispose(); });
@@ -859,8 +867,33 @@
       requestAnimationFrame(this._frameCb);
     }
 
+    /**
+     * P4 F2: Schleifen-Schutz. Das nächste Bild wird VOR dem Rumpf angefordert, eine Ausnahme beendet die rAF-Kette also nicht mehr.
+     * Mehr als 5 Ausnahmen in 2 s: Physik pausiert (this.pausiert), sichtbare Meldung, kein weiteres Fehlerlog.
+     */
     frame(jetzt) {
       if (!this.laeuft) return;
+      requestAnimationFrame(this._frameCb);
+      try { this._frameRumpf(jetzt); if (this._fehler) this._fehler.reihe = 0; } catch (e) { this._frameAusnahme(e); }
+    }
+
+    _frameAusnahme(e) {
+      const f = this._fehler || (this._fehler = { zeiten: [], gesamt: 0, reihe: 0, gestoppt: false });
+      f.gesamt++; f.reihe++;
+      if (f.gestoppt) { if (this.pausiert) return; f.gestoppt = false; f.zeiten.length = 0; f.reihe = 1; }   // kein Endlos-Fehlerlog; nach Weiterspielen (Esc) wird neu gezählt
+      const jetzt = performance.now();
+      f.zeiten.push(jetzt);
+      while (f.zeiten.length && jetzt - f.zeiten[0] > 2000) f.zeiten.shift();
+      console.error('frame(): Ausnahme ' + f.zeiten.length + ' (gesamt ' + f.gesamt + ')', e);
+      if (f.zeiten.length > 5 || f.reihe > 5) {      // > 5 in 2 s, oder > 5 Bilder in Folge (bei sehr niedriger Bildrate)
+        f.gestoppt = true; f.zeiten.length = 0; f.reihe = 0;
+        if (this.zustand === 'rennen') { this.pausiert = true; this.uhr.rest = 0; }   // Gegenlesen F2: nur offline pausieren (online hält der Server)
+        if (this.zustand === 'rennen' && this.pauseAnzeige) this.pauseAnzeige.zeigen();
+        this.huds.forEach(hd => { if (hd && hd.meldung) hd.meldung('⚠️ Fehler – Esc für Menü', 600000); });
+      }
+    }
+
+    _frameRumpf(jetzt) {
       const p = R.config.physik, m = this._mess, t0 = performance.now();
       let dt = (jetzt - this.uhr.letzte) / 1000;
       this.uhr.letzte = jetzt;
@@ -968,7 +1001,6 @@
       m.physik[k] = t1 - t0; m.grafik[k] = t2 - t1; m.audio[k] = t3 - t2; m.render[k] = t4 - t3; m.hud[k] = t5 - t4;
       m.gesamt[k] = t5 - t0; m.dt[k] = dt; m.schritte[k] = schritte;
       m.i = (k + 1) % 60; if (m.n < 60) m.n++;
-      requestAnimationFrame(this._frameCb);
     }
 
     /**

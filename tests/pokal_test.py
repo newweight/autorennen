@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Runde 6 (W3-F): Pokal-Serie (D1) und „Letzter fliegt raus" (D7) im Browser (Playwright, headless Chromium).
-a) Modus-Schritt: 4 Karten (Allein, Zu zweit, Pokal, Letzter fliegt raus) passen bei 1280×800 und 1440×900, Tastatur ←→ wandert über alle 4
+a) Modus-Schritt: 4 Karten (Allein, Zu zweit, Pokal, Letzter fliegt raus) passen bei 1280×800 und 1440×900, Tastatur ←→ wandert über alle 5 Karten (4 + Online)
 b) Pokal 3 Rennen (solo, Autopilot + Schnellvorlauf je Rennen): Strecken Wiese → Wald → Fantasie, KI-Stärke steigt, Zwischenstände,
    Siegerehrung (Podest, Konfetti) – Screenshot, Pokal-Zähler im Fahrer-Schritt, Einstellungen danach wiederhergestellt
 c) Pokal abbrechen: Esc im Zwischenstand → Rückfrage (Nein bleibt, Ja → Hauptmenü), Pause → Hauptmenü fragt ebenfalls
@@ -64,10 +64,11 @@ with sync_playwright() as p:
     page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
     page.evaluate(f"{E}.modus = 'solo'; {E}.spielart = 'rennen'; Rennspiel.spiel.menue.zeichnen()")
     folge = []
-    for _ in range(4):
+    # P4 (16.10.): seit W5 gibt es 5 Karten (menu.js:311, 5. = „Online“, ändert keine Einstellungen) → 5 Schritte, der 4. landet auf Online
+    for _ in range(5):
         taste('ArrowRight')
-        folge.append(page.evaluate(f"{E}.spielart + '/' + {E}.modus"))
-    pruefe('Tastatur → wandert: zwei, Pokal, Raus, wieder allein', folge == ['rennen/zwei', 'pokal/zwei', 'elimination/zwei', 'rennen/solo'], folge)
+        folge.append(page.evaluate(f"{E}.spielart + '/' + {E}.modus + (Rennspiel.spiel.menue.onlineGewaehlt ? '/online' : '')"))
+    pruefe('Tastatur → wandert über 5 Karten: zwei, Pokal, Raus, Online, wieder allein', folge == ['rennen/zwei', 'pokal/zwei', 'elimination/zwei', 'elimination/zwei/online', 'rennen/solo'], folge)
     page.click('[data-a="pokalgroesse:4"]'); page.wait_for_timeout(100)
     page.click('[data-a="spieler:solo:pokal"]'); page.wait_for_timeout(100)
     pruefe('Pillen auf der Pokal-Karte: 4 Rennen, allein', page.evaluate(f"[{E}.spielart, {E}.pokalGroesse, {E}.modus].join()") == 'pokal,4,solo')
