@@ -77,8 +77,8 @@ with sync_playwright() as p:
     page.evaluate("() => { const s = Rennspiel.spiel; s.zurMenue && s.zurMenue(); }")
     # --- mit Verkehr ---
     st = page.evaluate(STARTEN, [True, 'viel', 'daemmerung', 3, None])
-    pruefe('Geisterfahrer + Verkehr viel: 7 Wagen (3 Geister, 2 Krankenwagen, 2 Abschleppwagen), nicht im Rennen, geparkt unsichtbar',
-           st['sys'] and st['wagen'] == ['geisterfahrer'] * 3 + ['krankenwagen'] * 2 + ['abschleppwagen'] * 2 and st['tn'] == 4 and st['fz'] == 11 and st['nichtImRennen'] and st['geparkt'], st)
+    pruefe('Geisterfahrer + Krankenwagen + Abschleppwagen (v28: je 1): 5 Wagen (3 Geister-Routen, 1 Krankenwagen, 1 Abschleppwagen), nicht im Rennen, geparkt unsichtbar',
+           st['sys'] and st['wagen'] == ['geisterfahrer'] * 3 + ['krankenwagen'] + ['abschleppwagen'] and st['tn'] == 4 and st['fz'] == 9 and st['nichtImRennen'] and st['geparkt'], st)
     vor(page, 7)       # Countdown vorbei
     z = page.evaluate(STAND)
     pruefe('Start sauber (keine NaN)', not z['nan'], z)
@@ -109,7 +109,7 @@ with sync_playwright() as p:
     vor(page, 1.2)
     foto(page, 'geisterfahrer_warnung' + suffix + '.png', 300)
     z = page.evaluate(STAND)
-    pruefe('HUD-Warnung „Geisterfahrer voraus“ sichtbar', 'Geisterfahrer voraus' in z['warn'], z['warn'])
+    pruefe('v28 W3: keine HUD-Warnung „Geisterfahrer voraus“ (config verkehr.geister.warnung aus)', 'Geisterfahrer voraus' not in z['warn'], z['warn'])
     page.evaluate(PLATZIEREN, ['geisterfahrer', 2, k['s'] + 26, -0.45, 20, k['s'] - 8, 0.45, False])
     vor(page, 0.6)
     page.evaluate("() => { document.querySelector('.hud-geisterfahrer').style.visibility = 'hidden'; }")      # Bild ohne Banner (das Warnbild gibt es extra)
@@ -122,6 +122,7 @@ with sync_playwright() as p:
     print(json.dumps(z))
 
     # --- Lauf: alles fährt, nichts bleibt hängen, keine NaN, keine Fehler ---
+    page.evaluate('() => { Rennspiel.config.verkehr.geister.verteilung = [0, 0, 1]; }')      # v28 (W3): im Lauf fest 2 Geisterfahrer je Runde (sonst zufällig 0–2)
     st = page.evaluate(STARTEN, [True, 'viel', 'tag', 3, None])
     page.evaluate('() => { Rennspiel.spiel.autopilot(0); }')
     for sek in range(0, 180):

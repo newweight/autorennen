@@ -715,7 +715,10 @@ Rennspiel.config = {
       viel:  { name: 'Viel',  krankenwagen: 2, abschleppwagen: 2 },
     },
     geister: { anzahl: 3, tempo: 21, tempoSchwankung: 3, warnAbstand: 150, spurWechselAb: 70, spurWechselBis: 170, wechselLaenge: 45,
-      routeMax: 700, routeMin: 260, hupeAbstand: 110 },
+      routeMax: 700, routeMin: 260, hupeAbstand: 110,
+      // v28 (W3): selten – je Runde zufällig 0/1/2 Geisterfahrer (Seed-fest; Wahrscheinlichkeiten 0,2/0,4/0,4 = Erwartung 1,2), zwei nur mit >= 400 m Strecke dazwischen;
+      // keine HUD-Vorwarnung und kein Minimap-Blinken (warnung: true bringt beides zurück; Lichthupe/Hupe des Geisterfahrers bleiben)
+      verteilung: [0.2, 0.4, 0.4], mindestAbstand: 400, warnung: false },
     krankenwagen: { tempo: 34, schadenFaktor: 3, autoId: 'krankenwagen', spurQ: 0.28 },
     abschleppwagen: { tempo: 9.5, spurQ: 0.3, hoerweite: 110 },
     // gemeinsam

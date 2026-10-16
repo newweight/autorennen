@@ -591,6 +591,209 @@
     }
 
     /**
+     * 16.10. (v28 W4b, „Rad verschmolzen"): Wie hoch liegt die SICHTBARE Oberfläche an (s, q) über hoeheAn? Die Meshes werden mit
+     * festen Anhebungen gebaut (Asphalt +0,06 _strasseBauen, Randstein +0,07 _randBauen, Gabel-Insel-Rasen +0,03, Kreuzungsplatte
+     * +0,075, Holz-/Stamm-Brücke +0,16, Werkstatt-Fläche +0,07 / Keil +0,06 in garage.js) – das Auto stand mit der Radunterkante auf
+     * hoeheAn, also 6–16 cm IM Belag. Nur für die Anzeige-Pose (radBodenPose); Physik/Server unverändert.
+     * q = roher Seitenabstand zur Mittellinie (in Gabelungen nicht auf den Ast bezogen); werkstatt optional (R.Werkstatt/-Gruppe mit belag()),
+     * startIndex = Streckenindex des Autos (wie hoeheAn).
+     * null = Gelände (Gras/Sand: Boden-Gitter bzw. Böschung, siehe radBodenPose).
+     */
+    belagHoehe(s, q, x, z, werkstatt, startIndex) {
+      if (this.kreuzungen.length) {
+        const kb = this.kreuzungBei(s, 25);
+        if (kb) {
+          const k = kb.k, r = Math.hypot(x - k.x, z - k.z);
+          if (r >= 2.6 && r <= 3.6) return 0.1;                                                        // Zauberkreis (_kreuzungBauen)
+          if (Math.abs(q) <= this.breite / 2 - 0.3) for (const sK of [k.sA, k.sB]) { const d = this.spline.differenzS(s, sK - k.halbL - 1.6); if (d >= 0 && d <= 0.6) return 0.1; }   // Haltelinien
+          if (this._querAbstand(s, x, z) <= this.breite / 2 + this.randBreite) return 0.075;           // Kreuzungsplatte
+        }
+      }
+      if (this.bruecken.length) {
+        const br = this.brueckeBei(s);
+        if (br && (br.art === 'holz' || br.art === 'stamm') && Math.abs(q) <= this.grenzeEng + (br.art === 'stamm' ? 0.25 : 0)) return 0.16;
+      }
+      let rel = q, w = null;
+      if (this.gabelungen.length && (w = this.gabelBei(s))) rel = q - (q >= 0 ? 1 : -1) * w.c;
+      const b2 = this.breiteBei(s) / 2, a = Math.abs(rel);
+      if (a <= b2) return w ? 0.06 : this._fahrbahnZeichen(s, q);
+      if (w && Math.abs(q) < w.c - w.h) return Math.abs(q) >= w.c - w.h - Math.min(this.randBreite, w.c - w.h) ? 0.07 : 0.03;   // Insel: Randstein, sonst Rasen
+      if (a <= b2 + this.randBreite) return 0.07;
+      if (werkstatt && werkstatt.belag) {
+        const wb = werkstatt.belag(s, q, x, z);
+        if (wb === null || wb === undefined) return null;
+        // garage.js baut die Fläche auf hoeheAn(x, z) OHNE Streckenindex – im Höhenmodell 'strasse' (Alpen, Mega) kann das vom Boden mit Index abweichen
+        return this.sModell && startIndex !== undefined && startIndex >= 0 ? wb + this.hoeheAn(x, z) - this.hoeheAn(x, z, startIndex) : wb;
+      }
+      return null;
+    }
+
+    /**
+     * v28 W4b: Höhe des SICHTBAREN Boden-Gitters (_bodenBauen, PlaneGeometry ~10 m Felder) an (x, z) – liest die Eckhöhen aus dem Mesh
+     * (gleiche Dreiecksteilung wie three.js), statt der wahren Geländehöhe: die Sehnen liegen auf Kuppen/Mulden bis ~6 cm daneben.
+     * null = kein Boden-Gitter gebaut (Node/Server) oder außerhalb.
+     */
+    bodenNetzHoehe(x, z) {
+      const b = this._bodenNetz;
+      if (!b) return null;
+      const u = (x - b.mx) / b.zx, v = (z - b.mz) / b.zz, ix = Math.floor(u), iy = Math.floor(v);
+      if (ix < 0 || iy < 0 || ix >= b.nx || iy >= b.nz) return null;
+      const fu = u - ix, fv = v - iy, n1 = b.nx + 1, y = b.y;
+      const ha = y[(ix + n1 * iy) * 3 + 1], hb = y[(ix + n1 * (iy + 1)) * 3 + 1], hc = y[(ix + 1 + n1 * (iy + 1)) * 3 + 1], hd = y[(ix + 1 + n1 * iy) * 3 + 1];
+      return fu + fv <= 1 ? ha + (hd - ha) * fu + (hb - ha) * fv : hc + (hb - hc) * (1 - fu) + (hd - hc) * (1 - fv);   // Dreiecke (a, b, d) und (b, c, d)
+    }
+
+    /**
+     * v28 W4b: Höhe des SICHTBAREN Asphalt-Bandes (_strasseBauen: je Splinepunkt nur linker und rechter Rand) an (s, q) – auf breiten
+     * Fahrbahnen über Kuppen liegt die Sehne bis ~2 cm neben hoeheAn + 0,06. null = kein Band / Gabel-Abschnitt.
+     */
+    strassenNetzHoehe(s, q) {
+      const P = this._strassenNetz;
+      if (!P) return null;
+      const pk = this.spline.punkte, N = pk.length, ds = this.spline.ds;
+      const i = Math.floor(s / ds) % N, j = (i + 1) % N, t = Math.max(0, Math.min(1, (s - pk[i].s) / ds));
+      if (this.gabelungen.length && (this._gabelIdx(i) || this._gabelIdx(j))) return null;
+      const quer = (k) => {
+        const lx = P[k * 6], ly = P[k * 6 + 1], lz = P[k * 6 + 2], rx = P[k * 6 + 3], ry = P[k * 6 + 4], rz = P[k * 6 + 5];
+        const b = Math.hypot(rx - lx, rz - lz) / 2 || 1;
+        return ly + (ry - ly) * Math.max(0, Math.min(1, (q + b) / (2 * b)));
+      };
+      return quer(i) + (quer(j) - quer(i)) * t;
+    }
+
+    /** v28 W4b: liegt (x, z) im Rechteck eines feinen Senke-Gitters (_senkeBauen: Brückenmitte ± halb + 24 m längs, q1 + 24 m quer)? */
+    _imSenkeNetz(x, z) {
+      for (const b of this.bruecken) {
+        const dx = x - b.m.x, dz = z - b.m.z;
+        if (Math.abs(dx * b.m.tx + dz * b.m.tz) <= b.halb + 24 && Math.abs(dx * b.m.nx + dz * b.m.nz) <= b.q1 + 24) return true;
+      }
+      return false;
+    }
+
+    /** v28 W4b: Fahrbahn +0,06; darauf Start/Ziel-Schachbrett und Startplatz-Balken +0,1 (_startZielBauen), Mittellinie +0,08 (_mittellinieBauen). */
+    _fahrbahnZeichen(s, q) {
+      const sp = this.spline, L = sp.laenge, b = this.breite / 2;
+      const sz = sp.differenzS(s, 0);
+      if (sz > -60 && sz < 2) {
+        if (sz >= -1.5 && sz <= 1.5 && Math.abs(q) <= b) return 0.1;
+        const z = this._startBalken || (this._startBalken = this.startpositionen((R.config.rennen.gegnerMax || 5) + 1).map((st) => {
+          const n = sp.naechster(st.x, st.z); return { s: sp.differenzS(n.s, 0) + 2.6, q: n.seitenabstand };
+        }));
+        for (let i = 0; i < z.length; i++) if (sz >= z[i].s && sz <= z[i].s + 0.4 && Math.abs(q - z[i].q) <= 1.3) return 0.1;
+      }
+      const t = ((s - 8) % 7 + 7) % 7;
+      if (s >= 8 && s < L - 9 && t <= 3 && !(this.gabelungen.length && this.gabelNah(s, 2))) {
+        const spur = this.spurBei ? this.spurBei(s) : null;
+        if (!(spur && spur.spuren === 1)) {
+          const m = spur && spur.spuren === 3 ? this.breiteBei(s) / 6 : 0;
+          if (Math.abs(Math.abs(q) - m) <= 0.14) return 0.08;
+        }
+      }
+      return 0.06;
+    }
+
+    /** v28 W4b: Räder eines Auto-Meshes (carBuilder: userData.raeder, Rad im Halter) → [{ x, y, z, r, w }] lokal (Radmitte, Radius, Breite). */
+    radAufstand(mesh) {
+      const raeder = mesh && mesh.userData && mesh.userData.raeder;
+      if (!raeder || !raeder.length) return [];
+      return raeder.map((rad) => {
+        const g = rad.geometry; if (!g.boundingBox) g.computeBoundingBox();
+        const h = rad.parent || rad;
+        return { x: h.position.x, y: h.position.y, z: h.position.z, r: (g.boundingBox.max.y - g.boundingBox.min.y) / 2, w: g.boundingBox.max.x - g.boundingBox.min.x };
+      });
+    }
+
+    /**
+     * v28 W4b: Anzeige-Pose auf der SICHTBAREN Oberfläche. An den 4 Radaufstandspunkten (tiefster Punkt jedes Rades in der Pose) wird
+     * hoeheAn (mit Streckenindex, dieselbe schnelle Abfrage wie Physik/Server) + belagHoehe gelesen → Nicken/Querneigung aus Vorder-/
+     * Hinterachse bzw. linker/rechter Seite (auch auf der Fahrbahn: am Hang ist die sichtbare Straße quer geneigt) und Anhebung dy, mit der
+     * das tiefste Rad aufsetzt (keins steckt im Belag). Zwei Durchgänge (1.: Aufstandspunkte nur nach Heading, 2.: mit Nicken/Neigung),
+     * also 8 Höhenabfragen je Auto. y = bisherige Anzeige-Höhe; dynN/dynQ = Nicken/Wanken der Fahrdynamik (+ Flug-Nicken), werden addiert (YXZ).
+     * Ergebnis { ok, dy, nicken, neigung } (nicken/neigung ohne dynN/dynQ). ok = false (nichts ändern), wenn das Auto > 0,6 m über dem
+     * Boden ist. nah = Streckenabfrage des Autos (f.nah; fehlt sie, wird sie hier geholt). dy begrenzt −0,4…+0,25 m (−: nimmt die
+     * Sicherheits-Anhebung von gelaendePose zurück, die an den Karosserie-Ecken statt an den Rädern misst). Nur Anzeige – Physik,
+     * Server, Vorhersage unverändert.
+     */
+    radBodenPose(x, z, heading, y, dynN, dynQ, aufstand, startIndex, nah, werkstatt, aus) {
+      const o = aus || {};
+      o.ok = false; o.dy = 0; o.nicken = 0; o.neigung = 0;
+      const n = aufstand ? aufstand.length : 0;
+      if (n < 3) return o;
+      if (!nah) nah = this.abfrage(x, z, startIndex);          // noch kein Physikschritt (Startaufstellung vor dem Countdown, Pause)
+      const c = Math.cos(heading), sn = Math.sin(heading), p = this.spline.punktBei(nah.s);
+      const h = o._h || (o._h = []), ux = o._x || (o._x = []), uy = o._y || (o._y = []), uz = o._z || (o._z = []);
+      let zm = 0;
+      for (let i = 0; i < n; i++) zm += aufstand[i].z / n;
+      // Aufstandspunkt jedes Rades bei Nicken A / Wanken B (YXZ): tiefster Punkt der Radscheibe → Versatz (ux, uy, uz) zur Auto-Mitte
+      const punkte = (A, B) => {
+        const sA = Math.sin(A), cA = Math.cos(A), sB = Math.sin(B), cB = Math.cos(B), N = Math.hypot(cB * cA, sA) || 1;
+        for (let i = 0; i < n; i++) {
+          const r = aufstand[i], px = r.x, py = r.y - r.r * cB * cA / N, pz = r.z + r.r * sA / N;
+          const x1 = px * cB - py * sB, y1 = px * sB + py * cB, y2 = y1 * cA - pz * sA, z2 = y1 * sA + pz * cA;
+          ux[i] = x1 * c + z2 * sn; uz[i] = -x1 * sn + z2 * c; uy[i] = y2;
+        }
+      };
+      const tx = p.tx, tz = p.tz, qx = p.nx, qz = p.nz;
+      const hoehen = (kontur) => {
+        for (let i = 0; i < n; i++) {
+          const px = x + ux[i], pz = z + uz[i], dx = px - p.x, dz = pz - p.z;
+          const si = this.spline.wrapS(nah.s + dx * tx + dz * tz), qi = dx * qx + dz * qz;
+          const b = this.belagHoehe(si, qi, px, pz, werkstatt, startIndex);
+          let basis;                                                   // Höhe, auf die sich der Belag bezieht (≈ hoeheAn)
+          if (b !== null) {
+            // Asphalt (+ Markierung): Höhe des Asphalt-Bandes (Sehne quer zwischen den Rändern) statt hoeheAn – nur Höhenmodell 'gelaende'
+            // (im Modell 'strasse' ist die Fahrbahn quer flach; dort passte das Band in der Messung schlechter als hoeheAn mit Index)
+            const sn = b >= 0.06 && b <= 0.1 && !this.sModell && Math.abs(qi) <= this.breiteBei(si) / 2 ? this.strassenNetzHoehe(si, qi) : null;
+            basis = sn !== null ? sn - 0.06 : this.hoeheAn(px, pz, startIndex);
+            h[i] = basis + b;
+          } else {
+            // Gelände: sichtbares Boden-Gitter; Höhenmodell 'strasse' (Alpen, Mega): darüber die feine Böschung ≈ hoeheAn ohne Index,
+            // +6 cm wie gelaendePose (v22: die Sehnen der Böschung liegen am Hang bis ~10 cm daneben)
+            let g = this.bodenNetzHoehe(px, pz);
+            if (g !== null && this.bruecken.length && this._imSenkeNetz(px, pz)) g = Math.max(g, this.bodenHoehe(px, pz));   // feines Senke-Gitter an Brücken liegt über dem groben
+            const hb = this.sModell || g === null ? this.hoeheAn(px, pz) : g;
+            h[i] = this.sModell || g === null ? Math.max(g === null ? -Infinity : g, hb + (this.sModell ? 0.06 : 0)) : g;
+            basis = hb;
+          }
+          if (!kontur) continue;
+          // Reifenkontur: Stufen im Belag (Randstein, Startbalken, Werkstatt-Platte, Brücken-Bohlen …) unter der Lauffläche (± halbe Breite quer)
+          // und vor/hinter dem Aufstandspunkt (Bogen des Reifens: in Abstand d liegt er r − √(r² − d²) höher) – nur Belag (Werkstatt: + Sehne)
+          const r = aufstand[i], b0 = b === null ? 0 : b, wq = r.w * 0.4;
+          for (let k = 0; k < 6; k++) {
+            const dl = k < 4 ? [-0.12, -0.06, 0.06, 0.12][k] : 0, dq = k === 4 ? -wq : k === 5 ? wq : 0;
+            const bn = this.belagHoehe(this.spline.wrapS(si + dl), qi + dq, px + tx * dl + qx * dq, pz + tz * dl + qz * dq, werkstatt, startIndex);
+            if (bn === null || bn <= b0) continue;
+            h[i] = Math.max(h[i], basis + bn - (dl ? r.r - Math.sqrt(r.r * r.r - dl * dl) : 0));
+          }
+        }
+      };
+      // Ebene durch die Aufstandshöhen: Nicken aus vorn/hinten, Neigung aus links/rechts (Mittelwerte; Höhe ≈ y + x·sin(q)cos(n) − z·sin(n))
+      const kl = (v) => Math.max(-0.9, Math.min(0.9, v));
+      const ebene = () => {
+        let xl = 0, hl = 0, nl = 0, xr = 0, hr = 0, nr = 0, zv = 0, hv = 0, nv = 0, zh = 0, hh = 0, nh = 0;
+        for (let i = 0; i < n; i++) {
+          const r = aufstand[i];
+          if (r.x < 0) { xl += r.x; hl += h[i]; nl++; } else { xr += r.x; hr += h[i]; nr++; }
+          if (r.z < zm) { zv += r.z; hv += h[i]; nv++; } else { zh += r.z; hh += h[i]; nh++; }
+        }
+        if (!nl || !nr || !nv || !nh) return false;
+        o.nicken = Math.asin(kl(-(hh / nh - hv / nv) / (zh / nh - zv / nv)));
+        o.neigung = Math.asin(kl((hr / nr - hl / nl) / (xr / nr - xl / nl) / Math.cos(o.nicken)));
+        return true;
+      };
+      punkte(dynN || 0, dynQ || 0); hoehen(false);
+      if (!ebene()) return o;
+      punkte(o.nicken + (dynN || 0), o.neigung + (dynQ || 0)); hoehen(true);
+      if (!ebene()) return o;
+      punkte(o.nicken + (dynN || 0), o.neigung + (dynQ || 0));
+      let d = -Infinity;
+      for (let i = 0; i < n; i++) d = Math.max(d, h[i] - (y + uy[i]));
+      if (d < -0.6) return o;
+      o.ok = true; o.dy = Math.min(0.25, Math.max(-0.4, d));
+      return o;
+    }
+
+    /**
      * W4-I: naechster() mit Index-Kontinuität: lokales Suchfenster ±120 m (60 Abtastpunkte) um startIndex, global erst,
      * wenn das Auto weiter als Bande + 15 m von „seinem" Abschnitt entfernt ist (Teleport). An einer Überführung bleibt
      * ein Auto so auf seiner Ebene. Ohne Überführungen: wie spline.naechster (unverändert).
@@ -1504,6 +1707,7 @@
       }
       geo.setAttribute('color', new THREE.BufferAttribute(farben, 3));
       geo.computeVertexNormals();
+      this._bodenNetz = { y: pos.array, mx: mx - g.hx, mz: mz - g.hz, zx: 2 * g.hx / nx, zz: 2 * g.hz / nz, nx, nz };   // v28 W4b: bodenNetzHoehe
       const boden = new THREE.Mesh(geo, this._material(undefined, 0));
       boden.name = 'Boden';
       return boden;
@@ -1869,6 +2073,7 @@
       geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
       geo.setIndex(index);
       geo.computeVertexNormals();
+      this._strassenNetz = pos;   // v28 W4b: strassenNetzHoehe (Rand links/rechts je Splinepunkt)
       const m = new THREE.Mesh(geo, this._material(undefined, 1));
       m.name = 'Strasse';
       return m;

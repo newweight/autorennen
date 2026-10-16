@@ -27,13 +27,16 @@
       polizei: !!(c.polizei && c.polizei.standardAn),
       // 15.10. (v25): Verkehr – Geisterfahrer (3 je Runde, fahren entgegen) und Krankenwagen/Abschleppwagen (world/verkehr.js), Standard aus
       geisterfahrer: !!(c.verkehr && c.verkehr.geisterfahrerStandardAn),
-      verkehr: (c.verkehr && c.verkehr.stufen && c.verkehr.stufen[c.verkehr.verkehrStandard]) ? c.verkehr.verkehrStandard : 'aus',
+      verkehr: (c.verkehr && c.verkehr.stufen && c.verkehr.stufen[c.verkehr.verkehrStandard]) ? c.verkehr.verkehrStandard : 'aus',      // alt (v25), nur noch lesbar: wird aus krankenwagen/abschleppwagen abgeleitet
+      // v28 (W1): Krankenwagen und Abschleppwagen je einzeln An/Aus (Standard aus; an = 1 Wagen)
+      krankenwagen: !!(c.verkehr && c.verkehr.stufen && c.verkehr.stufen[c.verkehr.verkehrStandard] && c.verkehr.stufen[c.verkehr.verkehrStandard].krankenwagen),
+      abschleppwagen: !!(c.verkehr && c.verkehr.stufen && c.verkehr.stufen[c.verkehr.verkehrStandard] && c.verkehr.stufen[c.verkehr.verkehrStandard].abschleppwagen),
       // Runde 6 (W1-A4): Rempeln 'sanft' (nur Abstoßung, wie bisher) | 'echt' (Drehen, Abdrängen), Standard sanft
       rempeln: (c.kollision && c.kollision.rempeln && c.kollision.rempeln.standard) === 'echt' ? 'echt' : 'sanft',
       // Runde 6 (W2-D): Tageszeit 'tag' (Standard, Licht wie bisher) | 'daemmerung' | 'nacht'
       tageszeit: c.tageszeit && c.tageszeit[c.tageszeitStandard] ? c.tageszeitStandard : 'tag',
-      // W5 Stufe 2: Online-Raum mit Rempeln (Auto↔Auto) statt Geister – nur die zuletzt gewählte Host-Einstellung, Standard Geister
-      kollisionen: false,
+      // W5 Stufe 2: Online-Raum mit Rempeln (Auto↔Auto) statt Geister – zuletzt gewählte Host-Einstellung; v28 W5: Standard Rempeln
+      kollisionen: true, kollisionenGewaehlt: false,
       // 12.10. Hindernis-Menge: 'normal' (Standard = wie bisher) | 'viele' (≈ ×3, mind. 1 je 150 m) | 'sehrViele' (≈ ×5, mind. 1 je 80 m); wirkt nur in Welten mit Hindernissen
       hindernisMenge: (c.hindernisMenge && c.hindernisMenge.standard) || 'normal',
       // Runde 6 (W3-F): Spielart 'rennen' (Einzelrennen, wie bisher) | 'pokal' (D1) | 'elimination' (D7); Pokal-Größe 3/4/5
@@ -52,6 +55,9 @@
     const hilfe = Array.isArray(r.fahrhilfe) ? r.fahrhilfe : [];
     const fa = Array.isArray(r.fahrer) ? r.fahrer : [];
     const fahrerOk = (n, d) => (R.fahrerSuche(n) ? n : d);
+    const altVerkehr = r.verkehr === 'wenig' || r.verkehr === 'viel';       // v28 (W1): alte Einstellung → beide an
+    const krankenwagen = typeof r.krankenwagen === 'boolean' ? r.krankenwagen : (altVerkehr ? true : std.krankenwagen);
+    const abschleppwagen = typeof r.abschleppwagen === 'boolean' ? r.abschleppwagen : (altVerkehr ? true : std.abschleppwagen);
     return {
       modus: r.modus === 'zwei' ? 'zwei' : 'solo',
       streckeId: R.trackCatalog.find(t => t.id === r.streckeId) ? r.streckeId : std.streckeId,
@@ -71,10 +77,15 @@
       tempoKlasse: c.tempoKlassen && c.tempoKlassen[r.tempoKlasse] ? r.tempoKlasse : std.tempoKlasse,
       polizei: typeof r.polizei === 'boolean' ? r.polizei : std.polizei,
       geisterfahrer: typeof r.geisterfahrer === 'boolean' ? r.geisterfahrer : std.geisterfahrer,
-      verkehr: c.verkehr && c.verkehr.stufen && c.verkehr.stufen[r.verkehr] ? r.verkehr : std.verkehr,
+      // v28 (W1): je einzeln; alte gespeicherte Einstellung (nur `verkehr` wenig/viel) → beide an (Migration beim Laden); `verkehr` bleibt als abgeleiteter Wert erhalten
+      krankenwagen, abschleppwagen,
+      verkehr: krankenwagen || abschleppwagen ? 'wenig' : 'aus',
       rempeln: r.rempeln === 'echt' || r.rempeln === 'sanft' ? r.rempeln : std.rempeln,
       tageszeit: c.tageszeit && c.tageszeit[r.tageszeit] ? r.tageszeit : std.tageszeit,
-      kollisionen: r.kollisionen === true,                // W5 Stufe 2 (nur online genutzt)
+      // W5 Stufe 2 (nur online genutzt). v28 W5: Standard Rempeln; ein Wert gilt nur, wenn der Host ihn in der Lobby selbst gewählt hat
+      // (kollisionenGewaehlt) – alte Speicherstände hatten kollisionen:false nur als Standard gespeichert → Rempeln; altes true bleibt true
+      kollisionen: r.kollisionenGewaehlt === true ? r.kollisionen === true : (r.kollisionen === true || std.kollisionen),
+      kollisionenGewaehlt: r.kollisionenGewaehlt === true,
       hindernisMenge: c.hindernisMenge && c.hindernisMenge.stufen && typeof r.hindernisMenge === 'string' && Object.prototype.hasOwnProperty.call(c.hindernisMenge.stufen, r.hindernisMenge)
         ? r.hindernisMenge : std.hindernisMenge,          // 12.10.
       spielart: r.spielart === 'pokal' || r.spielart === 'elimination' ? r.spielart : 'rennen',     // W3-F
@@ -428,7 +439,12 @@
      */
     rennenStarten(einst, opt) {
       const _startT0 = performance.now();      // v26b: Diagnose „Seite reagiert nicht“ – Startdauer merken (s. Ende der Funktion)
-      if (einst) this.einstellungen = einstellungenPruefen(Object.assign({}, this.einstellungen, einst));
+      if (einst) {
+        const basis = Object.assign({}, this.einstellungen);
+        // v28 (W1): wer nur das alte `verkehr` (aus/wenig/viel) übergibt, bekommt die Migration (wenig/viel → Krankenwagen + Abschleppwagen an)
+        if (einst.verkehr !== undefined && einst.krankenwagen === undefined && einst.abschleppwagen === undefined) { delete basis.krankenwagen; delete basis.abschleppwagen; }
+        this.einstellungen = einstellungenPruefen(Object.assign(basis, einst));
+      }
       if (opt && opt.temporaer) this.fahrhilfeStufe = this.einstellungen.fahrhilfe[0];   // W3-F: Pokal-Rennen nicht speichern
       else this.einstellungenSpeichern();
       const e = this.einstellungen;
@@ -447,7 +463,7 @@
         spieler: zwei ? 2 : 1, autoIds: e.autoIds, fahrer: e.fahrer, gegner: gegnerE, runden: rundenE,
         schwierigkeit: e.schwierigkeit, fahrhilfe: e.fahrhilfe, schaden: e.schaden === true, tempoKlasse: e.tempoKlasse,
         polizei: e.polizei === true && !elim,
-        geisterfahrer: e.geisterfahrer === true && !elim, verkehr: elim ? 'aus' : (e.verkehr || 'aus'),    // 15.10. (v25)
+        geisterfahrer: e.geisterfahrer === true && !elim, krankenwagen: !elim && !!(R.Verkehr && R.Verkehr.ausEinstellung(e).krankenwagen), abschleppwagen: !elim && !!(R.Verkehr && R.Verkehr.ausEinstellung(e).abschleppwagen),    // 15.10. (v25), v28 W1: je einzeln
         elimination: elim ? { zuschauerSekunden: CE.zuschauerSekunden === undefined ? 6 : CE.zuschauerSekunden } : null,   // W3-F
         upgradesZaehlen: e.upgradesZaehlen !== false,      // W3-G
       });
@@ -485,7 +501,7 @@
       // Rennspiel.spiel.startMs / .vorwaermMs in der Konsole, bei > 3 s zusätzlich Warnung + localStorage 'jhsw_langsamerStart'
       this.startMs = performance.now() - _startT0;
       if (this.startMs > 3000) {
-        const info = { ms: Math.round(this.startMs), vorwaermMs: Math.round(this.vorwaermMs || 0), strecke: e.streckeId, tageszeit: e.tageszeit, wetter: e.wetter, verkehr: e.verkehr, geister: !!e.geisterfahrer, schaden: !!e.schaden, gegner: e.gegner, modus: e.modus, wann: new Date().toISOString() };
+        const info = { ms: Math.round(this.startMs), vorwaermMs: Math.round(this.vorwaermMs || 0), strecke: e.streckeId, tageszeit: e.tageszeit, wetter: e.wetter, krankenwagen: !!(R.Verkehr && R.Verkehr.ausEinstellung(e).krankenwagen), abschleppwagen: !!(R.Verkehr && R.Verkehr.ausEinstellung(e).abschleppwagen), geister: !!e.geisterfahrer, schaden: !!e.schaden, gegner: e.gegner, modus: e.modus, wann: new Date().toISOString() };
         try { console.warn('Langsamer Rennstart', info); } catch (err) { /* egal */ }
         try { localStorage.setItem('jhsw_langsamerStart', JSON.stringify(info)); } catch (err) { /* egal */ }
       }
@@ -773,9 +789,9 @@
         this.polizei.vorkompilieren(this.renderer, this.szene, this.menueKamera);
       }
       this.verkehr = null;
-      if ((opt.geisterfahrer === true || (opt.verkehr && opt.verkehr !== 'aus')) && R.Verkehr && !opt.elimination) {   // 15.10. (v25)
+      if ((opt.geisterfahrer === true || opt.krankenwagen === true || opt.abschleppwagen === true) && R.Verkehr && !opt.elimination) {   // 15.10. (v25), v28 W1: je Fahrzeugart einzeln
         this.verkehr = new R.Verkehr(this);
-        this.verkehr.einsetzen(strecke, opt.spieler + opt.gegner, { geister: opt.geisterfahrer === true, stufe: opt.verkehr || 'aus' });
+        this.verkehr.einsetzen(strecke, opt.spieler + opt.gegner, { geister: opt.geisterfahrer === true, krankenwagen: opt.krankenwagen === true, abschleppwagen: opt.abschleppwagen === true });
         this.verkehr.vorkompilieren(this.renderer, this.szene, this.menueKamera);
       }
       this._blauPoolAnlegen(opt.spieler || 1);      // v26c: fester Licht-Pool für Streifen-/Krankenwagen (Lichtzahl bleibt nach dem Rennstart konstant)
@@ -952,10 +968,29 @@
         const fz = f.flug;
         if (fz && fz.aktiv) steigung = 0;
         const flugNicken = fz ? R.Schanzen.anzeigeNicken(fz, alpha) : 0;
+        // 16.10. (v28 W4b, „unterer Reifen verschmolzen"): Räder auf die SICHTBARE Oberfläche (Asphalt +6 cm, Randstein, Startbalken,
+        // Werkstatt-Platte, Brücken-Bohlen, Boden-Gitter) – Höhe, Nicken und Querneigung aus den 4 Radaufstandspunkten (strecke.radBodenPose),
+        // weich nachgeführt (kein Zittern); nicht in der Luft, auf der Rampe, im Looping. Nur Anzeige: v.y = hoeheAn für Physik/Server/Netz bleibt.
+        const rg = f._radGlatt || (f._radGlatt = { an: false, x: 0, z: 0, dy: 0, n: 0, q: 0 });
+        if (this.strecke && this.strecke.radBodenPose && !f.loopAnzeige && !(fz && (fz.aktiv || fz.rampe))) {
+          const rb = this.strecke.radBodenPose(d.x, d.z, d.heading, mesh.position.y, d.nicken + flugNicken, d.neigung,
+            f._radAuf || (f._radAuf = this.strecke.radAufstand(mesh)), f.index, f.nah, this.werkstatt, f._radPose || (f._radPose = {}));
+          if (rb.ok) {
+            if (!rg.init || Math.abs(d.x - rg.x) + Math.abs(d.z - rg.z) > 6) { rg.dy = rb.dy; rg.n = rb.nicken; rg.q = rb.neigung; }   // erstes Bild / Reset: sofort
+            else {
+              if (!rg.an) { rg.dy = 0; rg.n = steigung; rg.q = geleNeig; }                 // nach Flug/Looping: vom bisherigen Stand aus weich
+              const k = 1 - Math.exp(-dt / 0.06), kAuf = 1 - Math.exp(-dt / 0.03);
+              rg.dy += (rb.dy - rg.dy) * (rb.dy > rg.dy ? kAuf : k); rg.n += (rb.nicken - rg.n) * k; rg.q += (rb.neigung - rg.q) * k;
+            }
+            rg.init = rg.an = true;
+            mesh.position.y += rg.dy; steigung = rg.n; geleNeig = rg.q;
+          } else rg.an = false;
+        } else rg.an = false;
+        rg.x = d.x; rg.z = d.z;
         // YXZ: erst Heading (Hochachse), dann Nicken (Querachse, > 0 = Bug hoch), dann Wanken (Längsachse) – alles lokal
         if (!f.loopAnzeige) mesh.rotation.set(d.nicken + steigung + flugNicken, d.heading, d.neigung + geleNeig, 'YXZ');
         // Räder rollen und lenken, Bremslicht
-        f.radwinkel -= v.vLaengs * dt / 0.34;   // Rolldrehung (Radradius ≈ 0,34 m)
+        f.radwinkel -= v.vLaengs * (aktiv ? dt : 0) / 0.34;   // Rolldrehung (Radradius ≈ 0,34 m); v28 W4: nur in laufender Spielzeit – in Pause/Menü steht das Auto, dann auch die Räder
         R.carBuilder.dreheRaeder(mesh, f.radwinkel);
         R.carBuilder.lenkeRaeder(mesh, -v.lenkung * 0.5);
         R.carBuilder.setzeBremslicht(mesh, !!f.bremst);

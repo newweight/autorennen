@@ -173,7 +173,8 @@ function autopilot(st, v, idx) {
   // Server übernimmt kollisionen nur als echtes bool (Host-Nachricht 'einstellungen' läuft durch einstellungenPruefen)
   {
     const w = (x) => einstellungenPruefen({ kollisionen: x }, 2).kollisionen;
-    pruefe('K Server: kollisionen nur true → an; Standard/„true“/1/null → Geister (bool-Prüfung)', w(true) === true && w(false) === false && w() === false && w('true') === false && w(1) === false && w(null) === false,
+    // v28 W5: Standard Rempeln – nur ein echtes false schaltet Geister, alles andere (fehlt/„true“/1/null) → Standard Rempeln
+    pruefe('K Server: kollisionen nur false → Geister; true/Standard/„true“/1/null → Rempeln (bool-Prüfung, v28 Standard Rempeln)', w(true) === true && w(false) === false && w() === true && w('true') === true && w(1) === true && w(null) === true,
       [w(true), w(false), w(), w('true'), w(1), w(null)].join(' '));
   }
   const VERZUG = 6;                 // Zustände (und ack) kommen 6 Schritte = 100 ms zu spät an
@@ -561,7 +562,7 @@ if (process.env.NETZ_NUR_SYNC) { console.log(`\n${ok} OK, ${fehler} FEHL (nur di
   host.senden({ t: 'einstellungen', einstellungen: { kollisionen: true } }); await host.auf('lobby');
   gast.senden({ t: 'einstellungen', einstellungen: { kollisionen: false } }); const lkg = await gast.auf('fehler');
   host.senden({ t: 'einstellungen', einstellungen: { kollisionen: false } }); const lk3 = await host.auf('lobby');
-  pruefe('E Rempeln-Schalter: Host an/aus, „ja“ → Geister, Gast bekommt nurHost', lk1 && lk1.einstellungen.kollisionen === true && lk2 && lk2.einstellungen.kollisionen === false &&
+  pruefe('E Rempeln-Schalter: Host an/aus, „ja“ → Standard Rempeln (v28), Gast bekommt nurHost', lk1 && lk1.einstellungen.kollisionen === true && lk2 && lk2.einstellungen.kollisionen === true &&
     lkg && lkg.grund === 'nurHost' && lk3 && lk3.einstellungen.kollisionen === false);
   // 12.10. Hindernis-Menge-Schalter: Host stellt normal/viele/sehrViele, Unsinn → normal, Gast bekommt nurHost
   host.senden({ t: 'einstellungen', einstellungen: { hindernisMenge: 'viele' } }); const lh1 = await host.auf('lobby');

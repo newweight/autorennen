@@ -1054,8 +1054,9 @@
             const ra = r / RINGE, rb = (r + 1) / RINGE;
             const f = ton(r % 2 ? 0.55 : 0.9);
             const A = [c0 * ra, yy, s0 * ra], B = [c1 * ra, yy, s1 * ra], Cc = [c1 * rb, yy, s1 * rb], D = [c0 * rb, yy, s0 * rb];
-            if (yy > 0) { tri(A, Cc, B, f, f, f); tri(A, D, Cc, f, f, f); }
-            else { tri(A, B, Cc, f, f, f); tri(A, Cc, D, f, f, f); }
+            // v28 W6: Umlaufsinn war verkehrt herum (Kappen zeigten nach innen → von außen unsichtbar, Ballen wirkte wie ein offenes Rohr)
+            if (yy > 0) { tri(A, B, Cc, f, f, f); tri(A, Cc, D, f, f, f); }
+            else { tri(A, Cc, B, f, f, f); tri(A, D, Cc, f, f, f); }
           }
         }
       }

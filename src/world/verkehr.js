@@ -2,9 +2,9 @@
 // 15.10. (v25) Verkehr auf der Strecke: Geisterfahrer, Krankenwagen, Abschleppwagen
 //
 // Einstellungen (Menü, Standard AUS = alles wie bisher):
-//   geisterfahrer  aus | an      3 Geisterfahrer je Runde fahren ENTGEGEN der Fahrtrichtung (Spline-Folgen mit weichen Spurwechseln, kein Ausweichen,
-//                                Licht an + Lichthupe + Hupe), HUD „⚠️ Geisterfahrer voraus!“ ~150 m vorher
-//   verkehr        aus | wenig | viel     wenig = 1 Krankenwagen + 1 Abschleppwagen, viel = 2 + 2 (config.verkehr.stufen)
+//   geisterfahrer  aus | an      selten (v28: je Runde 0–2, nie zwei nah beieinander) fahren Geisterfahrer ENTGEGEN der Fahrtrichtung (Spline-Folgen mit weichen Spurwechseln, kein Ausweichen,
+//                                Licht an + Lichthupe + Hupe), HUD-Warnung „⚠️ Geisterfahrer voraus!“ nur mit config verkehr.geister.warnung (v28: Standard aus)
+//   krankenwagen / abschleppwagen  an | aus  (v28: je einzeln, an = 1 Wagen; alt: verkehr aus | wenig | viel → wenig/viel = beide an)
 //   Krankenwagen   Multivan-Basis (Katalog 'krankenwagen'), Blaulicht + Sirene, fährt zügig (34 m/s) in Fahrtrichtung, Kontakt = 3× Schaden
 //   Abschleppwagen Modell aus world/abschleppwagen.js, gelbe Rundumleuchte, ~9,5 m/s in Fahrtrichtung = bewegliches Hindernis (überholen!)
 //
@@ -38,14 +38,15 @@
     geisterfahrerStandardAn: false, verkehrStandard: 'aus',
     stufen: { aus: { krankenwagen: 0, abschleppwagen: 0 }, wenig: { krankenwagen: 1, abschleppwagen: 1 }, viel: { krankenwagen: 2, abschleppwagen: 2 } },
     geister: { anzahl: 3, tempo: 21, tempoSchwankung: 3, warnAbstand: 150, spurWechselAb: 70, spurWechselBis: 170, wechselLaenge: 45,
-      routeMax: 700, routeMin: 260, routeMinNot: 100, routeLuecke: 30, hupeAbstand: 110, ausloeser: 420, spurAnteil: 0.45, wechselChance: 0.7, wechselAbstand: 120 },
+      routeMax: 700, routeMin: 260, routeMinNot: 100, routeLuecke: 30, hupeAbstand: 110, ausloeser: 420, spurAnteil: 0.45, wechselChance: 0.7, wechselAbstand: 120,
+      verteilung: [0.2, 0.4, 0.4], mindestAbstand: 400, warnung: false },     // v28 (W3): je Runde 0/1/2 Geisterfahrer (Erwartung 1,2), nie zwei näher als 400 m, keine HUD-Warnung/Minimap-Blinken
     krankenwagen: { tempo: 34, schadenFaktor: 3, autoId: 'krankenwagen', spurQ: 0.28 },
     abschleppwagen: { tempo: 9.5, spurQ: 0.3, hoerweite: 110 },
     sperrVor: 45, sperrNach: 45, loopingVor: 140, loopingNach: 70, schanzeVor: 140, schanzeNach: 40, startFrei: 220, zielFrei: 120,
     hindernisSperre: 25, hindernisNach: 20,
     freiAbstand: 130, spawnVorAnderen: 260, wiederkehr: [4, 12], lichtAbstand: 45, blinkHz: 3,
     // intern
-    steckenZeit: 3.5, abseitsZeit: 2.5, nachlauf: 25, sichtNachlauf: 40, hintenWeg: 220, sireneHoerweite: 120, hupeHoerweite: 160, vorausblickMin: 7, vorausblickMax: 38,
+    steckenZeit: 3.5, abseitsZeit: 2.5, steckNah: 15, sichtFrei: 120, endeAuslauf: 15, haltMax: 12, haltKamera: 40, haltRand: 1.5, nachlauf: 25, sichtNachlauf: 40, hintenWeg: 220, sireneHoerweite: 120, hupeHoerweite: 160, vorausblickMin: 7, vorausblickMax: 38,
   };
   function cfg() {
     const c = (R.config && R.config.verkehr) || {};
@@ -177,6 +178,27 @@
     return routen;
   }
 
+  /**
+   * v28 (W3): Welche der geplanten Routen sind in Runde `runde` (0-basiert) besetzt? 0, 1 oder 2 Geisterfahrer (G.verteilung = Wahrscheinlichkeiten für 0/1/2,
+   * Standard 0,2/0,4/0,4 → Erwartung 1,2), deterministisch aus Seed + Runde. Zwei Routen nur, wenn zwischen ihnen mindestens G.mindestAbstand m Strecke liegen
+   * (dann sind nie zwei gleichzeitig nah beieinander sichtbar); gibt es kein solches Paar, wird es einer.
+   * @returns {number[]} Indizes in `routen`
+   */
+  function geisterAuswahl(routen, seed, runde, laenge, opt) {
+    const G = Object.assign({}, cfg().geister, (opt && opt.geister) || {}), rnd = mulberry32(hashText('gr|' + seed + '|' + runde));
+    const v = Array.isArray(G.verteilung) && G.verteilung.length === 3 ? G.verteilung : [0.2, 0.4, 0.4];
+    const summe = (v[0] + v[1] + v[2]) || 1, u = rnd() * summe;
+    let n = u < v[0] ? 0 : u < v[0] + v[1] ? 1 : 2;
+    n = Math.min(n, routen.length);
+    if (n === 0) return [];
+    if (n === 1) return [Math.floor(rnd() * routen.length)];
+    const paare = [];
+    const luecke = (p, q) => { const d1 = (((q.a - p.b) % laenge) + laenge) % laenge, d2 = (((p.a - q.b) % laenge) + laenge) % laenge; return Math.min(d1, d2); };
+    for (let i = 0; i < routen.length; i++) for (let j = i + 1; j < routen.length; j++) if (luecke(routen[i], routen[j]) >= G.mindestAbstand) paare.push([i, j]);
+    if (!paare.length) return [Math.floor(rnd() * routen.length)];
+    return paare[Math.floor(rnd() * paare.length)];
+  }
+
   // ------------------------------------------------------------
   // Lage auf der Strecke
   // ------------------------------------------------------------
@@ -291,13 +313,30 @@
       this._andere = [];
     }
 
-    static aktiv(opt) { return !!opt && (opt.geister === true || (opt.stufe && opt.stufe !== 'aus')); }
+    /** v28 (W1): Krankenwagen/Abschleppwagen je einzeln An/Aus (opt.krankenwagen / opt.abschleppwagen); ohne diese Felder gilt wie früher opt.stufe. */
+    static _einzeln(opt) { return !!opt && (typeof opt.krankenwagen === 'boolean' || typeof opt.abschleppwagen === 'boolean'); }
 
-    /** Anzahl Wagen je Art für die Optionen. */
+    static aktiv(opt) { return !!opt && (opt.geister === true || opt.krankenwagen === true || opt.abschleppwagen === true || (!Verkehr._einzeln(opt) && !!opt.stufe && opt.stufe !== 'aus')); }
+
+    /**
+     * v28 (W1): Einstellungen (Menü/Lobby/Server) → Optionen für einsetzen(). Neue Felder `krankenwagen`/`abschleppwagen` (bool) gelten;
+     * fehlen sie (alte gespeicherte Einstellung / alter Client), gilt `verkehr` 'wenig'/'viel' → beide an (Migration), sonst aus.
+     * @returns {{geister:boolean, krankenwagen:boolean, abschleppwagen:boolean}}
+     */
+    static ausEinstellung(e) {
+        const o = e || {}, alt = o.verkehr === 'wenig' || o.verkehr === 'viel';
+        return { geister: o.geisterfahrer === true,
+          krankenwagen: typeof o.krankenwagen === 'boolean' ? o.krankenwagen : alt,
+          abschleppwagen: typeof o.abschleppwagen === 'boolean' ? o.abschleppwagen : alt };
+    }
+
+    /** Anzahl Wagen je Art für die Optionen (einzeln an = 1 Wagen; alte Stufen wenig 1+1 / viel 2+2 bleiben für opt.stufe lesbar). */
     static anzahlen(opt) {
       const c = cfg(), o = opt || {};
+      const geist = o.geister === true ? c.geister.anzahl : 0;
+      if (Verkehr._einzeln(o)) return { geist, kranken: o.krankenwagen === true ? 1 : 0, abschlepp: o.abschleppwagen === true ? 1 : 0 };
       const st = c.stufen[o.stufe] || c.stufen.aus;
-      return { geist: o.geister === true ? c.geister.anzahl : 0, kranken: st.krankenwagen || 0, abschlepp: st.abschleppwagen || 0 };
+      return { geist, kranken: st.krankenwagen || 0, abschlepp: st.abschleppwagen || 0 };
     }
 
     /** Auto-Daten (Katalog bzw. Sonderbau) für Art/Nummer. */
@@ -315,7 +354,7 @@
     }
 
     /**
-     * Wagen anlegen (alle geparkt). opt = { geister: bool, stufe: 'aus'|'wenig'|'viel' }.
+     * Wagen anlegen (alle geparkt). opt = { geister: bool, krankenwagen: bool, abschleppwagen: bool } (v28; alt: stufe: 'aus'|'wenig'|'viel').
      * @returns {number[]} Fahrzeug-Indizes
      */
     einsetzen(strecke, teilnehmerAnzahl, opt) {
@@ -392,7 +431,7 @@
       f.nah = st.abfrage(pt.x, pt.z, f.index); f.index = f.nah.index;
       if (sp._vorherAngleichen) sp._vorherAngleichen(f);
       f.netReset = (f.netReset || 0) + 1;
-      e.aktiv = true; e.lenk = 0; e.steckt = 0; e.abseits = 0; e.wechsel = null; e.alter = 0; e.hupe = 0; e.nahe = 1e9; e.naechsterWechsel = Infinity;
+      e.aktiv = true; e.halt = false; e.lenk = 0; e.steckt = 0; e.abseits = 0; e.wechsel = null; e.alter = 0; e.haltT = 0; e.haltSeite = undefined; e.hupe = 0; e.nahe = 1e9; e.naechsterWechsel = Infinity;
       e.frac = frac; e.fracZiel = frac; e.sStart = s;
       this.statistik.auftritte++;
       if (e.art === 'geisterfahrer') this.statistik.geister++; else if (e.art === 'krankenwagen') this.statistik.kranken++; else this.statistik.abschlepp++;
@@ -431,6 +470,13 @@
       return true;
     }
 
+    /** v28 (W2): Abstand zum nächsten Teilnehmer, der noch im Rennen ist (Mensch oder Computer). */
+    _teilnehmerAbstand(x, z, tn) {
+      let d = 1e9;
+      for (let i = 0; i < tn.length; i++) { if (tn[i].fertig) continue; const q = Math.hypot(tn[i].x - x, tn[i].z - z); if (q < d) d = q; }
+      return d;
+    }
+
     /** Abstand zur nächsten Spieler-KAMERA (Mensch); ohne Kameras: nächster menschlicher Teilnehmer. */
     _kameraAbstand(x, z) {
       const kams = this.spiel.kameras || [], zustand = this.spiel.zustand;
@@ -459,6 +505,14 @@
       return best ? [best] : [];
     }
 
+    /** v28 (W3): ist Geisterfahrer k in Runde `runde` dabei? (Auswahl je Runde zwischengespeichert) */
+    _geisterDabei(k, runde) {
+      const c = this._geisterPlan || (this._geisterPlan = {});
+      let a = c[runde];
+      if (!a) a = c[runde] = Verkehr.geisterAuswahl(this.routen, this.seed, runde, this.strecke.spline.laenge);
+      return a.indexOf(k) >= 0;
+    }
+
     _inaktiv(e, dt, tn) {
       const c = this.c, L = this.strecke.spline.laenge;
       if (e.art === 'geisterfahrer') {
@@ -472,6 +526,7 @@
           if (d < 40 || d > G.ausloeser) continue;
           const key = Math.floor((h.prog + d) / L);
           if (key < 0 || key >= laufRunden) continue;
+          if (!this._geisterDabei(e.k, key)) continue;                                  // v28 (W3): in dieser Runde nicht besetzt
           if (e.gesehen[h.nr] === key) continue;
           ausloeser = h; key0 = key; break;
         }
@@ -479,6 +534,7 @@
         // am oberen Ende der Route erscheinen (weit von allen Autos und Kameras)
         const pt = lagePunkt(this.strecke, b, 0, e.ast, e.rand, this._pt || (this._pt = {}));
         if (!this._spawnFrei(pt.x, pt.z)) return;
+        if (this._anderesGeisterNah(e, b)) return;                                      // v28 (W3): nie zwei Geisterfahrer gleichzeitig näher als mindestAbstand
         // alle Teilnehmer, die diesen Auftritt „gehabt“ haben (noch vor oder auf der Route), merken
         for (const h of tn) {
           const sH = ((h.s % L) + L) % L;
@@ -524,21 +580,32 @@
       e.pause = 1.5;
     }
 
+    /** v28 (W3): fährt schon ein anderer Geisterfahrer näher als G.mindestAbstand m (Strecke) bei s? */
+    _anderesGeisterNah(e, s) {
+      const L = this.strecke.spline.laenge, M = this.c.geister.mindestAbstand;
+      for (const q of this.eintraege) {
+        if (q === e || !q.aktiv || q.art !== 'geisterfahrer' || !q.f.nah) continue;
+        let d = Math.abs(q.f.nah.s - s) % L; if (d > L / 2) d = L - d;
+        if (d < M) return true;
+      }
+      return false;
+    }
+
     _aktiv(e, dt, tn) {
       const c = this.c, f = e.f, v = f.vehicle, st = this.strecke, L = st.spline.laenge, n = f.nah;
       e.alter += dt;
       if (!n) return;
-      // Festgefahren / abseits: wegnehmen (kein Hängenbleiben als Hindernis)
+      // v28 (W2): Teilnehmer-Abstand. Festgefahren / abseits NUR bei echtem Stillstand (< 1 m/s) und ohne Teilnehmer ≤ 15 m (sonst Rempler/Überholen);
+      // wegnehmen NUR, wenn kein Teilnehmer und keine Kamera ≤ 120 m entfernt ist (nie unter den Augen eines Fahrers).
+      const dTn = this._teilnehmerAbstand(v.x, v.z, tn), dSicht = Math.min(dTn, this._kameraAbstand(v.x, v.z));
       const soll = e.sollTempo === undefined ? e.tempo : e.sollTempo;
-      if (Math.abs(v.vLaengs) < 1.2 && soll > 3 && e.alter > 2) e.steckt += dt; else e.steckt = 0;
+      if (Math.abs(v.vLaengs) < 1.0 && soll > 3 && e.alter > 2 && dTn > c.steckNah) e.steckt += dt; else e.steckt = 0;
       const halb = (st.breiteBei ? st.breiteBei(n.s) : st.breite) / 2;
-      if (Math.abs(n.seitenabstand) > halb + (st.randBreite || 3) + 1) e.abseits += dt; else e.abseits = 0;
-      if (e.steckt > c.steckenZeit || e.abseits > c.abseitsZeit) {
+      if (Math.abs(n.seitenabstand) > halb + (st.randBreite || 3) + 1 && dTn > c.steckNah) e.abseits += dt; else e.abseits = 0;
+      if ((e.steckt > c.steckenZeit || e.abseits > c.abseitsZeit) && dSicht > c.sichtFrei) {
         this.statistik.haengen++;
-        let dn = 1e9; for (let i = 0; i < this.n; i++) dn = Math.min(dn, Math.hypot(this.spiel.fahrzeuge[i].vehicle.x - v.x, this.spiel.fahrzeuge[i].vehicle.z - v.z));
-        if (dn > 14) this.statistik.haengenAlleine++;       // festgefahren OHNE Teilnehmer in der Nähe = Fehler der Steuerung (kein Rempler)
-        // sichtbar vor einer Kamera: erst wegnehmen, wenn niemand hinsieht (≥ 25 m), sonst noch kurz warten
-        if (this._kameraAbstand(v.x, v.z) > 25 || e.steckt > c.steckenZeit * 2) { this._verschwinden(e); return; }
+        if (dTn > 14) this.statistik.haengenAlleine++;       // festgefahren OHNE Teilnehmer in der Nähe = Fehler der Steuerung (kein Rempler)
+        this._verschwinden(e); return;
       }
       const kamD = this._kameraAbstand(v.x, v.z);
       if (e.art === 'geisterfahrer') {
@@ -551,8 +618,23 @@
       } else {
         const ende = e.route.b;
         // Ende des freien Abschnitts erreicht → verschwinden (nicht vor den Augen); oder alle Teilnehmer weit voraus
-        if (n.s >= ende - c.nachlauf && kamD > 40) { this._verschwinden(e); return; }
-        if (n.s >= ende + 10) { this._verschwinden(e); return; }
+        // v28 (W2): am Routenende nur wegnehmen, wenn kein Teilnehmer/keine Kamera ≤ 120 m (sonst weiterrollen bis 40 m hinter das Ende, dann anhalten)
+        const sicht = dSicht > c.sichtFrei;
+        e.halt = n.s >= ende + c.endeAuslauf;
+        if (e.halt) {
+          // v28 (W2, Nachbesserung): Halteplatz NEBEN der Fahrbahn (Randstreifen), rollt weich dorthin aus; höchstens haltMax s, dann weg, sobald keine Kamera ≤ haltKamera m
+          e.haltT = (e.haltT || 0) + dt;
+          if (e.haltSeite === undefined) e.haltSeite = this._haltSeite(e, n, v);
+          if (e.haltSeite) {
+            const bw = v.daten && v.daten.breite || 2, hb = (st.breiteBei ? st.breiteBei(n.s) : st.breite) / 2;
+            const ziel = e.haltSeite.seite * (hb + e.haltSeite.o) / Math.max(0.4, hb - e.rand);
+            e.frac += klemme(ziel - e.frac, -1.0 * dt, 1.0 * dt);
+            e.haltQ = e.haltSeite.seite * (hb + e.haltSeite.o);
+          }
+          if (e.haltT > c.haltMax && kamD > c.haltKamera) { this._verschwinden(e); return; }
+        }
+        if (n.s >= ende - c.nachlauf && kamD > 40 && sicht) { this._verschwinden(e); return; }
+        if (n.s >= ende + 10 && sicht) { this._verschwinden(e); return; }
         if (e.alter > 4) {
           let alleVoraus = true;
           for (let i = 0; i < tn.length; i++) {
@@ -560,9 +642,38 @@
             let d = n.s - ((tn[i].s % L) + L) % L; if (d < -L / 2) d += L; if (d > L / 2) d -= L;
             if (d > -c.hintenWeg) { alleVoraus = false; break; }
           }
-          if (alleVoraus && kamD > c.hintenWeg) { this._verschwinden(e); return; }
+          if (alleVoraus && kamD > c.hintenWeg && dSicht > c.sichtFrei) { this._verschwinden(e); return; }
         }
       }
+    }
+
+    /**
+     * v28 (W2): Seite (+1/−1) für den Halteplatz neben der Fahrbahn: Querlage Fahrbahnrand + haltRand (Mitte + halbe Wagenbreite), frei von Bande,
+     * Tribüne, Werkstatt und festen Säulen auf dem ganzen Ausrollweg. Bevorzugt die Seite der aktuellen Spur. null = keine Seite frei (bleibt in der Spur).
+     */
+    _haltSeite(e, n, v) {
+      const st = this.strecke, c = this.c, bw = v.daten && v.daten.breite || 2, sp = st.spline;
+      const weg = 30 + v.vLaengs * v.vLaengs / (2 * 5);                // Ausrollweg (Bremsung ≈ 5 m/s²) + Kriechstrecke zum Rand
+      const wk = this.spiel.werkstatt && this.spiel.werkstatt.platz, sa = st.saeulen || [];
+      // Versatz o (Mitte über dem Fahrbahnrand): Wunsch haltRand + halbe Breite, wo die Bande näher liegt (Wald-Zaun) so weit wie möglich, mind. oMin
+      const ok = (seite) => {
+        let o = c.haltRand + bw / 2;
+        for (let k = 0; k <= weg; k += 4) {
+          const s = n.s + k, hb = (st.breiteBei ? st.breiteBei(s) : st.breite) / 2;
+          if (st.grenzeBei) o = Math.min(o, st.grenzeBei(s) - bw / 2 - 0.1 - hb);
+          if (o < 0.3) return null;
+          if (wk && wk.seite === seite && Math.abs(sp.differenzS(wk.s, s)) < wk.laenge / 2 + Math.max(wk.zufahrt || 0, wk.ausfahrt || 0) + 4) return null;
+        }
+        for (let k = 0; k <= weg; k += 4) {
+          const s = n.s + k, hb = (st.breiteBei ? st.breiteBei(s) : st.breite) / 2;
+          const p = lagePunkt(st, s, seite * (hb + o) / Math.max(0.4, hb - e.rand), 0, e.rand, this._hp || (this._hp = {}));
+          if (R.Tribuenen && R.Tribuenen.sperre && R.Tribuenen.sperre(st, p.x, p.z, bw / 2 + 2)) return null;
+          for (let i = 0; i < sa.length; i++) { const q = sa[i], dx = q.x - p.x, dz = q.z - p.z, r = (q.r || 0.5) + bw / 2 + 1; if (dx * dx + dz * dz < r * r) return null; }
+        }
+        return { seite, o };
+      };
+      const erst = e.frac >= 0 ? 1 : -1;
+      return ok(erst) || ok(-erst);
     }
 
     /** Geisterfahrer: Spurwechsel, Hupe/Lichthupe-Zustand. */
@@ -614,6 +725,8 @@
       if (st.tempoBei) soll = Math.min(soll, Math.max(7, st.tempoBei(sZiel) * 0.7));
       // Krankenwagen/Abschleppwagen bremsen vor langsameren Autos vor ihnen (kein Auffahren); Geisterfahrer nicht (sie weichen nicht aus)
       if (e.art !== 'geisterfahrer') soll = Math.min(soll, this._folgeTempo(e, v, soll));
+      // v28 (W2): Routenende erreicht, Teilnehmer noch in Sicht → anhalten statt vor ihren Augen zu verschwinden; vorher im Schritttempo zum Halteplatz neben der Fahrbahn
+      if (e.halt) soll = (e.haltSeite && e.haltQ !== undefined && Math.abs(n.seitenabstand - e.haltQ) > 0.7 && e.haltT < 10) ? Math.min(soll, 4) : 0;
       e.sollTempo = soll;
       const s = tempoSteuerung(soll, tempo);
       f.bremst = s.bremse > 0 && tempo > 0.5;
@@ -669,6 +782,7 @@
     warnung(i) {
       if (i >= this.n) return null;
       const f = this.spiel.fahrzeuge[i], G = this.c.geister;
+      if (!G.warnung) return null;                       // v28 (W3): keine HUD-Vorwarnung (config verkehr.geister.warnung)
       if (!f || !f.nah) return null;
       const L = this.strecke.spline.laenge;
       let best = null;
@@ -686,7 +800,7 @@
     minimapPunkte() {
       const l = this._mm; l.length = 0;
       for (const e of this.eintraege) if (e.aktiv) l.push({ vehicle: e.f.vehicle, art: e.art });
-      l.blink = this._phase === 1;
+      l.blink = this.c.geister.warnung ? this._phase === 1 : false;       // v28 (W3): Minimap-Blinken nur mit Warnung
       return l;
     }
 
@@ -852,6 +966,7 @@
   Verkehr.sperrzonen = sperrzonen;
   Verkehr.freieAbschnitte = freieAbschnitte;
   Verkehr.geisterRouten = geisterRouten;
+  Verkehr.geisterAuswahl = geisterAuswahl;
   Verkehr.lagePunkt = lagePunkt;
   Verkehr.astFuer = astFuer;
   Verkehr.gesperrt = gesperrt;

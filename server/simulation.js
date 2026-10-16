@@ -93,6 +93,9 @@ function einstellungenPruefen(roh, spielerAnzahl) {
   let wetter = (c.wetter && c.wetter[r.wetter]) || r.wetter === 'zufall' ? r.wetter : 'klar';
   if (jz !== 'zufall' && wetter !== 'zufall' && R.Wetter.erlaubt && !R.Wetter.erlaubt(daten.thema, jz).includes(wetter)) wetter = 'klar';
   const maxKI = Math.max(0, Math.min(c.rennen.gegnerMax, N.MAX_AUTOS - Math.max(1, spielerAnzahl || 1)));
+  const altVerkehr = r.verkehr === 'wenig' || r.verkehr === 'viel';       // v28 (W1): alter Client → beide an
+  const krankenwagen = typeof r.krankenwagen === 'boolean' ? r.krankenwagen : altVerkehr;
+  const abschleppwagen = typeof r.abschleppwagen === 'boolean' ? r.abschleppwagen : altVerkehr;
   return {
     streckeId: daten.id, welt, variante, jahreszeit: jz, wetter,
     windStaerke: r.windStaerke === 'zufall' ? 'zufall' : zahl(r.windStaerke, 0, 5, 0),
@@ -102,11 +105,13 @@ function einstellungenPruefen(roh, spielerAnzahl) {
     tempoKlasse: c.tempoKlassen && c.tempoKlassen[r.tempoKlasse] ? r.tempoKlasse : (c.tempoKlasseStandard || 'normal'),
     tageszeit: c.tageszeit && c.tageszeit[r.tageszeit] ? r.tageszeit : 'tag',
     schaden: false,                       // Stufe 1: online immer aus
-    kollisionen: r.kollisionen === true,  // Stufe 2 (nicht im Menü): Auto↔Auto an
+    kollisionen: typeof r.kollisionen === 'boolean' ? r.kollisionen : true,  // Stufe 2: Auto↔Auto (Rempeln); v28 W5: Standard Rempeln, nur echtes false = Geister
     polizei: r.polizei === true,          // v4 (14.10.): Streifenwagen (nur ein echtes true schaltet ihn an)
     // v25 (15.10., additiv): Verkehr – Geisterfahrer (true/false) und Krankenwagen/Abschleppwagen ('aus'|'wenig'|'viel'); alte Clients senden es nicht → aus
     geisterfahrer: r.geisterfahrer === true,
-    verkehr: c.verkehr && c.verkehr.stufen && typeof r.verkehr === 'string' && Object.prototype.hasOwnProperty.call(c.verkehr.stufen, r.verkehr) ? r.verkehr : 'aus',
+    // v28 (W1, additiv): Krankenwagen/Abschleppwagen je einzeln (nur ein echtes true schaltet ein); fehlen beide Felder (alter Client), gilt `verkehr` 'wenig'/'viel' → beide an.
+    // `verkehr` bleibt als abgeleiteter Wert ('wenig' wenn einer an, sonst 'aus') in den Einstellungen, damit alte Clients weiter etwas Sinnvolles anzeigen.
+    krankenwagen, abschleppwagen, verkehr: krankenwagen || abschleppwagen ? 'wenig' : 'aus',
     // 12.10. Hindernis-Menge: nur 'normal' | 'viele' | 'sehrViele' (unbekannt, Zahl, null … → 'normal'); alle Browser bauen dieselbe Strecke
     hindernisMenge: c.hindernisMenge && c.hindernisMenge.stufen && typeof r.hindernisMenge === 'string' &&
       Object.prototype.hasOwnProperty.call(c.hindernisMenge.stufen, r.hindernisMenge) ? r.hindernisMenge : ((c.hindernisMenge && c.hindernisMenge.standard) || 'normal'),
@@ -214,7 +219,7 @@ class Simulation {
     // Sie sind Einträge hinter den Teilnehmern in sim.fahrzeuge (f.polizei = true); zustand() meldet sie getrennt (`po`, `ps`, `pz`).
     this.nT = teilnehmer.length;
     sim.polizei = null;
-    const verkehrAn = R.Verkehr && (e.geisterfahrer || e.verkehr !== 'aus');
+    const verkehrAn = R.Verkehr && (e.geisterfahrer || e.krankenwagen || e.abschleppwagen);
     if ((e.polizei && R.Polizei) || verkehrAn) {
       sim.fahrzeugHinzufuegen = function (auto, x, z, heading) {     // kopflos: kein Mesh, keine Szene
         const vehicle = new R.Vehicle(auto.fahrwerte, { tempoKlasse: e.tempoKlasse });
@@ -235,7 +240,7 @@ class Simulation {
     sim.verkehr = null;
     if (verkehrAn) {
       sim.verkehr = new R.Verkehr(sim);
-      sim.verkehr.einsetzen(strecke, teilnehmer.length, { geister: e.geisterfahrer, stufe: e.verkehr });
+      sim.verkehr.einsetzen(strecke, teilnehmer.length, { geister: e.geisterfahrer, krankenwagen: e.krankenwagen === true, abschleppwagen: e.abschleppwagen === true });
       sim.verkehr.idx.forEach((i) => { sim.fahrzeuge[i].netReset = 0; });
     }
     // Reset-Zähler (Clients interpolieren nicht über einen Sprung hinweg)

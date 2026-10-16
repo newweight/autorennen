@@ -511,6 +511,43 @@
      * Breite (m ab Randstreifen-Kante qE) des weichen Asphalt-Keils bei Abstand ds (m) von der Fläche-Mitte: vor der Fläche über `zufahrt` m
      * von 0 auf die volle Tiefe (qB − qE), hinter der Fläche über `ausfahrt` m zurück auf 0. Auf der Fläche selbst: volle Tiefe, außerhalb: 0.
      */
+    /**
+     * v28 W4b: Höhe der sichtbaren Werkstatt-Fläche an (s, q roh; Welt x, z) relativ zu strecke.hoeheAn(x, z) – wie bauen(): Fläche +0,07
+     * (Gitter mit 3 Spalten quer, Lückenstreifen +0,065), Linien +0,09, gelbe Warnstreifen +0,1, Keil +0,06 (Sehne zwischen Straßenkante und
+     * Keilrand). Ohne x/z nur die Anhebung (ohne Sehne). null = nicht auf der Werkstatt-Fläche (für strecke.belagHoehe).
+     */
+    belag(s, q, x, z) {
+      const P = this.platz;
+      if (!P) return null;
+      const ds = this.strecke.spline.differenzS(s, P.s), qs = q * P.seite, qE = P.qE !== undefined ? P.qE : P.qA - 0.4, h = P.laenge / 2;
+      if (qs < qE - 0.05 || qs > P.qB) return null;
+      const st = this.strecke;
+      const sehne = (q0, q1, dy) => {                     // Mesh: Höhe linear zwischen den Gitterspalten q0 … q1 (je hoeheAn + dy)
+        if (x === undefined || q1 <= q0) return dy;
+        const a = this.welt(s, q0), b = this.welt(s, q1), t = Math.max(0, Math.min(1, (qs - q0) / (q1 - q0)));
+        return (1 - t) * st.hoeheAn(a.x, a.z) + t * st.hoeheAn(b.x, b.z) + dy - st.hoeheAn(x, z);
+      };
+      if (ds >= -h && ds <= h) {
+        if (qs < P.qA) return sehne(qE - 0.05, P.qA + 0.1, 0.065);
+        const w3 = (P.qB - P.qA) / 3, c = Math.max(0, Math.min(2, Math.floor((qs - P.qA) / w3)));
+        // Markierungen wie bauen(): Linien +0,09 (Breite 0,14), gelbe Warnstreifen +0,1 an der Hallenseite
+        const u = ds + h, L = P.laenge, l = 0.14, nBox = P.boxen || 2, nStr = Math.max(8, Math.round((L - 1.2) / 1.5)), sl = (L - 1.2) / nStr;
+        let dy = 0.07;
+        if (u >= 0.6 && u <= L - 0.6 && qs >= P.qB - 0.85 && qs <= P.qB - 0.31 && ((u - 0.6) % sl) <= sl / 2) dy = 0.1;
+        else if (u >= 0.2 && u <= L - 0.2 && ((qs >= P.qA + 0.15 && qs <= P.qA + 0.15 + l) || (qs >= P.qB - 0.15 - l && qs <= P.qB - 0.15))) dy = 0.09;
+        else if (qs >= P.qA + 0.15 && qs <= P.qB - 0.15) {
+          if ((u >= 0.2 && u <= 0.2 + l) || (u >= L - 0.2 - l && u <= L - 0.2)) dy = 0.09;
+          for (let k = 1; k < nBox; k++) if (Math.abs(u - L * k / nBox) <= l / 2) dy = 0.09;
+        }
+        return sehne(P.qA + c * w3, P.qA + (c + 1) * w3, dy);
+      }
+      if (ds < -h - P.zufahrt || ds > h + P.ausfahrt) return null;
+      // Keil-Mesh: 8 Abschnitte, Breite dazwischen linear (wie bauen() → keil(sFern, sNah))
+      const a0 = ds < -h ? -h - P.zufahrt : h, len = ds < -h ? P.zufahrt : P.ausfahrt, t = Math.max(0, Math.min(8, (ds - a0) / len * 8)), k = Math.min(7, Math.floor(t));
+      const wb = (j) => Math.max(0.02, this.keilBreite(a0 + len * j / 8)), wk = wb(k) + (wb(k + 1) - wb(k)) * (t - k);
+      return qs <= qE + wk ? sehne(qE - 0.05, qE + wk, 0.06) : null;
+    }
+
     keilBreite(ds) {
       const P = this.platz, voll = P.qB - (P.qE !== undefined ? P.qE : P.qA - 0.4), h = P.laenge / 2;
       if (ds >= -h && ds <= h) return voll;
@@ -672,6 +709,7 @@
     get platz() { return this.teile.length ? this.teile[0].platz : null; }
     get plaetze() { return this.teile.map(t => t.platz); }
     bei(fn) { this.teile.forEach(t => t.bei(fn)); }
+    belag(s, q, x, z) { for (const t of this.teile) { const b = t.belag(s, q, x, z); if (b !== null) return b; } return null; }   // v28 W4b
     bauen() {
       if (typeof THREE === 'undefined') return null;
       const g = new THREE.Group(); g.name = 'Werkstaetten';

@@ -10,7 +10,8 @@ if (process.env.KI_LAUF) {
     const orig = fs.readFileSync, altDatei = path.join(__dirname, 'sicherung_v27_F5', 'driver.js');
     fs.readFileSync = function (p, ...r) { return (typeof p === 'string' && /src[\\/]ai[\\/]driver\.js$/.test(p)) ? orig.call(fs, altDatei, ...r) : orig.call(fs, p, ...r); };
   }
-  const { Simulation } = require('../server/simulation.js');
+  const { Simulation, laden } = require('../server/simulation.js');
+  laden().config.verkehr.geister.verteilung = [0, 0, 1];      // v28 (W3): Geisterfahrer sind jetzt selten (0–2 je Runde) – im Test fest 2 je Runde
   const geister = process.env.KI_GEISTER === '1';
   const sim = new Simulation({ einstellungen: { streckeId: strecke, gegner: 5, runden: 2, geisterfahrer: geister, kollisionen: true, schwierigkeit: 'mittel' }, spieler: [{ fahrer: 'Jonas', auto: 'passat' }], seed: 1 });
   const S = sim.sim, R = sim.R, f0 = S.fahrzeuge[0];

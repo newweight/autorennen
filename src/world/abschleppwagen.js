@@ -95,7 +95,8 @@
       const q = n.seitenabstand, seitlich = wert(C.seitlich, 3.6);
       e.s = n.s; e.qLkw = q >= 0 ? q - seitlich : q + seitlich;
       e.sStart = n.s - wert(C.anfahrtWeg, 38); e.weg = wert(C.abfahrtWeg, 34);
-      e.auto = { x: v.x, y: v.y, z: v.z, heading: v.heading, rx: mesh.rotation.x, rz: mesh.rotation.z, sx: mesh.scale.x, sy: mesh.scale.y, sz: mesh.scale.z };
+      // v28 W4b: Höhe aus der Anzeige (Räder auf dem sichtbaren Belag, main.js radBodenPose) – sonst sackt das Wrack beim Anheben 6 cm ab
+      e.auto = { x: v.x, y: isFinite(mesh.position.y) ? mesh.position.y : v.y, z: v.z, heading: v.heading, rx: mesh.rotation.x, rz: mesh.rotation.z, sx: mesh.scale.x, sy: mesh.scale.y, sz: mesh.scale.z };
       e.dist = 0;
       if (!e.lkw) { e.lkw = this._lkwBauen(); if (this.szene && this.szene.add) this.szene.add(e.lkw); }
       e.aktiv = true;

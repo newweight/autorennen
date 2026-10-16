@@ -11,7 +11,7 @@ Startet server/server.js als Unterprozess (freier Port) und spielt mit 2 Browser
     Server-Zustände in beiden Sichten gleich (Computer-Auto zum selben Tick)
  f) weiterfahren bis die Runde zählt (Ziel) → Ergebnis-Tafel bei beiden; keine JS-Fehler
 W5 Stufe 2 (Rempeln online):
- g) Lobby: Gast sieht „Geister“ (nur Ansicht), Host schaltet per Klick auf „💥 Rempeln“ (Server übernimmt, Gast sieht den Wert,
+ g) Lobby: Standard Rempeln (v28), Host stellt für d) auf Geister, später per Klick wieder auf „💥 Rempeln“ (Server übernimmt, Gast sieht den Wert,
     zuletzt gewählter Wert landet in den lokalen Einstellungen); Start mit Rempeln: alle Autos deckend, Vorhersage kennt die
     Stellvertreter; der Gast fährt in das stehende Host-Auto → Stoß in der Vorhersage, keine harte Korrektur, keine JS-Fehler
 v16 Sonder-Vorhersage (Browser-Teil, ohne Server-Eingriff): Der Gast bekommt im Stand einen künstlichen Server-Zustand `ich.sz` (Looping aktiv), der Server-Zustandsempfang
@@ -163,9 +163,15 @@ try:
         gl = gast.evaluate("(() => { const o = Rennspiel.spiel.menue.onlineUi; return { n: o.lobby.spieler.length, host: o.istHost, bereit: o.ichLobby().bereit, start: !!document.querySelector('[data-a=\"start\"]'), einst: !!document.querySelector('.on-zusammen') }; })()")
         pruefe('Gast-Lobby: 2 Spieler, Gast bereit (Leertaste), kein Start-Knopf, Einstellungen nur zum Ansehen', gl['n'] == 2 and not gl['host'] and gl['bereit'] and not gl['start'] and gl['einst'], gl)
         gz = gast.evaluate("document.querySelector('.on-zusammen').textContent")
-        pruefe('Rempeln-Schalter: Standard Geister (Host-Zeile 👻 aktiv, Gast sieht „Geister“, kein Schalter beim Gast)',
-               host.evaluate("(() => { const a = document.querySelector('[data-a=\"wert:kollisionen:aus\"]'); return !!a && a.classList.contains('aktiv'); })()")
-               and 'Geister' in gz and gast.evaluate("!document.querySelector('[data-a^=\"wert:kollisionen\"]')"), gz[-40:])
+        # v28 W5: Standard ist jetzt Rempeln (vorher Geister) – danach schaltet der Host für Teil d) bewusst auf 👻 Geister
+        pruefe('Rempeln-Schalter: Standard Rempeln (Host-Zeile 🚗💥 aktiv, Gast sieht „Rempeln an“, kein Schalter beim Gast)',
+               host.evaluate("(() => { const a = document.querySelector('[data-a=\"wert:kollisionen:an\"]'); return !!a && a.classList.contains('aktiv'); })()")
+               and 'Rempeln an' in gz and gast.evaluate("!document.querySelector('[data-a^=\"wert:kollisionen\"]')"), gz[-40:])
+        host.click('[data-a="wert:kollisionen:aus"]')
+        for pg in (host, gast):
+            pg.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.einstellungen.kollisionen === false", timeout=10000, polling=200)
+        gz = gast.evaluate("document.querySelector('.on-zusammen').textContent")
+        pruefe('Host schaltet auf 👻 Geister: Gast sieht „Geister“', 'Geister' in gz, gz[-40:])
         # ---------- b2) 12.10. Hindernis-Menge in der Lobby: grau in Welt ohne Hindernisse, Host stellt ein, Gast sieht es ----------
         hm0 = host.evaluate("""(() => { const z = Array.from(document.querySelectorAll('.on-zeile')).find(e => e.querySelector('.on-label').textContent.includes('Hindernisse'));
           return z ? { pillen: Array.from(z.querySelectorAll('.pille')).map(p => p.textContent.trim()), aus: z.querySelectorAll('.pille.aus').length, klickbar: z.querySelectorAll('.pille[data-a]').length,
