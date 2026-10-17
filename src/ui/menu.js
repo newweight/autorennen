@@ -129,7 +129,7 @@
       if (this.streckeDaten().mega) z.push('wind', 'schaden');     // v22 Megastrecke: Jahreszeit/Wetter würfelt jede Zone selbst
       else z.push('jahreszeit', 'wetter', 'wind', 'schaden');
       z.push( 'tempo', 'polizei', 'rempeln');   // Runde 5: Tempo-Klasse, 5b: Polizei, 6: Rempeln
-      if (this.e.spielart !== 'elimination') z.push('geister', 'krankenwagen', 'abschleppwagen', 'tiere');      // 15.10. (v25): Geisterfahrer + Verkehr (v28 W1: Krankenwagen und Abschleppwagen je einzeln; stehen links unten; hinten angehängt, damit die Fokus-Nummern der bisherigen Zeilen gleich bleiben)
+      if (this.e.spielart !== 'elimination') z.push('geister', 'krankenwagen', 'abschleppwagen', 'tiere', 'rennautos');      // 15.10. (v25): Geisterfahrer + Verkehr (v28 W1: Krankenwagen und Abschleppwagen je einzeln; stehen links unten; hinten angehängt, damit die Fokus-Nummern der bisherigen Zeilen gleich bleiben)
       z.push('start');
       return z;
     }
@@ -242,10 +242,25 @@
       }, 250);
     }
     /** Streckenwechsel: Welt zurück auf Standard, Wetter prüfen. */
+    /**
+     * v29 (F3): Formel-1-Strecke (Modus „Nur Rennautos“ an) → die Autowahl springt auf den Formel-Renner (nur ein Vorschlag, im Auto-Schritt änderbar);
+     * verlässt man die Strecke, kommt die frühere Wahl zurück – aber nur, wenn man sie nicht inzwischen selbst geändert hat.
+     */
+    formelVorschlag() {
+      const e = this.e, d = this.streckeDaten();
+      if (d.nurRennautosStandard && e.nurRennautos !== false) {
+        if (!e.autoVorFormel && !(e.autoIds[0] === 'formel' && e.autoIds[1] === 'formel')) e.autoVorFormel = e.autoIds.slice();
+        e.autoIds = ['formel', 'formel'];
+      } else if (e.autoVorFormel) {
+        if (e.autoIds[0] === 'formel' && e.autoIds[1] === 'formel') e.autoIds = e.autoVorFormel.slice();
+        e.autoVorFormel = null;
+      }
+    }
     streckeWaehlen(id) {
       if (this.e.streckeId !== id) {
         this.e.streckeId = id; this.e.welt = ''; this.e.variante = ''; this.weltFix();
         if (this.streckeDaten().mega) this.e.runden = 1;      // v22: Megastrecke ist lang → Standard 1 Runde
+        this.formelVorschlag();
       }
       this.spiel.menueHintergrund(id);
     }
@@ -396,7 +411,7 @@
         if (dx) e.polizei = dx > 0;
       } else if (zeile === 'geister') {
         if (dx) e.geisterfahrer = dx > 0;
-      } else if (zeile === 'krankenwagen' || zeile === 'abschleppwagen' || zeile === 'tiere') {      // v28 (W1): je Fahrzeugart An/Aus (← aus, → an); W10: Tiere
+      } else if (zeile === 'krankenwagen' || zeile === 'abschleppwagen' || zeile === 'tiere' || zeile === 'rennautos') {      // v28 (W1): je Fahrzeugart An/Aus (← aus, → an); W10: Tiere
         if (dx) this.wertSetzen(zeile, dx > 0 ? 'an' : 'aus');
       } else if (zeile === 'tageszeit') {      // Runde 6 (W2-D): Tag → Dämmerung → Nacht
         const l = Object.keys(R.config.tageszeit || { tag: 1 }), i = l.indexOf(e.tageszeit || 'tag');
@@ -419,6 +434,7 @@
       else if (zeile === 'polizei') e.polizei = k === 'an';
       else if (zeile === 'geister') e.geisterfahrer = k === 'an';
       else if (zeile === 'tiere') e.tiere = k === 'an';      // v28 (W10): Tiere queren die Straße
+      else if (zeile === 'rennautos') e.nurRennautos = k === 'an';      // v29 (F3): Modus „Nur Rennautos“
       else if (zeile === 'krankenwagen' || zeile === 'abschleppwagen') {      // v28 (W1)
         e[zeile] = k === 'an';
         e.verkehr = e.krankenwagen || e.abschleppwagen ? 'wenig' : 'aus';      // abgeleiteter Altwert (alte Spielstände/Server)
@@ -602,10 +618,10 @@
     }
 
     htmlStrecke() {
-      const farben = { wiese: ['#7ed957', '#3a8f2f'], wald: ['#2f7a3a', '#143d1f'], wueste: ['#f2c768', '#c98a34'], fantasie: ['#ff8fd8', '#9b5de5'], dino: ['#6fae3a', '#3d6b1e'] };
+      const farben = { wiese: ['#7ed957', '#3a8f2f'], wald: ['#2f7a3a', '#143d1f'], wueste: ['#f2c768', '#c98a34'], fantasie: ['#ff8fd8', '#9b5de5'], dino: ['#6fae3a', '#3d6b1e'], formel1: ['#8d949c', '#3a3f46'] };
       const labels = { leicht: 'leicht', mittel: 'mittel', schnell: 'schnell', spass: 'spaß' };
       return `<div class="reihe strecken">` + R.trackCatalog.map((s) => {
-        const f = farben[s.thema] || farben.wiese;
+        const f = farben[s.id] || farben[s.thema] || farben.wiese;      // v29: Formel 1 = graue Asphaltkarte
         const himmel = s.thema === 'fantasie' ? '#b48cff' : s.thema === 'dino' ? '#f2b36a' : '#8fc8ff';   // Dino: Vulkan-Dunst
         // Hinweis aus den Katalogdaten (Fantasie: Loopings, Bälle, Wasserstrahl)
         const teile = [];
@@ -619,7 +635,7 @@
         return `<div class="karte strecke t-${s.thema}${this.e.streckeId === s.id ? ' gewaehlt' : ''}" data-a="strecke:${s.id}">` +
           `<div class="strecken-bild" style="background:linear-gradient(180deg,${himmel} 0%,${himmel} 35%,${f[0]} 35%,${f[1]} 100%)">` +
           `<div class="strasse"></div>${pille}</div>` +
-          `<div class="karten-name">${s.name}</div><div class="karten-sub">${s.beschreibung}</div>${hinweis}</div>`;
+          `<div class="karten-name">${s.emoji ? s.emoji + ' ' : ''}${s.name}</div><div class="karten-sub">${s.beschreibung}</div>${hinweis}</div>`;
       }).join('') + `</div>` + this.htmlWelt() + this.htmlVariante() + this.htmlHindernisse();
     }
 
@@ -810,9 +826,21 @@
               pille('tiere', 'aus', 'Aus', e.tiere === false) + pille('tiere', 'an', 'An', e.tiere !== false) + `</div></div>`;
           })()).replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele') +
         // Runde 6: Rempeln (sanft = nur abprallen, echt = Autos drehen sich / werden abgedrängt); etwas flacher (passt in 1440×900)
-        pillenL('rempeln', '🌀', 'Rempeln', [{ k: 'sanft', text: 'Sanft' }, { k: 'echt', text: 'Echt' }], e.rempeln === 'echt' ? 'echt' : 'sanft',
-          'Sanft: Autos prallen nur ab – Echt: Autos drehen sich oder werden von der Bahn geschubst')
-          .replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele');
+        // v29 (F3): in derselben Zeile „Nur Rennautos“ (🏎 alle Computer-Gegner fahren den Formel-Renner, jeder in eigener Farbe; bei der Formel-1-Strecke Standard An) –
+        // eigene Fokus-Zeile 'rennautos' (hinten angehängt), Unterstreichung zeigt die Gruppe; nicht im Modus „Letzter fliegt raus“
+        (e.spielart === 'elimination'
+          ? pillenL('rempeln', '🌀', 'Rempeln', [{ k: 'sanft', text: 'Sanft' }, { k: 'echt', text: 'Echt' }], e.rempeln === 'echt' ? 'echt' : 'sanft',
+            'Sanft: Autos prallen nur ab – Echt: Autos drehen sich oder werden von der Bahn geschubst')
+          : (() => {
+            const gf = z[this.fokus], imRR = gf === 'rempeln' || gf === 'rennautos', rnAn = R.carCatalog.nurRennautos(e, this.streckeDaten());
+            const u = (zeile) => (gf === zeile ? 'text-decoration:underline;text-decoration-thickness:.12em;text-underline-offset:.2em;' : '');
+            const pille = (zeile, k, text, an) => `<span class="pille${an ? ' aktiv' : ''}" data-a="wert:${zeile}:${k}">${text}</span>`;
+            return `<div class="zeile viele${imRR ? ' fokus' : ''}" ${fz(imRR ? gf : 'rempeln')} title="Rempeln: Sanft = Autos prallen nur ab, Echt = Autos drehen sich oder werden von der Bahn geschubst. Nur Rennautos: alle Computer-Gegner fahren den Formel-Renner, jeder in einer eigenen Farbe">` +
+              `<div class="z-label"><span style="${u('rempeln')}" data-a="fokus:${z.indexOf('rempeln')}">🌀 Rempeln</span></div><div class="z-wert">` +
+              pille('rempeln', 'sanft', 'Sanft', e.rempeln !== 'echt') + pille('rempeln', 'echt', 'Echt', e.rempeln === 'echt') +
+              `<span class="z-label" style="${u('rennautos')}margin:0 0 0 .7em;font-size:.95em" data-a="fokus:${z.indexOf('rennautos')}">🏎 Nur Rennautos</span>` +
+              pille('rennautos', 'aus', 'Aus', !rnAn) + pille('rennautos', 'an', 'An', rnAn) + `</div></div>`;
+          })()).replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele');
       const tonAn = !R.Audio || R.Audio.an;
       const aktionen = `<div class="m-aktionen"><div class="start-knopf${fk('start')}" data-a="start">🏁 LOS GEHT'S!</div>` +
         `<div class="knopf klein ton" data-a="ton">${tonAn ? '🔊 Ton an' : '🔇 Ton aus'} <kbd>M</kbd></div>` +

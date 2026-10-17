@@ -65,6 +65,8 @@
       if (k === 'gabelungen' || SONDER.has(k)) return;
       d[k].forEach(e => dazu(e, 20));
     });
+    // v29 Gegenlesen: Formel-1-Boxengasse (daten.boxen ist ein Objekt, kein Array) ± 20 m sperren – sonst stand die Werkstatt in der Gasse
+    if (d.boxen && typeof d.boxen.s0 === 'number' && typeof d.boxen.s1 === 'number') liste.push({ s0: Math.min(d.boxen.s0, d.boxen.s1) - 20, s1: Math.max(d.boxen.s0, d.boxen.s1) + 20 });
     // v25: Zonen anderer Module (Tribünen, Verkehr …): strecke.tribuenen / strecke.sperrzonen / strecke.sperrzonenExtern = [{ s0, s1 } | { s }] – großzügig meiden
     ['sperrzonen', 'sperrzonenExtern'].forEach((k) => { if (Array.isArray(strecke[k])) strecke[k].forEach(e => dazu(e, 12)); });
     // Tribünen (world/tribuenen.js: { s (Mitte), laenge }): ganze Länge + 12 m frei lassen (Standfläche liegt hinter der Bande, Zuschauer/Fahnen davor)
@@ -426,6 +428,7 @@
       const tx = zurStrasse * (tiefeG / 2 + 0.04);
       let ybMax = -1e9;
       const segmente = [];
+      this._ausblend = []; this._halleSeg = segmente; this._halleA = 1; this._halleGesetzt = 1; this._halleT = null; this._halleHalb = [tiefeG / 2, segB / 2];
       for (let k = 0; k < nHalle; k++) {
         const ds = (k + 0.5) / nHalle * breiteG - breiteG / 2;
         const m0 = this.welt(P.s + ds, P.gebQ), ma = this.welt(P.s + ds - segB / 2, P.gebQ), mb = this.welt(P.s + ds + segB / 2, P.gebQ);
@@ -434,7 +437,7 @@
         const halle = new THREE.Group();
         halle.position.set(m0.x, yb, m0.z);
         halle.rotation.y = Math.atan2(-m0.tx, -m0.tz);     // wie Auto-Heading: −z = Fahrtrichtung
-        const box = (w, h, d, farbe, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(farbe)); m.position.set(x, y, z); halle.add(m); return m; };
+        const box = (w, h, d, farbe, x, y, z) => { const mt = mat(farbe); mt.transparent = true; this._ausblend.push(mt); const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mt); m.position.set(x, y, z); halle.add(m); return m; };   // v29 F4: transparent von Anfang an (opacity 1) → Halle kann ausgeblendet werden, ohne neues Shader-Programm
         const bw = segB + 0.06;                            // Segmente überlappen leicht (keine Spalten in Kurven)
         box(tiefeG, 1.6, bw, 0x6d7076, 0, -0.7, 0);                                  // Fundament (reicht ins Gelände)
         box(tiefeG, hGeb, bw, 0xd8dde4, 0, hGeb / 2, 0);                             // Wände
@@ -448,6 +451,7 @@
       // Dachschild (große Hallentafel) in der Mitte
       const tafel = this._tafel(true);
       if (tafel) {
+        tafel.material.transparent = true; this._ausblend.push(tafel.material);
         const mm = this.welt(P.s, P.gebQ), mitte = new THREE.Group();
         mitte.position.set(mm.x, ybMax, mm.z);
         mitte.rotation.y = Math.atan2(-mm.tx, -mm.tz);
@@ -455,7 +459,7 @@
         tafel.position.set(tx + zurStrasse * 0.1, hGeb + 1.35, 0);
         tafel.rotation.y = zurStrasse > 0 ? Math.PI / 2 : -Math.PI / 2;
         mitte.add(tafel);
-        for (const dz of [-2.6, 2.6]) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.3, 0.12), mat(0x555a62)); st.position.set(tx, hGeb + 0.8, dz); mitte.add(st); }
+        for (const dz of [-2.6, 2.6]) { const mt = mat(0x555a62); mt.transparent = true; this._ausblend.push(mt); const st = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.3, 0.12), mt); st.position.set(tx, hGeb + 0.8, dz); mitte.add(st); }
         g.add(mitte);
       }
       // feste Gebäude-Säulen für die Kollision (Kreise alle 4 m entlang der Straßenseite des Gebäudes)
@@ -639,7 +643,40 @@
     }
 
     /** Je Frame: Schild/Lampe zeigen den Zustand des nächsten Menschen (grün = frei in dieser Runde, rot = schon benutzt), Lampe pulsiert beim Heilen. */
-    animieren(t, fahrzeuge) {
+    /**
+     * v29 F4: Halle (Wände, Dach, Tore, Dachschild) blendet sich aus, wenn eine Kamera nah dran ist (Verfolger/Cockpit beim Losfahren aus der Halle:
+     * sonst füllt die Wand das halbe Bild). Abstand Kamera → Hallen-Grundriss: ab ausblendNah (8 m) fast durchsichtig (Rest ausblendMin 0,1), ab ausblendFern (15 m) normal (die Fahrbahnmitte liegt ≥ 16 m von der Halle → Vorbeifahren unverändert).
+     * Nur opacity/depthWrite der Hallen-Materialien (von Anfang an transparent = kein neues Shader-Programm). Billig: nur Kameras < 40 m vom Platz.
+     */
+    _halleAusblenden(t, kameras) {
+      const seg = this._halleSeg; if (!seg || !seg.length || !this._ausblend || !this._ausblend.length) return;
+      const C = cfg(), nah = wert(C.ausblendNah, 8), fern = wert(C.ausblendFern, 15), minA = wert(C.ausblendMin, 0.1);
+      const jetzt0 = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;   // Bildzeit (auch in der Pause blendet die Halle weiter)
+      const erst = this._halleT === null, dt = erst ? 0 : Math.max(0, Math.min(0.1, jetzt0 - this._halleT)); this._halleT = jetzt0;
+      let d = 1e9;
+      for (let i = 0; i < (kameras || []).length; i++) {
+        const k = kameras[i], kp = k && k.kamera && k.kamera.position; if (!kp) continue;
+        for (let j = 0; j < seg.length; j++) {
+          const g = seg[j], dx = kp.x - g.position.x, dz = kp.z - g.position.z;
+          if (Math.abs(dx) > 40 || Math.abs(dz) > 40) continue;
+          const c = Math.cos(g.rotation.y), sn = Math.sin(g.rotation.y);
+          const lx = dx * c - dz * sn, lz = dx * sn + dz * c;       // Kamera im Segment-Koordinatensystem (Drehung um y: Rückdrehung)
+          const ex = Math.max(0, Math.abs(lx) - this._halleHalb[0]), ez = Math.max(0, Math.abs(lz) - this._halleHalb[1]);
+          const e = Math.hypot(ex, ez); if (e < d) d = e;
+        }
+      }
+      const u = Math.max(0, Math.min(1, (d - nah) / Math.max(0.1, fern - nah))), ziel = minA + (1 - minA) * u * u * (3 - 2 * u);
+      const alt = this._halleA;
+      const a = erst ? ziel : ziel + (alt - ziel) * Math.exp(-(ziel < alt ? 9 : 4) * dt);   // schnell aus (0,1 s), langsamer wieder ein (0,25 s)
+      this._halleA = a;
+      const voll = a >= 0.995, jetzt = voll ? 1 : a;
+      if (Math.abs(jetzt - this._halleGesetzt) < 0.004 && (jetzt === 1) === (this._halleGesetzt === 1)) return;
+      this._halleGesetzt = jetzt;
+      for (const m of this._ausblend) { m.opacity = jetzt; m.depthWrite = voll; }
+    }
+
+    animieren(t, fahrzeuge, kameras) {
+      if (kameras) this._halleAusblenden(t, kameras);
       if (!this._lampe || !this.platz) return;
       const P = this.platz, sp = this.strecke.spline;
       let best = null, bestD = 1e9, heilt = false;
@@ -731,7 +768,7 @@
       for (const t of this.teile) { const s = t.kiSteuerung(i, f, dt, rennen, schaden); if (s) return s; }
       return null;
     }
-    animieren(t, fahrzeuge) { this.teile.forEach(x => x.animieren(t, fahrzeuge)); }
+    animieren(t, fahrzeuge, kameras) { this.teile.forEach(x => x.animieren(t, fahrzeuge, kameras)); }
     zerstoeren() { this.teile.forEach(t => t.zerstoeren()); }
   }
 

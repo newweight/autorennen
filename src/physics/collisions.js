@@ -739,6 +739,7 @@
     for (let i = 0; i < fahrzeugListe.length; i++) {
       const f = fahrzeugListe[i], v = (f && f.vehicle) ? f.vehicle : f;
       if (v._astSperre > 0) v._astSperre -= dt;
+      if (v._astRandSperre > 0) v._astRandSperre -= dt;
       // Runde 6 (W2-C): Lava hält das Auto stopp s fest (wie Kleber), danach frei s Schonzeit zum Wegfahren
       if (v._lavaFrei > 0) v._lavaFrei -= dt;
       if (v._lavaStopp > 0) {
@@ -781,15 +782,29 @@
               const grenze = ka.rad + dicke;
               if (n.d >= grenze) continue;
               if (sg.art === 'ast') {
-                if (v._astSperre > 0) break;
+                // v29 F2b: Stamm (innere 70 % der Länge ab Stammende a, dort ist der Ast dick) = fest; dünnes Ende (äußere 30 % bis zur Spitze b,
+                // dort stehen nur Zweige) = überfahrbar: Hüpfer, Tempo −20 %, 1 Stoß je Überfahrt (Sperre), kein Herausschieben; Schaden 10 % (schaden.js, art 'ast')
+                const sx = sg.bx - sg.ax, sz = sg.bz - sg.az, tq = Math.max(0, Math.min(1, ((c.x - sg.ax) * sx + (c.z - sg.az) * sz) / ((sx * sx + sz * sz) || 1)));
+                if (tq > (CA.stammAnteil !== undefined ? CA.stammAnteil : 0.7)) {
+                  if (!(v._astRandSperre > 0)) {
+                    v.vLaengs *= (CA.randTempoFaktor !== undefined ? CA.randTempoFaktor : 0.8);
+                    v.huepfer = CA.huepfer !== undefined ? CA.huepfer : 2.2;
+                    stoesse.push({ nr: i, typ: 'ast', rand: true, staerke: v.tempo * 0.2, hindernis: k });
+                  }
+                  v._astRandSperre = CA.sperrZeit || 0.8;
+                  continue;
+                }
+              }
+              if (sg.art === 'ast' && !(v._astSperre > 0)) {
+                // Erstkontakt: Tempo −40 %, Hüpfer, Stoß (wie bisher). v29 F2: danach bleibt der Ast fest (Schieben wie Bake, unten),
+                // vorher fuhr das Auto nach dem Stoß mitten durch den sichtbaren Stamm.
                 const staerke = v.tempo * 0.4;
                 v.vLaengs *= (CA.tempoFaktor !== undefined ? CA.tempoFaktor : 0.6);
                 v.vQuer *= 0.7;
                 v.huepfer = CA.huepfer !== undefined ? CA.huepfer : 2.2;
                 v._astSperre = CA.sperrZeit || 0.8;
                 stoesse.push({ nr: i, typ: 'ast', staerke, hindernis: k });
-                break;
-              }
+              } else if (sg.art === 'ast') v._astSperre = CA.sperrZeit || 0.8;   // dranstehen/-schieben = kein neuer Stoß (Sperre läuft erst nach dem Lösen ab)
               // Bake: wie eine Bande – aus der Bake schieben, Tempo in die Bake wegnehmen, Rest dämpfen
               let nx, nz;
               if (n.d > 1e-6) { nx = (c.x - n.x) / n.d; nz = (c.z - n.z) / n.d; }
@@ -801,7 +816,17 @@
               if (vn < 0) {
                 const px = vw.x - nx * vn, pz = vw.z - nz * vn;
                 v.weltGeschwindigkeitSetzen(px * BANDE_PARALLEL, pz * BANDE_PARALLEL);
-                if (-vn > 0.5) stoesse.push({ nr: i, typ: sg.art === 'bake' ? 'bake' : sg.art, staerke: -vn, hindernis: k });
+                if (sg.art === 'ast' && R.headingAus) {
+                  // v29 F2: Streifstoß – die Nase dreht am Stamm entlang (zur Astspitze hin, dort ist die Spur frei), sonst klemmt ein Auto,
+                  // das frontal mit Vollgas am Ast steht (Tempo 0 → keine Lenkwirkung), und die KI muss zurückgesetzt werden
+                  const al = Math.hypot(sg.bx - sg.ax, sg.bz - sg.az) || 1, tx = (sg.bx - sg.ax) / al, tz = (sg.bz - sg.az) / al, r = v.richtung();
+                  const sgn = (r.x * tx + r.z * tz) < -0.35 ? -1 : 1;                      // fährt fast gegen die Spitze zurück → andere Richtung
+                  let d = R.headingAus(tx * sgn, tz * sgn) - v.heading;
+                  d = Math.atan2(Math.sin(d), Math.cos(d));
+                  const max = (CA.streifDreh !== undefined ? CA.streifDreh : 2.5) * (dt || 1 / 60);
+                  v.heading += Math.max(-max, Math.min(max, d));
+                }
+                if (-vn > 0.5 && sg.art !== 'ast') stoesse.push({ nr: i, typ: sg.art === 'bake' ? 'bake' : sg.art, staerke: -vn, hindernis: k });   // Ast: Stoß nur beim Erstkontakt
               }
               break;
             }

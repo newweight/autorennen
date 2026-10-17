@@ -80,7 +80,7 @@ for (const daten of R.trackCatalog) {
     if (s.length) { stoss = s[0]; nachher = a.vLaengs; }
   }
   pruefe('Ast: Kontakt wird erkannt (Stoß-Liste)', !!stoss && stoss.typ === 'ast' && stoss.staerke > 0, stoss && JSON.stringify(stoss));
-  pruefe('Ast: Tempo −40 %', stoss && Math.abs(nachher / vorher - 0.6) < 0.01, (nachher / vorher).toFixed(3));
+  pruefe('Ast: Tempo mindestens −40 % (v29: danach hält der feste Stamm das Auto zusätzlich auf wie die Bake)', stoss && nachher / vorher <= 0.61, (nachher / vorher).toFixed(3));
   pruefe('Ast: Hüpfer (vehicle.huepfer > 0)', a.huepfer > 0, a.huepfer);
   const v2 = a.vLaengs;
   const s2 = R.Kollisionen.hindernisse([a], st, { dt: DT, zeit: zeit += DT });
@@ -354,6 +354,7 @@ for (const daten of R.trackCatalog) {
   {
     let alles = '', n = 0, gleichOpt = true;
     for (const d of R.trackCatalog) for (const welt of Object.keys(d.welten)) for (const v of [''].concat(Object.keys(d.varianten || {}))) {
+      if (d.id === 'formel1') continue;   // v29: Formel 1 hat keine Hindernis-Welt – Fingerabdruck bleibt der alte
       const st = new R.Strecke(d, { welt, variante: v }); mitWracks(st);
       alles += JSON.stringify([st.hindernisse, st.wracks, st.strohballen, st.daten.hindernisse]); n++;
       const s2 = new R.Strecke(d, { welt, variante: v, hindernisMenge: 'normal' }); mitWracks(s2);
@@ -373,6 +374,7 @@ for (const daten of R.trackCatalog) {
 
   for (const d of R.trackCatalog) {
     const wH = Object.keys(d.welten).find(w => d.welten[w].hindernisse);
+    if (!wH) continue;   // v29: Formel 1 – keine Hindernis-Welt (gewollt)
     const katalogVorher = JSON.stringify([d.hindernisse, d.wracks, d.strohballen]);
     const zaehl = (st) => ({ h: st.hindernisse.filter(x => x.typ !== 'wrack' && x.typ !== 'brand' && x.typ !== 'lava' && x.typ !== 'krater').length, w: st.wracks.length, s: st.strohballen.length });
     const gesamt = (z) => z.h + z.w + z.s;

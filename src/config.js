@@ -198,7 +198,7 @@ Rennspiel.config = {
                  pylonTempo: 0.88,       // Tempo × 0,88 beim Umfahren einer Pylone
                  blinkZeit: 0.3,         // s rot blinken, dann weg bis zur nächsten Runde des Verursachers
                  gefahr: 1.0 },
-    ast:       { name: 'Ast', dicke: 0.28, tempoFaktor: 0.6, huepfer: 2.2, sperrZeit: 0.8, gefahr: 0.6 },
+    ast:       { name: 'Ast', dicke: 0.28, tempoFaktor: 0.6, huepfer: 2.2, sperrZeit: 0.8, gefahr: 0.6, stammAnteil: 0.7, randTempoFaktor: 0.8 },   // v29: stammAnteil = fester Teil ab Stammende, Rest überfahrbar
     // Runde 4 (Welt „Hindernisse“, Katalog wracks [{ s, seitenabstand, brennt, autoId }]):
     // liegengebliebenes Auto = feste Kapsel (wie die Bake), schräg um `schraeg` rad (Bug zum Rand),
     // Warnblinker im blinkTakt (s an / s aus), Warndreieck dreieckAbstand m davor.
@@ -300,10 +300,10 @@ Rennspiel.config = {
     trefferVerlust: 5,         // Prozentpunkte je Treffer
     brandVerlust: 10,          // Prozentpunkte bei Treffer eines brennenden Wracks
     // Runde 6 (W1-A4/A5): auto 2 → 1 m/s; neu pflanze (Baum/Fels zwischen Straße und Zaun)
-    mindest: { bande: 3, auto: 1, hindernis: 0, brand: 0, ball: 0, wasser: 0, stroh: 0, pflanze: 0, nass: 0 },
+    mindest: { bande: 3, auto: 1, hindernis: 0, ast: 0, brand: 0, ball: 0, wasser: 0, stroh: 0, pflanze: 0, nass: 0 },
     // Runde 6: eigene Verluste je Art (fehlt eine Art: trefferVerlust); drehung = Zuschlag, wenn ein Rempler das
     // Auto in Drehung versetzt (kommt im selben Treffer dazu → −8 %)
-    verluste: { bande: 3, pflanze: 3, nass: 10 },   // 15.10. (v24): nass = offenes Cabrio-Dach bei Regen/Schnee/Hagel (config.dachRegen)
+    verluste: { bande: 3, pflanze: 3, nass: 10, ast: 10 },   // v29: ast = überfahrener Astrand   // 15.10. (v24): nass = offenes Cabrio-Dach bei Regen/Schnee/Hagel (config.dachRegen)
     drehungVerlust: 3,
     abklingZeit: 0.7,
     stufeJe: 20,
@@ -721,7 +721,9 @@ Rennspiel.config = {
       // v28 (W3): selten – je Runde zufällig 0/1/2 Geisterfahrer (Seed-fest; Wahrscheinlichkeiten 0,2/0,4/0,4 = Erwartung 1,2), zwei nur mit >= 400 m Strecke dazwischen;
       // keine HUD-Vorwarnung und kein Minimap-Blinken (warnung: true bringt beides zurück; Lichthupe/Hupe des Geisterfahrers bleiben)
       verteilung: [0.2, 0.4, 0.4], mindestAbstand: 400, warnung: false },
-    krankenwagen: { tempo: 34, schadenFaktor: 3, autoId: 'krankenwagen', spurQ: 0.28 },
+    krankenwagen: { tempo: 34, schadenFaktor: 3, autoId: 'krankenwagen', spurQ: 0.28,
+      // v29 (F7): Krankenwagen überholt den langsamen Abschleppwagen (Nachbarspur ≥ frei m frei, weicher Querversatz über zeit s, zurück ab zurueckAb m vor dem Lkw; Spawn nicht < spawnHinter m hinter einem Lkw)
+      ueberholen: { an: true, ab: 120, frei: 40, zeit: 2, zurueckAb: 25, randZugabe: 1.2, abstandQuer: 0.8, spawnHinter: 60 } },
     abschleppwagen: { tempo: 9.5, spurQ: 0.3, hoerweite: 110 },
     // gemeinsam
     sperrVor: 45, sperrNach: 45,          // m Sicherheitsrand um Sperrzonen (Tunnel, Brücken, Überführungen, Kreuzungen, Spur-Engstellen)
@@ -812,7 +814,7 @@ Rennspiel.config = {
     zeichenrate: 30,                            // höchstens so oft pro Sekunde neu zeichnen (Hz)
     zweispielerFaktor: 1.25,                    // Zweispieler: Instrumente (Größe + Abstände vom unteren Mittelpunkt) mal diesen Faktor (Hälfte ist schmal)
     // welches Auto welche Instrumente hat ('vw' | 'porsche' | 'standard' = alte Anzeige); nicht genannte Autos: 'standard'
-    stile: { 'passat': 'vw', 'polizei': 'vw', 'multivan': 'vw', 'troc-cabrio': 'vw', 'porsche-911': 'porsche' },
+    stile: { 'passat': 'vw', 'polizei': 'vw', 'multivan': 'vw', 'troc-cabrio': 'vw', 'porsche-911': 'porsche', 'formel': 'porsche' },
     // VW „Digital Cockpit Pro“ (10,25 Zoll; Passat Variant, Multivan T7, T-Roc Cabrio): links Drehzahl, rechts km/h, Mitte Platz/Runde
     vw: {
       tafel:    { x: 50,   y: 90.5, b: 35, h: 20, farbe: '#05080d' },     // dunkle Anzeigefläche hinter den Instrumenten
@@ -820,15 +822,18 @@ Rennspiel.config = {
       tacho:    { x: 61.8, y: 90.5, b: 11.4 },
       mitte:    { x: 50,   y: 90.5, b: 9.5, h: 14 },
     },
-    // Porsche 911 (992), „Classic“-Anzeige mit fünf Rundinstrumenten: Mitte großer Drehzahlmesser mit Digital-Tacho, außen je zwei kleine
+    // Porsche 911 (992), „Classic“-Anzeige: Drehzahlmesser + Tacho in der Mitte, außen je zwei kleine
     porsche: {
-      zweispielerFaktor: 1.0,                 // (optional) eigener Zweispieler-Faktor für diesen Stil (breit → sonst Überdeckung der Minimap)
-      tafel:   { x: 50,   y: 90,   b: 43, h: 21, farbe: '#030303' },
-      drehzahl: { x: 50,  y: 89.5, b: 13.2 },
-      linksAussen:  { x: 31.8, y: 91, b: 6.6 },     // Gang
-      linksInnen:   { x: 40.6, y: 91, b: 7.4 },     // Runde
-      rechtsInnen:  { x: 59.4, y: 91, b: 7.4 },     // Platz
-      rechtsAussen: { x: 68.2, y: 91, b: 6.6 },     // Öl-Temperatur
+      zweispielerFaktor: 0.74,                // (optional) eigener Zweispieler-Faktor für diesen Stil (v29: Tafel jetzt 58 % breit → 0,74 ergibt wie vorher ≈ 43 % je Hälfte, sonst Überdeckung der Minimap)
+      // 17.10. (v29, F8): sechs Instrumente, symmetrisch um die Mitte: innen Drehzahlmesser (links) + Tacho 0–300 km/h (rechts), je mit Nadel;
+      // außen wie bisher Gang · Runde | Platz · Öl. Auch das Formel-Renner-Cockpit nutzt diese Anzeige (Skala 0–13, rot ab 11,5).
+      tafel:   { x: 50,   y: 90,   b: 58, h: 21, farbe: '#030303' },
+      drehzahl: { x: 43.1, y: 89.5, b: 13.4 },
+      tacho:    { x: 56.9, y: 89.5, b: 13.4 },
+      linksAussen:  { x: 24.6, y: 91, b: 6.6 },     // Gang
+      linksInnen:   { x: 32.1, y: 91, b: 7.4 },     // Runde
+      rechtsInnen:  { x: 67.9, y: 91, b: 7.4 },     // Platz
+      rechtsAussen: { x: 75.4, y: 91, b: 6.6 },     // Öl-Temperatur
     },
     // Rückspiegel: zweite Kamera nach hinten, wird in ein kleines Bild gerendert (jedes 2. Bild), links/rechts vertauscht wie ein echter Spiegel
     spiegel: {

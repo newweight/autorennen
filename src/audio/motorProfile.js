@@ -13,6 +13,9 @@
 //   alle()                      → Liste aller Profile (für Tests)
 // R.config.sound (optional, src/config.js) überschreibt: motor.lautstaerke, motor.maxKi, motor.knallen (true/false), motor.turbo (true/false).
 //
+// 17.10. (v29, F6) Drehzahlgrenzen = Cockpit-Skalen (src/ui/cockpit.js, MOTOREN): Diesel Skala 0–6000, rot ab 4500, Begrenzer 4800 (Passat, Multivan,
+//   Polizei, Krankenwagen); Benziner Skala 0–8000; Porsche rot ab 7000, Begrenzer 7500; Formel Skala 0–13000, rot ab 11500, Begrenzer 12000.
+//   rpmMax ≤ Skala (tests/test_drehzahl.js). Die Tonhöhe folgt der Drehzahl (Zündfrequenz-Formel): Formel klingt jetzt etwas tiefer als mit 18 000.
 // DATEN JE AUTO – gegoogelt am 14.10.2026; „Annahme“ = nicht aus einer Quelle belegt, sondern passend gewählt.
 //   Die Spiel-Höchstgeschwindigkeiten (carCatalog.js) sind höher als bei den echten Autos; deshalb wird die Übersetzung so gelegt,
 //   dass der höchste Gang bei vMax die Drehzahl `rpmVmax` ergibt (Annahme), die tieferen Gänge folgen der Spreizung.
@@ -51,7 +54,8 @@
 //              Quelle: https://www.autohled.cz/de/a/mini/mini-3-dverove/cooper-7751898  (Getriebe dort 6-Gang-Schaltung gelistet;
 //              Automatik = Steptronic-DKG laut ADAC) – Annahme hier: 7 Gänge (Doppelkupplung), Leerlauf 800, Abregeln ~6500.
 //              3-Zylinder: Zündfrequenz = Drehzahl/60 × 1,5, „knurrend“, deutliche halbe Ordnung.
-//  formel      Formel-Renner (Monoposto): Annahme V10-Sauger der alten F1-Zeit, 3,0 l, ~18 000/min, 8-Gang-Getriebe, Leerlauf 5000 –
+//  formel      Formel-Renner (Monoposto): Annahme V10-Sauger, 3,0 l, 17.10. (v29, F6; Wunsch Vater „Rennauto bis 12000“) Begrenzer 12 000/min
+//              (vorher 18 000; Anzeige-Skala 0–13 000, rot ab 11 500, passend zu src/ui/cockpit.js), 8-Gang-Getriebe, Leerlauf 3500 –
 //              „hoch kreischend“. Gegenvariante (heutige F1: 1,6-l-V6-Turbo-Hybrid, 15 000/min lt. Sport1:
 //              https://www.sport1.de/motorsport/formel1/2017/10/formel-1-fia-legt-motoren-eckdaten-fuer-2021-fest ) klingt tiefer.
 //
@@ -90,7 +94,7 @@
 
   P.multivan = {
     id: 'multivan', name: 'VW Multivan 2.0 TDI', bauart: 'Reihen-4 Diesel', zyl: 4, hubraum: 1968, ps: 150,
-    leerlauf: 800, rpmMax: 4500, rpmVmax: 3500, startRpm: 2100, hoch: 2100, hochVoll: 3800, runter: 1250,
+    leerlauf: 800, rpmMax: 4800, rpmVmax: 3500, startRpm: 2100, hoch: 2100, hochVoll: 3800, runter: 1250,
     gaenge: stufen(7, 3.9, 0.62), schaltZeit: 0.2, steigK: 10, fallK: 8,
     wave: { slope: 1.0, odd: 1, bump: [3, 2.0, 1.2] }, halb: 0.55, beat: 0.005, wobble: 9,
     klopf: 3.0, klopfHz: 1500, klopfQ: 0.8, klopfDuty: 0.15,
@@ -164,7 +168,7 @@
 
   P.formel = {
     id: 'formel', name: 'Formel-Renner', bauart: 'V10 Hochdreher (Annahme)', zyl: 10, hubraum: 3000, ps: 900,
-    leerlauf: 5000, rpmMax: 18000, rpmVmax: 16000, startRpm: 9000, hoch: 11000, hochVoll: 16500, runter: 8000,
+    leerlauf: 3500, rpmMax: 12000, rpmVmax: 10600, startRpm: 6500, hoch: 7500, hochVoll: 11200, runter: 5500,
     gaenge: stufen(8, 3.6, 0.8), schaltZeit: 0.05, steigK: 24, fallK: 22,
     wave: { slope: 0.55, odd: 1, bump: [3, 3.0, 0.6] }, halb: 0.03, beat: 0.004, wobble: 2,
     klopf: 0, klopfHz: 3000, klopfQ: 0.7, klopfDuty: 0.3,

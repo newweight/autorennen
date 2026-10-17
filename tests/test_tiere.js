@@ -46,7 +46,8 @@ function pfadS(t) { return [t.s, t.s + t.vs * (Math.abs(t.qZiel - t.anfangQ) / M
       strecken++;
       const nm = `${daten.id}${w ? '/' + w : ''}${va ? '/' + va : ''}`, L = st.spline.laenge;
       const arten = Tiere.artenFuer(st);
-      if (!arten.length || !arten.every(a => ARTEN[a])) keineArt.push(nm);
+      if (daten.id === "formel1") { if (arten.length) keineArt.push(nm + " (Formel 1 soll keine Tiere haben)"); }   // v29 F3
+      else if (!arten.length || !arten.every(a => ARTEN[a])) keineArt.push(nm);
       const erwartet = { wiese: 'kuh', wald: 'reh', alpen: 'baer', dino: 'dino', wueste: 'kamel', fantasie: 'einhorn' }[daten.id];
       if (erwartet && !arten.includes(erwartet)) artFalsch.push(nm + ' ' + arten.join('+'));
       const lauf = (seed) => {

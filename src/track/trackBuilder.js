@@ -1253,6 +1253,8 @@
     dekoSperre(x, z, n) {
       // 15.10. (v25): auf und neben einer Zuschauertribüne (world/tribuenen.js) steht keine Deko
       if (this.tribuenen && this.tribuenen.length && R.Tribuenen && R.Tribuenen.sperre(this, x, z)) return true;
+      // 17.10. (v29, F3): Formel-1-Strecke – Boxengasse + Boxen (world/formel1.js) bleiben frei von Deko
+      if (this.daten && this.daten.formel1 && R.Formel1 && R.Formel1.sperre(this, x, z, n)) return true;
       // 14.10. (v22, Alpen hügeliger): keine Pflanzen/Felsen an sehr steilen Hängen (Einschnitt zwischen zwei Serpentinen-Ästen, > 32 %):
       // dort stünde das Auto bei flacher Fahrt mit dem Dach im Busch (test_gelaende_hoehe B). Nur Höhenmodell 'strasse'.
       if (this.sModell) {

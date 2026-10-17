@@ -239,7 +239,7 @@
         this.treffer(s.b, 'auto', s.staerke, s.dreht && s.dreht[1] ? dz : 0, s.faktor);
       });
       (st.pflanzen || []).forEach((s) => { if (s.typ === 'baum') this.treffer(s.nr, 'pflanze', s.staerke); });   // Busch: kein Schaden
-      (st.hindernis || []).forEach((s) => this.treffer(s.nr, s.typ === 'brand' ? 'brand' : 'hindernis', s.staerke));
+      (st.hindernis || []).forEach((s) => this.treffer(s.nr, s.typ === 'brand' ? 'brand' : (s.typ === 'ast' && s.rand ? 'ast' : 'hindernis'), s.staerke));   // v29: überfahrener Astrand −10 %
       (st.dynamik || []).forEach((s) => this.treffer(s.nr, s.typ === 'wasser' ? 'wasser' : s.typ === 'ball' ? 'ball' : 'stroh', s.staerke));
     }
 

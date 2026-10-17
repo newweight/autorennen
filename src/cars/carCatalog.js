@@ -437,6 +437,47 @@ window.Rennspiel = window.Rennspiel || {};
     return liste;
   }
 
+  // 17.10. (v29, F3) Modus „Nur Rennautos“ (Formel-1-Strecke): alle Teilnehmer fahren den Formel-Renner, jeder in einer eigenen Teamfarbe.
+  //   FORMEL_FARBEN = 8 kräftige, gut unterscheidbare Farben (dieselben nutzt world/formel1.js für die Boxen).
+  //   formelFeld({ spieler: [Autoeinträge], gegner: n, seed, belegt: [hex|null je Spieler] }) → { spieler: [Einträge], gegner: [Einträge] }:
+  //   Gegner = abgeleitete Einträge des Katalogautos 'formel' (Katalogeintrag selbst unverändert) mit optionen.farbe aus der Palette,
+  //   deterministisch je seed, nie eine Farbe, die ein Spieler-Formel schon trägt; fährt Spieler 2 denselben Lack wie Spieler 1, bekommt er eine Palettenfarbe.
+  //   Spieler, die ein anderes Auto gewählt haben, behalten es (spieler[i] unverändert).
+  const FORMEL_FARBEN = [0xd7261e, 0x1e5bd8, 0xf6c20a, 0x1fa84f, 0xff7a00, 0x7a3cc8, 0x00b3b8, 0xf0409a];
+  const FORMEL_FARBNAMEN = ['Rot', 'Blau', 'Gelb', 'Grün', 'Orange', 'Lila', 'Türkis', 'Pink'];
+  function farbNah(a, b) {
+    const dr = ((a >> 16) & 255) - ((b >> 16) & 255), dg = ((a >> 8) & 255) - ((b >> 8) & 255), db = (a & 255) - (b & 255);
+    return Math.sqrt(dr * dr + dg * dg + db * db) < 70;
+  }
+  function formelFeld(opt) {
+    opt = opt || {};
+    const formel = katalog.find((a) => a.id === 'formel');
+    const spieler = (opt.spieler || []).slice();
+    const n = Math.max(0, opt.gegner | 0);
+    if (!formel) return { spieler, gegner: [] };
+    const rnd = zufall(hashText('formel|' + String(opt.seed === undefined ? 'rennen' : opt.seed)));
+    const reihe = FORMEL_FARBEN.slice();
+    for (let i = reihe.length - 1; i > 0; i--) { const k = Math.floor(rnd() * (i + 1)); const t = reihe[i]; reihe[i] = reihe[k]; reihe[k] = t; }
+    const belegt = [];
+    spieler.forEach((a, i) => {
+      if (!a || a.id !== 'formel') return;
+      let f = opt.belegt && opt.belegt[i] !== undefined && opt.belegt[i] !== null ? (opt.belegt[i] >>> 0) : ((a.optionen && a.optionen.farbe !== undefined) ? a.optionen.farbe >>> 0 : formel.farbe);
+      if (belegt.some((b) => farbNah(b, f))) {              // zweiter Spieler mit gleichem Lack: eigene Teamfarbe
+        const frei = reihe.find((h) => !belegt.some((b) => farbNah(b, h)));
+        if (frei !== undefined) { f = frei; spieler[i] = Object.assign({}, a, { optionen: Object.assign({}, a.optionen || {}, { farbe: f }) }); }
+      }
+      belegt.push(f);
+    });
+    let pool = reihe.filter((h) => !belegt.some((b) => farbNah(b, h)));
+    if (!pool.length) pool = reihe.slice();
+    const gegner = [];
+    for (let j = 0; j < n; j++) {
+      const f = pool[j % pool.length];                       // bis 8 Gegner lauter verschiedene Farben
+      gegner.push(Object.assign({}, formel, { optionen: Object.assign({}, formel.optionen || {}, { farbe: f }) }));
+    }
+    return { spieler, gegner };
+  }
+
   /** Auto per id holen (oder undefined). */
   function finde(id) {
     return katalog.find((a) => a.id === id);
@@ -452,5 +493,13 @@ window.Rennspiel = window.Rennspiel || {};
   R.carCatalog.finde = finde;
   R.carCatalog.waehlbare = waehlbare;
   R.carCatalog.gegnerAutos = gegnerAutos;
+  /** Ist der Modus „Nur Rennautos“ aktiv? e.nurRennautos: true/false = Wahl, null/undefined = Standard der Strecke (daten.nurRennautosStandard). */
+  R.carCatalog.nurRennautos = function (e, daten) {
+    if (e && typeof e.nurRennautos === 'boolean') return e.nurRennautos;
+    return !!(daten && daten.nurRennautosStandard);
+  };
+  R.carCatalog.formelFeld = formelFeld;          // v29 F3
+  R.carCatalog.FORMEL_FARBEN = FORMEL_FARBEN;
+  R.carCatalog.FORMEL_FARBNAMEN = FORMEL_FARBNAMEN;
   R.carCatalog.GEGNER_MODELLE = GEGNER_MODELLE;
 })();

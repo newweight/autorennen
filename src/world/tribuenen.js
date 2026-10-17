@@ -166,9 +166,11 @@
     const soll = bereiche.map((b) => {
       const len = b.s1 - b.s0, roh = Math.round(basis * len / refL);
       if (nurStart.indexOf(b.thema) >= 0) return b.mega ? 0 : 1;          // v28 W9: Wald/Dino/Alpen: nur die Start/Ziel-Tribüne
+      if (!b.mega && st.daten && st.daten.tribuenenOpt && num(st.daten.tribuenenOpt.anzahl, 0) > 0) return Math.floor(st.daten.tribuenenOpt.anzahl);   // v29 F3: Formel 1 = Start/Ziel + 2 Kurven (Katalog tribuenenOpt)
       return b.mega ? Math.max(num(C.megaMin, 2), Math.min(roh, num(C.anzahlMax, 8))) : Math.max(num(C.anzahlMin, 5), Math.min(roh, num(C.anzahlMax, 8)));
     });
-    const kurven = (R.Kurvenschilder && R.Kurvenschilder.kurvenSuchen ? R.Kurvenschilder.kurvenSuchen(st) : [])
+    const kurven = (d.tribuenenOpt && R.Formel1 && R.Formel1.tribuenenKurven ? R.Formel1.tribuenenKurven(st)      // v29 F3: weite Formel-1-Kurven (Kurvenschilder-Suche kennt nur enge)
+      : (R.Kurvenschilder && R.Kurvenschilder.kurvenSuchen ? R.Kurvenschilder.kurvenSuchen(st) : []))
       .filter((k) => k.winkel >= num(C.kurveWinkelMin, 35));
     const lMin = num(C.laenge && C.laenge[0], 30), lMax = num(C.laenge && C.laenge[1], 40);
     const rMin = num(C.reihen && C.reihen[0], 5), rMax = num(C.reihen && C.reihen[1], 8);
@@ -193,8 +195,10 @@
 
     // 1) Start/Ziel (nur eine je Strecke): möglichst genau an der Ziellinie, rechts vor links
     let startDa = false;
+    const wunschSeite = d.tribuenenOpt && d.tribuenenOpt.startSeite;     // v29 F3: Formel 1 – Start/Ziel-Tribüne links (Boxen rechts)
+    const startSeiten = wunschSeite === -1 ? [-1, 1] : [1, -1];
     for (const off of [0, 8, -8, 16, -16, 28, -28, 42, -42, 60, -60, 80, -80, 100, -100, 125, -125, 150, -150]) {
-      const pl = versuche('start', off, [1, -1]);
+      const pl = versuche('start', off, startSeiten);
       if (pl) { gewaehlt.push(pl); startDa = true; break; }
     }
     // 2) Kurventribünen (Außenseite), je Bereich ein Anteil der Tribünen, größte Winkel zuerst

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""v28 W8: Feuerwerk an Start/Ziel. Aufruf: python3 tests/feuerwerk_test.py [strecke]  (Standard wiese)
+"""v28 W8 / v29 F5: Feuerwerk an Start/Ziel (v29: ~12 s, 18 Raketen, Fontaenen, Konfetti, Ergebnistafel erst nach ~6 s). Aufruf: python3 tests/feuerwerk_test.py [strecke]  (Standard wiese)
 1) Spieler gewinnt (1 Runde, Auto kurz vor der Linie) -> Feuerwerk aktiv, Partikel leben, Punkte sichtbar (Bildunterschied mit/ohne), 1 Draw-Call,
    keine neuen Shader-Programme, laeuft auf der Ergebnistafel weiter, Screenshots (Verfolger, Cockpit, Ergebnis) -> tests/out/v28/feuerwerk_*.png
 2) nach zumMenue: spiel.feuerwerk null, kein 'Feuerwerk' in der Szene, 0 Reste (Geometrien/Texturen), 3 Durchlaeufe ohne Wachstum
@@ -12,6 +12,7 @@ from PIL import Image
 basis = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 url = 'file://' + os.path.join(basis, 'Autorennen.html')
 out = os.path.join(basis, 'tests', 'out', 'v28'); os.makedirs(out, exist_ok=True)
+out29 = os.path.join(basis, 'tests', 'out', 'v29'); os.makedirs(out29, exist_ok=True)
 sid = (sys.argv[1] if len(sys.argv) > 1 else 'wiese')
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required']
 erg = []
@@ -26,9 +27,16 @@ LAUF = '''(idx) => { const S = Rennspiel.spiel, sp = S.strecke.spline, L = S.str
   f.vehicle.setzen(q.x, q.z, Rennspiel.headingAus(q.tx, q.tz)); f.vehicle.vLaengs = 38; f.index = -1; if (S.kameras[0]) S.kameras[0]._erstesMal = true; }'''
 INFO = '''() => { const S = Rennspiel.spiel, fw = S.feuerwerk, ri = S.renderer.info; let n = 0; S.szene.traverse(o => { if (o.name === 'Feuerwerk') n++; });
   return { da: !!fw, aktiv: !!(fw && fw.aktiv), t: fw ? fw.t : 0, lebend: fw ? fw.lebende() : 0, sichtbar: !!(fw && fw.punkte.visible), imSzene: n, zustand: S.zustand,
+    raketen: fw ? fw.raketen.length : 0, geplatzt: fw ? fw.geplatzt : 0, spitze: fw ? fw.spitze : 0, rz: S.rennen ? S.rennen.zustand : '',
     geo: ri.memory.geometries, tex: ri.memory.textures, prog: ri.programs ? ri.programs.length : -1, calls: ri.render.calls }; }'''
 def bild(page):
     return np.asarray(Image.open(io.BytesIO(page.screenshot())).convert('RGB')).astype(int)
+def halte(page, ts, name):
+    """Wartet bis die Show ts Sekunden alt ist, friert ein (pausiert), Bild ohne Tafel -> tests/out/v29/feuerwerk_xl_<name>.png, taut wieder auf."""
+    page.wait_for_function('Rennspiel.spiel.feuerwerk.t >= %s || !Rennspiel.spiel.feuerwerk.aktiv' % ts, timeout=240000)
+    page.evaluate("() => { Rennspiel.spiel.pausiert = true; document.querySelectorAll('.overlay').forEach(e => { e.dataset.vor = e.style.display; e.style.display = 'none'; }); }")
+    frames(page, 2); page.screenshot(path=os.path.join(out29, 'feuerwerk_xl_%s.png' % name))
+    page.evaluate("() => { document.querySelectorAll('.overlay').forEach(e => { if (e.dataset.vor !== undefined) e.style.display = e.dataset.vor; }); Rennspiel.spiel.pausiert = false; }")
 def frames(page, n=3):
     page.evaluate('window._fz0 = window._fz || 0'); page.wait_for_function('(window._fz || 0) >= window._fz0 + %d' % n)
 
@@ -49,43 +57,45 @@ with sync_playwright() as p:
             pruefe('Rennstart: Feuerwerk-Objekt angelegt, unsichtbar, noch nicht aktiv', v['da'] and not v['aktiv'] and not v['sichtbar'] and v['imSzene'] == 1, v)
         prog0 = v['prog']
         page.wait_for_function('Rennspiel.spiel.rennen.zeit > 3.2', timeout=120000)
-        if lauf == 1:
+        if lauf >= 1:
             page.evaluate("() => { const k = Rennspiel.spiel.kameras[0]; for (let i = 0; i < 6 && k.modus !== 'cockpit'; i++) k.naechsterModus(); }")
         page.evaluate(LAUF, 0)
         page.wait_for_function('Rennspiel.spiel.feuerwerk && Rennspiel.spiel.feuerwerk.aktiv', timeout=60000)
         pruefe('Lauf %d: Spieler gewinnt -> Feuerwerk aktiv' % lauf, True)
-        if lauf == 1:
-            page.wait_for_function('Rennspiel.spiel.feuerwerk.t > 2.0 && Rennspiel.spiel.feuerwerk.lebende() > 60 || !Rennspiel.spiel.feuerwerk.aktiv', timeout=120000)
-            page.evaluate("() => document.querySelectorAll('.overlay').forEach(e => { e.style.display = 'none'; })")
-            frames(page, 2); page.screenshot(path=os.path.join(out, 'feuerwerk_cockpit_%s.png' % sid))
+        v = page.evaluate(INFO)
+        if lauf == 0: pruefe('Raketen >= 16 (18 Standard)', v['raketen'] >= 16, v['raketen'])
+        # Tafel erst nach ~6 s: waehrend t < 5 weiter im Rennen (rennen.zustand fertig, spiel.zustand rennen)
+        page.wait_for_function('Rennspiel.spiel.feuerwerk.t > 2.5 || !Rennspiel.spiel.feuerwerk.aktiv', timeout=120000)
+        v = page.evaluate(INFO)
+        pruefe('Lauf %d: bei t=%.1f s noch keine Ergebnistafel (Kamera beim Auto)' % (lauf, v['t']), v['zustand'] == 'rennen' and v['rz'] == 'fertig' and v['aktiv'], v)
+        halte(page, 3.0, '%s_3s' % ('verfolger' if lauf == 0 else 'cockpit'))
+        page.wait_for_function('Rennspiel.spiel.zustand === "ergebnis"', timeout=240000)
+        v = page.evaluate(INFO)
+        pruefe('Lauf %d: Ergebnistafel erscheint nach >= 5 s Feuerwerk (t=%.2f s)' % (lauf, v['t']), 5.0 <= v['t'] <= 8.0 and v['aktiv'] and v['sichtbar'], v)
+        halte(page, 7.0, '%s_7s' % ('verfolger' if lauf == 0 else 'cockpit'))
         if lauf == 0:
-            # Bildunterschied mit/ohne Punkte (Verfolgerkamera)
-            # Ergebnistafel (erscheint sofort, wenn alle Spieler im Ziel sind) – Feuerwerk läuft darunter weiter
-            page.wait_for_function('Rennspiel.spiel.zustand === "ergebnis"', timeout=120000)
-            v = page.evaluate(INFO)
-            pruefe('Ergebnistafel: Feuerwerk läuft weiter', v['zustand'] == 'ergebnis' and v['aktiv'] and v['sichtbar'], v)
-            page.wait_for_function('Rennspiel.spiel.feuerwerk.t > 3.8 || !Rennspiel.spiel.feuerwerk.aktiv', timeout=120000)
-            pruefe('Ergebnistafel nach 3,8 s: weiter aktiv', page.evaluate('Rennspiel.spiel.feuerwerk.aktiv') and page.evaluate('Rennspiel.spiel.zustand') == 'ergebnis')
-            frames(page, 3); page.screenshot(path=os.path.join(out, 'feuerwerk_ergebnis_%s.png' % sid))
-            page.evaluate("() => document.querySelectorAll('.overlay').forEach(e => { e.style.display = 'none'; })")   # freie Sicht für die Bilder darunter
+            page.screenshot(path=os.path.join(out29, 'feuerwerk_xl_ergebnis.png'))
+            page.evaluate("() => document.querySelectorAll('.overlay').forEach(e => { e.style.display = 'none'; })")   # freie Sicht fuer die Bilder darunter
+            frames(page, 3); page.screenshot(path=os.path.join(out, 'feuerwerk_verfolger_%s.png' % sid))
             page.wait_for_function('Rennspiel.spiel.feuerwerk.lebende() > 80', timeout=120000)
             v = page.evaluate(INFO)
             pruefe('Partikel leben', v['lebend'] > 80, v['lebend'])
             pruefe('Keine neuen Shader-Programme nach dem Countdown', v['prog'] == prog0, '%s -> %s' % (prog0, v['prog']))
-            a = bild(page); page.screenshot(path=os.path.join(out, 'feuerwerk_verfolger_%s.png' % sid))
-            page.evaluate('Rennspiel.spiel.feuerwerk.punkte.visible = false'); frames(page)
+            a = bild(page)
+            page.evaluate('Rennspiel.spiel.feuerwerk.objekte.forEach(o => { o.visible = false; })'); frames(page)
             b = bild(page)
-            page.evaluate('Rennspiel.spiel.feuerwerk.punkte.visible = Rennspiel.spiel.feuerwerk.aktiv'); frames(page)
-            diff = int((np.abs(a - b)[100:215, 180:840].sum(axis=2) > 60).sum())   # nur der Himmel unter den HUD-Kästen
+            page.evaluate('Rennspiel.spiel.feuerwerk.objekte.forEach(o => { o.visible = Rennspiel.spiel.feuerwerk.aktiv; })'); frames(page)
+            diff = int((np.abs(a - b)[100:215, 180:840].sum(axis=2) > 60).sum())   # nur der Himmel unter den HUD-Kaesten
             pruefe('Punkte sichtbar (Pixel mit/ohne)', diff > 150, diff)
-            # Draw-Calls mit/ohne (solange die Show läuft; 2 Bilder Abstand je Messung)
             dc = page.evaluate('''() => new Promise(res => { const S = Rennspiel.spiel, fw = S.feuerwerk, rr = (n, f) => { if (n <= 0) f(); else requestAnimationFrame(() => rr(n - 1, f)); };
               if (!fw.aktiv) { res(null); return; }
-              fw.punkte.visible = true; rr(3, () => { const mit = S.renderer.info.render.calls, aktiv1 = fw.aktiv; fw.punkte.visible = false; rr(3, () => { const ohne = S.renderer.info.render.calls; fw.punkte.visible = fw.aktiv; res({ mit, ohne, aktiv1 }); }); }); })''')
-            pruefe('Draw-Calls +1 solange es läuft', dc is None or (dc['mit'] - dc['ohne'] == 1) or not dc['aktiv1'], dc)
+              fw.objekte.forEach(o => { o.visible = true; }); rr(3, () => { const mit = S.renderer.info.render.calls, aktiv1 = fw.aktiv; fw.objekte.forEach(o => { o.visible = false; }); rr(3, () => { const ohne = S.renderer.info.render.calls; fw.objekte.forEach(o => { o.visible = fw.aktiv; }); res({ mit, ohne, aktiv1 }); }); }); })''')
+            pruefe('Draw-Calls +2 solange es laeuft (gross + fein)', dc is None or (dc['mit'] - dc['ohne'] == 2) or not dc['aktiv1'], dc)
+        halte(page, 11.0, '%s_11s' % ('verfolger' if lauf == 0 else 'cockpit'))
         page.wait_for_function('!Rennspiel.spiel.feuerwerk.aktiv', timeout=120000)
         v = page.evaluate(INFO)
-        pruefe('Lauf %d: Show endet von selbst (unsichtbar, 0 Partikel)' % lauf, not v['sichtbar'] and v['lebend'] == 0, v)
+        pruefe('Lauf %d: Show endet von selbst (unsichtbar, 0 Partikel), Dauer 11-16 s' % lauf, not v['sichtbar'] and v['lebend'] == 0 and 11.0 <= v['t'] <= 16.0, v)
+        pruefe('Lauf %d: alle %d Raketen geplatzt, Partikel-Spitze > 600' % (lauf, v['raketen']), v['geplatzt'] == v['raketen'] >= 16 and v['spitze'] > 600, [v['geplatzt'], v['raketen'], v['spitze']])
         page.evaluate('Rennspiel.spiel.zumMenue(true)'); page.wait_for_timeout(800)
         v = page.evaluate(INFO)
         pruefe('Lauf %d: nach Menü: kein Feuerwerk, 0 Reste' % lauf, not v['da'] and v['imSzene'] == 0, v)
@@ -103,10 +113,12 @@ with sync_playwright() as p:
     page.wait_for_function('Rennspiel.spiel.rennen.teilnehmer[1].imZiel', timeout=60000)
     page.wait_for_timeout(1500)
     v = page.evaluate(INFO); pruefe('Computerfahrer Erster: kein Feuerwerk', not v['aktiv'] and v['lebend'] == 0 and not v['sichtbar'], v)
+    pruefe('Computerfahrer Erster: Spieler noch unterwegs -> keine Tafel', v['zustand'] == 'rennen', v['zustand'])
     page.evaluate(LAUF, 0)
     page.wait_for_function('Rennspiel.spiel.rennen.teilnehmer[0].imZiel', timeout=60000); page.wait_for_timeout(1500)
     pl = page.evaluate('Rennspiel.spiel.rennen.teilnehmer[0].zielPlatz'); v = page.evaluate(INFO)
     pruefe('Spieler danach Zweiter (Platz %s): weiter kein Feuerwerk' % pl, pl == 2 and not v['aktiv'] and v['lebend'] == 0, v)
+    pruefe('Niederlage: Ergebnistafel sofort (innerhalb 1,5 s nach dem Ziel)', v['zustand'] == 'ergebnis', v['zustand'])
     # Auswahlregel synthetisch
     r = page.evaluate('''() => { const S = Rennspiel.spiel; const f = S.feuerwerk; const res = []; f.gestartet = 0; f.aktiv = false;
       const fall = (t) => { f.gestartet = 0; f.aktiv = false; f.punkte.visible = false; S.rennen._melden('ziel', t); const a = f.aktiv; f.beenden(); return a; };

@@ -212,6 +212,47 @@ function lauf(streckeId, opt, sekunden, extra) {
   pruefe('V7 keine HUD-Warnung, Minimap blinkt nicht', r.log.warn === 0 && r.vk.minimapPunkte().blink === false);
 }
 
+// ---------------- V8 (v29 F7) Krankenwagen hängt nicht hinter dem Abschleppwagen: 10 Seeds × 3 Strecken × 200 s, höchstens 10 s je Lauf ≤ 15 m hinter dem Lkw (gleiche Spur)
+{
+  const { messen } = require('./verkehr_haengt_messung.js');
+  const strecken = ['wiese', 'wald', 'wueste'].filter(id => R.trackCatalog.some(t => t.id === id));
+  let gesamt = 0, max = 0, beruehr = 0, ueberholt = 0, schlecht = [], ersterLauf = null;
+  for (const id of strecken) {
+    for (let k = 0; k < 10; k++) {
+      const r = messen(id, k, 200);
+      gesamt += r.haengt; max = Math.max(max, r.haengt); beruehr += r.beruehr; ueberholt += r.ueberholt;
+      if (r.haengt > 10) schlecht.push(`${id}#${k}:${r.haengt.toFixed(1)}`);
+      if (!ersterLauf) ersterLauf = r;
+    }
+  }
+  pruefe('V8 Krankenwagen hängt <= 10 s je 200 s hinter dem Abschleppwagen (10 Seeds × ' + strecken.join('/') + ')', schlecht.length === 0, `Summe ${gesamt.toFixed(1)} s, Max ${max.toFixed(1)} s ` + schlecht.slice(0, 4).join(' | '));
+  pruefe('V8 Krankenwagen überholt tatsächlich (Überholvorgänge gezählt) und berührt den Lkw dabei nie', ueberholt > 0 && beruehr === 0, `Überholvorgänge ${ueberholt}, Berührung ${beruehr.toFixed(2)} s`);
+  const again = messen(strecken[0], 0, 200);
+  pruefe('V8 deterministisch (Seed 0 zweimal identisch)', JSON.stringify(again) === JSON.stringify(ersterLauf));
+  // Einheit: beide Nachbarspuren belegt (zwei stehende Teilnehmer 50 m voraus) → kein Spurwechsel; frei → Spurwechsel
+  const einheit = (blockiert) => {
+    const sim = neu({ krankenwagen: true, abschleppwagen: true, gegner: 1, streckeId: 'wiese' }), vk = sim.sim.verkehr, P = sim.sim.fahrzeuge[0].vehicle, P2 = sim.sim.fahrzeuge[1].vehicle, st = sim.sim.strecke;
+    const K = vk.eintraege.find(e => e.art === 'krankenwagen'), A = vk.eintraege.find(e => e.art === 'abschleppwagen');
+    for (let n = 0; n < 60 * 25 && !sim.sim.rennen.gasErlaubt; n++) sim.schritt();
+    const frei = vk.frei.filter(a => a[1] - a[0] >= 700).sort((a, b) => (b[1] - b[0]) - (a[1] - a[0]))[0], s0 = frei[0] + 40;
+    K.route = A.route = { a: s0 - 20, b: frei[1] }; K.ast = A.ast = 0; K.pause = A.pause = 1e9;
+    vk._erscheinen(A, s0 + 90, R.config.verkehr.abschleppwagen.spurQ, 9.5);
+    vk._erscheinen(K, s0, R.config.verkehr.krankenwagen.spurQ, 30);
+    const p = st.spline.punktBei(s0 + 50), q = -4.5;
+    let ueber = false;
+    for (let n = 0; n < 60 * 1.2; n++) {
+      if (blockiert) { P.setzen(p.x + p.nx * q, p.z + p.nz * q, P.heading); P.vLaengs = 0; P2.setzen(p.x - p.nx * q, p.z - p.nz * q, P2.heading); P2.vLaengs = 0; }       // zwei stehende Teilnehmer 50 m voraus, links und rechts neben der Fahrbahnmitte
+      sim.eingabeSetzen(0, { gas: 0, bremse: 1, lenkung: 0 }); sim.schritt();
+      if (K.ueber) ueber = true;
+    }
+    return ueber;
+  };
+  const eb = einheit(true), ef = einheit(false);
+  pruefe('V8 Einheit: Nachbarspur belegt → kein Spurwechsel, Nachbarspur frei → Spurwechsel', ef === true && eb === false, `frei ${ef}, belegt ${eb}`);
+  const U = R.config.verkehr.krankenwagen.ueberholen;
+  pruefe('V8 config: ueberholen an, >= 40 m frei, Querversatz ~2 s', U.an === true && U.frei >= 40 && U.zeit >= 1.5 && U.zeit <= 3, JSON.stringify(U));
+}
+
 // ---------------- V6 KI: Computerfahrer überholen den Verkehr ohne Hängen (KI-Fortschritt bei gleicher Zeit mit/ohne Verkehr)
 {
   const fort = (opt) => { const r = lauf('wiese', Object.assign({ runden: 2, gegner: 3 }, opt), 150); return r.sim.sim.rennen.teilnehmer.filter(t => !t.istSpieler).map(t => t.fortschritt); };

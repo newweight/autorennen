@@ -23,7 +23,7 @@ const MODULE = [
   'vendor/three.min.js',
   'src/config.js', 'src/physics/vehicle.js', 'src/physics/collisions.js', 'src/physics/schaden.js', 'src/cars/carCatalog.js', 'src/cars/dachregel.js',
   'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/looping.js', 'src/track/schanze.js',
-  'src/track/anlauf.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/tribuenen.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
+  'src/track/anlauf.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/tribuenen.js', 'src/world/formel1.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
   'src/world/kleber.js', 'src/world/polizei.js', 'src/world/verkehr.js', 'src/world/tiere.js', 'src/race/raceManager.js', 'src/race/startBoost.js', 'src/ai/driver.js', 'src/net/protokoll.js',
   'src/track/megastrecke.js',   // v22: Megastrecke (Add-on, nach Wetter/Themen/Strecke geladen)
   'src/main.js',
@@ -115,6 +115,9 @@ function einstellungenPruefen(roh, spielerAnzahl) {
     // v28 (W10, additiv): Tiere queren die Straße (Server simuliert, Protokoll zustand.ti); nur ein echtes true schaltet ein – ein alter Browser kennt `ti` nicht und sendet nichts
     // (sonst gäbe es unsichtbare Tiere); der neue Browser sendet `tiere` (Standard true) in den Raum-Einstellungen
     tiere: r.tiere === true,
+    // v29 (F3, additiv): Modus „Nur Rennautos“ – alle Computer-Gegner fahren den Formel-Renner, jeder in eigener Farbe (Autowahl macht der Server,
+    // teilnehmerInfo.optionen.farbe); nur ein echtes true schaltet ein (alter Client sendet es nicht → wie bisher). Menschen behalten ihre Wahl.
+    nurRennautos: r.nurRennautos === true,
     // 12.10. Hindernis-Menge: nur 'normal' | 'viele' | 'sehrViele' (unbekannt, Zahl, null … → 'normal'); alle Browser bauen dieselbe Strecke
     hindernisMenge: c.hindernisMenge && c.hindernisMenge.stufen && typeof r.hindernisMenge === 'string' &&
       Object.prototype.hasOwnProperty.call(c.hindernisMenge.stufen, r.hindernisMenge) ? r.hindernisMenge : ((c.hindernisMenge && c.hindernisMenge.standard) || 'normal'),
@@ -190,7 +193,11 @@ class Simulation {
     const spielerIds = spieler.map(s => s.auto);
     const plaetze = strecke.startpositionen(P + G);
     // 14.10. (v20): Computer-Füller wie im Einzelspiel nur aus Passat, Multivan, 911, T-Roc (gemischter Lack, T-Roc Dach/Lack); deterministisch je Rennen
-    const gegnerAutos = R.carCatalog.gegnerAutos(G, { seed: [e.streckeId, G, spielerIds.join('+')].join('|'), spielerIds });
+    let gegnerAutos = R.carCatalog.gegnerAutos(G, { seed: [e.streckeId, G, spielerIds.join('+')].join('|'), spielerIds });
+    // v29 (F3): Modus „Nur Rennautos“ – Gegner = Formel-Renner in eigenen Farben (wie main.js streckeAufbauen)
+    if (e.nurRennautos === true && R.carCatalog.formelFeld) {
+      gegnerAutos = R.carCatalog.formelFeld({ spieler: spielerIds.map(id => katalog.find(a => a.id === id) || katalog[0]), gegner: G, seed: [e.streckeId, G, spielerIds.join('+')].join('|') }).gegner;
+    }
     const teilnehmer = plaetze.map((p, i) => {
       const istSpieler = i < P;
       const auto = istSpieler ? (katalog.find(a => a.id === spielerIds[i]) || katalog[0]) : (gegnerAutos[i - P] || katalog[0]);

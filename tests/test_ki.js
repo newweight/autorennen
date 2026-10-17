@@ -172,7 +172,7 @@ for (const st of STRECKEN) {
   pruefe(`[${st.id}] Spanne leicht – unschlagbar ≥ ${spanneMin} s`, r2('leicht') - r2('unschlagbar') >= spanneMin, (r2('leicht') - r2('unschlagbar')).toFixed(1) + ' s');
   // Fantasie ist kürzer (1,4 km): Runde 40–70 s, Spanne ≥ 12 s
   // Runde 4: Strecken länger (Wiese ×1,35, Wald ×1,25, Wüste ×1,45) → unschlagbar 75–110 s
-  const kurz = st.id === 'fantasie', zMin = kurz ? 40 : 75, zMax = kurz ? 70 : 110;
+  const kurz = st.id === 'fantasie', zMin = kurz ? 40 : st.id === 'formel1' ? 65 : 75, zMax = kurz ? 70 : 110;
   pruefe(`[${st.id}] unschlagbar-Rundenzeit ${zMin}–${zMax} s`, r2('unschlagbar') >= zMin && r2('unschlagbar') <= zMax, fmt(r2('unschlagbar')));
   if (st.loopings.length) {
     const ks = Object.keys(ergebnis[st.id]).map(s => ergebnis[st.id][s].loop);
@@ -332,6 +332,6 @@ for (const daten of R.trackCatalog) {
 }
 
 const dauer = (Date.now() - t0) / 1000;
-pruefe('Laufzeit < 60 s', dauer < 60, dauer.toFixed(1) + ' s');
+pruefe('Laufzeit < 100 s', dauer < 100, dauer.toFixed(1) + ' s');   // v29: 8. Strecke (Formel 1) in der Schleife, 2-Kern-Cloud 72–80 s (v28c: 66 s)
 console.log(fehler === 0 ? '\nAlle KI-Tests bestanden.' : `\n${fehler} Test(s) fehlgeschlagen.`);
 process.exit(fehler === 0 ? 0 : 1);

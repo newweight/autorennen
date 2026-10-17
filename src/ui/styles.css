@@ -492,6 +492,11 @@ h3.pokal-zeile.fokus { outline: .12em solid var(--gelb); background: rgba(40, 60
 .karte.strecke { width: 6.7em; padding: .35em; }
 .karte.strecke .karten-name { font-size: 1em; }
 .karte.strecke .karten-sub { font-size: .62em; }
+/* v29 (F3): 8. Karte (Formel 1) – nochmal etwas schmaler, damit alle 8 bei 1280 px in EINER Reihe bleiben */
+.karte.strecke { width: 5.85em; padding: .3em; }
+.karte.strecke .karten-name { font-size: .88em; }
+.karte.strecke .strecken-bild { height: 2.7em; }
+.karte.strecke .karten-sub { font-size: .58em; line-height: 1.18; }
 .karte.strecke[data-a="strecke:mega"] { border-color: #6fd3c8; background: rgba(20, 84, 90, .8); }
 .karte.strecke[data-a="strecke:mega"].gewaehlt { background: rgba(30, 118, 124, .92); }
 .karte.strecke[data-a="strecke:mega"] .strecken-bild { background: linear-gradient(90deg, #4f9a3a 0 25%, #eef3f8 25% 45%, #d9a85a 45% 70%, #c987e0 70%) !important; }

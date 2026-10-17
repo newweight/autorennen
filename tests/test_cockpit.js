@@ -17,21 +17,22 @@ R.carCatalog.forEach((a) => {
     if (K.drehzahl(a, v) !== r) ok(a.id + ': drehzahl() = getriebe().rpm', false);
   }
   const leer = K.drehzahl(a, 0), rueck = K.getriebe(a, -3);
-  ok(`${a.id}: Leerlauf ${leer} (${m.name}), max ${Math.round(max)} ≤ Rot ${m.rot}·1,02, min ≥ Leerlauf`, leer === m.leerlauf && max <= m.rot * 1.02 + 1 && min >= m.leerlauf - 1);
+  ok(`${a.id}: Leerlauf ${leer} (${m.name}), max ${Math.round(max)} ≤ Begrenzer ${m.begr}, min ≥ Leerlauf`, leer === m.leerlauf && max <= m.begr + 1 && min >= m.leerlauf - 1);
   ok(`${a.id}: alle ${m.uebers.length} Gänge werden durchlaufen, Gang steigt mit dem Tempo`, gaenge.size === m.uebers.length && monotonGang, [...gaenge].join(','));
   ok(`${a.id}: Rückwärts = Gang −1`, rueck.gang === -1);
   const topRpm = K.drehzahl(a, vm);
   ok(`${a.id}: bei Höchsttempo knapp unter Rot (${Math.round(topRpm)})`, topRpm > m.rot * 0.85 && topRpm <= m.rot);
 });
 const p = R.carCatalog.finde('porsche-911'), pv = R.carCatalog.finde('passat');
-ok('911: Rot 7500, 8 Gänge', K.motor(p).rot === 7500 && K.motor(p).uebers.length === 8);
+ok('911: Rot 7000 (v29: Begrenzer 7500), 8 Gänge', K.motor(p).rot === 7000 && K.motor(p).begr === 7500 && K.motor(p).uebers.length === 8);
 ok('Passat: Diesel Rot 4500, 7 Gänge', K.motor(pv).rot === 4500 && K.motor(pv).uebers.length === 7);
 ok('T-Roc: Benziner Rot 6500', K.motor('troc-cabrio').rot === 6500);
 ok('drehzahl(id-String, v, vMax) funktioniert', K.drehzahl('porsche-911', 40, 60) > 0 && K.drehzahl('porsche-911', 40, 60) !== K.drehzahl('porsche-911', 40, 80));
 // Stile
 ['passat', 'polizei', 'multivan', 'troc-cabrio'].forEach((id) => ok('Stil ' + id + ' = vw', K.stilFuer(id) === 'vw'));
 ok('Stil porsche-911 = porsche', K.stilFuer('porsche-911') === 'porsche');
-['bmw-m4', 'amg-gt', 'audi-rs6', 'mini-cooper', 'formel'].forEach((id) => ok('Stil ' + id + ' = standard (alte Anzeige)', K.stilFuer(id) === 'standard'));
+ok('Stil formel = porsche (v29: Drehzahlmesser + Tacho)', K.stilFuer('formel') === 'porsche');
+['bmw-m4', 'amg-gt', 'audi-rs6', 'mini-cooper'].forEach((id) => ok('Stil ' + id + ' = standard (alte Anzeige)', K.stilFuer(id) === 'standard'));
 
 // --- Rechteck-Umrechnung
 const rc = R.rueckspiegel.rechteckAus({ x: 50, y: 50, b: 20, h: 10 }, 1000, 500, 1);

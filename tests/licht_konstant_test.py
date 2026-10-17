@@ -88,6 +88,7 @@ def cfg(**k):
 
 SZENARIEN = [
     ('tag_ohne',        cfg(), 'Tag, klar, ohne Verkehr (Referenz)'),
+    ('formel1_tag',    cfg(streckeId='formel1', autoIds=['formel', 'multivan'], gegner=7), 'Formel 1, Tag, Nur Rennautos (Standard), 8 Formel-Renner'),
     ('tag_viel',        cfg(verkehr='viel', geisterfahrer=True, polizei=True), 'Tag, Verkehr viel, Geister, Polizei, 9 Teilnehmer'),
     ('daemm_regen',     cfg(tageszeit='daemmerung', wetter='regen', verkehr='viel', geisterfahrer=True, polizei=True), 'Dämmerung, Regen, Verkehr viel, Geister, Polizei, 9'),
     ('nacht_regen',     cfg(tageszeit='nacht', wetter='regen', verkehr='viel', geisterfahrer=True, polizei=True, schaden=True), 'Nacht, Regen, Verkehr viel, Geister, Polizei, Schaden, 9'),

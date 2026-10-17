@@ -161,6 +161,7 @@ function autopilot(st, v, idx) {
         V.abgleich(ich, null);
       }
     }
+    // v29 F2: der Ast ist jetzt fest (Server rechnet das Hindernis, die Vorhersage nicht – wie Bake/Baustelle) → nach einem Astkontakt kurz Abweichung bis zur Korrektur: 94,3 % statt 100 % (max 0,45 m), mit F2b (Rand überfahrbar) 98,2 % → Schwelle bleibt 95 %
     pruefe('L wiese/hindernisse/sehrViele: Vorhersage = Server (≥ 95 % der Vergleiche < 1 mm, max < 3 m)', gleich / Math.max(1, schritte) >= 0.95 && maxD < 3 && schritte > 100,
       `${(100 * gleich / Math.max(1, schritte)).toFixed(1)} % gleich, max ${maxD.toFixed(3)} m, ${schritte} Vergleiche`);
   }

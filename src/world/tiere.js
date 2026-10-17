@@ -92,6 +92,7 @@
   function artenFuer(strecke) {
     const id = (strecke && (strecke.id || (strecke.daten && strecke.daten.id))) || 'wiese';
     const set = new Set();
+    if (strecke && ((strecke.daten && strecke.daten.tiereAus) || id === 'formel1')) return [];      // v29 F3: Formel 1 – keine querenden Tiere
     if (id === 'mega' || (strecke && strecke.mega) || (strecke && strecke.daten && strecke.daten.mega)) {
       const sek = (R.Mega && R.Mega.info && R.Mega.info.sektionen) || [];
       sek.forEach((s) => { set.add(THEMA_ART[s.id] || 'kuh'); if (s.id === 'alpen') set.add('steinbock'); });

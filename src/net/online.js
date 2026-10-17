@@ -230,6 +230,7 @@
           gegner: e.gegner, schwierigkeit: e.schwierigkeit, tempoKlasse: e.tempoKlasse, jahreszeit: e.jahreszeit, wetter: e.wetter,
           tageszeit: e.tageszeit, kollisionen: e.kollisionen !== false, hindernisMenge: e.hindernisMenge, polizei: e.polizei === true,
           geisterfahrer: e.geisterfahrer === true, krankenwagen: e.krankenwagen === true, abschleppwagen: e.abschleppwagen === true, tiere: e.tiere !== false,      // v28 (W10): Tiere queren die Straße (Standard an)
+          nurRennautos: R.carCatalog.nurRennautos(e, R.trackCatalog.find(t => t.id === e.streckeId)),      // v29 (F3): alle Computer-Gegner fahren den Formel-Renner (bei der Formel-1-Strecke Standard an)
           verkehr: e.krankenwagen === true || e.abschleppwagen === true ? 'wenig' : 'aus' } }, this.meineWahl()));      // v25: Verkehr (additiv); v28 W1: Krankenwagen/Abschleppwagen je einzeln, `verkehr` nur noch abgeleitet für alte Server   // Stufe 2: zuletzt gewählt (Standard Geister)
       } catch (err) { this.ansicht = 'start'; this.hinweis = 'Keine Verbindung zum Server 😕'; this.zeichnen(); }
     }
@@ -544,6 +545,7 @@
       if (zeile === 'krankenwagen') return { wert: R.Verkehr.ausEinstellung(e).krankenwagen ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '🚑 An' }] };      // v28 (W1)
       if (zeile === 'abschleppwagen') return { wert: R.Verkehr.ausEinstellung(e).abschleppwagen ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '🛻 An' }] };
       if (zeile === 'tiere') return { wert: e.tiere === true ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '🐄 An' }] };      // v28 (W10)
+      if (zeile === 'rennautos') return { wert: e.nurRennautos === true ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '🏎 An' }] };      // v29 (F3)
       if (zeile === 'tageszeit') return { wert: e.tageszeit, liste: [{ k: 'tag', text: '☀️ Tag' }, { k: 'daemmerung', text: '🌇 Dämmerung' }, { k: 'nacht', text: '🌙 Nacht' }] };
       return { wert: null, liste: [] };
     }
@@ -562,7 +564,12 @@
       if (zeile === 'fahrer' || zeile === 'auto' || zeile === 'hilfe') { this.verb.senden({ t: 'wahl', [zeile]: k }); return; }
       if (!this.istHost) return;
       const e = {};
-      if (zeile === 'strecke') { e.streckeId = k; e.welt = ''; e.variante = ''; }
+      if (zeile === 'strecke') {
+        e.streckeId = k; e.welt = ''; e.variante = '';
+        // v29 (F3): Formel-1-Strecke → „Nur Rennautos“ an (außer der Host hat es selbst ausgeschaltet); andere Strecke → aus, wenn es nur der Standard war
+        const nd = R.trackCatalog.find(t => t.id === k), lok0 = this.basis || this.spiel.einstellungen;
+        e.nurRennautos = lok0.nurRennautos === false ? false : lok0.nurRennautos === true ? true : !!(nd && nd.nurRennautosStandard);
+      }
       else if (zeile === 'welt') e.welt = k === this.streckeDaten().weltStandard ? '' : k;
       else if (zeile === 'runden' || zeile === 'gegner') e[zeile] = +k;
       else if (zeile === 'jahreszeit') { e.jahreszeit = k; e.wetter = 'klar'; }
@@ -590,6 +597,12 @@
         e.geisterfahrer = k === 'an';
         const lok = this.basis || this.spiel.einstellungen;
         lok.geisterfahrer = e.geisterfahrer;
+        if (!this.basis) this.spiel.einstellungenSpeichern();
+      }
+      else if (zeile === 'rennautos') {      // v29 (F3): Modus „Nur Rennautos“
+        e.nurRennautos = k === 'an';
+        const lok = this.basis || this.spiel.einstellungen;
+        lok.nurRennautos = e.nurRennautos;
         if (!this.basis) this.spiel.einstellungenSpeichern();
       }
       else if (zeile === 'tiere') {      // v28 (W10): Tiere queren die Straße
@@ -682,6 +695,13 @@
           sch('geisterfahrer', w.geister, '👻 Geister', 'Geisterfahrer') + sch('krankenwagen', w.krankenwagen, '🚑 Kranken', 'Krankenwagen') + sch('abschleppwagen', w.abschleppwagen, '🛻 Abschlepp', 'Abschleppwagen') +
           sch('tiere', this.lobby.einstellungen.tiere === true, '🐄 Tiere', 'Tiere queren die Straße') + `</div></div>`;      // v28 (W10)
       };
+      // v29 (F3): Zeile „Nur Rennautos“ (Computer-Gegner = Formel-Renner in eigenen Farben); Klick = An/Aus
+      const rennautosZeile = () => {
+        const an = this.lobby.einstellungen.nurRennautos === true;
+        return `<div class="on-zeile"><div class="on-label">🏎 Nur Rennautos</div><div class="on-werte">` +
+          `<span class="pille${an ? '' : ' aktiv'}" data-a="wert:rennautos:aus" title="Aus: Computer-Gegner fahren verschiedene Autos">Aus</span>` +
+          `<span class="pille${an ? ' aktiv' : ''}" data-a="wert:rennautos:an" title="An: alle Computer-Gegner fahren den Formel-Renner, jeder in einer eigenen Farbe">🏎 An</span></div></div>`;
+      };
       const meine = zeile('fahrer', '🧑 Fahrer') + zeile('auto', '🚗 Auto') + zeile('hilfe', '🛟 Fahrhilfe');
       let rechts;
       const daten = this.streckeDaten();
@@ -690,7 +710,7 @@
           (this.variantenListe().length ? zeile('variante', '📏 Variante') : '') +
           zeile('hindernisMenge', this.hindernisMengeAktiv() ? '🚧 Hindernisse' : '🚧 Hindernisse <small>(erst ab Welt „Hindernisse“)</small>') + zeile('runden', '🔁 Runden') +
           zeile('gegner', '🤖 Computer-Gegner') + zeile('schwierigkeit', '🎚️ Computer-Stärke') + zeile('tempoKlasse', '🏎️ Tempo') +
-          zeile('jahreszeit', '🍂 Jahreszeit') + zeile('wetter', '🌦️ Wetter') + zeile('tageszeit', '🌗 Tageszeit') + zeile('polizei', '🚨 Polizei') + verkehrZeile() +
+          zeile('jahreszeit', '🍂 Jahreszeit') + zeile('wetter', '🌦️ Wetter') + zeile('tageszeit', '🌗 Tageszeit') + zeile('polizei', '🚨 Polizei') + verkehrZeile() + rennautosZeile() +
           `<div class="on-fest">💥 Schaden: aus (online) · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister: Autos fahren durcheinander durch'}</div>`;
       } else {
         const wi = (R.weltInfo || {})[e.welt || daten.weltStandard] || {};
@@ -700,7 +720,7 @@
           `🗺️ ${esc(daten.name)} · ${wi.emoji || '🌍'} ${esc(wi.name || e.welt || '')}${e.variante ? ' · 📏 XL' : ''}<br>` +
           `🔁 ${e.runden} Runden · 🤖 ${e.gegner} Computer (${esc(S.name || e.schwierigkeit)})<br>` +
           (e.hindernisMenge && e.hindernisMenge !== 'normal' && this.hindernisMengeAktiv() ? `🚧 Hindernisse: ${esc(((c.hindernisMenge.stufen[e.hindernisMenge]) || {}).name || e.hindernisMenge)}<br>` : '') +
-          `🏎️ ${e.tempoKlasse === 'schnell' ? 'Schnell' : 'Normal'} · ${J ? J.emoji + ' ' + J.name : '🎲'} · ${W ? (W.emoji || '☀️') + ' ' + W.name : '🎲'} · ${T[e.tageszeit] || ''}${e.polizei ? ' · 🚨 Polizei' : ''}${e.geisterfahrer ? ' · 👻 Geisterfahrer' : ''}${R.Verkehr.ausEinstellung(e).krankenwagen ? ' · 🚑 Krankenwagen' : ''}${R.Verkehr.ausEinstellung(e).abschleppwagen ? ' · 🛻 Abschleppwagen' : ''}${e.tiere === true ? ' · 🐄 Tiere' : ''}<br>` +
+          `🏎️ ${e.tempoKlasse === 'schnell' ? 'Schnell' : 'Normal'} · ${J ? J.emoji + ' ' + J.name : '🎲'} · ${W ? (W.emoji || '☀️') + ' ' + W.name : '🎲'} · ${T[e.tageszeit] || ''}${e.polizei ? ' · 🚨 Polizei' : ''}${e.nurRennautos ? ' · 🏎 Nur Rennautos' : ''}${e.geisterfahrer ? ' · 👻 Geisterfahrer' : ''}${R.Verkehr.ausEinstellung(e).krankenwagen ? ' · 🚑 Krankenwagen' : ''}${R.Verkehr.ausEinstellung(e).abschleppwagen ? ' · 🛻 Abschleppwagen' : ''}${e.tiere === true ? ' · 🐄 Tiere' : ''}<br>` +
           `💥 Schaden: aus (online) · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister'}</div>`;
       }
       return `<div class="on-lobby">` +
@@ -1060,8 +1080,18 @@
         `<div class="knoepfe">` + (this.istHost ? `<div class="knopf gruen" data-a="zurLobby">👥 Zur Lobby <kbd>Enter</kbd></div>`
           : `<div class="knopf" style="background:rgba(255,255,255,.2)">⏳ Warten auf den Host …</div>`) +
         `<div class="knopf blau" data-a="rennenVerlassen">🚪 Verlassen <kbd>Esc</kbd></div></div></div>`;
-      this.ergEl.style.display = '';
+      // v29 F5: läuft das Feuerwerk (ein Mensch wurde Erster), erscheint die Tafel erst nach config.feuerwerk.tafelNach (main.js ruft ergebnisFreigeben je Bild)
+      this.ergEl.style.display = (R.Feuerwerk && R.Feuerwerk.tafelWartezeit && R.Feuerwerk.tafelWartezeit(this.spiel) > 0) ? 'none' : '';
+      this._ergWarten = this.ergEl.style.display === 'none';
       this.statistik.korrekturen = this.vorhersage ? Object.assign({}, this.vorhersage.stat) : null;
+    }
+
+    /** v29 F5: Ergebnistafel nachträglich zeigen, sobald das Feuerwerk den Auftakt hinter sich hat (je Bild von main.js). */
+    ergebnisFreigeben() {
+      if (!this._ergWarten) return;
+      if (this.phase !== 'ergebnis') { this._ergWarten = false; return; }
+      if (R.Feuerwerk.tafelWartezeit(this.spiel) > 0) return;
+      this._ergWarten = false; this.ergEl.style.display = '';
     }
 
     // ---------- fester Schritt (main.js physikSchritt im Zustand 'online') ----------

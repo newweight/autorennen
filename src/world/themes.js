@@ -581,6 +581,61 @@
     return { baeume: baeume.length, buesche: buesche.length, heuballen: ballen.length, kuehe: weiss.length / 2, blumen: blumen.length, teich: !!teich };
   }
 
+  // ------------------------------------------------------------------ Formel 1 (v29 F3)
+  /**
+   * Formel-1-Strecke (Katalog formel1, Thema wiese): weite, freie Fläche statt Wiesen-Idylle – nur Wäldchen und Baumreihen
+   * weit hinter Bande und Tribünen (ab zaunAbstand + 14 m), Büsche am Horizont, keine Kühe/Heuballen/Blumen/Teich.
+   * Nichts davon liegt zwischen Straße und Bande (keine Pflanzen-Kollider). Rein deterministisch (Seed je Strecke).
+   */
+  function formel1Deko(gruppe, thema, strecke, rnd) {
+    const b2 = strecke.breite / 2, frei = b2 + (strecke.zaunAbstand || 12) + 14;
+    const mitte = streckenMitte(strecke);
+    const stammGeo = new THREE.CylinderGeometry(0.25, 0.35, 1, 6); stammGeo.translate(0, 0.5, 0);
+    const kroneRundGeo = new THREE.IcosahedronGeometry(1, 0);
+    const kroneKegelGeo = new THREE.ConeGeometry(1, 1, 7); kroneKegelGeo.translate(0, 0.5, 0);
+    const stammMat = new THREE.MeshLambertMaterial({ color: 0x6b4a2b });
+    const laubMat = new THREE.MeshLambertMaterial({ color: 0x3f7f2a, flatShading: true });
+    const tanneMat = new THREE.MeshLambertMaterial({ color: 0x2d5e33, flatShading: true });
+    const baeume = [], zentren = [];
+    for (let i = 0; i < 10; i++) { const st = stelleSuchen(strecke, rnd, frei + 10, 260, frei + 10, 40); if (st) zentren.push(st); }
+    for (let i = 0; i < 170; i++) {
+      let st = null;
+      if (zentren.length) {
+        const w = zentren[Math.floor(rnd() * zentren.length)];
+        for (let v = 0; v < 8 && !st; v++) {
+          const x = w.x + (rnd() - 0.5) * 70, z = w.z + (rnd() - 0.5) * 70;
+          if (istFrei(strecke, x, z, frei)) st = { x, z, y: strecke.bodenHoehe(x, z), winkel: rnd() * Math.PI * 2 };
+        }
+      }
+      if (!st) continue;
+      st.tanne = rnd() < 0.3; st.groesse = 0.8 + rnd() * 0.6; baeume.push(st);
+    }
+    for (let i = 0; i < 220; i++) {
+      const st = stelleSuchen(strecke, rnd, 170, 440, 140, 10, 1);
+      if (!st || !aufBoden(mitte, st.x, st.z)) continue;
+      st.tanne = rnd() < 0.4; st.groesse = 1.0 + rnd() * 0.7; baeume.push(st);
+    }
+    const laub = baeume.filter(b => !b.tanne), tannen = baeume.filter(b => b.tanne);
+    instanzMesh(gruppe, 'Baeume', stammGeo, stammMat, baeume, (b, d) => {
+      const g = b.groesse; d.position.set(b.x, b.y - 0.1, b.z); d.rotation.set(0, b.winkel, 0); d.scale.set(g, (b.tanne ? 1.6 : 2.6) * g, g);
+    });
+    instanzMesh(gruppe, 'Baeume', kroneRundGeo, laubMat, laub, (b, d, f) => {
+      const g = b.groesse; d.position.set(b.x, b.y + 2.6 * g + 1.6 * g, b.z); d.rotation.set(rnd() * 0.5, b.winkel, rnd() * 0.5);
+      d.scale.set(2.6 * g, 2.3 * g, 2.6 * g); f.setHSL(0.26 + rnd() * 0.06, 0.5, 0.75 + rnd() * 0.25);
+    });
+    instanzMesh(gruppe, 'Baeume', kroneKegelGeo, tanneMat, tannen, (b, d, f) => {
+      const g = b.groesse; d.position.set(b.x, b.y + 1.2 * g, b.z); d.rotation.set(0, b.winkel, 0);
+      d.scale.set(2.2 * g, 7 * g, 2.2 * g); f.setHSL(0.33, 0.3, 0.8 + rnd() * 0.2);
+    });
+    const buesche = [];
+    for (let i = 0; i < 60; i++) { const st = stelleSuchen(strecke, rnd, frei, 200, frei); if (st) buesche.push(st); }
+    instanzMesh(gruppe, 'Buesche', new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: 0x4d8f30, flatShading: true }), buesche, (b, d, f) => {
+      const g = 0.8 + rnd() * 1.0; d.position.set(b.x, b.y + 0.35 * g, b.z); d.rotation.set(0, b.winkel, 0);
+      d.scale.set(1.4 * g, 0.9 * g, 1.2 * g); f.setHSL(0.25 + rnd() * 0.08, 0.55, 0.7 + rnd() * 0.3);
+    });
+    return { baeume: baeume.length, buesche: buesche.length, heuballen: 0, kuehe: 0, blumen: 0, teich: false };
+  }
+
   // ------------------------------------------------------------------ Wald
 
   function waldDeko(gruppe, thema, strecke, rnd) {
@@ -1942,7 +1997,7 @@
     const rnd = zufall(textSeed(strecke.id || 'strecke') ^ thema.seed);
     const gruppe = new THREE.Group();
     gruppe.name = 'Deko ' + themaName;
-    const bauer = { wiese: wieseDeko, wald: waldDeko, wueste: wuesteDeko, fantasie: fantasieDeko, dino: dinoDeko, alpen: alpenDeko }[themaName] || wieseDeko;
+    const bauer = (strecke.daten && strecke.daten.formel1) ? formel1Deko : { wiese: wieseDeko, wald: waldDeko, wueste: wuesteDeko, fantasie: fantasieDeko, dino: dinoDeko, alpen: alpenDeko }[themaName] || wieseDeko;
     const anzahl = bauer(gruppe, thema, strecke, rnd);
     // Instanzen bewegen sich nicht: Begrenzungskugeln einmal berechnen
     gruppe.children.forEach((m) => {

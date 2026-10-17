@@ -1479,6 +1479,9 @@
       // Felgenabdeckung: Scheibe + heller Ring + Mutter
       const cover = new THREE.CircleGeometry(rf * 0.97, 16); cover.rotateY(Math.PI / 2); cover.translate(x0 - 0.002, 0, 0);
       S.geo(cover, 0x565c67);
+      // v29 F1: Innenseite schließen (Scheibe zeigt nach innen) – sonst sieht man bei freistehenden Rädern (Formel-Renner) von innen durch den Reifen
+      const innenSeite = new THREE.CircleGeometry(rb, 16); innenSeite.rotateY(-Math.PI / 2); innenSeite.translate(-hw + 0.012, 0, 0);
+      S.geo(innenSeite, 0x2b2e35);
       const ring = new THREE.RingGeometry(rf * 0.8, rf * 0.97, 16); ring.rotateY(Math.PI / 2); ring.translate(x0 + 0.002, 0, 0);
       S.geo(ring, 0x9aa0aa);
       const mutter = new THREE.CylinderGeometry(rf * 0.16, rf * 0.16, 0.035, 6); mutter.rotateZ(-Math.PI / 2); mutter.translate(x0 + 0.004, 0, 0);

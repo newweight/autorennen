@@ -30,6 +30,7 @@ IMPASSEND = """(() => { const m = document.querySelector('.m-inhalt'), b = (s) =
 with sync_playwright() as p:
     browser = p.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
     page = browser.new_page(viewport={'width': 1280, 'height': 800})
+    page.set_default_timeout(120000)   # v29: bei Last (parallele Tests, SwiftShader) braucht der Menühintergrund länger als 30 s
     page.on('pageerror', lambda e: fehler.append(str(e)))
     page.on('console', lambda m: fehler.append('console.error: ' + m.text) if m.type == 'error' else None)
     page.goto(url)
@@ -141,7 +142,7 @@ with sync_playwright() as p:
     pruefe('Modus zu zweit', page.evaluate('Rennspiel.spiel.einstellungen.modus') == 'zwei')
     taste('Enter'); page.wait_for_timeout(200); snap('menu_2_strecke.png')
     karten = page.evaluate("Array.from(document.querySelectorAll('.karte.strecke')).map(k => k.dataset.a)")
-    pruefe('Streckenwahl: 7 Karten (Wiese, Wald, Wüste, Fantasie, Dino, Alpen, Megastrecke)', karten == ['strecke:wiese', 'strecke:wald', 'strecke:wueste', 'strecke:fantasie', 'strecke:dino', 'strecke:alpen', 'strecke:mega'], karten)
+    pruefe('Streckenwahl: 8 Karten (Wiese, Wald, Wüste, Fantasie, Dino, Alpen, Formel 1, Megastrecke)', karten == ['strecke:wiese', 'strecke:wald', 'strecke:wueste', 'strecke:fantasie', 'strecke:dino', 'strecke:alpen', 'strecke:formel1', 'strecke:mega'], karten)
     # 6 Karten (W4-I: + Alpen) in EINER Reihe (gleiches offsetTop), im Bild, ohne Überlappung – bei 1280×800 und 1440×900
     LAGE = """(() => { const k = Array.from(document.querySelectorAll('.karte.strecke')), r = k.map(e => e.getBoundingClientRect());
       return { gleicheReihe: new Set(k.map(e => e.offsetTop)).size === 1,
@@ -157,9 +158,9 @@ with sync_playwright() as p:
     for vw, vh in ((1280, 800), (1440, 900)):
         page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(400)
         lage = page.evaluate(LAGE)
-        pruefe(f'Streckenwahl {vw}×{vh}: 7 Karten in einer Reihe (gleiches offsetTop), im Bild, ohne Überlappung', lage['gleicheReihe'] and lage['ok'] and lage['scroll'] and not lage['textUeber'], lage)
+        pruefe(f'Streckenwahl {vw}×{vh}: 8 Karten in einer Reihe (gleiches offsetTop), im Bild, ohne Überlappung', lage['gleicheReihe'] and lage['ok'] and lage['scroll'] and not lage['textUeber'], lage)
         snap(f'menu_2_strecke_{vw}.png')
-    pruefe('Streckenkarten: Schwierigkeits-Pillen leicht/mittel/schnell/spaß/mittel/mittel/spaß (Mega)', lage['pilleText'] == ['leicht', 'mittel', 'schnell', 'spaß', 'mittel', 'mittel', 'spaß'], lage['pilleText'])
+    pruefe('Streckenkarten: Schwierigkeits-Pillen leicht/mittel/schnell/spaß/mittel/mittel/schnell/spaß (Formel 1, Mega)', lage['pilleText'] == ['leicht', 'mittel', 'schnell', 'spaß', 'mittel', 'mittel', 'schnell', 'spaß'], lage['pilleText'])
     pruefe('Dino-Karte: eigene Farbe (Rahmen/Hintergrund) + Vulkan-Himmel im Bild', lage['farbe4'] != lage['farbe0'] and '242, 179, 106' in lage['bild4'], [lage['farbe4'], lage['bild4'][:80]])
     pruefe('Fantasie-Karte: eigene Farbe + Hinweis 2 Loopings, Bälle, Wasserstrahl', lage['farbe3'] != lage['farbe0'] and '2 Loopings' in lage['hinweis'] and 'Bälle' in lage['hinweis'] and 'Wasserstrahl' in lage['hinweis'], [lage['farbe3'], lage['hinweis']])
     page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
@@ -240,7 +241,7 @@ with sync_playwright() as p:
     taste('ArrowDown'); taste('ArrowRight')   # Schwierigkeit
     snap('menu_4_einstellungen.png')
     # Start: bis zur Start-Zeile mit Enter, dann Enter
-    for _ in range(16):
+    for _ in range(24):
         if zustand() != 'menue': break
         taste('Enter'); page.wait_for_timeout(100)
     page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=120000)
@@ -461,7 +462,7 @@ with sync_playwright() as p:
     # Einstellungen-Schritt (solo)
     page.click('[data-a="schritt:4"]'); page.wait_for_timeout(300)
     zl = page.evaluate('Rennspiel.spiel.menue.zeilen()')
-    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'tageszeit', 'jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'rempeln', 'geister', 'krankenwagen', 'abschleppwagen', 'tiere', 'start'], zl)
+    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'tageszeit', 'jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'rempeln', 'geister', 'krankenwagen', 'abschleppwagen', 'tiere', 'rennautos', 'start'], zl)
     pj = texte('[data-a="fokus:5"] .pille')
     pruefe('Jahreszeit-Pillen (Wiese): Frühling, Sommer, Herbst, Winter, Zufall; Sommer aktiv', len(pj) == 5 and 'Sommer' in pj[1] and 'Zufall' in pj[4]
            and 'Sommer' in texte('[data-a="fokus:5"] .pille.aktiv')[0], pj)
@@ -570,6 +571,10 @@ with sync_playwright() as p:
     pruefe('Tastatur: Tiere (Standard an) ← = aus, → = an', [t0, t1, t2] == [True, False, True], [t0, t1, t2])
     page.click('[data-a="wert:tiere:aus"]'); t3 = E().get('tiere'); page.click('[data-a="wert:tiere:an"]')
     pruefe('Maus: Tiere-Pillen Aus/An', t3 is False and E().get('tiere') is True, [t3, E().get('tiere')])
+    taste('ArrowDown')   # v29 (F3): Zeile „Nur Rennautos“ (Wiese: Standard aus)
+    n0 = E().get('nurRennautos'); taste('ArrowRight'); n1 = E().get('nurRennautos'); taste('ArrowLeft'); n2 = E().get('nurRennautos')
+    pruefe('Tastatur: Nur Rennautos (Wiese) → = an, ← = aus', n1 is True and n2 is False, [n0, n1, n2])
+    page.evaluate('Rennspiel.spiel.einstellungen.nurRennautos = null')
     taste('ArrowDown')
     pruefe('Tastatur: ↓ erreicht Start (Fokus-Ring), Schaden wieder an', page.locator('.start-knopf.fokus').count() == 1 and E()['schaden'] is True)
     # Layout ohne Überlauf: solo/zwei × Tafel zu/auf × 1280×800 / 1440×900

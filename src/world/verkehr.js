@@ -40,7 +40,8 @@
     geister: { anzahl: 3, tempo: 21, tempoSchwankung: 3, warnAbstand: 150, spurWechselAb: 70, spurWechselBis: 170, wechselLaenge: 45,
       routeMax: 700, routeMin: 260, routeMinNot: 100, routeLuecke: 30, hupeAbstand: 110, ausloeser: 420, spurAnteil: 0.45, wechselChance: 0.7, wechselAbstand: 120,
       verteilung: [0.2, 0.4, 0.4], mindestAbstand: 400, warnung: false },     // v28 (W3): je Runde 0/1/2 Geisterfahrer (Erwartung 1,2), nie zwei näher als 400 m, keine HUD-Warnung/Minimap-Blinken
-    krankenwagen: { tempo: 34, schadenFaktor: 3, autoId: 'krankenwagen', spurQ: 0.28 },
+    krankenwagen: { tempo: 34, schadenFaktor: 3, autoId: 'krankenwagen', spurQ: 0.28,
+      ueberholen: { an: true, ab: 120, frei: 40, zeit: 2, zurueckAb: 25, randZugabe: 1.2, abstandQuer: 0.8, spawnHinter: 60 } },     // v29 (F7): überholt den Abschleppwagen auf der Nachbarspur
     abschleppwagen: { tempo: 9.5, spurQ: 0.3, hoerweite: 110 },
     sperrVor: 45, sperrNach: 45, loopingVor: 140, loopingNach: 70, schanzeVor: 140, schanzeNach: 40, startFrei: 220, zielFrei: 120,
     hindernisSperre: 25, hindernisNach: 20,
@@ -54,7 +55,7 @@
     return Object.assign({}, STANDARD, c, {
       stufen: Object.assign({}, STANDARD.stufen, c.stufen || {}),
       geister: Object.assign({}, STANDARD.geister, c.geister || {}),
-      krankenwagen: Object.assign({}, STANDARD.krankenwagen, c.krankenwagen || {}),
+      krankenwagen: Object.assign({}, STANDARD.krankenwagen, c.krankenwagen || {}, { ueberholen: Object.assign({}, STANDARD.krankenwagen.ueberholen, (c.krankenwagen && c.krankenwagen.ueberholen) || {}) }),
       abschleppwagen: Object.assign({}, STANDARD.abschleppwagen, c.abschleppwagen || {}),
     });
   }
@@ -432,7 +433,7 @@
       f.nah = st.abfrage(pt.x, pt.z, f.index); f.index = f.nah.index;
       if (sp._vorherAngleichen) sp._vorherAngleichen(f);
       f.netReset = (f.netReset || 0) + 1;
-      e.aktiv = true; e.halt = false; e.lenk = 0; e.steckt = 0; e.abseits = 0; e.wechsel = null; e.alter = 0; e.haltT = 0; e.haltSeite = undefined; e.hupe = 0; e.nahe = 1e9; e.naechsterWechsel = Infinity;
+      e.aktiv = true; e.halt = false; e.lenk = 0; e.steckt = 0; e.abseits = 0; e.wechsel = null; e.alter = 0; e.haltT = 0; e.ueber = null; e.haltSeite = undefined; e.hupe = 0; e.nahe = 1e9; e.naechsterWechsel = Infinity;
       e.frac = frac; e.fracZiel = frac; e.sStart = s;
       this.statistik.auftritte++;
       if (e.art === 'geisterfahrer') this.statistik.geister++; else if (e.art === 'krankenwagen') this.statistik.kranken++; else this.statistik.abschlepp++;
@@ -571,6 +572,7 @@
         if (!wahl) { e.pause = 5; return; }
         const pt = lagePunkt(this.strecke, wahl.s, 0, 0, 0, this._pt || (this._pt = {}));
         if (!this._spawnFrei(pt.x, pt.z)) continue;
+        if (e.art === 'krankenwagen' && this._hinterLkw(wahl.s)) continue;       // v29 (F7): nicht kurz hinter einem Abschleppwagen erscheinen
         e.route = { a: wahl.s, b: wahl.ende };
         e.ast = astFuer(this.strecke, wahl.s, wahl.ende, rnd() < 0.5);
         const qC = e.art === 'krankenwagen' ? c.krankenwagen.spurQ : c.abschleppwagen.spurQ;
@@ -622,6 +624,7 @@
         // v28 (W2): am Routenende nur wegnehmen, wenn kein Teilnehmer/keine Kamera ≤ 120 m (sonst weiterrollen bis 40 m hinter das Ende, dann anhalten)
         const sicht = dSicht > c.sichtFrei;
         e.halt = n.s >= ende + c.endeAuslauf;
+        if (e.art === 'krankenwagen' && c.krankenwagen.ueberholen.an) this._krankenUeberholen(e, dt);       // v29 (F7)
         if (e.halt) {
           // v28 (W2, Nachbesserung): Halteplatz NEBEN der Fahrbahn (Randstreifen), rollt weich dorthin aus; höchstens haltMax s, dann weg, sobald keine Kamera ≤ haltKamera m
           e.haltT = (e.haltT || 0) + dt;
@@ -645,6 +648,105 @@
           }
           if (alleVoraus && kamD > c.hintenWeg && dSicht > c.sichtFrei) { this._verschwinden(e); return; }
         }
+      }
+    }
+
+    // ---------- v29 (F7): Krankenwagen überholt den Abschleppwagen ----------
+    /** Liegt s0 (Spawn) höchstens spawnHinter m HINTER einem aktiven Abschleppwagen (in Fahrtrichtung)? */
+    _hinterLkw(s0) {
+      const L = this.strecke.spline.laenge, U = this.c.krankenwagen.ueberholen;
+      for (const q of this.eintraege) {
+        if (q.art !== 'abschleppwagen' || !q.aktiv || !q.f.nah) continue;
+        let d = q.f.nah.s - s0; if (d < -L / 2) d += L; if (d > L / 2) d -= L;
+        if (d > -20 && d < U.spawnHinter) return true;
+      }
+      return false;
+    }
+
+    /** Querlage (m von der Streckenmitte, rechts +) aus einer Streckenabfrage – auf Gabelungs-Ästen der rohe Wert q0 (seitenabstand ist dort relativ zum Ast). */
+    _rohQ(nah) { const st = this.strecke; return nah.q0 !== undefined && st.gabelBei && st.gabelBei(nah.s) ? nah.q0 : nah.seitenabstand; }
+
+    /** Ist die Querlage `lat` (m) auf dem Abschnitt s0−zurueck … s0+voraus frei (kein Teilnehmer/Verkehrswagen/Streifenwagen; Geisterfahrer: jede Querlage, bis geisterVoraus)? */
+    _spurFrei(e, s0, lat, zurueck, voraus, geisterVoraus, ausser) {
+      const fz = this.spiel.fahrzeuge, L = this.strecke.spline.laenge, bk = e.f.vehicle.daten.breite || 2;
+      for (let j = 0; j < fz.length; j++) {
+        const g = fz[j];
+        if (g === e.f || g.ausgeschieden || !g.nah) continue;
+        let d = g.nah.s - s0; if (d < -L / 2) d += L; if (d > L / 2) d -= L;
+        const geist = g.verkehr && g.verkehr.art === 'geisterfahrer';
+        if (geist) { if (d > -25 && d < geisterVoraus) return false; continue; }
+        if (g.verkehr === ausser) continue;                                                              // der Lkw, an dem wir vorbei wollen
+        if (d < -zurueck || d > voraus) continue;
+        const bg = (g.vehicle.daten && g.vehicle.daten.breite) || 2;
+        if (Math.abs(this._rohQ(g.nah) - lat) < (bk + bg) / 2 + 1.0) return false;
+      }
+      return true;
+    }
+
+    /**
+     * v29 (F7): ein Krankenwagen (34 m/s) fährt sonst oft lange hinter dem Abschleppwagen (9,5 m/s, selbe Spur). Jetzt: Lkw ≤ `ab` m voraus auf derselben Spur →
+     * Nachbarspur (Querlage neben dem Lkw), wenn dort ≥ `frei` m (bis hinter den Lkw) kein Teilnehmer/Verkehrswagen und weit voraus kein Geisterfahrer ist und die Spur breit genug ist;
+     * weicher Querversatz über `zeit` s; ≥ zurueckAb m vor dem Lkw zurück auf die Ausgangsspur (wenn dort frei), sonst warten/bremsen wie bisher (_folgeTempo).
+     */
+    _krankenUeberholen(e, dt) {
+      const U = this.c.krankenwagen.ueberholen, st = this.strecke, L = st.spline.laenge, n = e.f.nah, v = e.f.vehicle;
+      if (!n) return;
+      const lq = this._lq || (this._lq = {});
+      const quer = (w, s, frac) => lagePunkt(st, s, frac, w.ast, w.rand, lq).q;              // Querlage (m von der Streckenmitte) – auch auf Gabelungs-Ästen
+      // aktiver Überholvorgang: Querlage weich nachführen
+      if (e.ueber) {
+        const u = e.ueber;
+        if (e.halt) { e.ueber = null; return; }                                                          // Routenende: Halt-Logik übernimmt (Querlage bleibt)
+        const weg = !u.lkw.aktiv || !u.lkw.f.nah;                                                        // Lkw verschwunden → gleich zurück
+        u.t = Math.min(1, u.t + dt / U.zeit);
+        e.frac = u.von + (u.nach - u.von) * glatt(u.t);
+        if (u.phase === 'hin' && u.t >= 1) u.phase = 'neben';
+        let d = weg ? -1e9 : u.lkw.f.nah.s - n.s; if (d < -L / 2 && !weg) d += L; if (d > L / 2) d -= L;       // d < 0: Lkw liegt hinter mir
+        if (u.phase === 'neben' && d < -U.zurueckAb) {
+          const sA = n.s, latZiel = quer(e, sA, u.basis);
+          if (this._spurFrei(e, sA, latZiel, 15, U.frei, 0, u.lkw)) { u.phase = 'zurueck'; u.von = e.frac; u.nach = u.basis; u.t = 0; }
+        } else if (u.phase === 'zurueck' && u.t >= 1) { e.frac = u.basis; e.ueber = null; this.statistik.ueberholt = (this.statistik.ueberholt || 0) + 1; }
+        return;
+      }
+      if (e.halt || e.route.b - n.s < 60) return;
+      // Lkw voraus auf derselben Spur?
+      let lkw = null, luecke = 1e9;
+      for (const q of this.eintraege) {
+        if (q.art !== 'abschleppwagen' || !q.aktiv || !q.f.nah) continue;
+        let d = q.f.nah.s - n.s; if (d < -L / 2) d += L; if (d > L / 2) d -= L;
+        const lg = d - (v.daten.laenge + q.f.vehicle.daten.laenge) / 2;
+        if (d > 0 && lg < U.ab && lg < luecke && e.tempo > q.f.vehicle.vLaengs + 3 &&
+          Math.abs(quer(q, q.f.nah.s, q.frac) - quer(e, q.f.nah.s, e.frac)) < ((v.daten.breite || 2) + (q.f.vehicle.daten.breite || 2.5)) / 2 + U.abstandQuer) { lkw = q; luecke = lg; }
+      }
+      if (!lkw) return;
+      const sA = lkw.f.nah.s;
+      let dA = sA - n.s; if (dA < -L / 2) dA += L; if (dA > L / 2) dA -= L;
+      const bis = n.s + dA + U.frei;                                                         // bis ≥ `frei` m hinter den Lkw
+      if (bis > e.route.b - 20 || gesperrt(this.zonen, n.s - 5, 0) || gesperrt(this.zonen, bis, 20)) return;
+      const A = lkw.f.vehicle;
+      const bw = (v.daten.breite || 2) + (A.daten.breite || 2.5), halbK = (v.daten.breite || 2) / 2;
+      // Gegenverkehr: Geisterfahrer in der Zeit des Überholens (Annäherung 34 + 24 m/s)
+      const tUeb = (dA + U.frei) / Math.max(5, e.tempo - A.vLaengs);
+      const geistVor = Math.min(500, (e.tempo + this.c.geister.tempo + 4) * (tUeb + U.zeit) + 40);
+      // Nachbarspur: zuerst die Seite, die dem Lkw gegenüberliegt, dann die andere. Querlage: Lkw-Mitte ± (halbe Breiten + abstandQuer); wo die Fahrbahn zu schmal ist,
+      // darf der Krankenwagen bis randZugabe m auf den Randstreifen (nie über Bande/Zaun).
+      const sM = Math.min(sA + 25, bis - 10), wunsch = bw / 2 + U.abstandQuer + 0.2;
+      const q0 = quer(e, sM, 0), W = quer(e, sM, 1) - q0, latAM = quer(lkw, sM, lkw.frac);
+      const erst = latAM > q0 ? -1 : 1;
+      for (let pass = 0; pass < 2; pass++) {
+        const seite = pass === 0 ? erst : -erst, nach = (latAM + seite * wunsch - q0) / Math.max(0.3, W);
+        let ok = true;
+        for (let k = 0; k <= dA + U.frei && ok; k += 15) {
+          const sk = n.s + k, c0 = quer(e, sk, 0), Wk = quer(e, sk, 1) - c0, latK = c0 + nach * Wk;
+          const randM = Wk + e.rand + U.randZugabe, grenze = (!st.gabelNah || !st.gabelNah(sk, 0)) && st.grenzeBei ? st.grenzeBei(sk) - halbK - 0.4 : 1e9;
+          if (Math.abs(latK - c0) > Math.min(randM, grenze + Math.abs(c0))) ok = false;
+          if (sk >= sA - 10 && Math.abs(latK - quer(lkw, sk, lkw.frac)) < bw / 2 + U.abstandQuer * 0.9) ok = false;
+        }
+        if (!ok) continue;
+        if (!this._spurFrei(e, n.s, quer(e, n.s, 0) + nach * (quer(e, n.s, 1) - quer(e, n.s, 0)), 30, dA + U.frei, geistVor, lkw)) continue;
+        e.ueber = { lkw, von: e.frac, nach, basis: e.frac, t: 0, phase: 'hin' };
+        this.statistik.ueberholVersuche = (this.statistik.ueberholVersuche || 0) + 1;
+        return;
       }
     }
 

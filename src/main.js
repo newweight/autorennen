@@ -45,6 +45,9 @@
       spielart: 'rennen', pokalGroesse: (c.pokal && c.pokal.groesseStandard) || 3,
       // Runde 6 (W3-G): Garage-Upgrades im Rennen anwenden (aus = Faktoren 1, Lackfarben bleiben)
       upgradesZaehlen: true,
+      // 17.10. (v29, F3): Modus „Nur Rennautos“ (alle Gegner fahren den Formel-Renner in eigener Farbe): null = Standard der Strecke
+      // (an bei der Formel-1-Strecke, sonst aus) | true | false; autoVorFormel = Autowahl vor dem Vorschlag „Formel-Renner“ (Wiederherstellen beim Streckenwechsel)
+      nurRennautos: null, autoVorFormel: null,
     };
   }
 
@@ -94,6 +97,8 @@
       spielart: r.spielart === 'pokal' || r.spielart === 'elimination' ? r.spielart : 'rennen',     // W3-F
       pokalGroesse: ((c.pokal && c.pokal.groessen) || [3, 4, 5]).includes(+r.pokalGroesse) ? +r.pokalGroesse : std.pokalGroesse,
       upgradesZaehlen: r.upgradesZaehlen !== false,      // W3-G
+      nurRennautos: typeof r.nurRennautos === 'boolean' ? r.nurRennautos : null,      // v29 F3
+      autoVorFormel: Array.isArray(r.autoVorFormel) && r.autoVorFormel.length === 2 && r.autoVorFormel.every(x => autoOk(x, null)) ? r.autoVorFormel.slice() : null,
     };
   }
 
@@ -287,6 +292,7 @@
       if (this.verkehr) { this.verkehr.zerstoeren(); this.verkehr = null; }    // 15.10. (v25)
       if (this.tiere) { this.tiere.zerstoeren(); this.tiere = null; }    // v28 (W10)
       if (this.lichtPool) { this.lichtPool.zerstoeren(); this.lichtPool = null; }    // v26c: fester Blaulicht-Licht-Pool
+      this._tafelWarten = false;
       if (this.feuerwerk) { this.feuerwerk.zerstoeren(); this.feuerwerk = null; }    // v28 W8: Geometrie/Material/Textur frei
       this.huds.forEach(h => h.zerstoeren());
       this.huds = [];
@@ -356,6 +362,8 @@
         const tg = R.Tribuenen.bauen(strecke);
         if (tg) { this.szene.add(tg); this.tribuenenGruppe = tg; }
       }
+      // 17.10. (v29, F3): Formel-1-Strecke – Boxengasse, Boxen, Kiesbetten, Werbebanden, Reifenstapel (world/formel1.js; nur Strecken mit Flag formel1)
+      if (R.Formel1 && strecke.daten && strecke.daten.formel1) { const fg = R.Formel1.bauen(strecke); if (fg) this.szene.add(R.themes.statischVorbereiten(fg)); }
       const deko = R.themes.dekoBauen(daten.thema, strecke, this.wetter ? this.wetter.jahreszeit : undefined);
       // Runde 6 (W1-A5): Bäume/Felsen/Büsche zwischen Straße und Zaun als Kollider (nur Physik)
       if (R.Kollisionen.pflanzenSammeln) R.Kollisionen.pflanzenSammeln(strecke, deko);
@@ -469,6 +477,7 @@
         schwierigkeit: e.schwierigkeit, fahrhilfe: e.fahrhilfe, schaden: e.schaden === true, tempoKlasse: e.tempoKlasse,
         polizei: e.polizei === true && !elim,
         tiere: e.tiere !== false && !elim,      // v28 (W10): Tiere queren die Straße (Standard an)
+        nurRennautos: !elim && R.carCatalog.nurRennautos(e, R.trackCatalog.find(t => t.id === e.streckeId)),      // v29 (F3): alle Gegner fahren den Formel-Renner (eigene Farben)
         geisterfahrer: e.geisterfahrer === true && !elim, krankenwagen: !elim && !!(R.Verkehr && R.Verkehr.ausEinstellung(e).krankenwagen), abschleppwagen: !elim && !!(R.Verkehr && R.Verkehr.ausEinstellung(e).abschleppwagen),    // 15.10. (v25), v28 W1: je einzeln
         elimination: elim ? { zuschauerSekunden: CE.zuschauerSekunden === undefined ? 6 : CE.zuschauerSekunden } : null,   // W3-F
         upgradesZaehlen: e.upgradesZaehlen !== false,      // W3-G
@@ -552,7 +561,10 @@
     }
 
     /** Alle Spieler im Ziel: Ergebnis einfrieren (KI-Platzierungen ändern sich danach nicht mehr). */
-    rennenFertig() {
+    rennenFertig(sofort) {
+      // v29 F5: gewinnt ein Mensch und das Feuerwerk läuft, kommt die Ergebnistafel erst nach config.feuerwerk.tafelNach (Kamera bleibt beim ausrollenden Auto)
+      if (!sofort && R.Feuerwerk && R.Feuerwerk.tafelWartezeit && R.Feuerwerk.tafelWartezeit(this) > 0) { this._tafelWarten = true; return; }
+      this._tafelWarten = false;
       const r = this.rennen;
       this.ergebnis = {
         runden: r.runden,
@@ -721,11 +733,20 @@
       const plaetze = strecke.startpositionen(opt.spieler + opt.gegner);
       // 14.10. (v20): Computer-Gegner nur aus den 4 Modellen mit der guten Optik (Passat, Multivan, 911, T-Roc), bunt gemischt (Lack, T-Roc: Dach
       // offen/zu, Lack blau/gulf), deterministisch je Rennen (Seed aus Strecke, Gegnerzahl und Spielerautos; opt.gegnerSeed überschreibt)
-      const gegnerAutos = R.carCatalog.gegnerAutos(opt.gegner, { seed: opt.gegnerSeed !== undefined ? opt.gegnerSeed : [trackId, opt.gegner, spielerIds.join('+')].join('|'), spielerIds });
+      let gegnerAutos = R.carCatalog.gegnerAutos(opt.gegner, { seed: opt.gegnerSeed !== undefined ? opt.gegnerSeed : [trackId, opt.gegner, spielerIds.join('+')].join('|'), spielerIds });
+      // 17.10. (v29, F3): Modus „Nur Rennautos“ – alle Gegner fahren den Formel-Renner, jeder in eigener Teamfarbe; die Spieler behalten ihre Wahl
+      // (fahren zwei Spieler Formel in gleicher Farbe, bekommt Spieler 2 eine andere). Ohne den Modus bleibt alles wie bisher.
+      let spielerAutos = null;
+      if (opt.nurRennautos === true && R.carCatalog.formelFeld) {
+        const spA = spielerIds.map(id => katalog.find(a => a.id === id) || katalog[0]);
+        const ff = R.carCatalog.formelFeld({ spieler: spA, gegner: opt.gegner, seed: opt.gegnerSeed !== undefined ? opt.gegnerSeed : [trackId, opt.gegner, spielerIds.join('+')].join('|'),
+          belegt: spA.map((a, i) => { const g = R.Garage ? R.Garage.fahrzeugWerte(spielerNamen[i], a.id, opt.upgradesZaehlen !== false) : null; return g && g.farbe !== null && g.farbe !== undefined ? g.farbe : null; }) });
+        gegnerAutos = ff.gegner; spielerAutos = ff.spieler;
+      }
       const teilnehmer = plaetze.map((p, i) => {
         const istSpieler = i < opt.spieler;
         const auto = istSpieler
-          ? (katalog.find(a => a.id === spielerIds[i]) || katalog[0])
+          ? (spielerAutos ? spielerAutos[i] : (katalog.find(a => a.id === spielerIds[i]) || katalog[0]))
           : (gegnerAutos[i - opt.spieler] || katalog[0]);
         // Runde 6 (W3-G): Garage-Werte (Lack, Upgrade-Faktoren) nur für Spieler – die KI nie
         const gw = istSpieler && R.Garage ? R.Garage.fahrzeugWerte(spielerNamen[i], auto.id, opt.upgradesZaehlen !== false) : null;
@@ -1027,9 +1048,11 @@
       if (this.muenzen) this.muenzen.animieren(this._physikZeit || 0);      // Runde 6 (W3-G)
       if (this.schaden && this.schaden.an) this.schaden.update(this.pausiert || this.zustand === 'menue' ? 0 : dt);
       if (this.abschlepp) this.abschlepp.update(this.pausiert ? 0 : dt);                      // 14.10. (v18): Abschleppwagen/Kran überschreibt die Mesh-Pose des Wracks
-      if (this.werkstatt) this.werkstatt.animieren(this._physikZeit || 0, this.fahrzeuge);   // Schild/Lampe der Werkstatt
+      if (this.werkstatt) this.werkstatt.animieren(this._physikZeit || 0, this.fahrzeuge, this.zustand === "menue" ? null : this.kameras);   // Schild/Lampe der Werkstatt
       if (this.strecke && this.strecke.tribuenen && this.strecke.tribuenen.length && R.Tribuenen) R.Tribuenen.animieren(this.strecke, this._physikZeit || 0, this.pausiert ? 0 : dt);   // 15.10. (v25): Zuschauer wippen/jubeln, Fahnen wehen
       if (this.feuerwerk) this.feuerwerk.update(this.pausiert || this.zustand === 'menue' ? 0 : dt);   // v28 W8: läuft auch auf der Ergebnistafel weiter
+      if (this._tafelWarten && (!this.feuerwerk || !this.feuerwerk.aktiv || this.feuerwerk.t >= this.feuerwerk.c.tafelNach)) this.rennenFertig(true);   // v29 F5: Tafel nach dem Feuerwerk-Auftakt
+      if (this.online && this.online.ergebnisFreigeben) this.online.ergebnisFreigeben();   // v29 F5: online dasselbe (Client-Optik)
       if (this.polizei) this.polizei.animieren(this._physikZeit || 0);   // Runde 5b: Blaulicht
       if (this.verkehr) this.verkehr.animieren(this._physikZeit || 0);   // 15.10. (v25): Blaulicht Krankenwagen, Rundumleuchte, Lichthupe
       if (this.tiere) this.tiere.animieren();      // v28 (W10): Matrizen der querenden Tiere

@@ -29,15 +29,16 @@
   // uebers = Übersetzung je Gang RELATIV zum höchsten Gang (= 1). Der höchste Gang erreicht bei Höchsttempo 92 % der roten Zone.
   // schalt = Anteil der roten Zone, bei dem hochgeschaltet wird.
   const MOTOREN = {
-    diesel7:  { name: 'Diesel 7-Gang-DSG',    leerlauf: 800,  rot: 4500,  skala: 6000,  schalt: 0.82, uebers: [5.0, 3.3, 2.35, 1.8, 1.4, 1.15, 1.0] },
-    benzin7:  { name: 'Benziner 7-Gang-DSG',  leerlauf: 800,  rot: 6500,  skala: 8000,  schalt: 0.80, uebers: [4.9, 3.2, 2.3, 1.75, 1.38, 1.14, 1.0] },
-    pdk8:     { name: 'Boxer 8-Gang-PDK',     leerlauf: 800,  rot: 7500,  skala: 8000,  schalt: 0.86, uebers: [5.4, 3.7, 2.75, 2.15, 1.7, 1.35, 1.12, 1.0] },
-    benzin8:  { name: 'Sechszylinder 8-Gang', leerlauf: 850,  rot: 7000,  skala: 8000,  schalt: 0.85, uebers: [5.3, 3.6, 2.7, 2.1, 1.65, 1.32, 1.1, 1.0] },
-    benzin6:  { name: 'Benziner 6-Gang',      leerlauf: 850,  rot: 6500,  skala: 8000,  schalt: 0.82, uebers: [4.2, 2.6, 1.8, 1.35, 1.1, 1.0] },
-    formel:   { name: 'Rennmotor 8-Gang',     leerlauf: 3500, rot: 12500, skala: 14000, schalt: 0.90, uebers: [5.5, 3.8, 2.8, 2.2, 1.75, 1.4, 1.15, 1.0] },
+    diesel7:  { name: 'Diesel 7-Gang-DSG',    leerlauf: 800,  rot: 4500,  skala: 6000,  begr: 4800,  schalt: 0.82, uebers: [5.0, 3.3, 2.35, 1.8, 1.4, 1.15, 1.0] },
+    benzin7:  { name: 'Benziner 7-Gang-DSG',  leerlauf: 800,  rot: 6500,  skala: 8000,  begr: 6630,  schalt: 0.80, uebers: [4.9, 3.2, 2.3, 1.75, 1.38, 1.14, 1.0] },
+    pdk8:     { name: 'Boxer 8-Gang-PDK',     leerlauf: 800,  rot: 7000,  skala: 8000,  begr: 7500,  schalt: 0.86, uebers: [5.4, 3.7, 2.75, 2.15, 1.7, 1.35, 1.12, 1.0] },
+    benzin8:  { name: 'Sechszylinder 8-Gang', leerlauf: 850,  rot: 7000,  skala: 8000,  begr: 7140,  schalt: 0.85, uebers: [5.3, 3.6, 2.7, 2.1, 1.65, 1.32, 1.1, 1.0] },
+    benzin6:  { name: 'Benziner 6-Gang',      leerlauf: 850,  rot: 6500,  skala: 8000,  begr: 6630,  schalt: 0.82, uebers: [4.2, 2.6, 1.8, 1.35, 1.1, 1.0] },
+    formel:   { name: 'Rennmotor 8-Gang',     leerlauf: 3500, rot: 11500, skala: 13000, begr: 12000, gross: 2, klein: 1, schalt: 0.90, uebers: [5.5, 3.8, 2.8, 2.2, 1.75, 1.4, 1.15, 1.0] },
   };
   const AUTO_MOTOR = { 'passat': 'diesel7', 'polizei': 'diesel7', 'multivan': 'diesel7', 'troc-cabrio': 'benzin7', 'porsche-911': 'pdk8',
-    'bmw-m4': 'benzin8', 'amg-gt': 'benzin8', 'audi-rs6': 'benzin8', 'mini-cooper': 'benzin6', 'formel': 'formel' };
+    'bmw-m4': 'benzin8', 'amg-gt': 'benzin8', 'audi-rs6': 'benzin8', 'mini-cooper': 'benzin6', 'formel': 'formel',
+    'krankenwagen': 'diesel7', 'abschleppwagen': 'diesel7' };
   K.MOTOREN = MOTOREN; K.AUTO_MOTOR = AUTO_MOTOR;
 
   function autoId(auto) { return typeof auto === 'string' ? auto : (auto && auto.id) || ''; }
@@ -52,8 +53,8 @@
     while (g < u.length - 1 && kTop * u[g] * kmh > m.schalt * m.rot) g++;
     let rpm = kTop * u[g] * kmh;
     if (kmh < 14) rpm = Math.max(rpm, m.leerlauf + kmh * (m.rot * 0.17));     // Anfahren: Kupplung schleift, Drehzahl steigt schneller
-    rpm = Math.max(m.leerlauf, Math.min(m.rot * 1.02, rpm));
-    return { rpm, gang: v < -0.5 ? -1 : g + 1, gaenge: u.length, leerlauf: m.leerlauf, rot: m.rot, skala: m.skala, anteil: rpm / m.rot };
+    rpm = Math.max(m.leerlauf, Math.min(m.begr, rpm));       // 17.10. (v29, F6): Begrenzer je Motor (Diesel 4800, Porsche 7500, Formel 12000) – bleibt immer unter dem Skalenende
+    return { rpm, gang: v < -0.5 ? -1 : g + 1, gaenge: u.length, leerlauf: m.leerlauf, rot: m.rot, begr: m.begr, skala: m.skala, anteil: rpm / m.rot };
   };
 
   K.drehzahl = function (auto, v, vMax) { return K.getriebe(auto, v, vMax).rpm; };
@@ -128,30 +129,36 @@
     if (grossDial) {
       // rote Zone als Bogen
       g.strokeStyle = 'rgba(230,40,30,.9)'; g.lineWidth = m * 0.045; g.lineCap = 'butt';
-      g.beginPath(); g.arc(m, m, m * 0.835, ang(sk.rot / sk.max), ang(1)); g.stroke();
+      if (sk.rot < sk.max) { g.beginPath(); g.arc(m, m, m * 0.835, ang(sk.rot / sk.max), ang(1)); g.stroke(); }
       skalaZeichnen(g, m, sk, { strich: '#f2f2f2', zahl: '#ffffff', rot: '#ff4338' }, m * 0.60, m * 0.80, m * 0.69, m * 0.74, 0.19);
     }
     return c;
   }
 
-  function pDrehzahl(g, S, stat, sk, rpm, kmh, gangText) {
+  /**
+   * Porsche-Rundinstrument mit Nadel (17.10. v29, F8): `wert` in Skaleneinheiten (Drehzahl ×1000 bzw. km/h), Mitte = `gross` (+ darüber `oben`, darunter `klein`).
+   * Drehzahlmesser: oben Gang (D3), Mitte „x1000“-Text entfällt (Zahlen stehen auf der Skala), unten „U/min x1000“; Tacho: Mitte km/h-Ziffern, unten „km/h“.
+   */
+  function pNadel(g, S, stat, sk, wert, oben, gross, klein) {
     const m = S / 2;
     g.clearRect(0, 0, S, S);
     g.drawImage(stat, 0, 0);
-    const a = ang(rpm / sk.max);
-    // Zeiger: konisch, außen
-    const r1 = m * 0.50, r2 = m * 0.86, br = m * 0.05;
+    const a = ang(wert / sk.max);
+    // Zeiger: konisch, vom Rand bis nahe der Mitte; kleiner Gegenschwanz
+    const r1 = m * 0.30, r2 = m * 0.86, br = m * 0.05;
     const nx = -Math.sin(a), ny = Math.cos(a);
     g.fillStyle = '#ff5a1e'; g.beginPath();
     g.moveTo(m + Math.cos(a) * r2, m + Math.sin(a) * r2);
     g.lineTo(m + Math.cos(a) * r1 + nx * br, m + Math.sin(a) * r1 + ny * br);
     g.lineTo(m + Math.cos(a) * r1 - nx * br, m + Math.sin(a) * r1 - ny * br);
     g.closePath(); g.fill();
-    // Digital-Tacho in der Mitte
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillStyle = '#ffffff'; g.font = '800 ' + Math.round(m * 0.50) + 'px ' + SCHRIFT; g.fillText(String(kmh), m, m * 0.98);
-    g.fillStyle = '#9aa3ad'; g.font = '700 ' + Math.round(m * 0.15) + 'px ' + SCHRIFT; g.fillText('km/h', m, m * 1.27);
-    g.fillStyle = '#ffb347'; g.font = '800 ' + Math.round(m * 0.2) + 'px ' + SCHRIFT; g.fillText(gangText, m, m * 0.62);
+    // Ziffern über dem Zeigerfuß: dunkle Scheibe, damit der Zeiger die Ziffern nicht schneidet
+    g.fillStyle = '#050505'; g.beginPath(); g.arc(m, m, m * 0.30, 0, TAU); g.fill();
+    g.strokeStyle = '#1b1b1d'; g.lineWidth = m * 0.02; g.beginPath(); g.arc(m, m, m * 0.30, 0, TAU); g.stroke();
+    if (oben) { g.fillStyle = '#ffb347'; g.font = '800 ' + Math.round(m * 0.17) + 'px ' + SCHRIFT; g.fillText(oben, m, m * 0.84); }
+    g.fillStyle = '#ffffff'; g.font = '800 ' + Math.round(m * (gross.length > 2 ? 0.27 : 0.3)) + 'px ' + SCHRIFT; g.fillText(gross, m, m * 1.02);
+    g.fillStyle = '#9aa3ad'; g.font = '700 ' + Math.round(m * 0.1) + 'px ' + SCHRIFT; g.fillText(klein, m, m * 1.19);
   }
 
   /** Kleine digitale Rundanzeige (Porsche): Ring + Titel + großer Wert (+ optional Bogen 0..1). */
@@ -227,7 +234,7 @@
     _bauen() {
       this._teil('tafel', 'tafel');
       if (this.stil === 'vw') { this._teil('drehzahl'); this._teil('tacho'); this._teil('mitte'); }
-      else { this._teil('drehzahl'); ['linksAussen', 'linksInnen', 'rechtsInnen', 'rechtsAussen'].forEach((n) => this._teil(n)); }
+      else { this._teil('drehzahl'); this._teil('tacho'); ['linksAussen', 'linksInnen', 'rechtsInnen', 'rechtsAussen'].forEach((n) => this._teil(n)); }
     }
 
     groesse(vw, vh) { this.vw = vw; this.vh = vh; this._layout = true; if (this.wischer) this.wischer.groesse(vw, vh); }
@@ -332,15 +339,21 @@
         k = platz + '/' + von + '|' + runde + '/' + r.runden;
         if (m.letzte !== k) { m.letzte = k; vwMitte(m.g, m.W, m.H, platz, von, runde, r.runden); }
       } else {
-        const sk = this._skalen(gt, maxKmh), d = this.teile.drehzahl;
-        let k = rpmQ + '|' + kmh + '|' + gangText;
+        const sk = this._skalen(gt, maxKmh), d = this.teile.drehzahl, tc = this.teile.tacho;
+        let k = rpmQ + '|' + gangText;
         if (d.letzte !== k) {
           d.letzte = k;
-          if (!d.statik || d.statikKey !== sk.rpm.max) { d.statik = pStatik(d.S, sk.rpm, true); d.statikKey = sk.rpm.max; }
-          pDrehzahl(d.g, d.S, d.statik, sk.rpm, this.rpm, kmh, gangText);
+          if (!d.statik || d.statikKey !== sk.key) { d.statik = pStatik(d.S, sk.rpm, true); d.statikKey = sk.key; }
+          pNadel(d.g, d.S, d.statik, sk.rpm, this.rpm / 1000, gangText, String(Math.round(this.rpm / 10) * 10), 'U/min');
+        }
+        k = String(kmh);
+        if (tc.letzte !== k) {
+          tc.letzte = k;
+          if (!tc.statik || tc.statikKey !== sk.key) { tc.statik = pStatik(tc.S, sk.kmh, true); tc.statikKey = sk.key; }
+          pNadel(tc.g, tc.S, tc.statik, sk.kmh, kmh, '', String(kmh), 'km/h');
         }
         const kl = (n, titel, wert, bogen, farbe) => { const p = this.teile[n]; const kk = titel + wert + (bogen >= 0 ? Math.round(bogen * 40) : ''); if (p.letzte !== kk) { p.letzte = kk; pKlein(p.g, p.S, titel, wert, bogen, farbe); } };
-        kl('linksAussen', 'PDK', gt.gang < 0 ? 'R' : String(gt.gang), gt.gang < 0 ? -1 : gt.gang / gt.gaenge, '#ffb347');
+        kl('linksAussen', this.autoId === 'formel' ? 'GANG' : 'PDK', gt.gang < 0 ? 'R' : String(gt.gang), gt.gang < 0 ? -1 : gt.gang / gt.gaenge, '#ffb347');
         kl('linksInnen', 'RUNDE', runde + '/' + r.runden, -1, '');
         kl('rechtsInnen', 'PLATZ', platz + '/' + von, -1, '');
         const oel = 0.55 + 0.25 * Math.min(1, this.rpm / gt.rot);
@@ -351,10 +364,12 @@
     _skalen(gt, maxKmh) {
       const key = gt.skala + '|' + gt.rot + '|' + maxKmh;
       if (this._sk && this._sk.key === key) return this._sk;
-      const porsche = this.stil === 'porsche';
+      const porsche = this.stil === 'porsche', mo = K.motor(this.autoId);
       this._sk = { key,
-        rpm: { max: gt.skala / 1000, gross: 1, klein: 0.5, rot: gt.rot / 1000, zahl: (v) => String(v), zahlGroesse: porsche ? 0.19 : 0.17 },
-        kmh: { max: maxKmh, gross: 40, klein: 20, rot: Infinity, zahl: (v) => String(v), zahlGroesse: 0.15 } };
+        rpm: { max: gt.skala / 1000, gross: mo.gross || 1, klein: mo.klein || 0.5, rot: gt.rot / 1000, zahl: (v) => String(v), zahlGroesse: porsche ? 0.19 : 0.17 },
+        // Porsche-Tacho: fest 0–300 km/h (Wunsch Vater 17.10.), Zahlen alle 50, Striche alle 10
+        kmh: porsche ? { max: 300, gross: 50, klein: 10, rot: Infinity, zahl: (v) => String(v), zahlGroesse: 0.17 }
+                     : { max: maxKmh, gross: 40, klein: 20, rot: Infinity, zahl: (v) => String(v), zahlGroesse: 0.15 } };
       return this._sk;
     }
 

@@ -1,7 +1,7 @@
 // Node-Test für Bande, Auto-Auto-Kollisionen und Fahrhilfen: node tests/test_kollisionen.js
 const { ladeModule } = require('./lade');
 const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/physics/collisions.js',
-  'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/cars/carCatalog.js', 'src/track/looping.js']);
+  'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/cars/carCatalog.js', 'src/track/looping.js', 'src/physics/schaden.js']);
 const dt = R.config.physik.schritt;
 const K = R.Kollisionen;
 let fehler = 0;
@@ -337,6 +337,54 @@ for (const rempeln of ['sanft', 'echt']) {
   const vorher = [e.x, e.z];
   K.autoAuto([c, e], { dt });
   pruefe('Δy 2,5 m + Überlappung → keine Trennung (übereinander)', e.x === vorher[0] && e.z === vorher[1]);
+}
+// v29 F2: Ast stößt (Stoß-Liste, Tempo −40 %, Hüpfer) UND bleibt danach fest – das Auto fährt nicht durch den Stamm (wie die Bake)
+{
+  const st = new R.Strecke(R.trackCatalog.find(t => t.id === 'wiese'), { welt: 'hindernisse' });
+  const h = st.hindernisse.find(x => x.typ === 'ast'), sg = h.segmente[0], spl = st.spline;
+  const AUTO = (R.carCatalog && R.carCatalog[0] && R.carCatalog[0].fahrwerte) || {};
+  const Lg0 = Math.hypot(sg.bx - sg.ax, sg.bz - sg.az);
+  const abstand = (x, z) => { const dx = sg.bx - sg.ax, dz = sg.bz - sg.az, t = Math.max(0, Math.min(1, ((x - sg.ax) * dx + (z - sg.az) * dz) / (dx * dx + dz * dz))); return Math.hypot(x - sg.ax - dx * t, z - sg.az - dz * t); };
+  for (const [name, u, v0, psi] of [['frontal Mitte 25 m/s', 0.5, 25, 0], ['frontal innen 45 m/s', 0.6, 45, 0], ['schräg 25 m/s', 0.4, 25, 0.35], ['langsam 8 m/s', 0.5, 8, 0]]) {
+    const p = spl.punktBei(h.s - 8), zx = sg.ax + (sg.bx - sg.ax) * u, zz = sg.az + (sg.bz - sg.az) * u, q = (zx - p.x) * p.nx + (zz - p.z) * p.nz;
+    const a = new R.Vehicle(AUTO); a.setzen(p.x + p.nx * q, p.z + p.nz * q, R.headingAus(p.tx, p.tz) + psi); a.vLaengs = v0;
+    let stoss = 0, tief = 0, zeit = 0, huep = 0;
+    for (let k = 0; k < 360; k++) {
+      a.schritt(dt, { gas: 1, bremse: 0, lenkung: 0 });
+      const s = K.hindernisse([a], st, { dt, zeit: zeit += dt });
+      stoss += s.filter(x => x.typ === 'ast' && !x.rand).length; if (s.length) huep = Math.max(huep, a.huepfer || 0);
+      for (const c of K.kapsel(a).kreise) { const tt = ((c.x - sg.ax) * (sg.bx - sg.ax) + (c.z - sg.az) * (sg.bz - sg.az)) / (Lg0 * Lg0); if (tt <= 0.7) tief = Math.max(tief, (sg.dicke || 0.28) - abstand(c.x, c.z)); }   // nur Stamm (≤ 70 %)
+    }
+    pruefe('Ast (' + name + '): genau 1 Stoß, Hüpfer', stoss === 1 && huep > 0, stoss + ' Stöße');
+    pruefe('Ast (' + name + '): fährt nicht durch den Stamm (Eindringung < 0,05 m)', tief < 0.05, tief.toFixed(2) + ' m');
+    pruefe('Ast (' + name + '): klemmt nicht – mit Vollgas nach 6 s wieder in Fahrt (> 3 m/s)', a.vLaengs > 3, a.vLaengs.toFixed(1) + ' m/s');
+  }
+}
+// v29 F2b: Astrand (äußere 30 % ab Stammende = dünnes Ende/Spitze) ist überfahrbar: Hüpfer, Tempo −20 %, 1 Stoß je Überfahrt, Schaden genau 10 %
+{
+  const st = new R.Strecke(R.trackCatalog.find(t => t.id === 'wiese'), { welt: 'hindernisse' });
+  const h = st.hindernisse.find(x => x.typ === 'ast'), sg = h.segmente[0], spl = st.spline;
+  const AUTO = (R.carCatalog && R.carCatalog[0] && R.carCatalog[0].fahrwerte) || {};
+  const Lg = Math.hypot(sg.bx - sg.ax, sg.bz - sg.az);
+  const lauf = (u, an) => {
+    const p = spl.punktBei(h.s - 8), zx = sg.ax + (sg.bx - sg.ax) * u, zz = sg.az + (sg.bz - sg.az) * u, q = (zx - p.x) * p.nx + (zz - p.z) * p.nz;
+    const a = new R.Vehicle(AUTO); a.setzen(p.x + p.nx * q, p.z + p.nz * q, R.headingAus(p.tx, p.tz)); a.vLaengs = 25;
+    const sch = new R.Schaden([{ vehicle: a }], { an }), alle = []; let zeit = 0, vorher = 25, vNach = 0;
+    for (let k = 0; k < 300; k++) {
+      vorher = a.vLaengs; a.schritt(dt, { gas: 0, bremse: 0, lenkung: 0 });
+      const ss = K.hindernisse([a], st, { dt, zeit: zeit += dt });
+      if (ss.length && !alle.length) vNach = a.vLaengs / vorher;
+      alle.push(...ss); sch.stoesseAuswerten({ hindernis: ss }); sch.schritt(dt);
+    }
+    return { a, alle, sch, vNach, s: spl.naechster(a.x, a.z).s };
+  };
+  const rand = lauf(0.97, true), mitte = lauf(0.4, true), ohne = lauf(0.97, false);
+  pruefe('Astrand: Grenze Stamm/Rand bei ' + (0.7 * Lg).toFixed(2) + ' m von ' + Lg.toFixed(2) + ' m', Lg > 3);
+  pruefe('Astrand: genau 1 Stoß (rand), Hüpfer, kommt drüber', rand.alle.length === 1 && rand.alle[0].rand === true && rand.a.huepfer !== undefined && (rand.s - h.s > 3 || rand.s < h.s - 100), 's ' + rand.s.toFixed(0) + ' / Ast ' + h.s.toFixed(0));
+  pruefe('Astrand: Tempo −20 % (ohne Rollwiderstand ±)', rand.vNach > 0.77 && rand.vNach < 0.81, rand.vNach.toFixed(3));
+  pruefe('Astrand: Schaden genau 10 % (Schaden an)', rand.sch.zustand(0).prozent === 90, rand.sch.zustand(0).prozent + ' %');
+  pruefe('Astrand: ohne Schaden-Option kein Schaden', ohne.sch.zustand(0).prozent === 100 && ohne.alle.length === 1, ohne.sch.zustand(0).prozent + ' %');
+  pruefe('Stamm (Mitte): fest, kein Rand-Stoß', mitte.alle.every(x => !x.rand) && mitte.alle.length === 1);
 }
 console.log(fehler === 0 ? '\nALLE TESTS OK' : '\n' + fehler + ' FEHLER');
 process.exit(fehler ? 1 : 0);

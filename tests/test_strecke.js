@@ -28,6 +28,8 @@ const ERWARTUNG = {
   alpen:  { kurven: [14, 30], geraden: { min: 150, anzahl: [3, 5] }, hoehe: 80, hoeheMin: 75, laenge: [2600, 3000], haarnadeln: 3,
             hindernisse: [4, 4], ueberfuehrungen: 1 },
 };
+// v29 (F3): Formel 1 – 4,4 km, zwei lange Geraden (≥ 700 m), weite Kurven (R > 150 m zählen hier nicht), eine Schikane (R 80 m), flach (±2,5 m), keine Hindernisse
+ERWARTUNG.formel1 = { kurven: [2, 2], geraden: { min: 400, anzahl: [2, 2] }, hoehe: 6, laenge: [4350, 4470], langeGerade: 800, hindernisse: [0, 0] };
 const STEIGUNG_MAX = 0.08;
 // W4-I: Alpen dürfen steiler sein (Pass, Serpentinen): bis 10 %. Begründung: vehicle.js kennt keine Hangabtriebskraft – die
 // Steigung wirkt nur optisch (Nicken/Kamera), Fahrbarkeit/KI ändern sich nicht; 10 % ist für eine Alpenstraße normal und
@@ -489,11 +491,11 @@ if (daten.welten) {
   const namen = Object.keys(daten.welten);
   const STANDARD = { wiese: 'klassisch', wald: 'hindernisse', wueste: 'hindernisse', fantasie: 'fantasie', dino: 'hindernisse' };
   if (STANDARD[daten.id]) pruefe('weltStandard = ' + STANDARD[daten.id], daten.weltStandard === STANDARD[daten.id], daten.weltStandard);
-  const erwNamen = (daten.id === 'fantasie' ? ['fantasie', 'verrueckt'] : ['klassisch', 'hindernisse', 'stunt', 'verrueckt']).concat('alles');
+  const erwNamen = daten.id === 'formel1' ? ['klassisch'] : (daten.id === 'fantasie' ? ['fantasie', 'verrueckt'] : ['klassisch', 'hindernisse', 'stunt', 'verrueckt']).concat('alles');   // v29: Formel 1 nur Klassisch
   pruefe('Welten: ' + erwNamen.join(', '), JSON.stringify(namen) === JSON.stringify(erwNamen), namen.join(', '));
   pruefe('R.weltInfo kennt alle Welten (Name + Emoji)', namen.every(w => R.weltInfo[w] && R.weltInfo[w].name && R.weltInfo[w].emoji));
   // Runde 6 (B4): Welt „Alles" = alle Schichten an, vereinigt die Listen aller anderen Welten
-  {
+  if (daten.welten.alles) {
     const ws = Object.keys(daten.welten).filter(w => w !== 'alles');
     const al = new R.Strecke(daten, { welt: 'alles' }), a = al.aktiveSchichten;
     pruefe('Welt alles: weltName akzeptiert, alle Schichten an', R.Strecke.weltName(daten, 'alles') === 'alles' && al.welt === 'alles' &&
@@ -557,7 +559,8 @@ if (daten.welten) {
     if (hsAlle.some(h => bereichAbstand(s0, s1, h.s0, h.s1) < 30)) g.push('Hindernis');
     return g;
   };
-  const ANZ = daten.id === 'fantasie' ? { wracks: [0, 0], strohballen: [2, 4], schanzen: [0, 0], boostFelder: [2, 4], schilde: [2, 4] }
+  const ANZ = daten.id === 'formel1' ? { wracks: [0, 0], strohballen: [0, 0], schanzen: [0, 0], boostFelder: [0, 0], schilde: [0, 0] }
+    : daten.id === 'fantasie' ? { wracks: [0, 0], strohballen: [2, 4], schanzen: [0, 0], boostFelder: [2, 4], schilde: [2, 4] }
     : { wracks: [2, 4], strohballen: daten.id === 'wueste' ? [0, 0] : [2, 4], schanzen: [2, 4], boostFelder: [2, 4], schilde: [2, 4] };
   Object.keys(ANZ).forEach((f) => {
     const n = (daten[f] || []).length;
@@ -732,7 +735,7 @@ pruefe('Checkpoint 0 = Start/Ziel', strecke.checkpoints[0].s === 0, strecke.chec
   let iMax = 0;
   sp.punkte.forEach((p, i) => { if (Math.abs(p.kruemmung) > Math.abs(sp.punkte[iMax].kruemmung)) iMax = i; });
   const vHaar = strecke.idealLinie[iMax];
-  pruefe('Ideallinie Haarnadel < 18 m/s', vHaar < 18, vHaar.toFixed(1) + ' m/s bei s=' + sp.punkte[iMax].s.toFixed(0));
+  pruefe('Ideallinie Haarnadel < ' + (daten.id === 'formel1' ? 26 : 18) + ' m/s' + (daten.id === 'formel1' ? ' (Formel 1: Schikane R 80 m)' : ''), vHaar < (daten.id === 'formel1' ? 26 : 18), vHaar.toFixed(1) + ' m/s bei s=' + sp.punkte[iMax].s.toFixed(0));
   // Mitte der längsten Geraden suchen (Krümmung < 1/500)
   let besteLaenge = 0, besteMitte = 0, lauf = 0;
   const st = sp.punkte.findIndex(p => Math.abs(p.kruemmung) > 1 / 100);

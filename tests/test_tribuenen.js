@@ -35,7 +35,8 @@ function pruefeStrecke(daten, welt, variante, tag) {
     return st;
   }
   const nurStart = !mega && (C.nurStart || []).indexOf(st.thema || daten.thema) >= 0;       // v28 W9: Wald/Dino/Alpen: nur Start/Ziel
-  const lo = nurStart ? 1 : mega ? 6 : C.anzahlMin - 1, hi = nurStart ? 1 : mega ? 12 : C.anzahlMax;
+  const f1 = !!(daten.tribuenenOpt && daten.tribuenenOpt.anzahl);                       // v29 F3: Formel 1 = genau 3 (Start/Ziel + 2 Kurven)
+  const lo = f1 ? daten.tribuenenOpt.anzahl : nurStart ? 1 : mega ? 6 : C.anzahlMin - 1, hi = f1 ? daten.tribuenenOpt.anzahl : nurStart ? 1 : mega ? 12 : C.anzahlMax;
   pruefe(`${tag} Anzahl ${nurStart ? '= 1 (nur Start/Ziel)' : '≈ 5'} (${lo}–${hi})`, liste.length >= lo && liste.length <= hi, `n=${liste.length}`);
   const starts = liste.filter((t) => t.typ === 'start');
   pruefe(`${tag} genau 1 Start/Ziel-Tribüne`, starts.length === 1, `n=${starts.length}`);
