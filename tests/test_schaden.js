@@ -275,6 +275,25 @@ C.reparaturJe10 = REP_STD;
     (a.vLaengs * 3.6).toFixed(0) + ' vs ' + (b.vLaengs * 3.6).toFixed(0) + ' km/h');
 }
 
+
+// ---------- v30 (G1): „Nochmal“ setzt den Schaden zurück ----------
+// main.js streckeAufbauen: opt.nochmal (von menu.js Ergebnistafel „Nochmal“) → kein startProzent, Garage-Rest = 100; neues Schaden-Objekt je Rennen.
+{
+  const fs = require('fs'), pfad = require('path');
+  const main = fs.readFileSync(pfad.join(__dirname, '..', 'src/main.js'), 'utf8'), menu = fs.readFileSync(pfad.join(__dirname, '..', 'src/ui/menu.js'), 'utf8');
+  pruefe('Nochmal: Ergebnistafel ruft rennenStarten mit { nochmal: true }', /a === 'nochmal'\) this\.spiel\.rennenStarten\(undefined, \{ nochmal: true \}\)/.test(menu));
+  pruefe('Nochmal: rennenStarten reicht nochmal an streckeAufbauen, dort Garage-Rest 100 statt startProzent', /nochmal: !!\(opt && opt\.nochmal\)/.test(main) && /if \(opt\.nochmal\) \{[^}]*restSetzen\([^)]*, 100\)[^}]*continue; \}/.test(main));
+  // Logik: Rest 40 % gespeichert → Menüstart übernimmt, Nochmal-Pfad (restSetzen 100) → neues Rennen startet mit 100 %
+  const G = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/cars/carCatalog.js', 'src/ui/garage.js']).Garage;
+  if (G) {
+    G.restSetzen('Test', 'passat', 40);
+    pruefe('Garage: gespeicherter Rest 40 % → Menü-Neustart startet mit 40 %', G.startProzent('Test', 'passat') === 40);
+    G.restSetzen('Test', 'passat', 100);
+    const { s } = neu(1, true); s._punkteSetzen(0, G.startProzent('Test', 'passat'));
+    pruefe('Nochmal setzt Schaden zurück: Rest 100 → neues Schaden-Objekt startet bei 100 %, Stufe 0, Fahrwerte voll', s.zustand(0).prozent === 100 && s.zustand(0).stufe === 0 && s.z[0].wAkku === undefined);
+  } else console.log('(Garage ohne Browser nicht ladbar – nur Quelltext-Prüfung)');
+}
+
 if (typeof THREE === 'undefined') console.log('(Partikel/Warnblinker: ohne THREE übersprungen – siehe tests/schaden_screenshot.py)');
 console.log(fehler ? `\n${fehler} FEHLER` : '\nALLE TESTS OK');
 process.exit(fehler ? 1 : 0);

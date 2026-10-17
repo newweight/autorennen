@@ -66,6 +66,11 @@
 //   klopf  Nageln: Rauschen, im Takt der Zündfrequenz zerhackt (Diesel); klopfHz = Mittenfrequenz, klopfDuty = Pulsbreite
 //   formant {hz, db, q}  feste Resonanz des Auspuffs (peaking-Filter), cut0/cut1/cutGas = Tiefpass-Grenzfrequenz (Hz)
 //   turbo  Pfeifen (0 = kein Turbo), knallen  Knallen/Blubbern bei Gas weg (0 = nie), pegel = Lautstärke relativ
+// 17.10. (v30, G2 – Vater: „mehrstimmig und weniger schrill, nicht nur ein Ton“): je Motor jetzt vier Tonstimmen statt zwei: Zündfrequenz als Säge (wave) +
+//   weiches Rechteck um `det` (6 Cent) verstimmt + Oktave darunter als Dreieck (`halb`) + Sub-Sinus 40–90 Hz (`sub`, Diesel/V8 stärker, läuft mit der Drehzahl);
+//   Tiefpass `lp` = [Leerlauf, Vollgas] in Hz (läuft mit Drehzahl+Gas mit, zwei Biquads, Resonanz `res`), Ansaugrauschen `ansaug` bei Last, Turbo-Pfeifen tiefer.
+//   Gegner-Autos (KI): nur Säge + Oktave (2 Tonoszillatoren). Drehzahl-/Gangmodell unverändert; `pegel` gleicht auf den RMS von v29 (±1 dB) an.
+//   v30b: `tonK` (Multivan, T-Roc): oberhalb 60 % Drehzahl steigt nur der hoerbare Ton langsamer (R.MotorProfile.tonFrequenz) – Drehzahlmodell/Cockpit/Begrenzer unveraendert.
 // Schaltlogik: hoch/hochVoll = Drehzahl für das Hochschalten bei leichtem/vollem Gas, runter = Runterschalten, schaltZeit = Zugkraft-
 //   Unterbrechung (s), startRpm = Drehzahl beim Anfahren mit Vollgas (schleifende Kupplung).
 // ============================================================
@@ -85,10 +90,11 @@
     id: 'passat', name: 'VW Passat Variant 2.0 TDI 200 PS', bauart: 'Reihen-4 Diesel', zyl: 4, hubraum: 1968, ps: 200,
     leerlauf: 800, rpmMax: 4800, rpmVmax: 3900, startRpm: 2000, hoch: 2300, hochVoll: 4100, runter: 1300,
     gaenge: stufen(7, 3.9, 0.62), schaltZeit: 0.16, steigK: 12, fallK: 9,
-    wave: { slope: 1.15, odd: 1, bump: [4, 2.5, 1.0] }, halb: 0.40, beat: 0.004, wobble: 7,
-    klopf: 1.45, klopfHz: 1700, klopfQ: 0.9, klopfDuty: 0.12,
+    wave: { slope: 1.15, odd: 1, bump: [4, 2.5, 1.0] }, halb: 0.534, beat: 0.004, wobble: 7,
+    klopf: 2.1, klopfHz: 1700, klopfQ: 0.9, klopfDuty: 0.12,
     formant: { hz: 380, db: 4, q: 1.0 }, cut0: 520, cut1: 900, cutGas: 500,
-    turbo: 0.32, knallen: 0, pegel: 1.0,
+    saege: 0.89, turbo: 0.32, knallen: 0, pegel: 0.897, kurve: [0.84, 0.871, 1.007, 0.849],
+    lp: [298, 1530], res: 1.5, sub: 0.500, ansaug: 0.5, det: 0.0035,
   };
   P.polizei = Object.assign({}, P.passat, { id: 'polizei', name: 'Streifenwagen (Passat-Basis)' });
 
@@ -96,44 +102,48 @@
     id: 'multivan', name: 'VW Multivan 2.0 TDI', bauart: 'Reihen-4 Diesel', zyl: 4, hubraum: 1968, ps: 150,
     leerlauf: 800, rpmMax: 4800, rpmVmax: 3500, startRpm: 2100, hoch: 2100, hochVoll: 3800, runter: 1250,
     gaenge: stufen(7, 3.9, 0.62), schaltZeit: 0.2, steigK: 10, fallK: 8,
-    wave: { slope: 1.0, odd: 1, bump: [3, 2.0, 1.2] }, halb: 0.55, beat: 0.005, wobble: 9,
-    klopf: 3.0, klopfHz: 1500, klopfQ: 0.8, klopfDuty: 0.15,
+    wave: { slope: 1.0, odd: 1, bump: [3, 2.0, 1.2] }, halb: 0.534, beat: 0.005, wobble: 9,
+    klopf: 3.9, klopfHz: 1500, klopfQ: 0.8, klopfDuty: 0.15,
     formant: { hz: 300, db: 5, q: 1.1 }, cut0: 440, cut1: 750, cutGas: 450,
-    turbo: 0.3, knallen: 0, pegel: 0.95,
+    turbo: 0.3, knallen: 0, pegel: 0.826, kurve: [0.896, 1.004, 1.087, 0.985],
+    lp: [268, 1377], res: 1.5, sub: 0.5, ansaug: 0.5, det: 0.0035, saege: 0.89, tonK: 0.5,
   };
   // 15.10. (v25): Verkehr – Krankenwagen (Multivan-Basis) und Abschleppwagen (Diesel-Lkw: tiefer Leerlauf, niedrige Drehzahl)
   P.krankenwagen = Object.assign({}, P.multivan, { id: 'krankenwagen', name: 'Krankenwagen (Multivan-Basis)' });
   P.abschleppwagen = Object.assign({}, P.multivan, { id: 'abschleppwagen', name: 'Abschleppwagen (Diesel-Lkw)', leerlauf: 650, rpmMax: 3200, rpmVmax: 2600, startRpm: 1500,
-    hoch: 1800, hochVoll: 2800, runter: 1000, pegel: 1.05, klopf: 3.6 });
+    hoch: 1800, hochVoll: 2800, runter: 1000, lp: [330, 1700], halb: 0.55, sub: 0.8, saege: 1, tonK: 0, pegel: 1.05, kurve: [0.629, 0.738, 0.813, 0.734], klopf: 4.7 });
 
   P['porsche-911'] = {
     id: 'porsche-911', name: 'Porsche 911 Carrera 3.0 Boxer', bauart: 'Boxer-6 Biturbo', zyl: 6, hubraum: 2981, ps: 394,
     leerlauf: 800, rpmMax: 7500, rpmVmax: 6900, startRpm: 3500, hoch: 4200, hochVoll: 7000, runter: 2200,
     gaenge: [4.89, 3.17, 2.15, 1.56, 1.18, 0.94, 0.76, 0.61], schaltZeit: 0.09, steigK: 20, fallK: 14,
-    wave: { slope: 0.72, odd: 1, bump: [9, 4, 1.4] }, halb: 0.22, beat: 0.012, wobble: 11,
+    wave: { slope: 0.72, odd: 1, bump: [9, 4, 1.4] }, halb: 0.454, beat: 0.012, wobble: 11,
     klopf: 0.06, klopfHz: 2600, klopfQ: 0.7, klopfDuty: 0.2,
     formant: { hz: 950, db: 6, q: 2.0 }, cut0: 900, cut1: 2600, cutGas: 1200,
-    turbo: 0.35, knallen: 0.5, pegel: 2.1,
+    saege: 0.89, turbo: 0.35, knallen: 0.5, pegel: 1.226, kurve: [1.07, 1.04, 1.071, 0.999],
+    lp: [357, 2040], res: 1.7, sub: 0.357, ansaug: 0.6, det: 0.0035,
   };
 
   P['troc-cabrio'] = {
     id: 'troc-cabrio', name: 'VW T-Roc Cabrio 1.5 TSI', bauart: 'Reihen-4 Benziner Turbo', zyl: 4, hubraum: 1498, ps: 150,
     leerlauf: 750, rpmMax: 6500, rpmVmax: 5000, startRpm: 2600, hoch: 3000, hochVoll: 5600, runter: 1500,
     gaenge: stufen(7, 3.7, 0.6), schaltZeit: 0.11, steigK: 16, fallK: 11,
-    wave: { slope: 0.9, odd: 1, bump: [6, 3, 0.9] }, halb: 0.18, beat: 0.002, wobble: 3,
+    wave: { slope: 0.9, odd: 1, bump: [6, 3, 0.9] }, halb: 0.450, beat: 0.002, wobble: 3,
     klopf: 0.07, klopfHz: 3000, klopfQ: 0.8, klopfDuty: 0.2,
     formant: { hz: 1200, db: 4, q: 1.2 }, cut0: 800, cut1: 2000, cutGas: 900,
-    turbo: 0.5, knallen: 0, pegel: 1.4,
+    saege: 0.89, tonK: 0.5, turbo: 0.5, knallen: 0, pegel: 0.943, kurve: [0.974, 1.257, 0.846, 1.154],
+    lp: [357, 1700], res: 1.5, sub: 0.357, ansaug: 0.5, det: 0.0035,
   };
 
   P['bmw-m4'] = {
     id: 'bmw-m4', name: 'BMW M4 Competition', bauart: 'Reihen-6 Biturbo', zyl: 6, hubraum: 2993, ps: 510,
     leerlauf: 750, rpmMax: 7200, rpmVmax: 6300, startRpm: 3300, hoch: 3800, hochVoll: 6800, runter: 1900,
     gaenge: stufen(8, 4.7, 0.72), schaltZeit: 0.1, steigK: 18, fallK: 12,
-    wave: { slope: 0.85, odd: 1.1, bump: [3, 2.5, 1.0] }, halb: 0.14, beat: 0.003, wobble: 3,
+    wave: { slope: 0.85, odd: 1.1, bump: [3, 2.5, 1.0] }, halb: 0.28, beat: 0.003, wobble: 3,
     klopf: 0.05, klopfHz: 2400, klopfQ: 0.7, klopfDuty: 0.2,
     formant: { hz: 600, db: 5, q: 1.4 }, cut0: 800, cut1: 2300, cutGas: 1000,
-    turbo: 0.4, knallen: 0.35, pegel: 1.3,
+    turbo: 0.4, knallen: 0.35, pegel: 1.023, kurve: [0.941, 0.889, 1.021, 1.024],
+    lp: [400, 2200], res: 1.6, sub: 0.30, ansaug: 0.6, det: 0.0035,
   };
 
   P['amg-gt'] = {
@@ -143,7 +153,8 @@
     wave: { slope: 0.95, odd: 1, bump: [2, 2.0, 1.4] }, halb: 0.55, beat: 0.02, wobble: 14,
     klopf: 0.03, klopfHz: 1800, klopfQ: 0.7, klopfDuty: 0.25,
     formant: { hz: 250, db: 7, q: 1.0 }, cut0: 650, cut1: 1600, cutGas: 900,
-    turbo: 0.2, knallen: 1.0, pegel: 0.9,
+    turbo: 0.2, knallen: 1.0, pegel: 0.744, kurve: [1.072, 0.997, 0.973, 1.122],
+    lp: [380, 2000], res: 1.5, sub: 0.60, ansaug: 0.5, det: 0.0045,
   };
 
   P['audi-rs6'] = {
@@ -153,7 +164,8 @@
     wave: { slope: 1.0, odd: 1, bump: [2, 1.8, 1.3] }, halb: 0.42, beat: 0.012, wobble: 8,
     klopf: 0.04, klopfHz: 1600, klopfQ: 0.7, klopfDuty: 0.25,
     formant: { hz: 220, db: 6, q: 1.0 }, cut0: 560, cut1: 1300, cutGas: 800,
-    turbo: 0.25, knallen: 0.4, pegel: 0.95,
+    turbo: 0.25, knallen: 0.4, pegel: 0.796, kurve: [1.017, 0.95, 1.044, 1.075],
+    lp: [370, 1900], res: 1.5, sub: 0.60, ansaug: 0.5, det: 0.0040,
   };
 
   P['mini-cooper'] = {
@@ -163,17 +175,19 @@
     wave: { slope: 0.9, odd: 1.2, bump: [5, 3, 1.0] }, halb: 0.55, beat: 0.015, wobble: 16,
     klopf: 0.12, klopfHz: 2200, klopfQ: 0.8, klopfDuty: 0.2,
     formant: { hz: 700, db: 4, q: 1.2 }, cut0: 750, cut1: 1900, cutGas: 800,
-    turbo: 0.45, knallen: 0, pegel: 1.25,
+    turbo: 0.45, knallen: 0, pegel: 1.145, kurve: [0.787, 1.026, 1.026, 0.913],
+    lp: [400, 2200], res: 1.5, sub: 0.15, ansaug: 0.5, det: 0.0035,
   };
 
   P.formel = {
     id: 'formel', name: 'Formel-Renner', bauart: 'V10 Hochdreher (Annahme)', zyl: 10, hubraum: 3000, ps: 900,
     leerlauf: 3500, rpmMax: 12000, rpmVmax: 10600, startRpm: 6500, hoch: 7500, hochVoll: 11200, runter: 5500,
     gaenge: stufen(8, 3.6, 0.8), schaltZeit: 0.05, steigK: 24, fallK: 22,
-    wave: { slope: 0.55, odd: 1, bump: [3, 3.0, 0.6] }, halb: 0.03, beat: 0.004, wobble: 2,
+    wave: { slope: 0.55, odd: 1, bump: [3, 3.0, 0.6] }, halb: 0.293, beat: 0.004, wobble: 2,
     klopf: 0, klopfHz: 3000, klopfQ: 0.7, klopfDuty: 0.3,
-    formant: { hz: 3200, db: 5, q: 1.0 }, cut0: 4000, cut1: 7000, cutGas: 2500,
-    turbo: 0, knallen: 0, pegel: 3.5,
+    formant: { hz: 1800, db: 3, q: 1.0 }, cut0: 4000, cut1: 7000, cutGas: 2500,
+    saege: 0.89, turbo: 0, knallen: 0, pegel: 1.778, kurve: [1.029, 1.078, 1.042, 0.97],
+    lp: [1530, 2975], res: 1.3, sub: 0.178, ansaug: 0.4, det: 0.0035,
   };
 
   const STANDARD = P.passat;
@@ -195,5 +209,10 @@
     },
     /** Zündfrequenz in Hz (Viertakt): Drehzahl/60 × Zylinder/2. */
     zuendFrequenz(p, rpm) { return rpm / 60 * p.zyl / 2; },
+    /** Hörbare Tonfrequenz (nur Klangpfad, v30): oberhalb 60 % des Drehzahlbereichs steigt der Ton nur noch mit Faktor `tonK` (Profile ohne tonK = Zündfrequenz). */
+    tonFrequenz(p, rpm) {
+      if (p.tonK > 0) { const r0 = p.leerlauf + 0.6 * (p.rpmMax - p.leerlauf); if (rpm > r0) rpm = r0 + (rpm - r0) * p.tonK; }
+      return rpm / 60 * p.zyl / 2;
+    },
   };
 })();

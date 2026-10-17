@@ -41,6 +41,7 @@
     gaenge: [3.9, 2.9, 2.1, 1.5, 1.1, 0.8, 0.62], schaltZeit: 0.16, steigK: 9, fallK: 6,
     wave: { slope: 1.15, odd: 1, bump: [4, 2.5, 1.0] }, halb: 0.4, beat: 0.004, wobble: 7, klopf: 0.5, klopfHz: 1700, klopfQ: 0.9, klopfDuty: 0.12,
     formant: { hz: 380, db: 4, q: 1 }, cut0: 520, cut1: 900, cutGas: 500, turbo: 0, knallen: 0, pegel: 1,
+    lp: [350, 1800], res: 1.5, sub: 0.5, ansaug: 0.4, det: 0.0035,
   };
   /** Drehzahl im Gang g (0-basiert); ohne Closure/Allokation (läuft je Frame und Auto). */
   function rpmGang(p, g, tempo, vMax) {
@@ -241,7 +242,7 @@
           id, spieler, gang: 0, profil, rpm: profil.leerlauf, rpmZiel: profil.leerlauf, grundton: profil.leerlauf / 60 * profil.zyl / 2,
           dip: 0, blip: 0, sperre: 0, gasG: 0, schubG: 0, volllast: 0, boost: 0, letztesKnallen: -9,
           abstand: 0, slot: null, zeit: 0, neu: true, ug: '',
-          lf: 0, lc: 0, ll: -1, lr: -1, lk: -1, lt: -1, ltf: 0,     // zuletzt geplante Werte (Frequenz, Filter, Lautstärke, Rauschen, Nageln, Turbo)
+          la: -1, ls: 0, lsg: -1, lf: 0, lc: 0, ll: -1, lr: -1, lk: -1, lt: -1, ltf: 0,     // zuletzt geplante Werte (Frequenz, Filter, Lautstärke, Rauschen, Nageln, Turbo)
           stimmung: 1,
         };
         this._stimmen.set(id, v);
@@ -297,7 +298,11 @@
         if (s.bump) a *= 1 + s.bump[2] * Math.exp(-Math.pow((h - s.bump[0]) / s.bump[1], 2));
         im[h] = a;
       }
-      w = { ton: c.createPeriodicWave(re, im), puls: null };
+      w = { ton: c.createPeriodicWave(re, im), puls: null, eck: null, drei: null };
+      // v30 (G2): zweite Stimme = weiches Rechteck (nur ungerade Teiltöne, 1/h^1,3), Oktave darunter = Dreieck (ungerade, 1/h²) → Sägezahn + Rechteck + Dreieck gemischt
+      const er = new Float32Array(N + 1), ei = new Float32Array(N + 1), dr = new Float32Array(N + 1), di = new Float32Array(N + 1);
+      for (let h = 1; h <= N; h += 2) { ei[h] = Math.pow(h, -1.3); di[h] = Math.pow(h, -2) * (((h - 1) / 2) % 2 ? -1 : 1); }
+      w.eck = c.createPeriodicWave(er, ei); w.drei = c.createPeriodicWave(dr, di);
       // Nagel-Puls: schmaler Rechteckpuls (Breite klopfDuty), Cosinus-Reihe
       const pr = new Float32Array(N + 1), pi = new Float32Array(N + 1), dty = Math.max(0.03, Math.min(0.5, p.klopfDuty || 0.15));
       for (let h = 1; h <= N; h++) pr[h] = Math.sin(Math.PI * h * dty) / (Math.PI * h);
@@ -320,6 +325,9 @@
         out: this._gain(0), filter: this._n(c.createBiquadFilter()), formant: this._n(c.createBiquadFilter()),
         oscA: this._n(c.createOscillator()), oscB: this._n(c.createOscillator()), oscH: this._n(c.createOscillator()),
         gA: this._gain(0.5), gB: this._gain(0.2), gH: this._gain(0.2),
+        filter2: this._n(c.createBiquadFilter()),                                          // v30: zweiter Tiefpass (24 dB/Okt. zusammen)
+        oscS: this._n(c.createOscillator()), gS: this._gain(0),                            // v30: Sub/Rumpel 40–90 Hz
+        ans: this._n(c.createBufferSource()), ansF: this._n(c.createBiquadFilter()), ansG: this._gain(0),   // v30: Ansaugrauschen bei Last
         nz: this._n(c.createBufferSource()), nzBP: this._n(c.createBiquadFilter()), nzAM: this._gain(0),
         oscK: this._n(c.createOscillator()), kTiefe: this._gain(0),
         turb: this._n(c.createOscillator()), turbG: this._gain(0),
@@ -327,14 +335,18 @@
       };
       k.filter.type = 'lowpass'; k.filter.frequency.value = 400; k.filter.Q.value = 0.9;
       k.formant.type = 'peaking'; k.formant.frequency.value = 600; k.formant.Q.value = 1; k.formant.gain.value = 0;
-      k.oscA.frequency.value = 60; k.oscB.frequency.value = 60; k.oscH.frequency.value = 30; k.oscH.type = 'sine';
+      k.oscA.frequency.value = 60; k.oscB.frequency.value = 60; k.oscH.frequency.value = 30; k.oscS.type = 'sine'; k.oscS.frequency.value = 45;
+      k.filter2.type = 'lowpass'; k.filter2.frequency.value = 400; k.filter2.Q.value = 0.55;
       k.oscA.connect(k.gA); k.oscB.connect(k.gB); k.oscH.connect(k.gH);
-      k.gA.connect(k.formant); k.gB.connect(k.formant); k.gH.connect(k.formant);
-      k.formant.connect(k.filter); k.filter.connect(k.out); k.out.connect(this._motorBus);
+      k.gA.connect(k.formant); k.gB.connect(k.formant); k.gH.connect(k.formant); k.oscS.connect(k.gS); k.gS.connect(k.formant);
+      k.formant.connect(k.filter); k.filter.connect(k.filter2); k.filter2.connect(k.out); k.out.connect(this._motorBus);
+      k.ans.buffer = this._rausch; k.ans.loop = true; k.ansF.type = 'lowpass'; k.ansF.frequency.value = 700; k.ansF.Q.value = 0.5;
+      k.ans.connect(k.ansF); k.ansF.connect(k.ansG); k.ansG.connect(k.out);
       // Nageln/Ticken: Rauschen, vom Puls (Zündfrequenz) zerhackt
       k.nz.buffer = this._rausch; k.nz.loop = true;
       k.nzBP.type = 'bandpass'; k.nzBP.frequency.value = 1700; k.nzBP.Q.value = 0.9;
-      k.nz.connect(k.nzBP); k.nzBP.connect(k.nzAM); k.nzAM.connect(k.out);
+      k.nzLP = this._n(c.createBiquadFilter()); k.nzLP.type = 'lowpass'; k.nzLP.frequency.value = 3000; k.nzLP.Q.value = 0.6;     // v30: Nageln ohne Zischen > 4 kHz
+      k.nz.connect(k.nzBP); k.nzBP.connect(k.nzLP); k.nzLP.connect(k.nzAM); k.nzAM.connect(k.out);
       k.oscK.frequency.value = 60; k.oscK.connect(k.kTiefe); k.kTiefe.connect(k.nzAM.gain);
       // Turbo-Pfeifen
       k.turb.type = 'sine'; k.turb.frequency.value = 3000; k.turb.connect(k.turbG); k.turbG.connect(k.out);
@@ -343,9 +355,9 @@
       k.rFilter.type = 'bandpass'; k.rFilter.Q.value = 0.8; k.rFilter.frequency.value = 700;
       k.rausch.connect(k.rFilter); k.rFilter.connect(k.rGain); k.rGain.connect(k.out);
       const z = Math.random() * 1.5;
-      k.oscA.start(); k.oscB.start(); k.oscH.start(); k.oscK.start(); k.turb.start();
-      k.nz.start(0, z); k.rausch.start(0, z + 0.4);
-      k.zw = { nz: true, turb: true, gB: true, gH: true, rausch: true, bus: true };    // alle Zweige beim Bauen angeschlossen
+      k.oscA.start(); k.oscB.start(); k.oscH.start(); k.oscK.start(); k.turb.start(); k.oscS.start();
+      k.nz.start(0, z); k.rausch.start(0, z + 0.4); k.ans.start(0, z + 0.8);
+      k.zw = { nz: true, turb: true, gB: true, gH: true, gS: true, ans: true, rausch: true, bus: true };    // alle Zweige beim Bauen angeschlossen
       k.rZaehl = 0; k.zeitFrei = 0;
       return { k, besitzer: null, profil: null };
     }
@@ -421,13 +433,20 @@
       dt = klemme(dt, 0.001, 0.1);
 
       // --- Profil im Slot einstellen (nur bei Wechsel des Profils) ---
-      if (sl.profil !== p) {
-        sl.profil = p;
+      // v30 (G2): Spieler = volle Stimmen (Säge + Rechteck + Oktave darunter als Dreieck + Sub + Ansaugrauschen); KI = vereinfacht
+      // (nur Säge + Oktave darunter = 2 Tonoszillatoren, kein Sub/Ansaugen/Rechteck) – spart Stimmen auf schwachen Geräten.
+      const modus = v.spieler ? 1 : 0;
+      if (sl.profil !== p || sl.modus !== modus) {
+        sl.profil = p; sl.modus = modus;
         const w = this._welle(p);
-        k.oscA.setPeriodicWave(w.ton); k.oscB.setPeriodicWave(w.ton); k.oscK.setPeriodicWave(w.puls);
-        k.gA.gain.value = 0.5; k.gB.gain.value = 0.32; k.gH.gain.value = 0.5 * p.halb;
-        this._zweig(k, 'gB', k.gB, k.formant, p.beat > 0);
+        k.oscA.setPeriodicWave(w.ton); k.oscB.setPeriodicWave(w.eck); k.oscH.setPeriodicWave(w.drei); k.oscK.setPeriodicWave(w.puls);
+        k.gA.gain.value = 0.5 * (p.saege || 1); k.gB.gain.value = 0.30; k.gH.gain.value = 0.5 * p.halb;
+        k.gS.gain.value = 0;
+        k.filter.Q.value = p.res || 1.5;
+        this._zweig(k, 'gB', k.gB, k.formant, modus === 1 && (p.det || p.beat) > 0);
         this._zweig(k, 'gH', k.gH, k.formant, p.halb >= 0.05);
+        this._zweig(k, 'gS', k.gS, k.formant, modus === 1 && p.sub > 0);
+        this._zweig(k, 'ans', k.ansG, k.out, modus === 1 && p.ansaug > 0);
         this._zweig(k, 'nz', k.nzAM, k.out, p.klopf >= 0.1);
         k.zw.turbCfg = null;
         k.nzBP.frequency.value = p.klopfHz; k.nzBP.Q.value = p.klopfQ;
@@ -490,11 +509,34 @@
       // --- Klangwerte ---
       // Zündfrequenz; dazu leichtes Tonhöhen-Zittern (wobble in Cent, zwei langsame Schwingungen) – im JS gerechnet, nicht als
       // Audio-Rate-Modulation (die macht jeden Oszillator mehrfach teurer)
-      v.grundton = rpm / 60 * p.zyl / 2 * v.stimmung;
+      let rpmT = rpm;      // v30b: weicher Pitch-Kompressor oberhalb 60 % Drehzahl (nur Ton; Drehzahl selbst unverändert)
+      if (p.tonK > 0) { const r0 = p.leerlauf + 0.6 * (p.rpmMax - p.leerlauf); if (rpm > r0) rpmT = r0 + (rpm - r0) * p.tonK; }
+      v.grundton = rpmT / 60 * p.zyl / 2 * v.stimmung;
       const f = v.grundton * (1 + p.wobble * 0.000578 * (0.6 * Math.sin(6.2832 * 4.3 * t + v.stimmung * 40) + 0.4 * Math.sin(6.2832 * 9.1 * t)));
       const last = 0.35 + 0.65 * v.gasG;
-      const cutoff = (p.cut0 + p.cut1 * rpmN + p.cutGas * v.gasG) * dumpf * (1 - 0.3 * v.schubG);
-      const laut = (0.10 + 0.40 * last * (0.4 + 0.6 * rpmN) + 0.10 * rpmN) * dipF * pegel * (1 - 0.5 * v.schubG);
+      // v30: Tiefpass läuft mit Drehzahl und Gas mit (Leerlauf lp[0] → Vollgas lp[1]); zwei Biquads hintereinander
+      const lp = p.lp || NOTPROFIL.lp;
+      const cutoff = (lp[0] + (lp[1] - lp[0]) * (0.7 * rpmN + 0.3 * v.gasG)) * dumpf * (1 - 0.3 * v.schubG);
+      const det = p.det || p.beat;
+      // Sub/Rumpel: Oktave(n) unter dem Grundton, immer ein ganzzahliges Vielfaches von f/2 (bleibt harmonisch), gefaltet in 40–80 Hz;
+      // Fenster = 0 an den Oktavgrenzen → der Sprung beim Falten ist lautlos. Ab f/2 ≥ 80 Hz gibt es keinen Sub (dort trägt die Oktave darunter).
+      let subHz = v.ls > 0 ? v.ls : 60, subW = 0;
+      if (modus === 1 && p.sub > 0 && f * 0.5 < 80) {
+        let x = f * 0.5; while (x < 40) x *= 2;
+        subHz = x; subW = Math.min(1, 2.5 * Math.sin(Math.PI * Math.log2(x / 40)));
+      }
+      const subG = 0.5 * (p.sub || 0) * subW;
+      const ansG = v.spieler ? (p.ansaug || 0) * 0.05 * v.gasG * (0.3 + 0.7 * rpmN) * pegel : 0;
+      // v30: Pegelkurve je Motor (Faktoren bei rpmN 0 / 0,18 / 0,44 / 0,87, dazwischen linear) gleicht den neuen Klang auf den RMS von v29 an (±1 dB)
+      let leerK = 1;
+      const kv = p.kurve;
+      if (kv) {
+        if (rpmN <= 0.18) leerK = kv[0] + (kv[1] - kv[0]) * (rpmN / 0.18);
+        else if (rpmN <= 0.44) leerK = kv[1] + (kv[2] - kv[1]) * ((rpmN - 0.18) / 0.26);
+        else if (rpmN <= 0.87) leerK = kv[2] + (kv[3] - kv[2]) * ((rpmN - 0.44) / 0.43);
+        else leerK = kv[3];
+      }
+      const laut = (0.10 + 0.40 * last * (0.4 + 0.6 * rpmN) + 0.10 * rpmN) * dipF * pegel * leerK * (1 - 0.5 * v.schubG);
       const klopf = p.klopf * (0.25 + 0.75 * last) * (1 - 0.6 * v.schubG) * (v.spieler ? 1 : 0.7) * laut * 1.4;
       // Turbo: Ladedruck baut sich mit Verzögerung auf
       let turboG = 0, turboF = 3000;
@@ -503,8 +545,8 @@
       if (p.turbo > 0 && turboAn) {
         const bz = klemme(v.gasG * (rpmN * 1.4 - 0.15), 0, 1);
         v.boost += (bz - v.boost) * Math.min(1, dt * (bz > v.boost ? 2.2 : 5));
-        turboG = p.turbo * 0.045 * v.boost * pegel * (v.spieler ? 1 : 0.5);
-        turboF = 2300 + 2600 * v.boost + 1800 * rpmN;
+        turboG = p.turbo * 0.032 * v.boost * pegel * (v.spieler ? 1 : 0.5);
+        turboF = 1500 + 1500 * v.boost + 900 * rpmN;      // v30: Pfeifen tiefer (vorher 2300–6700 Hz) und leiser → weniger schrill
       }
 
       // --- Rauschen auf Gras/Sand ---
@@ -519,26 +561,31 @@
       // spart AudioParam-Ereignisse – im Leerlauf/bei Vollgas fast keine Aufrufe je Frame.
       if (v.neu) {
         // frisch zugeteilt: Frequenzen sofort setzen (Pegel blendet weich ein)
-        const fb = f * (1 + p.beat);
+        const fb = f * (1 + det);
         k.oscA.frequency.cancelScheduledValues(t); k.oscA.frequency.setValueAtTime(f, t);
         k.oscB.frequency.cancelScheduledValues(t); k.oscB.frequency.setValueAtTime(fb, t);
         k.oscH.frequency.cancelScheduledValues(t); k.oscH.frequency.setValueAtTime(f * 0.5, t);
         k.oscK.frequency.cancelScheduledValues(t); k.oscK.frequency.setValueAtTime(f, t);
         k.filter.frequency.cancelScheduledValues(t); k.filter.frequency.setValueAtTime(cutoff, t);
+        k.filter2.frequency.cancelScheduledValues(t); k.filter2.frequency.setValueAtTime(cutoff, t);
+        k.oscS.frequency.cancelScheduledValues(t); k.oscS.frequency.setValueAtTime(subHz, t); v.ls = subHz;
         k.turb.frequency.cancelScheduledValues(t); k.turb.frequency.setValueAtTime(turboF, t);
-        v.lf = f; v.lc = cutoff; v.ll = -1; v.lr = -1; v.lk = -1; v.lt = -1; v.ltf = turboF;
+        v.lf = f; v.lc = cutoff; v.ll = -1; v.la = -1; v.lsg = -1; v.lr = -1; v.lk = -1; v.lt = -1; v.ltf = turboF;
         v.neu = false;
       } else {
         if (anders(f, v.lf, 0.3)) {
           v.lf = f;
-          k.oscA.frequency.setTargetAtTime(f, t, 0.03); k.oscB.frequency.setTargetAtTime(f * (1 + p.beat), t, 0.03);
+          k.oscA.frequency.setTargetAtTime(f, t, 0.03); k.oscB.frequency.setTargetAtTime(f * (1 + det), t, 0.03);
           k.oscH.frequency.setTargetAtTime(f * 0.5, t, 0.03); k.oscK.frequency.setTargetAtTime(f, t, 0.03);
         }
-        if (anders(cutoff, v.lc, 2)) { v.lc = cutoff; k.filter.frequency.setTargetAtTime(cutoff, t, 0.04); }
+        if (anders(cutoff, v.lc, 2)) { v.lc = cutoff; k.filter.frequency.setTargetAtTime(cutoff, t, 0.04); k.filter2.frequency.setTargetAtTime(cutoff, t, 0.04); }
+        if (subW > 0 && anders(subHz, v.ls, 0.3)) { v.ls = subHz; k.oscS.frequency.setTargetAtTime(subHz, t, 0.02); }
         if (turboG > 0 && anders(turboF, v.ltf, 20)) { v.ltf = turboF; k.turb.frequency.setTargetAtTime(turboF, t, 0.05); }
       }
       if (anders(laut, v.ll, 0.002)) { v.ll = laut; k.out.gain.setTargetAtTime(laut, t, 0.04); }
       if (anders(klopf, v.lk, 0.002)) { v.lk = klopf; k.kTiefe.gain.setTargetAtTime(klopf, t, 0.03); }
+      if (anders(subG, v.lsg, 0.001)) { v.lsg = subG; k.gS.gain.setTargetAtTime(subG, t, 0.03); }
+      if (anders(ansG, v.la, 0.0004)) { v.la = ansG; k.ansG.gain.setTargetAtTime(ansG, t, 0.08); }
       if (anders(turboG, v.lt, 0.0005)) { v.lt = turboG; k.turbG.gain.setTargetAtTime(turboG, t, 0.06); }
       if (anders(rausch, v.lr, 0.002)) { v.lr = rausch; k.rGain.gain.setTargetAtTime(rausch, t, 0.08); }
       if (ug !== v.ug) {

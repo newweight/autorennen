@@ -143,7 +143,7 @@ with sync_playwright() as p:
         for rpm in (2000, 4000, 6000):
             r, sig = holen(page, id=pid, sek=3.2, rpm=rpm)
             wav_schreiben(os.path.join(out, f'{pid}_{rpm}.wav'), sig)
-            f0 = rpm / 60 * r['zyl'] / 2
+            f0 = page.evaluate('([i,r])=>Rennspiel.MotorProfile.tonFrequenz(Rennspiel.MotorProfile.fuer(i),r)', [pid, rpm])      # v30b: Multivan/T-Roc mit Tonhöhen-Kompression oberhalb 60 %
             fr, sp = spektrum(sig)
             pr = prominenz(fr, sp, f0)
             sp5 = spitzen(fr, sp, fmax=min(2500, max(900, f0 * 12)))
@@ -182,7 +182,8 @@ with sync_playwright() as p:
         fr, sp = spektrum(x); return float(np.sum(fr * sp ** 2) / np.sum(sp ** 2))
     Z = {k: zentroid(v) for k, v in typ.items()}
     print('   Spektral-Schwerpunkt Hz:', {k: round(v) for k, v in Z.items()})
-    pruefe('Formel am hellsten, Diesel (Passat/Multivan) dumpfer als T-Roc, M4 und 911', Z['formel'] == max(Z.values()) and max(Z['passat'], Z['multivan']) < min(Z['troc-cabrio'], Z['bmw-m4'], Z['porsche-911']), {k: round(v) for k, v in Z.items()})
+    # v30b: T-Roc auf Wunsch des Vaters wie der (tiefere) Porsche-Klang, aber Vollgas-Tiefpass 1700 Hz → nicht mehr heller als der Diesel-Bus; deshalb nur noch M4 und 911 als Vergleich
+    pruefe('Formel am hellsten, Diesel (Passat/Multivan) dumpfer als M4 und 911', Z['formel'] == max(Z.values()) and max(Z['passat'], Z['multivan']) < min(Z['bmw-m4'], Z['porsche-911']), {k: round(v) for k, v in Z.items()})
     pruefe('Boxer-6 (911) heller als Diesel-4 (Passat/Multivan) bei gleicher Lastlage', Z['porsche-911'] > Z['passat'] and Z['porsche-911'] > Z['multivan'])
     # Diesel-Nageln: Rauschen im 1,2–4,5-kHz-Band, im Takt der Zündfrequenz zerhackt. Messung: gleiche Fahrt mit klopf an/aus (Zufall fest gesät).
     def band(sig, lo=1200, hi=4500):

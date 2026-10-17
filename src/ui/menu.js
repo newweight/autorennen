@@ -898,7 +898,7 @@
     verstecken() { this.sichtbar = false; this.wurzel.style.display = 'none'; }
     aktion(a) {
       if (performance.now() - this.seit < R.config.ui.ergebnisSperreMs) return;
-      if (a === 'nochmal') this.spiel.rennenStarten();
+      if (a === 'nochmal') this.spiel.rennenStarten(undefined, { nochmal: true });   // v30 (G1): Schaden zurück auf 100 %
       else if (a === 'menue') this.spiel.zumMenue();
     }
     taste(code) {

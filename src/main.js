@@ -481,6 +481,7 @@
         geisterfahrer: e.geisterfahrer === true && !elim, krankenwagen: !elim && !!(R.Verkehr && R.Verkehr.ausEinstellung(e).krankenwagen), abschleppwagen: !elim && !!(R.Verkehr && R.Verkehr.ausEinstellung(e).abschleppwagen),    // 15.10. (v25), v28 W1: je einzeln
         elimination: elim ? { zuschauerSekunden: CE.zuschauerSekunden === undefined ? 6 : CE.zuschauerSekunden } : null,   // W3-F
         upgradesZaehlen: e.upgradesZaehlen !== false,      // W3-G
+        nochmal: !!(opt && opt.nochmal),      // v30 (G1): „Nochmal“ von der Ergebnistafel → Schaden-Rest nicht übernehmen (alle starten bei 100 %)
       });
       for (let i = 0; i < (zwei ? 2 : 1); i++) this.kameraHinzufuegen(this.fahrzeuge[i]);
       const split = zwei;
@@ -783,6 +784,7 @@
         if (this.schaden.an && R.Garage) {
           for (let i = 0; i < opt.spieler; i++) {
             const f = this.fahrzeuge[i], pr = f && f.auto ? R.Garage.startProzent(spielerNamen[i], f.auto.id) : 100;
+            if (opt.nochmal) { if (f && f.auto) R.Garage.restSetzen(spielerNamen[i], f.auto.id, 100); continue; }   // v30 (G1): „Nochmal“ = repariertes Auto, Rest in der Garage ebenfalls zurück
             if (pr < 100) this.schaden._punkteSetzen(i, pr);
           }
         }
