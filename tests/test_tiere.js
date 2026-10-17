@@ -8,6 +8,8 @@
 //  T5) KI bremst/weicht aus: stehendes Tier auf der Spur – KI kommt ohne Berührung vorbei, nicht ewig stehend
 //  T6) Server = Client: zustand.ti (14 Zahlen, Flags) → zustandAnwenden/poseAus ergibt dieselben Posen; ohne Tiere kein `ti`; Einstellung nur bei echtem true
 //  T7) Rundenzeit KI: mit Tieren AN höchstens +5 % (alle Strecken, Computer-Rennen)
+//  T8) (v28c A1) KI weicht LAUFENDEN Tieren aus: Seite aus der Laufrichtung, 50 Fälle ≥ 90 % ohne Kontakt; Einheit: Seitenwahl, Hysterese, Bande
+//  T9) (v28c A2) Verkehrswagen bremsen vor kreuzenden/stehenden Tieren, kein Durchfahren  T10) Polizei/Verkehr: Kontakt wie beim Spieler, Streifenwagen weicht aus  T11) Determinismus mit allem
 const S = require('../server/simulation.js');
 const { Simulation, laden, einstellungenPruefen } = S;
 const R = laden(), DT = R.config.physik.schritt;
@@ -293,6 +295,158 @@ if (!KURZ || true) {
     zeilen.push([id, o.mittel, m.mittel, d, m.getroffen, m.auftritte]);
     pruefe(`T7 ${id}: KI-Rennzeit mit Tieren ≤ +5 %`, Number.isFinite(d) && d <= 5.0, `ohne ${o.mittel.toFixed(1)} s, mit ${m.mittel.toFixed(1)} s (${d >= 0 ? '+' : ''}${d.toFixed(2)} %), Tiere ${m.auftritte} Auftritte, KI-Treffer ${m.getroffen}`);
   }
+}
+
+// ---------------- T8 (v28c A1) KI-Ausweichen vor LAUFENDEN Tieren: Seite aus der Laufrichtung, Vorhersage, bremsen bei knapper Lücke
+// Tier läuft nach rechts (von = −1: kommt links, Ziel rechts), die KI nähert sich von hinten/seitlich auf der Geraden; 50 Fälle (Strecke wiese, 1 Rennen, feste Zufallsfolge:
+// Abstand 55–115 m, Fortschritt auf dem Weg, gerade oder schräg 25–75°, Längsrichtung ±). Kontakt = das Tier hat DIESES Auto berührt (t.getroffen).
+{
+  const mul = (a) => () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const rnd = mul(4242), N = 50;
+  const sim = neu({ streckeId: 'wiese', gegner: 2, tiere: true, runden: 40, schwierigkeit: 'mittel' }, undefined, 11), st = sim.sim.strecke, T = sim.sim.tiere, L = st.spline.laenge;
+  sim.zuKI(0);
+  const f1 = sim.sim.fahrzeuge[1], v1 = f1.vehicle;
+  let wait = 0, akt = null; const erg = [];
+  for (let n = 0; n < 60 * 3000 && erg.length < N; n++) {
+    sim.schritt();
+    const rz = sim.sim.rennen; if (!rz.gasErlaubt) continue;
+    T.naechster = 1e9;                       // keine Zufallsauftritte – nur die erzwungenen
+    if (!akt) {
+      wait++;
+      if (wait > 60 && f1.nah && v1.vLaengs > 20 && !Tiere.gesperrt(T.zonen, L2(f1.nah.s + 140, L), 60) && !Tiere.gesperrt(T.zonen, L2(f1.nah.s, L), 20)) {
+        const dist = 55 + rnd() * 60, fort = 0.05 + rnd() * 0.5, wink = rnd() < 0.4 ? 90 : 25 + rnd() * 50, ri = rnd() < 0.5 ? 1 : -1;
+        const g = T.erzwingen({ art: 'kuh', sM: f1.nah.s + dist, von: -1, winkel: wink, richtung: ri, anzahl: 1, fortschritt: fort });
+        if (!g) { wait = 0; continue; }
+        g.forEach((x) => { x.stehBei = -1; });
+        akt = { t0: rz.zeit, tier: g[0], v0: v1.vLaengs, vmin: 1e9, qmin: 1e9, q0: null, dmin: 1e9, vqPlus: g[0].vq > 0 };
+      }
+      continue;
+    }
+    const sl = T.slots[akt.tier.slot], nn = st.spline.naechster(v1.x, v1.z, f1.index);
+    if (akt.q0 === null) akt.q0 = nn.seitenabstand;
+    akt.qmin = Math.min(akt.qmin, nn.seitenabstand); akt.vmin = Math.min(akt.vmin, v1.vLaengs);
+    if (sl.aktiv) akt.dmin = Math.min(akt.dmin, Math.hypot(sl.x - v1.x, sl.z - v1.z));
+    if (rz.zeit - akt.t0 > 14) { akt.kontakt = akt.tier.getroffen.has(1); erg.push(akt); T.tiere.slice().forEach((x) => T._entfernen(x)); akt = null; wait = 0; }
+  }
+  const ohne = erg.filter((r) => !r.kontakt).length, reagiert = erg.filter((r) => r.vmin < 0.9 * r.v0 || r.qmin < r.q0 - 0.8).length;
+  pruefe('T8 KI vor nach rechts laufendem Tier: ohne Kontakt in ≥ 90 % von 50 Fällen', erg.length === N && ohne >= 0.9 * N, `${ohne}/${erg.length} ohne Kontakt (${(100 * ohne / Math.max(1, erg.length)).toFixed(0)} %)`);
+  pruefe('T8 KI weicht links aus (≥ 0,8 m) oder bremst (< 0,9 × Anfahrtempo) in ≥ 80 % der Fälle', reagiert >= 0.8 * N, `${reagiert}/${erg.length}`);
+}
+{
+  // Einheit: Seitenwahl + Hysterese + Gegenverkehr-Regel am Driver direkt (keine Simulation)
+  const st = neueStrecke(R.trackCatalog.find((d) => d.id === 'wiese'), '', ''), sp = st.spline, p = sp.punktBei(300), nx = p.nx, nz = p.nz;
+  const mk = (qMe) => { const v = new R.Vehicle(R.carCatalog.find((a) => a.id === 'porsche-911').fahrwerte, {}); v.setzen(p.x + nx * qMe, p.z + nz * qMe, R.headingAus(p.tx, p.tz)); v.vLaengs = 30; return v; };
+  const tier = (q, vq, vs, ds) => { const pt = sp.punktBei(300 + ds); return { istSpieler: false, tier: true, ausgeschieden: false, vehicle: { x: pt.x + pt.nx * q, z: pt.z + pt.nz * q, y: 0, heading: 0, vLaengs: 0, vQuer: 0, imLooping: false, imFlug: false, tier: true, vx: pt.nx * vq + pt.tx * vs, vz: pt.nz * vq + pt.tz * vs, daten: { laenge: 1.9, breite: 1.8 },
+    weltGeschwindigkeit() { return { x: this.vx, z: this.vz }; }, richtung() { return { x: 0, z: 0 }; } } }; };
+  const probe = (qMe, o) => { const v = mk(qMe), d = new R.Driver(v, st, { schwierigkeit: 'mittel', seed: 3 }); d.steuerung(0.016, { andere: [o], laeuft: true }); return d; };
+  const dRechts = probe(0.5, tier(-1.5, 3, 0, 55)), dLinks = probe(0.5, tier(1.5, -3, 0, 55));
+  pruefe('T8 Einheit: Tier läuft nach rechts (+q) → Ausweichziel links (kleiner als die Tierlage)', dRechts.hindernisse.length === 1 && dRechts.hindernisse[0].ziel < -1.5 + 0.1 && dRechts.tierMerk.size === 1 && [...dRechts.tierMerk.values()][0].seite === -1, JSON.stringify(dRechts.hindernisse));
+  pruefe('T8 Einheit: Tier läuft nach links (−q) → Ausweichziel rechts', dLinks.hindernisse.length === 1 && dLinks.hindernisse[0].ziel > 1.5 - 0.1 && [...dLinks.tierMerk.values()][0].seite === 1, JSON.stringify(dLinks.hindernisse));
+  // Hysterese: Seite bleibt über mehrere Schritte (kein Zappeln), solange die bisherige Seite geht
+  const v = mk(0.5), d = new R.Driver(v, st, { schwierigkeit: 'mittel', seed: 3 }), o = tier(-1.5, 3, 0, 55), seiten = [];
+  for (let i = 0; i < 40; i++) { d.steuerung(0.016, { andere: [o], laeuft: true }); const m = [...d.tierMerk.values()][0]; if (m) seiten.push(m.seite); }
+  pruefe('T8 Einheit: Seite bleibt über 40 Schritte gleich (Hysterese)', seiten.length === 40 && seiten.every((x) => x === seiten[0]), seiten.join(''));
+  // Gegenverkehr-Regel: geht die Tierseite gegen die Ausweichseite des Gegenverkehrs, wird nicht dorthin gelenkt (bremsen)
+  const dBande = probe(-4.2, tier(-1.0, 3, 0, 50));      // ganz links an der Grenze, Tier kommt von links: hinten links geht nicht → rechts vor dem Tier / bremsen
+  pruefe('T8 Einheit: Tier + Auto am linken Rand: kein Ziel jenseits der Spurgrenze (Bande), sonst Tempo begrenzt', dBande.hindernisse.every((h) => Math.abs(h.ziel) <= dBande._grenzeBei(300) + 1e-9) , JSON.stringify(dBande.hindernisse));
+}
+
+// ---------------- T9 (v28c A2) Verkehrswagen bremsen vor Tieren, berühren sie ohne Durchfahren
+{
+  const lauf = (art, szene, dist, fort) => {
+    const sim = new Simulation({ einstellungen: { streckeId: 'wiese', runden: 3, gegner: 0, tageszeit: 'tag', jahreszeit: 'sommer', wetter: 'klar', windStaerke: 0, krankenwagen: true, abschleppwagen: true, verkehr: 'wenig', tiere: true },
+      spieler: [{ fahrer: 'Jonas', auto: 'porsche-911', hilfe: 'aus' }], seed: 5 });
+    const st = sim.sim.strecke, vk = sim.sim.verkehr, T = sim.sim.tiere, P = sim.sim.fahrzeuge[0].vehicle;
+    for (let n = 0; n < 60 * 25 && !sim.sim.rennen.gasErlaubt; n++) sim.schritt();
+    const ziel = vk.eintraege.find((e) => e.art === art), anderer = vk.eintraege.find((e) => e !== ziel && e.art !== 'geisterfahrer');
+    const frei = vk.frei.filter((a) => a[1] - a[0] >= 700).sort((a, b) => (b[1] - b[0]) - (a[1] - a[0]))[0] || vk.frei[0];
+    const s0 = frei[0] + 20; ziel.route = { a: s0, b: frei[1] }; ziel.ast = 0;
+    const spurQ = R.config.verkehr[art].spurQ;
+    vk._erscheinen(ziel, s0, spurQ, ziel.tempo * 0.8);
+    if (anderer) anderer.pause = 1e9;
+    const pt = st.spline.punktBei(s0 - 300); P.setzen(pt.x, pt.z, R.headingAus(pt.tx, pt.tz)); P.vLaengs = 0;     // Spieler weit hinter dem Wagen, steht
+    T.naechster = 1e9;
+    const f = ziel.f, v = f.vehicle, i = sim.sim.fahrzeuge.indexOf(f);
+    for (let n = 0; n < 60 * 8; n++) sim.schritt();                         // Wagen auf Reisetempo
+    const v0 = v.vLaengs, nah = f.nah.s;
+    const g = szene === 'ohne' ? [{ slot: 0, getroffen: new Set() }] : szene === 'quert'
+      ? T.erzwingen({ art: 'kuh', sM: nah + (dist || 24), von: 1, winkel: 90, richtung: 1, anzahl: 1, fortschritt: fort === undefined ? 0.3 : fort })
+      : T.erzwingen({ art: 'kuh', sM: nah + (dist || (szene === 'nah' ? 7 : 60)), von: 1, winkel: 90, richtung: 1, anzahl: 1, fortschritt: 0.5 });
+    if (szene === 'ohne') { /* Kontrolllauf ohne Tier */ } else if (szene === 'steht' || szene === 'nah') g.forEach((x) => { x.zustand = 'steht'; x.stehtNoch = 6; x.ziel = 0; x.faktor = 0; x.q = spurQ * (st.breiteBei ? st.breiteBei(nah) : st.breite) / 2; });
+    else g.forEach((x) => { x.stehBei = -1; });
+    const tier = g[0], sl = T.slots[tier.slot];
+    let vmin = v0, dmin = 1e9, durch = false, kontakt = false, vorKontakt = null, nachKontakt = null, flaggeErschrocken = false, vorherVor = null, vPrev = v0;
+    for (let n = 0; n < 60 * 14; n++) {
+      vPrev = v.vLaengs;
+      sim.schritt();
+      if (tier.getroffen.has(i) && !kontakt) { kontakt = true; vorKontakt = vPrev; nachKontakt = v.vLaengs; }
+      if (kontakt && (sl.flags & 8)) flaggeErschrocken = true;
+      if (n < 60 * 6) vmin = Math.min(vmin, v.vLaengs);          // nur die Begegnung (6 s), nicht Routenende/Halt
+      if (szene === 'ohne' || !sl.aktiv) continue;
+      const r = v.richtung(), dx = sl.x - v.x, dz = sl.z - v.z, vor = dx * r.x + dz * r.z;
+      dmin = Math.min(dmin, Math.hypot(dx, dz));
+      if (vorherVor !== null && vorherVor > 0 && vor <= 0 && !kontakt && Math.hypot(dx, dz) < 1.6) durch = true;       // Tier von vorn nach hinten durch den Wagen, ohne Kontakt
+      vorherVor = vor;
+    }
+    return { v0, vmin, dmin, durch, kontakt, flaggeErschrocken, vorKontakt, nachKontakt };
+  };
+  for (const art of ['krankenwagen', 'abschleppwagen']) {
+    const k = lauf(art, 'ohne'), q = lauf(art, 'quert', 28, 0.3), s = lauf(art, 'steht'), nh = lauf(art, 'nah');
+    pruefe(`T9 ${art}: kreuzendes Tier 28 m voraus → bremst (v sinkt unter 0,8 × Fahrt ohne Tier)`, q.vmin < 0.8 * k.vmin, `ohne Tier min ${k.vmin.toFixed(1)}, mit Tier min ${q.vmin.toFixed(1)} m/s`);
+    pruefe(`T9 ${art}: kreuzendes Tier – kein Durchfahren (Abstand oder Kontakt), Kontakt → Tier erschrickt`, !q.durch && (!q.kontakt || q.flaggeErschrocken), `Kontakt ${q.kontakt}, kleinster Abstand ${q.dmin.toFixed(2)} m`);
+    pruefe(`T9 ${art}: Tier steht in der Spur → Wagen hält davor (kein Durchfahren), bremst bis fast zum Stand`, !s.durch && s.vmin < 0.5 * s.v0, `v0 ${s.v0.toFixed(1)}, min ${s.vmin.toFixed(1)}, Abstand ${s.dmin.toFixed(2)} m, Kontakt ${s.kontakt}`);
+    pruefe(`T9 ${art}: Tier plötzlich 7 m voraus (zu spät zum Anhalten) → Kontakt, Tier erschrickt (Flag 8), Wagen −30 %, kein Durchfahren`, nh.kontakt && nh.flaggeErschrocken && nh.nachKontakt <= 0.75 * nh.vorKontakt && !nh.durch, `Kontakt ${nh.kontakt}, erschrocken ${nh.flaggeErschrocken}, v ${nh.vorKontakt && nh.vorKontakt.toFixed(1)} → ${nh.nachKontakt && nh.nachKontakt.toFixed(1)}`);
+  }
+}
+
+// ---------------- T10 (v28c A2) Polizei und Verkehrswagen reagieren bei Kontakt wie der Spieler (Einheit) + Streifenwagen weicht aus (Simulation)
+{
+  const st = neueStrecke(R.trackCatalog.find((d) => d.id === 'wald'), '', '');
+  for (const [name, fl] of [['Polizei', { polizei: true }], ['Verkehrswagen', { verkehr: {} }]]) {
+    const a = auto(0, 0, 30, 0), { t } = mitTiere(st, 'p' + name, [a]);
+    a.istSpieler = false; Object.assign(a, fl);
+    const p = st.spline.punktBei(300);
+    a.vehicle.x = p.x; a.vehicle.z = p.z; a.vehicle.heading = R.headingAus(p.tx, p.tz); a.vehicle.vLaengs = 30; a.vehicle.vQuer = 0;
+    const g = t.erzwingen({ art: 'reh', sM: 300, von: 1, winkel: 90, richtung: 1, anzahl: 1, fortschritt: 0.5 });
+    const sl = t.slots[g[0].slot]; sl.x = p.x + p.tx * 0.5; sl.z = p.z + p.tz * 0.5;
+    const r = t.kollisionen([a]); t.schritt(0.05, true);
+    pruefe(`T10 ${name} berührt Tier: Treffer gemeldet, Tempo −30 %, Hüpfer, Tier erschrickt (Flag 8)`, r.length === 1 && Math.abs(a.vehicle.vLaengs - 21) < 0.01 && a.vehicle.huepfer > 0 && g[0].zustand === 'flieht' && (sl.flags & 8) === 8, JSON.stringify(r) + ' v=' + a.vehicle.vLaengs.toFixed(2) + ' flags=' + sl.flags);
+    const b = auto(0, 0, 30, 0); b.istSpieler = false; Object.assign(b, fl); b.ausgeschieden = true; b.vehicle.x = sl.x; b.vehicle.z = sl.z;
+    pruefe(`T10 ${name} geparkt/ausgeschieden: kein Kontakt`, t.kollisionen([b]).length === 0);
+  }
+  // Simulation: Streifenwagen (fährt ab Start) kommt auf ein stehendes Tier in seiner Spur zu → weicht aus/bremst, kein Kontakt
+  const sim = new Simulation({ einstellungen: { streckeId: 'wiese', runden: 3, gegner: 0, tageszeit: 'tag', jahreszeit: 'sommer', wetter: 'klar', windStaerke: 0, polizei: true, tiere: true },
+    spieler: [{ fahrer: 'Jonas', auto: 'porsche-911', hilfe: 'aus' }], seed: 77 });
+  const T = sim.sim.tiere, st2 = sim.sim.strecke, L = st2.spline.laenge, pi = sim.sim.polizei.idx[0], pf = sim.sim.fahrzeuge[pi];
+  let platz = null, kontakt = false, vmin = 1e9, v0 = 0;
+  for (let n = 0; n < 60 * 90; n++) {
+    sim.schritt(); T.naechster = 1e9;
+    if (!sim.sim.rennen.gasErlaubt) continue;
+    if (!platz && pf.nah && pf.vehicle.vLaengs > 22 && !Tiere.gesperrt(T.zonen, L2(pf.nah.s + 120, L), 40)) {
+      const g = T.erzwingen({ art: 'kuh', sM: pf.nah.s + 100, von: 1, winkel: 90, richtung: 1, anzahl: 1, fortschritt: 0.5 });
+      if (g) { g.forEach((x) => { x.zustand = 'steht'; x.stehtNoch = 9; x.ziel = 0; x.faktor = 0; x.q = 0.6; }); platz = { tier: g[0], t: sim.sim.rennen.zeit }; v0 = pf.vehicle.vLaengs; }
+    }
+    if (platz) {
+      if (platz.tier.getroffen.has(pi)) kontakt = true;
+      const sl = T.slots[platz.tier.slot]; if (sl.aktiv && Math.hypot(sl.x - pf.vehicle.x, sl.z - pf.vehicle.z) < 60) vmin = Math.min(vmin, pf.vehicle.vLaengs);
+      if (sim.sim.rennen.zeit - platz.t > 12) break;
+    }
+  }
+  pruefe('T10 Streifenwagen vor stehendem Tier in der Spur: kein Kontakt (weicht aus / bremst)', !!platz && !kontakt, `Anfahrt ${v0.toFixed(1)}, min ${vmin.toFixed(1)} m/s, Kontakt ${kontakt}`);
+}
+
+// ---------------- T11 (v28c) Determinismus Server = Client mit Tieren + Polizei + Verkehr: zwei Läufe gleiche ti/vk/po-Folge
+{
+  const lauf = () => {
+    const s2 = new Simulation({ einstellungen: { streckeId: 'wiese', gegner: 2, runden: 2, tageszeit: 'tag', jahreszeit: 'sommer', wetter: 'klar', windStaerke: 0, tiere: true, polizei: true, krankenwagen: true, abschleppwagen: true, schwierigkeit: 'mittel' },
+      spieler: [{ fahrer: 'Jonas', auto: 'porsche-911', hilfe: 'aus' }], seed: 31 });
+    s2.zuKI(0); s2.sim.tiere.erzwingen && 0;
+    const out = [];
+    for (let n = 0; n < 60 * 120; n++) { s2.schritt(); if (n % 90 === 0) { const z = s2.zustand(); out.push(JSON.stringify([z.ti, z.vk, z.po, z.a])); } }
+    return { out, stat: s2.sim.tiere.statistik };
+  };
+  const a = lauf(), b = lauf();
+  pruefe('T11 deterministisch: zwei Läufe (Tiere + Polizei + Verkehr + KI, Seed 31) gleiche ti/vk/po/a-Folge', JSON.stringify(a.out) === JSON.stringify(b.out) && a.stat.auftritte >= 1, JSON.stringify(a.stat));
 }
 
 console.log(`\n${geprueft - fehler} OK, ${fehler} FEHL (${geprueft} Prüfungen)`);

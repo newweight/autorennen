@@ -46,6 +46,7 @@
     hindernisSperre: 25, hindernisNach: 20,
     freiAbstand: 130, spawnVorAnderen: 260, wiederkehr: [4, 12], lichtAbstand: 45, blinkHz: 3,
     // intern
+    tierSicht: 25, tierBremse: 9,      // v28c A2: Tier voraus – Mindestsicht (m) und Bremsverzögerung (m/s²) der Verkehrswagen
     steckenZeit: 3.5, abseitsZeit: 2.5, steckNah: 15, sichtFrei: 120, endeAuslauf: 15, haltMax: 12, haltKamera: 40, haltRand: 1.5, nachlauf: 25, sichtNachlauf: 40, hintenWeg: 220, sireneHoerweite: 120, hupeHoerweite: 160, vorausblickMin: 7, vorausblickMax: 38,
   };
   function cfg() {
@@ -725,12 +726,43 @@
       if (st.tempoBei) soll = Math.min(soll, Math.max(7, st.tempoBei(sZiel) * 0.7));
       // Krankenwagen/Abschleppwagen bremsen vor langsameren Autos vor ihnen (kein Auffahren); Geisterfahrer nicht (sie weichen nicht aus)
       if (e.art !== 'geisterfahrer') soll = Math.min(soll, this._folgeTempo(e, v, soll));
+      soll = Math.min(soll, this._tierTempo(v, soll));      // v28c A2: kreuzt ein Tier die Spur voraus → bremsen (feste Spur, kein Ausweichen) – auch Geisterfahrer
       // v28 (W2): Routenende erreicht, Teilnehmer noch in Sicht → anhalten statt vor ihren Augen zu verschwinden; vorher im Schritttempo zum Halteplatz neben der Fahrbahn
       if (e.halt) soll = (e.haltSeite && e.haltQ !== undefined && Math.abs(n.seitenabstand - e.haltQ) > 0.7 && e.haltT < 10) ? Math.min(soll, 4) : 0;
       e.sollTempo = soll;
       const s = tempoSteuerung(soll, tempo);
       f.bremst = s.bremse > 0 && tempo > 0.5;
       return { gas: s.gas, bremse: s.bremse, lenkung };
+    }
+
+    /**
+     * v28c A2: Tier voraus, das die Spur kreuzt (jetzt oder in ≤ 1,5 s): Tempo so begrenzen, dass der Wagen vor dem Tier zum Stehen käme (Bremsverzögerung tierBremse).
+     * Sicht: max(tierSicht = 25 m, Bremsweg + 8 m). Verkehrswagen fahren auf fester Spur – hier wird nur gebremst. Kommt das Tier zu spät, trifft es der Wagen (tiere.kollisionen: −30 %, Tier erschrickt).
+     */
+    _tierTempo(v, soll) {
+      const T = this.spiel.tiere;
+      if (!T || !T.tiere.length || !T.slots) return soll;
+      const AR = T.constructor.ARTEN, r = v.richtung(), q = v.rechts(), tempo = Math.max(0, v.vLaengs);
+      const a = this.c.tierBremse || 9, sicht = Math.max(this.c.tierSicht || 25, tempo * tempo / (2 * a) + 8), halbL = (v.daten.laenge || 4.5) / 2, halbB = (v.daten.breite || 1.8) / 2;
+      let best = soll;
+      for (let k = 0; k < T.slots.length; k++) {
+        const sl = T.slots[k];
+        if (!sl.aktiv || !AR[sl.art]) continue;
+        const dx = sl.x - v.x, dz = sl.z - v.z;
+        if (dx * dx + dz * dz > (sicht + 8) * (sicht + 8)) continue;
+        const A = AR[sl.art], ext = A.r + Math.max.apply(null, A.kreise.map(Math.abs));
+        const vor = dx * r.x + dz * r.z, quer = dx * q.x + dz * q.z;
+        if (vor <= 0 || vor - ext - halbL > sicht) continue;
+        const t = sl.tier, wx = t ? t.wx : 0, wz = t ? t.wz : 0;
+        const vl = wx * r.x + wz * r.z, vq = wx * q.x + wz * q.z;
+        const tAnk = Math.max(0, vor - ext - halbL) / Math.max(3, tempo - vl), tp = Math.min(1.5, tAnk);
+        const q1 = quer + vq * tp, lo = Math.min(quer, q1) - ext - halbB - 0.3, hi = Math.max(quer, q1) + ext + halbB + 0.3;
+        if (lo > 0 || hi < 0) continue;                                    // kreuzt die Spur nicht
+        const dist = Math.max(0, vor - ext - halbL - 2);
+        const cap = Math.sqrt(2 * a * dist);
+        if (cap < best) best = cap;
+      }
+      return best;
     }
 
     /** Folgetempo: nächstes Fahrzeug direkt vor mir (längs ≤ 10 + 1,3·v, quer < 2,4 m) bestimmt das Tempo. */

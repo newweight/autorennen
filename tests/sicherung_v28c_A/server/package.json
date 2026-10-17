@@ -1,0 +1,11 @@
+{
+  "name": "jonas-hot-steering-wheel-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mehrspieler-Server für Jonas Hot Steering Wheel (statische Dateien + WebSocket /ws, autoritative Rennsimulation)",
+  "main": "server.js",
+  "license": "UNLICENSED",
+  "engines": { "node": ">=18" },
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "ws": "^8.18.0" }
+}

@@ -959,7 +959,8 @@
       // eigener Wagen
       if (z.ich) {
         const ich = z.ich, f = spiel.fahrzeuge[this.du], t = r.teilnehmer[this.du];
-        const v = f.vehicle, anzeige = { x: v.x, z: v.z, y: v.y, heading: v.heading };
+        const v = f.vehicle, tr = this.vorhersage.trenn || { x: 0, z: 0 };
+        const anzeige = { x: v.x - tr.x, z: v.z - tr.z, y: v.y, heading: v.heading };     // v28c: ohne den Trenn-Versatz (der gehört nur der Anzeige, nicht in korr)
         this.vorhersage.abgleich(ich, anzeige, this.kollisionen === true ? z.a : undefined, z.k);
         f.resetHinweis = !!ich.rh; f.falschHerum = !!ich.fh;
         t.rundenStart = ich.rs; t.rundenzeiten = ich.rzn || []; t.bestzeit = ich.bz;
@@ -1208,6 +1209,20 @@
             }
           }
         }
+      }
+      // v28c: eigenes Auto (vorhergesagt = „jetzt“) nicht optisch in die angezeigten anderen Autos (≈ 0,1 s + Ping hinter dem Server) schieben –
+      // nur die Anzeige wird getrennt (NetzVorhersage.trennen), Vorhersage und Server bleiben unberührt. Teilnehmer nur bei Rempeln, Verkehrswagen immer
+      // (der Server stößt mit ihnen auch im Geister-Modus).
+      if (!V.sonder && V.trennen) {
+        const liste = this._trennListe || (this._trennListe = []);
+        liste.length = 0;
+        if (this.kollisionen === true) for (let i = 0; i < this.nT; i++) if (i !== this.du && fz[i]) liste.push(fz[i].vehicle);
+        const vkw = spiel.verkehr;
+        if (vkw && vkw.eintraege) for (let k = 0; k < vkw.idx.length; k++) if (vkw.eintraege[k].aktiv && fz[vkw.idx[k]]) liste.push(fz[vkw.idx[k]].vehicle);
+        // v28c Gegenlesen: Streifenwagen (Server stößt mit ihnen beim Rempeln) ebenfalls trennen
+        const pol = spiel.polizei;
+        if (this.kollisionen === true && pol && pol.idx) for (const i of pol.idx) if (i !== this.du && fz[i] && liste.indexOf(fz[i].vehicle) < 0) liste.push(fz[i].vehicle);
+        V.trennen(mein.vehicle, liste, dt);
       }
       // Anhaltung zwischen den Zuständen herunterzählen (HUD „Anhalten… N s")
       if (spiel.polizei) { const L = spiel.polizei.logik; for (let i = 0; i < this.nT; i++) { const a = L.autos[i]; if (a && a.stopp > 0) a.stopp = Math.max(0, a.stopp - dt); } }

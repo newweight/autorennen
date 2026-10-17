@@ -43,6 +43,8 @@
   // v16: welche Sonderzustände die Vorhersage selbst mitrechnet (Messung: tests/test_netz.js Block M, Ergebnis in VERLAUF.md)
   const SONDER_STANDARD = { kleber: true, anlauf: true, flug: true, looping: true };
   const NULL_S = { gas: 0, bremse: 0, lenkung: 0 };
+  const TRENN_AUFHOL = 4;   // m/s, v28c
+  const TRENN_MAX = 8;         // v28c: m – größter Anzeige-Versatz von trennen() (Rempeln bei 200 ms Ping braucht bis ~5 m), darüber nichts tun
 
   class NetzVorhersage {
     /**
@@ -65,6 +67,8 @@
       this.sonder = false;         // Server rechnet gerade allein (Looping, Flug, …)
       this.korr = { x: 0, z: 0, y: 0, h: 0, w: 0 };   // w = Looping-Winkel (rad), nur mit Looping-Vorhersage
       this.tauKorr = 0.25;          // v23: Abklingzeit der Korrektur nach einem Abgleich (s); v22b: 0,12
+    this.trenn = { x: 0, z: 0 };  // v28c: Anzeige-Versatz „nicht in angezeigte Autos hinein“ (trennen), NICHT Teil der Vorhersage
+    this.tauTrenn = 0.15;         // v28c: Abklingzeit dieses Versatzes nach dem Kontakt (s)
       // v16: Sonderzustände lokal mitrechnen (opt.sonderVorhersage: false = v15 | true = Standard | { kleber, anlauf, flug, looping })
       const sv = opt.sonderVorhersage === false ? {} : (opt.sonderVorhersage && typeof opt.sonderVorhersage === 'object' ? opt.sonderVorhersage : SONDER_STANDARD);
       const st0 = opt.strecke || {};
@@ -327,11 +331,11 @@
       // neue Basis vs. bisherige Anzeige
       const dx = anzeige.x - v.x, dz = anzeige.z - v.z, dy = anzeige.y - v.y, dh = R.Vehicle.winkelDiff(anzeige.heading, v.heading);
       const fehler = Math.hypot(dx, dz);
-      if (this._ersterAbgleich) { this._ersterAbgleich = false; this.korr.x = this.korr.z = this.korr.y = this.korr.h = this.korr.w = 0; this.hart = true; return; }
+      if (this._ersterAbgleich) { this._ersterAbgleich = false; this.korr.x = this.korr.z = this.korr.y = this.korr.h = this.korr.w = 0; this.trenn.x = this.trenn.z = 0; this.hart = true; return; }
       const basisFehler = Math.hypot(dx - this.korr.x, dz - this.korr.z);   // reine Vorhersage-Abweichung (ohne alte Korrektur)
       if (!warSonder) { st.maxFehler = Math.max(st.maxFehler, basisFehler); st.summeFehler += basisFehler; }
       if (fehler > R.Netz.HART_KORREKTUR && !warSonder) {
-        this.korr.x = this.korr.z = this.korr.y = this.korr.h = this.korr.w = 0; this.hart = true; st.hart++;
+        this.korr.x = this.korr.z = this.korr.y = this.korr.h = this.korr.w = 0; this.trenn.x = this.trenn.z = 0; this.hart = true; st.hart++;
       } else {
         this.korr.x = dx; this.korr.z = dz; this.korr.y = dy; this.korr.h = dh;
         if (basisFehler > 0.01) st.weich++;
@@ -344,6 +348,44 @@
       this.korr.h = R.Vehicle.winkelDiff(anzeige.heading, basis.heading);
       if (Math.hypot(this.korr.x, this.korr.z) > 12) { this.korr.x = this.korr.z = this.korr.y = this.korr.h = this.korr.w = 0; this.hart = true; }
       this.korr.w = 0;
+      this.trenn.x = this.trenn.z = 0;         // v28c: die alte Anzeige (inkl. Trenn-Versatz) steckt jetzt in korr
+    }
+
+    /**
+     * v28c (nur Anzeige): Das eigene Auto wird VORHERGESAGT (Zeit „jetzt + Ping + Warteschlange“), die anderen Autos werden ~0,1 s + Ping
+     * HINTER dem Server gezeigt (NetzAnzeige). Schiebt man ein Auto an (Rempeln), stößt die Vorhersage korrekt gegen den Stellvertreter
+     * (= wo das andere Auto jetzt ist), auf dem Bildschirm steht das andere Auto aber noch an seiner alten Stelle → das eigene Auto steckt
+     * optisch 1–2 m darin (Messung tests/rempeln_netz_messung.js, auch bei 0 ms Ping). Hier wird nur die ANZEIGE fv des eigenen Wagens aus den
+     * angezeigten anderen Autos herausgeschoben (kleinste Durchdringung der Rechtecke, kein Impuls, Vorhersage/Server unberührt); der Versatz
+     * klingt nach dem Kontakt in tauTrenn ab. Aufruf je Physikschritt NACH anzeigen(fv) und nachdem die anderen Autos ihre Pose haben.
+     * @param {object} fv angezeigtes eigenes Fahrzeug (wird verändert)  @param {Array} andere angezeigte Fahrzeuge (nur lesen)
+     */
+    trennen(fv, andere, dt) {
+      const t = this.trenn, K = R.Kollisionen;
+      // v28c Gegenlesen: Abklingen auf 4 m/s begrenzen – sonst Satz nach vorn (bis 21 m/s bei 200 ms Ping), wenn das Rempeln endet
+      const k = Math.exp(-dt / this.tauTrenn), l0 = Math.hypot(t.x, t.z);
+      if (l0 > 1e-4) { const l1 = Math.max(l0 * k, l0 - TRENN_AUFHOL * dt); t.x *= l1 / l0; t.z *= l1 / l0; }
+      if (Math.abs(t.x) + Math.abs(t.z) < 1e-4) t.x = t.z = 0;
+      const alt = this._trennAlt || (this._trennAlt = new Map());
+      if (!K || !K.eindringung || fv.imLooping || fv.imFlug) { t.x = t.z = 0; alt.clear(); return; }
+      fv.x += t.x; fv.z += t.z;
+      const ich0 = alt.get(fv);
+      for (let durch = 0; durch < 2; durch++) {
+        let bewegt = false;
+        for (const o of andere) {
+          if (!o || o === fv || o.imLooping || o.imFlug || Math.abs((o.y || 0) - (fv.y || 0)) >= 2) continue;
+          if (Math.abs(o.x - fv.x) > 9 || Math.abs(o.z - fv.z) > 9) continue;
+          const e = K.eindringung(fv, o, ich0, alt.get(o));
+          if (!e) continue;
+          fv.x -= e.nx * e.tief; fv.z -= e.nz * e.tief; t.x -= e.nx * e.tief; t.z -= e.nz * e.tief; bewegt = true;
+        }
+        if (!bewegt) break;
+      }
+      if (Math.hypot(t.x, t.z) > TRENN_MAX) { fv.x -= t.x; fv.z -= t.z; t.x = t.z = 0; }   // Teleport/Reset o. Ä.: lieber nichts tun
+      // Posen für das nächste Bild merken (Aufprallrichtung)
+      const merk = (v) => { let p = alt.get(v); if (!p) alt.set(v, p = {}); p.x = v.x; p.z = v.z; p.h = v.heading; };
+      merk(fv);
+      for (const o of andere) if (o) merk(o);
     }
 
     /** Korrektur abklingen lassen (je Schritt). */

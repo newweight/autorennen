@@ -390,6 +390,7 @@
       } else d.versatzBasis += (f.polizeiBasis - d.versatzBasis) * Math.min(1, dt * 2);
       const u = this._u || (this._u = {});
       u.andere = this.andereFuer(rennen ? rennen.teilnehmer : []); u.spielerFortschrittMax = null; u.eigenerFortschritt = 0;
+      if (this.spiel.tiere) u.andere = this.spiel.tiere.andereFuer(u.andere);      // v28c A2: querende Tiere sind auch für den Streifenwagen bewegliche Hindernisse (KI-Logik A1)
       u.laeuft = rennen ? rennen.gasErlaubt : true;
       let s = d.steuerung(dt, u);
       if (d.brauchtReset) { this._zuruecksetzen(i); return { gas: 0, bremse: 0, lenkung: 0 }; }

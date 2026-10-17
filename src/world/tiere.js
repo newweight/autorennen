@@ -19,8 +19,8 @@
 //   Tiere.ausEinstellung(e)                     true, wenn e.tiere !== false (Menü/Spiel: Standard an)
 //   new R.Tiere(spiel)  einsetzen(strecke, teilnehmerAnzahl, { seed })     Plätze (Slots) je Tierart anlegen, Sperrzonen berechnen
 //   schritt(dt, laeuft)                         Auftritte, Bewegung, Fliehen, Verschwinden (je Physikschritt, nur Server/offline)
-//   kollisionen(fahrzeuge)                      weiche Stöße [{ nr, typ: 'tier', art, emoji, staerke }], ändert Tempo der Autos
-//   andereFuer(liste)                           aktive Tiere als „andere“ für die KI (nur .vehicle; vLaengs = 0 → „steht“)
+//   kollisionen(fahrzeuge)                      weiche Stöße [{ nr, typ: 'tier', art, emoji, staerke }], ändert Tempo der Autos (v28c A2: Spieler, KI, Streifenwagen und Verkehrswagen; geparkte = ausgeschieden zählen nicht)
+//   andereFuer(liste)                           aktive Tiere als „andere“ für die KI (nur .vehicle + tier:true, vx/vz = Bewegung; v28c: auch für Streifenwagen, polizei.js)
 //   zustandKodieren() / zustandAnwenden(z)      Server → Client (Protokoll: zustand.ti, 14 Zahlen je Platz wie `vk`), siehe server/PROTOKOLL.md
 //   bauen() / animieren()                       Grafik (nur Browser): THREE.Group mit einem InstancedMesh je Tierart
 //   zerstoeren()
@@ -443,7 +443,7 @@
       const C = this.c, kapsel = R.Kollisionen && R.Kollisionen.kapsel;
       for (let i = 0; i < fahrzeuge.length; i++) {
         const f = fahrzeuge[i], v = f && f.vehicle;
-        if (!v || f.ausgeschieden || f.polizei || f.verkehr || v.imLooping || v.imFlug) continue;
+        if (!v || f.ausgeschieden || v.imLooping || v.imFlug) continue;      // v28c A2: auch Streifenwagen und Verkehrswagen (geparkte sind ausgeschieden)
         const ka = kapsel ? kapsel(v) : { rad: 0.9, kreise: [{ x: v.x, z: v.z }] };
         for (let k = 0; k < this.tiere.length; k++) {
           const t = this.tiere[k];
@@ -493,7 +493,7 @@
     }
 
     // ---------- KI ----------
-    /** Aktive Tiere als „andere“ für die KI anhängen (nur .vehicle; vLaengs = 0 → die KI behandelt sie wie ein stehendes Hindernis und umfährt es). */
+    /** Aktive Tiere als „andere“ für die KI anhängen (nur .vehicle, Markierung tier:true; v28c A1: die KI liest die Weltgeschwindigkeit vx/vz, sagt die Tierposition voraus und weicht hinter dem Tier vorbei aus bzw. bremst – driver.js _tierAusweichen). */
     andereFuer(liste) {
       let aktiv = 0;
       for (let k = 0; k < this.slots.length; k++) if (this.slots[k].aktiv) aktiv++;

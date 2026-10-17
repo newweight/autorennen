@@ -99,6 +99,15 @@
   const RAMPE_MIN = 18;            // m Einblend-Strecke (mindestens)
   const RAMPE_ZEIT = 1.1;          // s × Tempo Einblend-Strecke
 
+  // v28c A1: querende Tiere – Ausweichseite aus der Laufrichtung (hinter dem Tier vorbei), Vorhersage ~1 s, Neubewertung alle 0,3 s, bei knapper Lücke bremsen
+  const TIER_VORHER = 2.0;         // s: Tierposition bei meiner Ankunft vorhersagen, höchstens so weit voraus (bei Ankunft ≤ 1 s genau dort)
+  const TIER_NEU = 0.3;            // s Neubewertung der Seite (Hysterese)
+  const TIER_AUTO_HALB = 1.1;      // m halbe Fahrzeugbreite (Tier-Rechnung)
+  const TIER_LUFT = 0.6;           // m Luft zum Tier
+  const TIER_LENK_RATE = 3.0;      // m/s seitliche Verlagerung, die die KI in der Zeit bis zum Tier schafft (Tier steht oder läuft weg: hinter dem Tier vorbei)
+  const TIER_LENK_RATE_VOR = 1.6;  // m/s, wenn das Tier in die gewählte Seite hineinläuft (vor dem Tier vorbei: knapp → früher bremsen)
+  const TIER_ZUGABE_RAND = 0.8;    // m, die das Ziel über die KI-Spurgrenze hinausragen darf (Kante der Fahrbahn bleibt frei)
+
   // --- Streckenhindernisse (strecke.hindernisse, von trackBuilder) ---
   // Baustelle/Ast: HART meiden – ab max(40 m, 2,5 s × Tempo) vorher auf die freie Hälfte,
   // erst 15 m nach dem Ende zurück. Öl/Sand: weich umfahren, wenn seitlich Platz ist, sonst −15 % Tempo.
@@ -209,6 +218,7 @@
       this.lenkung = 0;             // geglättete Lenkung
       this.hindernisse = [];        // [{ d (m voraus), ziel (Seitenabstand), langsam }]
       this.seitenMerk = new Map();  // Hindernis-Vehicle → gewählte Seite (−1 links / +1 rechts)
+      this.tierMerk = new Map();    // v28c A1: Tier-Vehicle → { seite, rest } (Seite fest, Neubewertung alle TIER_NEU s)
       this.tempoVerlauf = [];       // [[zeit, vLaengs]] der letzten ~0,25 s
       this.stossRest = 0;           // s, in denen nach einem Stoß ausgewichen wird
       this.stossZiel = 0;           // Seitenabstand während der Stoß-Reaktion
@@ -289,6 +299,111 @@
       return faktor;
     }
 
+    /**
+     * v28c A1: querende Tiere. Tier-Bewegung kommt aus ov.vx/vz (Weltgeschwindigkeit). Für jedes Tier voraus:
+     *  - Ankunftszeit tAnk → Position ~TIER_VORHER s voraus (oqP, längs)
+     *  - blockiert es meine Spur (Fläche zwischen jetziger und vorhergesagter Lage)? Nein → ignorieren.
+     *  - Seite: hinter dem Tier vorbei (läuft es nach rechts → links), sonst die Seite mit Platz; Gegenverkehr (gegenSeite) erlaubt nur dessen Seite
+     *  - Seite wird nur alle TIER_NEU s neu bewertet (kein Zappeln); das Ziel folgt der Vorhersage stetig
+     *  - passt keine Seite oder reicht die Zeit zum Verlagern nicht → Zieltempo (Bremsen), im Extremfall Gas weg
+     * Gibt { soll, gasWeg, brems } zurück (soll = Infinity: kein Tempolimit). Deterministisch (keine Zufallszahlen).
+     */
+    _tierAusweichen(liste, n, qMe, tempo, grenze, gegenSeite, dt) {
+      const sp = this.spline;
+      const erg = this._tierErg || (this._tierErg = { soll: Infinity, gasWeg: false, brems: 0 });
+      erg.soll = Infinity; erg.gasWeg = false; erg.brems = 0;
+      const gesehen = this._tierGesehen || (this._tierGesehen = new Set());
+      gesehen.clear();
+      for (const o of liste) {
+        const ov = o.vehicle;
+        const on = sp.naechster(ov.x, ov.z, this.index);
+        if (this._andereEbene(ov, on)) continue;
+        const ext = (ov.daten ? ov.daten.laenge : 2) / 2 + 0.35;                 // grobe Ausdehnung des Tiers in alle Richtungen
+        const voraus = sp.differenzS(on.s, n.s);
+        let merk = this.tierMerk.get(ov);
+        if (voraus < -ext - 3 || voraus > Math.max(30, 2.5 * Math.max(0, tempo)) + 15) { if (merk) this.tierMerk.delete(ov); continue; }   // vorbei / noch fern
+        const tp = sp.punktBei(on.s);
+        const vs = (ov.vx || 0) * tp.tx + (ov.vz || 0) * tp.tz, vq = (ov.vx || 0) * tp.nx + (ov.vz || 0) * tp.nz;
+        const oq = this.ast ? on.seitenabstand - this._ao(on.s) : on.seitenabstand;
+        const dist = Math.max(0, voraus - ext);
+        const tAnk = dist / Math.max(3, tempo - vs);
+        const tp1 = Math.min(TIER_VORHER, tAnk), tpA = Math.min(TIER_VORHER + 1, tAnk);
+        const oqP = oq + vq * tp1;                                                // Lage in ~1 s (bzw. bei Ankunft, wenn früher)
+        const oqA = oq + vq * tpA;                                                // Lage bei Ankunft (bis 3 s)
+        const lo = Math.min(oq, oqP) - ext - TIER_AUTO_HALB - 0.5, hi = Math.max(oq, oqP) + ext + TIER_AUTO_HALB + 0.5;
+        const linie = this._grundVersatz(on.s);
+        if (!merk) {
+          if (voraus < -ext) continue;
+          if (!((qMe >= lo && qMe <= hi) || (linie >= lo && linie <= hi))) continue;     // blockiert meine Spur nicht
+        }
+        // Seiten bewerten: ziel = Lage der Fahrzeugmitte; Platz = wie weit es über die Spurgrenze hinausragt (≤ 0: passt)
+        const e = ext + TIER_AUTO_HALB + TIER_LUFT;
+        const bewerte = (seite) => {
+          const hinein = vq * seite > 0.4;                                  // Tier läuft in diese Seite hinein: vor ihm vorbei (Lage bei Ankunft einplanen)
+          const hinter = !hinein;                                           // Tier steht oder läuft von dieser Seite weg: hinter ihm vorbei
+          const grenz = grenze + TIER_ZUGABE_RAND;
+          let ziel;
+          if (hinein) ziel = seite < 0 ? Math.min(oq, oqP, oqA) - e - 0.4 : Math.max(oq, oqP, oqA) + e + 0.4;
+          else {
+            // zuerst vorsichtig (an der bisherigen Lage des Tiers vorbei); passt das nicht in die Spur, an der vorhergesagten Lage bei Ankunft (es ist dann weitergelaufen)
+            ziel = seite < 0 ? Math.min(oq, oqP) - e : Math.max(oq, oqP) + e;
+            if (Math.abs(ziel) > grenz) { const arr = seite < 0 ? oqA - e - 0.4 : oqA + e + 0.4; if (Math.abs(arr) < Math.abs(ziel)) ziel = arr; }
+          }
+          const rest = Math.abs(ziel) - grenz;                              // > 0: passt nicht mehr
+          return { seite, ziel, rest, ok: rest <= 0 && (!gegenSeite || seite === gegenSeite), hinter };
+        };
+        const L = bewerte(-1), Rr = bewerte(1);
+        let wahl;
+        const beste = () => {
+          // 1. hinter dem Tier vorbei (Tier läuft von der Seite weg), 2. sonst nach Platz/eigener Lage
+          const lauf = Math.abs(vq) > 0.4 ? (vq > 0 ? -1 : 1) : 0;      // Tier läuft nach rechts (+) → links vorbei (−)
+          const kand = [L, Rr].filter((c) => c.ok);
+          if (!kand.length) return null;
+          if (kand.length === 1) return kand[0];
+          if (lauf) return lauf < 0 ? L : Rr;
+          const eigene = qMe >= oq ? 1 : -1;                             // auf der eigenen Seite bleiben, wenn Tier steht
+          return eigene < 0 ? L : Rr;
+        };
+        if (!merk) {
+          const b = beste();
+          merk = { seite: b ? b.seite : 0, rest: TIER_NEU };
+          this.tierMerk.set(ov, merk);
+        } else {
+          merk.rest -= dt;
+          if (merk.rest <= 0) {
+            merk.rest = TIER_NEU;
+            const b = beste(), alt = merk.seite < 0 ? L : merk.seite > 0 ? Rr : null;
+            // wechseln nur, wenn die bisherige Seite nicht mehr geht oder die andere klar besser ist (hinter dem Tier) und noch Platz zum Lenken bleibt
+            if (!alt || !alt.ok) merk.seite = b ? b.seite : 0;
+            else if (b && b.seite !== alt.seite && voraus > 25 && !alt.hinter && b.hinter) merk.seite = b.seite;
+          }
+        }
+        gesehen.add(ov);
+        const w = merk.seite < 0 ? L : merk.seite > 0 ? Rr : null;
+        if (w && w.ok) {
+          const ziel = clamp(w.ziel, -grenze, grenze);
+          this.hindernisse.push({ d: voraus, ziel, langsam: true, vor: 6 });
+          // reicht die Zeit zum Verlagern? sonst Tempo so, dass die Ankunft nach der nötigen Lenkzeit liegt
+          const noetig = w.hinter ? Math.abs(ziel - qMe) / TIER_LENK_RATE : 1.5 * Math.abs(ziel - qMe) / TIER_LENK_RATE_VOR + 0.3;   // vor dem Tier vorbei: Ziel läuft mit dem Tier mit → Zeitpuffer
+          if (Math.abs(ziel - qMe) > 0.4 && tAnk < noetig) {
+            const vmax = Math.max(KRIECH_TEMPO + 0.5, dist / Math.max(0.3, noetig));
+            if (vmax < erg.soll) erg.soll = vmax;
+          }
+        } else {
+          // keine Seite frei (Bande, Gegenverkehr, Gruppe): vor dem Tier anhalten, solange es die Spur sperrt
+          const blockiert = qMe >= lo && qMe <= hi;
+          if (blockiert || (linie >= lo && linie <= hi)) {
+            const vstop = Math.sqrt(2 * this.aBrems * Math.max(0, dist - 4));
+            if (vstop < erg.soll) erg.soll = vstop;
+            if (dist < 14 + tempo * 0.5) erg.gasWeg = true;
+            if (tempo > vstop + 2) erg.brems = Math.max(erg.brems, clamp((tempo - vstop) / 8, 0.3, 1));
+          }
+        }
+      }
+      for (const k of this.tierMerk.keys()) if (!gesehen.has(k)) this.tierMerk.delete(k);
+      return erg;
+    }
+
     _schlenkerAbstand() { return 10 + this.zufall() * 15; }
 
     /** Nach einem Reset durch main.js aufrufen: Zustände zurücksetzen. index (W4-I, optional) = Streckenindex nach dem Reset. */
@@ -297,7 +412,7 @@
       this.brauchtReset = false;
       this.festZeit = 0; this.rueckRest = 0; this.fehlversuche = 0; this.freiZeit = 0;
       this.lenkung = 0; this.schlenkerRest = 0;
-      this.hindernisse = []; this.seitenMerk.clear(); this.tempoVerlauf = []; this.stossRest = 0;
+      this.hindernisse = []; this.seitenMerk.clear(); this.tierMerk.clear(); this.tempoVerlauf = []; this.stossRest = 0;
     }
 
     /**
@@ -381,6 +496,7 @@
       const fensterLangsam = Math.max(LANGSAM_FENSTER_MIN, LANGSAM_FENSTER_ZEIT * Math.max(0, tempo), fenster);
       const andere = u.andere || [];
       let gasWeg = false, bremsNoetig = 0, langsamVoraus = false, kriechen = false, gegenVoraus = false;
+      const tierListe = this._tierListe || (this._tierListe = []); tierListe.length = 0; let gegenSeite = 0;
       const gesehen = new Set();
       let naechsterAndererQ = null, naechsterAbstand = Infinity;
       this.hindernisse = [];
@@ -389,6 +505,7 @@
         const ov = o.vehicle;
         if (!ov || ov === v) continue;
         if (quer && quer.quer.has(ov)) continue;     // W4-J: Querverkehr (kreuzt, fährt nicht vor mir) – eigene Regel oben
+        if (o.tier) { tierListe.push(o); continue; }   // v28c A1: querende Tiere haben eine eigene Regel (nach der Schleife)
         const dx = ov.x - v.x, dz = ov.z - v.z, abst = Math.hypot(dx, dz);
         let fernGegen = false;
         if (abst > fensterLangsam + 15) { if (abst > Math.max(GEGEN_FENSTER, GEGEN_ZEIT * (Math.max(0, tempo) + (ov.vLaengs || 0))) + 15 || !(ov.vLaengs > 0)) continue; fernGegen = true; }
@@ -441,7 +558,7 @@
         // Gegenverkehr: Treffpunkt statt Position des anderen Autos (beide fahren aufeinander zu) – so setzt das Ausweichen früh genug ein
         this.hindernisse.push({ d: gegen && voraus > 0 ? voraus * Math.max(tempo, 5) / (Math.max(tempo, 5) - vGegen) : voraus, ziel, langsam, vor: gegen ? GEGEN_VOR : undefined });
         if (langsam && voraus > -6) langsamVoraus = true;
-        if (gegen && voraus > 0) gegenVoraus = true;
+        if (gegen && voraus > 0) { gegenVoraus = true; gegenSeite = seite; }
 
         // Kein Rammen: direkt vor mir in der Spur → stehendes Auto: nur noch kriechen
         // (lenkt dabei vorbei, kein Stau), fahrendes Auto: Gas weg / bremsen
@@ -454,6 +571,9 @@
         }
       }
       for (const ov of this.seitenMerk.keys()) if (!gesehen.has(ov)) this.seitenMerk.delete(ov);
+      // v28c A1: querende Tiere (Vorhersage, Seite aus der Laufrichtung, sonst bremsen)
+      const tierErg = tierListe.length || this.tierMerk.size ? this._tierAusweichen(tierListe, n, qMe, tempo, grenze, gegenVoraus ? gegenSeite : 0, dt) : null;
+      if (tierErg) { if (tierErg.gasWeg) gasWeg = true; if (tierErg.brems > bremsNoetig) bremsNoetig = tierErg.brems; }
       const hindernisFaktor = this._streckenHindernisse(n, Math.max(0, tempo), grenze);
 
       // ---------- Stoß erkannt? (Tempo bricht plötzlich ein) ----------
@@ -517,7 +637,7 @@
         if (this.rang >= (RP.kiAbRang || 4)) {
           for (const o of andere) {
             const ov = o.vehicle;
-            if (!ov || ov === v || ov.imLooping || ov.imFlug || (quer && quer.quer.has(ov))) continue;   // W4-J: Querverkehr nicht rammen
+            if (!ov || ov === v || o.tier || ov.imLooping || ov.imFlug || (quer && quer.quer.has(ov))) continue;   // W4-J: Querverkehr nicht rammen (v28c: Tiere auch nicht)
             if (Math.hypot(ov.x - v.x, ov.z - v.z) > (RP.kiAbstand || 6) + 3) continue;
             const on = sp.naechster(ov.x, ov.z, this.index);
             if (this._andereEbene(ov, on)) continue;   // W4-I
@@ -551,6 +671,7 @@
       if (gegenVoraus) soll *= GEGEN_FAKTOR;
       if (langsamVoraus) soll *= LANGSAM_FAKTOR;   // vorsichtig vorbei, aber weiterfahren
       if (kriechen) soll = Math.min(soll, KRIECH_TEMPO);
+      if (tierErg && tierErg.soll < soll) soll = tierErg.soll;   // v28c A1: Tier voraus
       this.zieltempo = soll;
 
       let gas = 0, bremse = 0;

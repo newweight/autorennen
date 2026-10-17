@@ -10,6 +10,9 @@
 //  G1) Geister (Gegenprobe): B fährt durch A hindurch (Durchdringung, Tempo bleibt)
 //  G2) Geister: Spieler ↔ Verkehrswagen stößt trotzdem (v25)
 //  P)  Ping auf localhost (2 Fenster auf einem Mac) ≈ 1 ms → weit unter 100 ms
+//  U)  v28c: Überlappung je Quelle (tests/rempeln_netz_messung.js, Gleichschritt: echter Server-Code + 2 Clients mit dem Browser-Code der Anzeige,
+//      Latenz 0/50/100/200 ms) in 7 Fällen (Stand/Stand überlappend abgestellt, langsam, schnell, schieben, schräg, frontal, nebeneinander):
+//      Server nach 0,5 s 0 m; Host- und Gast-Anzeige ≤ 0,3 m dauerhaft (kurze Spitzen ≤ 0,8 m für ≤ 150 ms); Gegenprobe ohne Trennung (Stand v28b) > 1 m
 'use strict';
 const path = require('path');
 const WebSocket = require(path.join(__dirname, '..', 'server', 'node_modules', 'ws'));
@@ -119,6 +122,31 @@ async function szenario(raum, opt) {
   raum.gast.steuer(0, 0); raum.host.steuer(0, 0);
   if (process.env.DEBUG) console.log('  dbg', JSON.stringify({ T: [T.x, T.z, T.vLaengs], B: [B.x, B.z, B.vLaengs], p: [p.x, p.z], aktiv: opt.verkehr ? ziel.verkehr && ziel.verkehr.aktiv : null, gas: raum.r.sim.sim.rennen.gasErlaubt }));
   return { minD, vMin, vStart, soll, minObb, stoesse, n, LA, LB };
+}
+
+// ---------------- U) Überlappung je Quelle (synchron, ohne Netzwerk-Zeitrauschen)
+{
+  const M = require('./rempeln_netz_messung');
+  const LAT = [0, 50, 100, 200];
+  const anzOk = (x) => x.tief <= 0.3 || (x.tief <= 0.8 && x.ms03 <= 150);
+  const f = (x) => `${x.tief.toFixed(2)} m${x.ms03 ? ' [' + x.ms03 + ' ms > 0,3]' : ''}`;
+  for (const name of Object.keys(M.SZENARIEN)) {
+    const zeilen = [], serverZ = [];
+    let gutS = true, gutA = true, stoss = true;
+    for (const l of LAT) {
+      const r = M.lauf(name, l), a = M.auswerten(r), a05 = M.auswerten(r, { ab: 30 });
+      if (!(a05.server.tief < 0.01)) gutS = false;
+      if (!anzOk(a.host) || !anzOk(a.gast)) gutA = false;
+      if (name !== 'stand_stand' && !(r.stoesseVorhersage[1] > 0)) stoss = false;
+      serverZ.push(`${l} ms ${a05.server.tief.toFixed(2)}`);
+      zeilen.push(`${l} ms: Gast ${f(a.gast)} / Host ${f(a.host)} (Versatz max ${a.gastTrenn.toFixed(2)} m)`);
+    }
+    pruefe(`U ${name}: Server-Überlappung nach 0,5 s = 0 (0/50/100/200 ms)`, gutS, serverZ.join(', '));
+    pruefe(`U ${name}: Anzeige Host + Gast ≤ 0,3 m (Spitzen ≤ 0,8 m ≤ 150 ms)` + (name !== 'stand_stand' ? ', Gast-Vorhersage stößt' : ''), gutA && stoss, zeilen.join(' | '));
+  }
+  // Gegenprobe: ohne Anzeige-Trennung (Stand v28b) misst der Test das gemeldete Durchfahren (Gast-Sicht 1–2 m)
+  const g = M.auswerten(M.lauf('schieben', 100, { ohneTrennen: true }));
+  pruefe('U Gegenprobe ohne Trennung (v28b): Gast-Sicht beim Schieben (100 ms) > 1 m Überlappung, Server 0', g.gast.tief > 1 && g.server.tief < 0.01, `Gast ${f(g.gast)}, Server ${g.server.tief.toFixed(2)} m`);
 }
 
 (async () => {

@@ -4,16 +4,25 @@ Zwei Browser (wie Vater: 2 Fenster auf einem Mac, localhost) gegen server/server
  a) Speicherstand: frisch → Rempeln; alter Stand {kollisionen:false} ohne kollisionenGewaehlt → Rempeln;
     selbst gewählt {kollisionen:false, kollisionenGewaehlt:true} → Geister bleibt; altes true bleibt true
  b) Lobby: Host ohne Klick → Rempeln aktiv, Gast sieht „Rempeln an“, Texte „🚗💥 Rempeln (normal)“ / „👻 Geister – durchfahren“
- c) Rennen (Wiese, 0 Computer): Host steht, Gast fährt auf das Host-Auto. Gemessen in der GAST-Sicht je ~40 ms die
-    ANGEZEIGTEN Autos (eigenes = Vorhersage, fremdes = NetzAnzeige) als Rechtecke (Kollisionen.obbAbstand, < 0 = Überlappung):
-    kein optisches Durchfahren (größte Überlappung < 0,5 m, Mitten nie näher als die halbe Fahrzeuglänge), Gast bremst ab.
-    Dazu der Ping im HUD.
+ c) Rennen (Wiese, 0 Computer): Host steht (bremst), Gast fährt auf das Host-Auto und schiebt es (Gas gehalten).
+    v28c: Der GAST hängt hinter einem Latenz-Proxy (tests/latenz_proxy.js, Rundlauf 0/50/100/200 ms nacheinander im selben Rennen, je 12 s),
+    der Host direkt (wie Vater am Mac + Freund über Tailscale). Gemessen wird IN BEIDEN SEITEN nach jedem Physikschritt (Hook auf
+    online.physikSchritt, kein Abfragen im 40-ms-Takt mehr; gemessen wird ohne Zeichnen – Software-Grafik schafft auf 2 Kernen sonst nur 3–5 Bilder/s –,
+    für die Bilder wird kurz gezeichnet) als Rechteck-Abstand (Kollisionen.obbAbstand, < 0 = Überlappung):
+      Anzeige (eigenes Auto wie gezeichnet gegen das angezeigte andere Auto), Vorhersage (eigene Vorhersage ohne Korrektur/Trennung gegen das
+      angezeigte andere), dazu die SERVER-Positionen beider Autos aus jedem empfangenen Zustand. Beide Seiten müssen takten: ≥ 15 Physikschritte/s
+      (auf dem Test-Rechner, 2 Kerne + Parallel-Last, schaffen sie 25–38/s und stehen beide gleichzeitig bis 0,6–2,2 s still = Rechner-Last, nur Info;
+      gemessen wird je Schritt, das Spiel holt Eingaben nach – NetzEingabeTakt; den exakten 60-Hz-Fall misst tests/test_online_rempeln.js Block U).
+    Bestanden je Latenz: Gast- und Host-Anzeige ≤ 0,3 m dauerhaft (kurze Spitzen ≤ 0,8 m für ≤ 150 ms), Server ≤ 0,05 m (Rundung), Stöße in der
+    Vorhersage. Bilder der Gast-Sicht beim Kontakt: <ausgabe>/rempeln_<ms>ms.png (Standard tests/out/v28c). Dazu der Ping im HUD.
 """
 import sys, os, socket, subprocess, time, json
 from playwright.sync_api import sync_playwright
 
 basis = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(basis, 'tests', 'out', 'v28C')
+out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(basis, 'tests', 'out', 'v28c')
+LATENZEN = [0, 50, 100, 200]
+PHASE_S = 12
 os.makedirs(out, exist_ok=True)
 fails, fehler = [], []
 
@@ -29,11 +38,46 @@ for _ in range(50):
     try:
         socket.create_connection(('127.0.0.1', port), timeout=0.2).close(); break
     except OSError: time.sleep(0.1)
+# v28c: Gast über einen Latenz-Proxy (Rundlauf per stdin umschaltbar)
+prx = subprocess.Popen(['node', os.path.join(basis, 'tests', 'latenz_proxy.js'), str(port), '0'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+pport = int(prx.stdout.readline().split()[1])
+gurl = 'http://127.0.0.1:%d/' % pport
+def rtt(ms):
+    prx.stdin.write('rtt %d\n' % ms); prx.stdin.flush(); prx.stdout.readline()
 
-MESSUNG = """() => { const s = Rennspiel.spiel, o = s.online, R = Rennspiel, ich = s.fahrzeuge[o.du], er = s.fahrzeuge[0];
-  const ov = R.Kollisionen.obbAbstand(ich.vehicle, er.vehicle);
-  return { ov, d: Math.hypot(ich.vehicle.x - er.vehicle.x, ich.vehicle.z - er.vehicle.z), v: o.vorhersage.vp.vLaengs, L: (ich.vehicle.daten.laenge + er.vehicle.daten.laenge) / 2,
-    stoesse: o.vorhersage.stat.stoesse, rz: s.rennen.zustand, ping: o.verb && o.verb.ping }; }"""
+# v28c: Rekorder je Seite – nach JEDEM Physikschritt (Anzeige/Vorhersage) und je empfangenem Zustand (Server-Positionen)
+REKORDER = """() => { const s = Rennspiel.spiel, o = s.online, K = Rennspiel.Kollisionen, er = o.du === 0 ? 1 : 0;
+  const rec = window.__rec = { st: [], zu: [] };
+  // Software-Grafik (SwiftShader) auf 2 Kernen schafft sonst nur 3–5 Bilder/s → die Messung (Logik der Anzeige) läuft ohne Zeichnen; für Bilder kurz an
+  window.__zAus = () => { s.zeichnen = function () {}; }; window.__zAn = () => { delete s.zeichnen; }; window.__zAus();
+  const box = (a, d) => ({ x: a[0], z: a[1], heading: a[3], daten: d });
+  const ps = o.physikSchritt;
+  o.physikSchritt = function (dt) { ps.call(this, dt); const V = o.vorhersage; if (!V || o.phase !== 'rennen') return;
+    const ich = s.fahrzeuge[o.du].vehicle, an = s.fahrzeuge[er].vehicle;
+    rec.st.push([performance.now(), K.obbAbstand(ich, an), K.obbAbstand(V.vp, an), Math.hypot(ich.x - an.x, ich.z - an.z), V.stat.stoesse, V.trenn ? Math.hypot(V.trenn.x, V.trenn.z) : 0, o.verb && o.verb.ping]); };
+  const ze = o.zustandEmpfangen;
+  o.zustandEmpfangen = function (z) { ze.call(this, z); if (z && z.a && z.a[0] && z.a[1]) rec.zu.push([performance.now(), K.obbAbstand(box(z.a[0], s.fahrzeuge[0].vehicle.daten), box(z.a[1], s.fahrzeuge[1].vehicle.daten))]); };
+  return true; }"""
+HOLEN = "() => { const r = window.__rec, x = { st: r.st, zu: r.zu }; r.st = []; r.zu = []; return x; }"
+
+def auswerten(st):
+    """tiefste Überlappung (m), längste Zeit am Stück > 0,3 m (ms), Schritte/s, Kontakt-Schritte (Mitten < 6 m)."""
+    tief, lauf0, lmax, n = 0.0, None, 0.0, 0
+    # None = Marke um ein Bildschirmfoto (dort wird kurz gezeichnet, die Seite steht) → Lücken über die Marke zählen nicht
+    luecke = max([0.0] + [st[i][0] - st[i - 1][0] for i in range(1, len(st)) if st[i] and st[i - 1]])
+    st = [w for w in st if w]
+    for w in st:
+        ov = w[1]
+        tief = max(tief, -ov)
+        if ov < -0.3:
+            if lauf0 is None: lauf0 = w[0]
+            lmax = max(lmax, w[0] - lauf0)
+        else: lauf0 = None
+    dauer = (st[-1][0] - st[0][0]) / 1000 if len(st) > 1 else 0
+    kontakt = sum(1 for w in st if w[3] < 6)
+    vtief = max([0.0] + [-w[2] for w in st])
+    return {'tief': round(tief, 2), 'ms03': round(lmax), 'sps': round(len(st) / dauer) if dauer else 0, 'luecke': round(luecke), 'kontakt': kontakt, 'vtief': round(vtief, 2),
+            'stoesse': (st[-1][4] - st[0][4]) if st else 0, 'trenn': round(max([0.0] + [w[5] for w in st]), 2)}
 
 try:
     with sync_playwright() as p:
@@ -66,7 +110,7 @@ try:
         host.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby !== null && Rennspiel.spiel.menue.onlineUi.ansicht === 'lobby'", timeout=15000, polling=200)
         code = host.evaluate('Rennspiel.spiel.menue.onlineUi.lobby.code')
         gast = seite('Gast')
-        gast.goto(url + '?raum=' + code)
+        gast.goto(gurl + '?raum=' + code)
         gast.wait_for_function("window.Rennspiel && Rennspiel.spiel && Rennspiel.spiel.menue.onlineUi && ['code','lobby'].includes(Rennspiel.spiel.menue.onlineUi.ansicht)", timeout=90000, polling=200)
         if gast.evaluate("Rennspiel.spiel.menue.onlineUi.ansicht") == 'code': gast.keyboard.press('Enter')
         gast.wait_for_function("Rennspiel.spiel.menue.onlineUi.ansicht === 'lobby'", timeout=15000, polling=200)
@@ -98,26 +142,49 @@ try:
             return { gas: 1, bremse: 0, lenkung: Math.max(-1, Math.min(1, -3 * Math.sin(d))) }; };
           return true; }""")
         gast.wait_for_function("Rennspiel.spiel.rennen.gasErlaubt === true", timeout=30000, polling=200)
-        werte, t0 = [], time.time()
-        while time.time() - t0 < 14:
-            werte.append(gast.evaluate(MESSUNG)); gast.wait_for_timeout(40)
-            if len(werte) % 60 == 0: gast.screenshot(path=os.path.join(out, 'w5_gast_%02d.png' % (len(werte) // 60)))
-        nah = [w for w in werte if w['d'] < 12]
-        ovmin = min(w['ov'] for w in werte); dmin = min(w['d'] for w in werte); L = werte[0]['L']
-        vmax = max(w['v'] for w in werte); stoss = werte[-1]['stoesse']
-        pruefe('c) Gast-Sicht: eigenes Auto fährt optisch NICHT durch das Host-Auto (Überlappung < 0,5 m, Mitten ≥ halbe Länge), Stöße in der Vorhersage',
-               len(nah) > 5 and ovmin > -0.5 and dmin > 0.5 * L and stoss >= 1,
-               'Messungen %d (davon nah %d), Rechteck min %.2f m, Mitten min %.2f m (Länge %.2f), Stöße %d, v max %.1f' % (len(werte), len(nah), ovmin, dmin, L, stoss, vmax))
+        for pg in (host, gast):
+            pg.set_viewport_size({'width': 640, 'height': 400})     # weniger Software-Grafik → beide Seiten takten
+            pg.evaluate(REKORDER)
+        alle, pings = {}, []
+        def foto(pfad):
+            # Bild der Gast-Sicht: kurz zeichnen; beide Seiten bekommen eine Marke (None), Lücken darüber zählen nicht als Takt-Stillstand
+            host.evaluate('window.__rec.st.push(null)')
+            gast.evaluate('window.__rec.st.push(null); window.__zAn()'); gast.wait_for_timeout(250)
+            gast.screenshot(path=pfad)
+            gast.evaluate('window.__zAus(); window.__rec.st.push(null)'); host.evaluate('window.__rec.st.push(null)')
+        for L in LATENZEN:
+            rtt(L)
+            gast.wait_for_timeout(4000 if L == LATENZEN[0] else 3000)   # Uhr/Warteschlange stellen sich auf die neue Latenz ein (erste Phase: Gast fährt erst heran)
+            host.evaluate(HOLEN); gast.evaluate(HOLEN)
+            bild, t0 = False, time.time()
+            while time.time() - t0 < PHASE_S:
+                gast.wait_for_timeout(500)
+                if not bild:
+                    w = gast.evaluate("() => { const r = window.__rec.st.filter(Boolean); return r.length ? r[r.length - 1] : null; }")
+                    if w and w[3] < 5.6:
+                        foto(os.path.join(out, 'rempeln_%dms.png' % L)); bild = True
+            hg, gg = host.evaluate(HOLEN), gast.evaluate(HOLEN)
+            if not bild:
+                foto(os.path.join(out, 'rempeln_%dms.png' % L))
+            eh, eg = auswerten(hg['st']), auswerten(gg['st'])
+            srv_tief = round(max([0.0] + [-z[1] for z in gg['zu']] + [-z[1] for z in hg['zu']]), 2)
+            pings += [w[6] for w in gg['st'] if w and isinstance(w[6], (int, float))]
+            alle[L] = {'host': eh, 'gast': eg, 'server': srv_tief, 'zustaende': len(gg['zu'])}
+            ok_anz = lambda e: e['tief'] <= 0.3 or (e['tief'] <= 0.8 and e['ms03'] <= 150)
+            pruefe('c) %3d ms: Gast-Anzeige ≤ 0,3 m (Spitzen ≤ 0,8 m ≤ 150 ms), Host-Anzeige dito, Server ≤ 0,05 m, Kontakt + Stöße, beide takten' % L,
+                   ok_anz(eg) and ok_anz(eh) and srv_tief <= 0.05 and eg['kontakt'] > 30 and eg['stoesse'] >= 1 and min(eg['sps'], eh['sps']) >= 15,
+                   'Gast Anzeige %.2f m [%d ms > 0,3] (Vorhersage %.2f, Versatz max %.2f) | Host %.2f m [%d ms] | Server %.2f m (%d Zustände) | Kontakt %d Schritte, Stöße %d | Schritte/s Gast %d Host %d, längste Lücke %d/%d ms (nur Info)'
+                   % (eg['tief'], eg['ms03'], eg['vtief'], eg['trenn'], eh['tief'], eh['ms03'], srv_tief, len(gg['zu']), eg['kontakt'], eg['stoesse'], eg['sps'], eh['sps'], eg['luecke'], eh['luecke']))
+        gast.evaluate('window.__rec.st.push(null); window.__zAn()'); gast.wait_for_timeout(300)
         gast.screenshot(path=os.path.join(out, 'w5_gast_ende.png'))
-        pings = [w['ping'] for w in werte if isinstance(w['ping'], (int, float))]
         pt = gast.evaluate("Rennspiel.spiel.online.pingEl && Rennspiel.spiel.online.pingEl.textContent")
         # nur Info: hier rechnen 2 Browser mit Software-Grafik (SwiftShader) auf einer CPU – der HUD-Ping enthält die Bildzeit des
         # überlasteten Hauptthreads. Der reine Netz-Ping localhost steht in tests/test_online_rempeln.js (P, ~0–1 ms).
-        print('INFO c) HUD-Ping im Test-Browser (Software-Grafik, belastet): min %s / max %s ms, HUD „%s“' % (round(min(pings)) if pings else None, round(max(pings)) if pings else None, pt), flush=True)
-        with open(os.path.join(out, 'w5_browser_messung.json'), 'w') as f: json.dump(werte, f)
+        print('INFO c) HUD-Ping Gast (inkl. Proxy-Latenz, Software-Grafik): min %s / max %s ms, HUD „%s“' % (round(min(pings)) if pings else None, round(max(pings)) if pings else None, pt), flush=True)
+        with open(os.path.join(out, 'rempeln_browser_messung.json'), 'w') as f: json.dump(alle, f, indent=1)
         browser.close()
 finally:
-    srv.terminate()
+    srv.terminate(); prx.terminate()
 echt = [f for f in fehler if 'favicon' not in f]
 pruefe('keine JS-Fehler', not echt, echt[:5])
 print('\n%d FAIL' % len(fails))

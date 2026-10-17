@@ -190,6 +190,21 @@
     return -minOv;
   }
 
+  /**
+   * v28c (nur Anzeige, vorhersage.js NetzVorhersage.trennen): Durchdringung zweier Rechtecke OHNE Impuls/Trennung (nichts wird verändert).
+   * altA/altB = Posen { x, z, h } des vorigen Bildes: waren sie da noch getrennt, gilt wie in kontakt() die Achse, die zuletzt überlappt hat
+   * (Aufprallrichtung – sonst würde ein tief steckendes Auto zur Seite statt zurück geschoben). Liefert null (keine Überlappung) oder
+   * { nx, nz (A→B), tief (m) }: A um −n·tief verschieben trennt die beiden gerade.
+   */
+  function eindringung(A, B, altA, altB) {
+    const sa = A._kollAlt, sb = B._kollAlt;
+    A._kollAlt = altA || null; B._kollAlt = altB || null;
+    try {
+      const k = kontakt(A, B, 0);
+      return k && k.tief > 0 ? { nx: k.nx, nz: k.nz, tief: k.tief } : null;
+    } finally { A._kollAlt = sa; B._kollAlt = sb; }
+  }
+
   /** Eckpunkte eines Rechtecks. */
   function ecken(b) {
     const l = [];
@@ -845,5 +860,5 @@
   }
 
   R.Kollisionen = { bande, autoAuto, kapsel, hindernisse, wracksEinbauen,
-    obbAbstand, loopingAbstand, pflanzenSammeln, pflanzen };   // Runde 6
+    obbAbstand, eindringung, loopingAbstand, pflanzenSammeln, pflanzen };   // Runde 6; v28c: eindringung (nur Anzeige)
 })();
