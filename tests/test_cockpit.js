@@ -54,6 +54,6 @@ const alleElemente = [];
 ['vw', 'porsche'].forEach((s) => Object.keys(C[s]).forEach((n) => { if (typeof C[s][n] === 'object') alleElemente.push([s + '.' + n, C[s][n]]); }));
 alleElemente.push(['spiegel', C.spiegel]);
 alleElemente.forEach(([n, e]) => ok('Config ' + n + ': x/y/b in 0..100 und Element liegt im Bild', e.x > 0 && e.x < 100 && e.y > 0 && e.y <= 100 && e.b > 0 && e.b <= 100 && (e.h === undefined || (e.h > 0 && e.h <= 100)) && e.x - e.b / 2 >= -0.01 && e.x + e.b / 2 <= 100.01));
-ok('Standardwerte: Spiegel an, Zweispieler aus, Wischer nur Cockpit', C.an && C.spiegel.an && C.spiegel.zweispieler === 'aus' && C.wischer.modi.join() === 'cockpit');
+ok('Standardwerte: Spiegel an, Zweispieler an (v31), Wischer nur Cockpit', C.an && C.spiegel.an && C.spiegel.zweispieler === 'an' && C.wischer.modi.join() === 'cockpit');
 console.log(fehl ? '\n' + fehl + ' FEHLER' : '\nALLE TESTS OK');
 process.exit(fehl ? 1 : 0);

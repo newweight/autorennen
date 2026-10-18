@@ -55,6 +55,7 @@
   const BREMS_ANTEIL = 0.6;        // geplante Verzögerung = 60 % der Bremsleistung des Autos
   const QUER_SICHERHEIT = 0.9;     // Kurventempo mit 90 % der Querhaftung planen (Reserve zum Korrigieren)
   const ROLLEN_BAND = 1.5;         // m/s über dem Zieltempo: nur rollen, nicht bremsen
+  const LOOP_EINSCHWENK = 100;     // m vor dem Looping: Querlage allmählich auf die Einstiegsspur des Bandes (v31 H1)
   const VERSATZ_MAX = 3;           // m seitlicher Grundversatz (± aus dem Seed)
   const SPUR_GRENZE_RAND = 2.2;    // m Abstand der Auto-Mitte zum Straßenrand (mindestens)
   const ASTWAHL_VORAUS = 140, ASTWAHL_NACH = 40;   // 14.10. (v18): Gabelung – so weit vor der Teilung wird der Ast gewählt, so weit nach der Zusammenführung gilt er noch
@@ -187,6 +188,7 @@
       const opt = Object.assign({ schwierigkeit: R.config.schwierigkeitStandard, seed: 1, name: 'Computer' }, optionen);
       this.vehicle = vehicle;
       this.strecke = strecke;
+      vehicle.loopingFuehren = true;   // v31 H1: nur Computerfahrer (KI/Autopilot/Polizei) werden vor dem Looping auf die Einstiegsspur geführt (track/looping.js)
       this.spline = strecke.spline;
       this.name = opt.name;
       this.schwierigkeit = opt.schwierigkeit;
@@ -773,6 +775,15 @@
       if (q * k > 0) q /= 1 + Math.abs(k) * 70;
       // "unschlagbar": Kurven innen schneiden (voll ab Radius 120 m, weich eingeblendet)
       if (this.innenSchneiden) q += Math.sign(k) * this.innenSchneiden * glatt(Math.abs(k) * 120 - 0.3);
+      // v31 (H1): vor einem Looping allmählich auf die Einstiegsspur (Bandmitte beim Einstieg, links) einschwenken – so kämpft die KI
+      // nicht gegen die Führung in track/looping.js (fuehren) und kommt von selbst im Band an
+      const lps = this.strecke.loopings;
+      if (lps && lps.length) {
+        for (let i = 0; i < lps.length; i++) {
+          const d = sp.differenzS(lps[i].s, s);      // > 0: Looping liegt voraus
+          if (d > -2 && d < LOOP_EINSCHWENK) { const w = glatt(1 - Math.max(0, d) / LOOP_EINSCHWENK); q = q * (1 - w) + (-lps[i].seitenVersatz / 2) * w; break; }
+        }
+      }
       return q;
     }
 

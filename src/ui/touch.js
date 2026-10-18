@@ -2,6 +2,7 @@
 // W5-3: Touch-Steuerung für Handy/Tablet (reines Add-on, Desktop bleibt bitgleich)
 //
 // - Erkennung: 'ontouchstart' in window || navigator.maxTouchPoints > 0  (URL ?touch=1 erzwingt, ?touch=0 sperrt)
+//   v31 H4: Das reicht NICHT mehr für „Touch-UI an“ (Touch-Laptops!): Modus 'touch' nur bei (pointer: coarse) und ohne Tastendruck, siehe T.modus unten.
 //   Ohne Touch tut diese Datei NICHTS (kein DOM, keine Haken): R.Touch = { aktiv: false }.
 // - Bildschirm-Tasten im Rennen (lokal und online): links ◀ ▶ (Lenken), rechts ▲ Gas / ▼ Bremse+Rückwärts, unten Mitte
 //   Item / Reset / Kamera, oben Pause (online: 🚪 = „Rennen verlassen?“) und 📱 Neigen (Neigungssteuerung, optional).
@@ -25,9 +26,25 @@
     return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
   }
 
-  const AKTIV = erkennen();
-  const T = R.Touch = { aktiv: AKTIV };
+  const AKTIV = erkennen();     // Touch-Hardware da (Handy, Tablet, Touch-Laptop)? Nur dann wird das Modul überhaupt aufgebaut
+  const T = R.Touch = { aktiv: AKTIV, modus: 'tastatur' };
   if (!AKTIV) return;
+
+  // v31 H4: Welche EINGABE gilt? 'touch' = Bildschirm-Tasten + Handy-Layout, 'tastatur' = normales Desktop-HUD.
+  // Ein Touch-Laptop (Windows, Chrome) meldet maxTouchPoints > 0, hat aber Tastatur/Touchpad (pointer: fine) → startet mit Tastatur.
+  // Handy/Tablet (pointer: coarse) startet mit Touch. Erster echter Tastendruck (Pfeile/WASD) → Tastatur (gemerkt),
+  // Berührung der Knopfzone im Rennen oder Knopf „🎮 Touch-Steuerung“ im Pausemenü/in den Einstellungen → Touch (gemerkt).
+  // ?touch=1 erzwingt Touch (ohne Merken). Gemerkt wird in localStorage 'rennspiel.eingabe' ('tastatur' | 'touch').
+  const SCHLUESSEL = 'rennspiel.eingabe';
+  function gemerkt() { try { const v = window.localStorage.getItem(SCHLUESSEL); return v === 'touch' || v === 'tastatur' ? v : null; } catch (e) { return null; } }
+  function merken(v) { try { window.localStorage.setItem(SCHLUESSEL, v); } catch (e) { /* egal */ } }
+  function grobZeiger() { try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch (e) { return false; } }
+  (function () {
+    let p = null;
+    try { p = new URLSearchParams(location.search).get('touch'); } catch (e) { /* egal */ }
+    T.modus = p === '1' ? 'touch' : (gemerkt() || (grobZeiger() ? 'touch' : 'tastatur'));
+  })();
+  T.an = () => T.modus === 'touch';
 
   const klemme = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -162,7 +179,7 @@ html.touch-an:not(.t-rennen) #t-voll.geht { display: flex; }
     const st = document.createElement('style');
     st.textContent = STIL;
     document.head.appendChild(st);
-    document.documentElement.classList.add('touch-an');
+    document.documentElement.classList.toggle('touch-an', T.modus === 'touch');
 
     wurzel = document.createElement('div');
     wurzel.id = 'touch';
@@ -314,23 +331,56 @@ html.touch-an:not(.t-rennen) #t-voll.geht { display: flex; }
     menueGebunden = true;
     new MutationObserver(() => {
       const nav = menue.querySelector('.m-nav');
-      if (!nav || nav.querySelector('[data-a="start"]') || !menue.querySelector('.start-knopf')) return;
+      if (T.modus !== 'touch' || !nav || nav.querySelector('[data-a="start"]') || !menue.querySelector('.start-knopf')) return;   // v31: im Tastatur-Modus keine Extra-Taste
       const k = document.createElement('div');
-      k.className = 'knopf klein gruen'; k.dataset.a = 'start'; k.textContent = '🏁 Los!';
+      k.className = 'knopf klein gruen'; k.dataset.a = 'start'; k.dataset.tLos = '1'; k.textContent = '🏁 Los!';
       nav.appendChild(k);
     }).observe(menue, { childList: true });
   }
 
+  let imRennen = false;   // läuft gerade ein Rennen (unabhängig davon, ob die Tasten gezeigt werden)?
+
+  /** v31: einmaliger Hinweis (3 s) bei Touch-Hardware ohne Touch-UI (z. B. iPad mit Tastatur/Maus): so kommt man zu den Knöpfen. */
+  let hinweisGezeigt = false;
+  function tippHinweis() {
+    if (hinweisGezeigt) return;
+    hinweisGezeigt = true;
+    const h = document.createElement('div');
+    h.id = 't-tipp'; h.textContent = '👆 Tippen unten = Touch-Steuerung';
+    h.style.cssText = 'position:fixed;left:50%;bottom:24%;transform:translateX(-50%);z-index:29;pointer-events:none;white-space:nowrap;font:900 2em/1.2 Arial,sans-serif;color:#fff;' +
+      'padding:.25em .8em;border-radius:2em;background:linear-gradient(90deg,#ff5fa2,#a66bff);box-shadow:0 4px 14px rgba(0,0,0,.4);';
+    document.body.appendChild(h);
+    setTimeout(() => { h.remove(); }, 3000);
+  }
+
+  /** Eingabeart wechseln ('touch' | 'tastatur'); merken = in localStorage ablegen. */
+  function modusSetzen(m, merk) {
+    if (m !== 'touch' && m !== 'tastatur') return;
+    if (merk !== false) merken(m);
+    if (m === T.modus) return;
+    T.modus = m;
+    document.documentElement.classList.toggle('touch-an', m === 'touch');
+    if (m !== 'touch') { allesLoslassen(); document.querySelectorAll('[data-t-los]').forEach((k) => k.remove()); }
+    beobachten();
+    knopfBeschriften();
+  }
+  T.modusSetzen = modusSetzen;
+
   function beobachten() {
     if (!menueGebunden) menueBinden();
+    if (!beobachtet.pause || !beobachtet.menue) eingabeKnoepfe();
     const u = umgebung(), de = document.documentElement;
-    if (u.rennen !== T.zeigt) {
-      T.zeigt = u.rennen;
+    const warRennen = imRennen;
+    imRennen = !!u.rennen;
+    if (imRennen && !warRennen && T.modus !== 'touch') tippHinweis();
+    const sicht = u.rennen && T.modus === 'touch';
+    if (sicht !== T.zeigt) {
+      T.zeigt = sicht;
       de.classList.toggle('t-rennen', T.zeigt);
       if (!T.zeigt) allesLoslassen();
       wachhalten(T.zeigt);
     }
-    if (!u.rennen) return;
+    if (!sicht) return;
     if (letzteOnline !== u.online) {
       letzteOnline = u.online;
       knoepfe.pause.textContent = u.online ? '🚪' : '⏸';
@@ -376,6 +426,48 @@ html.touch-an:not(.t-rennen) #t-voll.geht { display: flex; }
     R.Input.prototype._touchEingehuellt = true;
   }
 
+  // 3) v31 H4: Eingabeart erkennen und umschalten
+  const TASTEN = /^(Arrow(Up|Down|Left|Right)|Key[WASD])$/;
+  window.addEventListener('keydown', (e) => {
+    // Nur echte Tasten (die Bildschirm-Tasten senden selbst KeyboardEvents, isTrusted = false)
+    if (e.isTrusted && TASTEN.test(e.code) && T.modus !== 'tastatur') modusSetzen('tastatur');
+  }, true);
+  window.addEventListener('pointerdown', (e) => {
+    // Erste Berührung der Knopfzone (untere Bildhälfte) im Rennen blendet die Tasten wieder ein
+    if (e.isTrusted && e.pointerType === 'touch' && T.modus !== 'touch' && imRennen && e.clientY > innerHeight * 0.5) modusSetzen('touch');
+  }, true);
+
+  // Knopf „🎮 Touch-Steuerung an/aus“ im Pausemenü (#pause) und in den Einstellungen (Menü-Schritt 5, neben „Ton“)
+  function knopfText() { return '🎮 Touch-Steuerung: ' + (T.modus === 'touch' ? 'an' : 'aus'); }
+  function knopfBeschriften() { document.querySelectorAll('[data-eingabe]').forEach((k) => { k.textContent = knopfText(); }); }
+  function knoepfeEinfuegen() {
+    const pause = document.querySelector('#pause .pause-karte');
+    if (pause && !pause.querySelector('[data-eingabe]')) {
+      const k = document.createElement('div');
+      k.className = 'knopf blau'; k.dataset.eingabe = '1'; k.textContent = knopfText();
+      pause.appendChild(k);
+    }
+    const akt = document.querySelector('#menue .m-aktionen');
+    if (akt && !akt.querySelector('[data-eingabe]')) {
+      const k = document.createElement('div');
+      k.className = 'knopf klein ton'; k.dataset.eingabe = '1'; k.textContent = knopfText();
+      akt.appendChild(k);
+    }
+  }
+  const beobachtet = {};
+  function eingabeKnoepfe() {   // läuft im 10-Hz-Takt, bis #pause und #menue (von main.js später angelegt) beobachtet werden
+    ['pause', 'menue'].forEach((id) => {
+      const w = document.getElementById(id);
+      if (w && !beobachtet[id]) { beobachtet[id] = true; new MutationObserver(knoepfeEinfuegen).observe(w, { childList: true, subtree: true }); knoepfeEinfuegen(); }
+    });
+  }
+  document.addEventListener('click', (e) => {
+    const k = e.target.closest && e.target.closest('[data-eingabe]');
+    if (!k) return;
+    e.stopPropagation(); e.preventDefault();
+    modusSetzen(T.modus === 'touch' ? 'tastatur' : 'touch');
+  }, true);
+
   function start() {
     aufbauen();
     // 2) Qualität: eine Stufe niedriger (pixelRatio 1,25 statt 1,5; die adaptive Regelung läuft wie gehabt darunter weiter)
@@ -383,6 +475,7 @@ html.touch-an:not(.t-rennen) #t-voll.geht { display: flex; }
       const orig = R.Spiel.prototype._startStufe;
       R.Spiel.prototype._startStufe = function () {
         const st = R.config.grafik.qualitaetsStufen, i = orig.call(this);
+        if (T.modus !== 'touch') return i;   // Tastatur-Modus (Touch-Laptop): Desktop-Qualität
         return Math.min(st.length - 1, i + 1);
       };
       R.Spiel.prototype._touchStufe = true;

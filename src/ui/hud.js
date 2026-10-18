@@ -172,12 +172,13 @@
       this.f = opt.fahrzeug;
       this.nr = opt.nr;
       this.split = !!opt.split;
+      this.seite = opt.seite !== undefined ? opt.seite : this.nr;   // v31 (H3): Bildhälfte 0 = links, 1 = rechts
       this.bannerTimer = null;
       this.bannerFest = false;     // Zieleinlauf-Meldung bleibt stehen
 
       const farbe = R.config.ui.spielerFarben[this.nr] || '#fff';
       const el = document.createElement('div');
-      el.className = 'hud ' + (this.split ? (this.nr === 0 ? 'links' : 'rechts') : 'voll');
+      el.className = 'hud ' + (this.split ? (this.seite === 0 ? 'links' : 'rechts') : 'voll');
       el.style.setProperty('--spielerfarbe', farbe);
       el.innerHTML =
         '<div class="hud-oben">' +
@@ -338,7 +339,7 @@
       if (!this.eItem) {
         const e = document.createElement('div');
         e.className = 'hud-item';
-        Object.assign(e.style, { position: 'absolute', left: this.split && this.nr === 1 ? '1.6em' : '1em', bottom: 'calc(1em + 168px)', whiteSpace: 'nowrap',
+        Object.assign(e.style, { position: 'absolute', left: this.split && this.seite === 1 ? '1.6em' : '1em', bottom: 'calc(1em + 168px)', whiteSpace: 'nowrap',
           fontSize: '1.5em', fontWeight: '900', color: '#fff', padding: '.15em .55em', borderRadius: '.8em', border: '.07em solid #fff',
           background: 'rgba(20,20,30,.78)', pointerEvents: 'none', display: 'none', textShadow: '0 .05em .1em rgba(0,0,0,.5)' });
         this.el.appendChild(e);
@@ -566,6 +567,8 @@
         if (f.resetHinweis) hinweis = 'Festgefahren? ' + (this.nr === 0 ? 'R' : 'T') + ' drücken';
         else if (f.falschHerum) hinweis = '↩ Falsch herum!';
       }
+      // v31 (H3): Zweispieler am selben Rechner – im Countdown kurz zeigen, wer wo fährt
+      if (!hinweis && this.split && r.zustand === 'countdown' && R.config.tasten.zweiLinks === 1) hinweis = '⬅ WASD · Pfeile ➡';
       setzeText(this.eHinweis, hinweis);
       setzeAnzeige(this.eHinweis, !!hinweis);
 

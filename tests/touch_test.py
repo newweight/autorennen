@@ -3,7 +3,7 @@
 Prüft: Bildschirm-Tasten sichtbar (≥ 64 px, nicht über dem HUD), Desktop: nichts; Multi-Touch Gas + Links gleichzeitig,
 Wischen ◀ → ▶, Loslassen; Item-Tipp = wurdeGedrueckt(item1) (auch Reset/Kamera/Pause); Menü bis zum Rennen nur per Tippen
 (zweites Tippen = weiter, Los-Taste in der Leiste); Mobil-Qualität (pixelRatio ≤ 1,5, eine Stufe niedriger); Hochformat-Hinweis;
-Neigung → Lenkung; keine JS-Fehler. Bilder: tests/out/touch/.   Aufruf: python3 tests/touch_test.py"""
+Neigung → Lenkung; keine JS-Fehler. Bilder: tests/out/touch/. v31 H4: Touch-Laptop/Tastatur-Umschaltung, Bilder tests/out/v31/touch_*.png.   Aufruf: python3 tests/touch_test.py"""
 import sys, os
 from playwright.sync_api import sync_playwright
 
@@ -133,14 +133,89 @@ with sync_playwright() as p:
     pruefe('[Desktop] pixelRatio-Startstufe unverändert (1)', page.evaluate('Rennspiel.spiel._startStufe()') == 0)
     page.screenshot(path=os.path.join(out, 'desktop_rennen.png'))
     pruefe('[Desktop] keine JS-Fehler', not fehler, fehler[:3]); ctx.close()
-    geraet(p, browser, 'iPhone 13 landscape', 'iphone')
-    geraet(p, browser, 'iPad (gen 7) landscape', 'ipad')
+    NUR = os.environ.get('TOUCH_NUR') == 'v31'   # nur der v31-Abschnitt (schneller)
+    if not NUR:
+        geraet(p, browser, 'iPhone 13 landscape', 'iphone')
+        if os.environ.get('TOUCH_NUR') != 'iphone': geraet(p, browser, 'iPad (gen 7) landscape', 'ipad')
     # ---- Hochformat ----
     ctx = browser.new_context(**p.devices['iPhone 13']); page = ctx.new_page(); page.goto(url); page.wait_for_timeout(1500)
-    pruefe('[iPhone Hochformat] Hinweis „Bitte Handy quer halten“ sichtbar', page.evaluate("getComputedStyle(document.getElementById('t-quer')).display") == 'flex')
+    if not NUR: pruefe('[iPhone Hochformat] Hinweis „Bitte Handy quer halten“ sichtbar', page.evaluate("getComputedStyle(document.getElementById('t-quer')).display") == 'flex')
     page.screenshot(path=os.path.join(out, 'iphone_hochformat.png')); ctx.close()
     ctx = browser.new_context(**p.devices['iPhone 13 landscape']); page = ctx.new_page(); page.goto(url); page.wait_for_timeout(1500)
     pruefe('[iPhone quer] kein Hochformat-Hinweis', page.evaluate("getComputedStyle(document.getElementById('t-quer')).display") == 'none'); ctx.close()
+
+    # ---- v31 H4: Touch-Laptop (hasTouch ohne isMobile) + Tastatur ----
+    out31 = os.path.join(basis, 'tests', 'out', 'v31'); os.makedirs(out31, exist_ok=True)
+    SICHT = "getComputedStyle(document.getElementById('touch')).display"
+    SCHL = "localStorage.getItem('rennspiel.eingabe')"
+    def rennen_an(page):
+        page.evaluate(START); page.wait_for_timeout(1500); page.evaluate('Rennspiel.spiel.schnellvorlauf(4)'); page.wait_for_timeout(500)
+    # a) Touch-Laptop frisch: Windows-Laptop meldet maxTouchPoints > 0, aber pointer: fine -> Tastatur-Modus, keine Knöpfe
+    ctx = browser.new_context(viewport={'width': 1366, 'height': 768}, has_touch=True, is_mobile=False); page = ctx.new_page(); fehler = []
+    page.on('pageerror', lambda e: fehler.append(str(e)))
+    page.add_init_script("Object.defineProperty(window, 'matchMedia', { value: (q) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }) });")
+    page.goto(url); page.wait_for_timeout(1500)
+    pruefe('[Touch-Laptop] Modul da, Modus = tastatur (pointer: fine)', page.evaluate('Rennspiel.Touch.aktiv') is True and page.evaluate('Rennspiel.Touch.modus') == 'tastatur', page.evaluate('Rennspiel.Touch.modus'))
+    rennen_an(page)
+    pruefe('[Touch-Laptop] Rennen: keine Touch-Knöpfe, kein touch-an/t-rennen', page.evaluate(SICHT) == 'none' and page.evaluate("!document.documentElement.classList.contains('touch-an') && !document.documentElement.classList.contains('t-rennen')"))
+    pruefe('[Touch-Laptop] Startstufe = Desktop (0)', page.evaluate('Rennspiel.spiel._startStufe()') == 0)
+    pruefe('[Touch-Laptop] Hinweis „Tippen unten = Touch-Steuerung“ im Rennstart', page.evaluate("!!document.getElementById('t-tipp')"))
+    page.screenshot(path=os.path.join(out31, 'touch_laptop_tastatur_rennen.png'))
+    page.wait_for_timeout(3300)
+    pruefe('[Touch-Laptop] Hinweis nach 3 s weg', page.evaluate("!document.getElementById('t-tipp')"))
+    # b) Touch erzwingen (?touch=1 simuliert Handy-Start): Knöpfe da -> Tastendruck blendet aus, merkt, bleibt nach Neuladen weg
+    page.goto(url + '?touch=1'); page.wait_for_timeout(1500); rennen_an(page)
+    pruefe('[Touch-Laptop ?touch=1] Knöpfe da', page.evaluate(SICHT) == 'block')
+    page.screenshot(path=os.path.join(out31, 'touch_laptop_knoepfe_an.png'))
+    page.keyboard.down('ArrowUp'); page.wait_for_timeout(300); page.keyboard.up('ArrowUp'); page.wait_for_timeout(300)
+    pruefe('[Touch-Laptop] Tastendruck blendet Knöpfe aus', page.evaluate(SICHT) == 'none' and page.evaluate('Rennspiel.Touch.modus') == 'tastatur')
+    pruefe('[Touch-Laptop] localStorage „tastatur“ gemerkt', page.evaluate(SCHL) == 'tastatur', page.evaluate(SCHL))
+    pruefe('[Touch-Laptop] Layout wie Desktop (kein touch-an)', page.evaluate("!document.documentElement.classList.contains('touch-an')"))
+    page.screenshot(path=os.path.join(out31, 'touch_laptop_nach_taste.png'))
+    page.goto(url + '?touch=1'); page.wait_for_timeout(1500)
+    # c) Neuladen ohne Parameter: bleibt Tastatur (gemerkt); mit ?touch=1 erzwungen wäre wieder Touch -> daher ohne
+    page.goto(url); page.wait_for_timeout(1500); rennen_an(page)
+    pruefe('[Touch-Laptop] nach Neuladen weiterhin Tastatur, keine Knöpfe', page.evaluate(SICHT) == 'none' and page.evaluate('Rennspiel.Touch.modus') == 'tastatur')
+    # d) Berührung der Knopfzone (untere Hälfte) blendet wieder ein und merkt „touch“
+    cdp = ctx.new_cdp_session(page)
+    touch_punkte(cdp, 'touchStart', [(1200, 650)]); page.wait_for_timeout(100); touch_punkte(cdp, 'touchEnd', []); page.wait_for_timeout(400)
+    pruefe('[Touch-Laptop] Berührung unten blendet Knöpfe wieder ein', page.evaluate(SICHT) == 'block' and page.evaluate('Rennspiel.Touch.modus') == 'touch', page.evaluate('Rennspiel.Touch.modus'))
+    pruefe('[Touch-Laptop] localStorage „touch“ gemerkt', page.evaluate(SCHL) == 'touch', page.evaluate(SCHL))
+    page.screenshot(path=os.path.join(out31, 'touch_laptop_wieder_touch.png'))
+    # e) Berührung im Menü ändert nichts (nur im Rennen, untere Hälfte)
+    page.evaluate("localStorage.setItem('rennspiel.eingabe','tastatur')"); page.goto(url); page.wait_for_timeout(1500)
+    touch_punkte(cdp, 'touchStart', [(1200, 650)]); page.wait_for_timeout(100); touch_punkte(cdp, 'touchEnd', []); page.wait_for_timeout(300)
+    pruefe('[Touch-Laptop] Berührung im Menü schaltet nicht auf Touch', page.evaluate('Rennspiel.Touch.modus') == 'tastatur')
+    # f) Pausemenü-Knopf (Esc) + Einstellungen-Knopf
+    rennen_an(page); page.keyboard.press('Escape'); page.wait_for_timeout(500)
+    pruefe('[Touch-Laptop] Pausemenü hat Knopf „Touch-Steuerung“ (aus)', page.locator('#pause [data-eingabe]').count() == 1 and 'aus' in page.locator('#pause [data-eingabe]').inner_text(), page.locator('#pause [data-eingabe]').inner_text() if page.locator('#pause [data-eingabe]').count() else '')
+    page.screenshot(path=os.path.join(out31, 'touch_pause_knopf.png'))
+    page.locator('#pause [data-eingabe]').click(); page.wait_for_timeout(300)
+    pruefe('[Touch-Laptop] Pausemenü-Knopf schaltet Touch an + merkt', page.evaluate('Rennspiel.Touch.modus') == 'touch' and page.evaluate(SCHL) == 'touch' and page.evaluate('Rennspiel.spiel.pausiert') is True)
+    page.locator('#pause [data-a="weiter"]').click(); page.wait_for_timeout(500)
+    pruefe('[Touch-Laptop] nach Weiter: Knöpfe da', page.evaluate(SICHT) == 'block')
+    page.screenshot(path=os.path.join(out31, 'touch_nach_pauseknopf.png'))
+    page.evaluate('Rennspiel.Touch.modusSetzen("tastatur")')
+    page.evaluate("Rennspiel.spiel.zumMenue()"); page.wait_for_timeout(500)
+    page.evaluate("Rennspiel.spiel.menue.schritt = 4; Rennspiel.spiel.menue.zeichnen && Rennspiel.spiel.menue.zeichnen()"); page.wait_for_timeout(500)
+    n = page.locator('#menue [data-eingabe]').count()
+    pruefe('[Touch-Laptop] Einstellungen (Menü-Schritt 5) haben Knopf „Touch-Steuerung“', n == 1, n)
+    pruefe('[Touch-Laptop] Menü ohne Extra-„🏁 Los!“ in der Leiste (Desktop-Menü)', page.locator('.m-nav [data-a="start"]').count() == 0)
+    page.screenshot(path=os.path.join(out31, 'touch_einstellungen_knopf.png'))
+    pruefe('[Touch-Laptop] keine JS-Fehler', not fehler, fehler[:3]); ctx.close()
+    # g) Desktop ohne Touch: kein Knopf im Pausemenü
+    ctx = browser.new_context(viewport={'width': 1280, 'height': 800}); page = ctx.new_page(); page.goto(url); page.wait_for_timeout(1500); rennen_an(page)
+    page.keyboard.press('Escape'); page.wait_for_timeout(400)
+    pruefe('[Desktop] kein Tipp-Hinweis', page.evaluate("!document.getElementById('t-tipp')"))
+    pruefe('[Desktop] Pausemenü ohne Touch-Knopf (unverändert)', page.locator('#pause [data-eingabe]').count() == 0)
+    ctx.close()
+    # h) Handy (iPhone, pointer: coarse): Touch-Modus auch ohne Tastendruck; synthetische Tasten der Knöpfe schalten NICHT um
+    ctx = browser.new_context(**p.devices['iPhone 13 landscape']); page = ctx.new_page(); page.goto(url); page.wait_for_timeout(1500); rennen_an(page)
+    pruefe('[iPhone] kein Tipp-Hinweis', page.evaluate("!document.getElementById('t-tipp')"))
+    pruefe('[iPhone] Modus touch, Knöpfe da', page.evaluate('Rennspiel.Touch.modus') == 'touch' and page.evaluate(SICHT) == 'block')
+    page.evaluate("window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowUp', key: 'ArrowUp', bubbles: true }))"); page.wait_for_timeout(300)
+    pruefe('[iPhone] unechte Taste (Skript) schaltet nicht um', page.evaluate('Rennspiel.Touch.modus') == 'touch' and page.evaluate(SCHL) is None)
+    ctx.close()
     browser.close()
 print(f'\n{sum(ergebnisse)}/{len(ergebnisse)} OK')
 sys.exit(0 if all(ergebnisse) else 1)

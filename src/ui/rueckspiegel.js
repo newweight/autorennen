@@ -44,17 +44,20 @@
     return sp.modi.indexOf(spiel.kameras[i].modus) >= 0;
   };
 
-  let rts = [null, null], rtB = 0, rtH = 0, kam = null, flaeche = null, flaecheSzene = null, flaecheKam = null, zaehler = [0, 0], geladen = [false, false], _vp = null, _sc = null;
+  /** v31 (H2): Zweispieler-Werte (halbe Auflösung, Takt, Deko, Sicht) – Solo bleibt unverändert. */
+  function zweiWert(cfg, name, solo) { return cfg[name] !== undefined ? cfg[name] : solo; }
 
-  function vorbereiten(i, b, h) {
+  let rts = [null, null], rtB = [0, 0], rtH = [0, 0], kam = null, flaeche = null, flaecheSzene = null, flaecheKam = null, zaehler = [0, 0], geladen = [false, false], versetzt = false, _vp = null, _sc = null;
+
+  function vorbereiten(i, b, h, split) {
     const sp = R.config.cockpit.spiegel;
-    const pb = Math.max(64, Math.round(sp.aufloesung)), ph = Math.max(16, Math.round(sp.aufloesung * h / b));
-    if (!rts[i] || rtB !== pb || rtH !== ph) {
-      rts.forEach((t, j) => { if (t) { t.dispose(); rts[j] = null; } });   // Größe geändert: alle neu (je Ansicht ein Bild)
+    const af = i >= 0 && split ? zweiWert(sp, 'zweiAufloesung', 0.5) : 1, auf = sp.aufloesung * af;
+    const pb = Math.max(48, Math.round(auf)), ph = Math.max(12, Math.round(auf * h / b));
+    if (!rts[i] || rtB[i] !== pb || rtH[i] !== ph) {   // v31: Größe je Ansicht (zwei Hälften können sich um 1 Pixel unterscheiden → kein gegenseitiges Neuanlegen)
+      if (rts[i]) rts[i].dispose();
       rts[i] = new THREE.WebGLRenderTarget(pb, ph, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: true, stencilBuffer: false });
-      rtB = pb; rtH = ph; geladen = [false, false];
+      rtB[i] = pb; rtH[i] = ph; geladen[i] = false;
     }
-    if (!rts[i]) { rts[i] = new THREE.WebGLRenderTarget(pb, ph, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: true, stencilBuffer: false }); geladen[i] = false; }
     if (!_vp) { _vp = new THREE.Vector4(); _sc = new THREE.Vector4(); }
     if (!kam) kam = new THREE.PerspectiveCamera(30, 4, 0.4, 200);
     if (!flaeche) {
@@ -74,15 +77,16 @@
     const split = spiel.kameras.length > 1;
     const rc = S.rechteck(vw, vh, split);
     if (rc.b < 8 || rc.h < 4) return;
-    vorbereiten(i, rc.b, rc.h);
+    vorbereiten(i, rc.b, rc.h, split);
     const rt = rts[i];
 
     // Takt: Spiegelbild nur bei jedem N-ten Bild neu (Zweispieler ×1,5)
     // adaptive Qualität des Spiels (main.js: qualitaet.stufe 0 = voll, steigt bei zu wenig fps): ab 1 keine Deko im Spiegel, ab 2 halber Takt, ab 3 kein Spiegel
-    const stufe = spiel.qualitaet ? spiel.qualitaet.stufe : 0, deko = cfg.deko && stufe < 1;
-    const takt = Math.max(1, Math.round(cfg.takt * (split ? 1.5 : 1) * (stufe >= 2 ? 2 : 1)));
+    const stufe = spiel.qualitaet ? spiel.qualitaet.stufe : 0, deko = (split ? zweiWert(cfg, 'zweiDeko', false) : cfg.deko) && stufe < 1;
+    const takt = Math.max(1, Math.round((split ? zweiWert(cfg, 'zweiTakt', 4) : cfg.takt) * (stufe >= 2 ? 2 : 1)));   // v31: zweite Hälfte um halben Takt versetzt (siehe unten) → meist nur ein Spiegel pro Bild
     if (++zaehler[i] >= takt || !geladen[i]) {
-      zaehler[i] = 0; geladen[i] = true;
+      zaehler[i] = (split && i === 1 && !versetzt) ? Math.floor(takt / 2) : 0; geladen[i] = true;
+      if (split && i === 1) versetzt = true;
       const q = k.quelle || k.ziel;
       if (q) {
         const fz = spiel.fahrzeuge.find((f) => f.anzeige === q);
@@ -91,7 +95,7 @@
         kam.position.set(q.x, q.y + cfg.hoehe, q.z);
         kam.rotation.order = 'YXZ';
         kam.rotation.set(-0.03, hd + Math.PI, 0);
-        kam.far = Math.min(cfg.sicht, k.kamera.far);
+        kam.far = Math.min(split ? zweiWert(cfg, 'zweiSicht', cfg.sicht) : cfg.sicht, k.kamera.far);
         const ha = (cfg.blickWinkel || 80) * Math.PI / 180;                       // waagerechter → senkrechter Winkel
         kam.aspect = rc.b / rc.h;
         kam.fov = 2 * Math.atan(Math.tan(ha / 2) / kam.aspect) * 180 / Math.PI;
@@ -144,11 +148,17 @@
       if (!S.sichtbar(spiel, i)) continue;
       const vw = split ? (i === 0 ? Math.floor(w / 2) : w - Math.floor(w / 2)) : w, rc = S.rechteck(vw, h, split);
       if (rc.b < 8 || rc.h < 4) continue;
-      vorbereiten(i, rc.b, rc.h);
+      vorbereiten(i, rc.b, rc.h, split);
       const alt = r.getRenderTarget();
       try { r.setRenderTarget(rts[i]); r.compile(spiel.szene, kam); } finally { r.setRenderTarget(alt); }
     }
   };
 
-  S.zuruecksetzen = function () { zaehler = [0, 0]; geladen = [false, false]; };
+  S.zuruecksetzen = function () { zaehler = [0, 0]; geladen = [false, false]; versetzt = false; };
+
+  /** v31 (H2): beim Zurück ins Menü Spiegel-Bilder freigeben (RenderTargets sind GPU-Speicher); beim nächsten Rennen werden sie neu angelegt. */
+  S.entsorgen = function () {
+    rts.forEach((t, j) => { if (t) { t.dispose(); rts[j] = null; } });
+    rtB = [0, 0]; rtH = [0, 0]; S.zuruecksetzen();
+  };
 })();

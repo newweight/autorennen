@@ -11,7 +11,7 @@ STRECKE = sys.argv[1] if len(sys.argv) > 1 else 'mega'
 VERKEHR = sys.argv[2] if len(sys.argv) > 2 else 'viel'
 N = int(sys.argv[3]) if len(sys.argv) > 3 else 4
 VAR = sys.argv[4] if len(sys.argv) > 4 else ''
-EINST = dict(modus='solo', streckeId=STRECKE, autoIds=['porsche-911', 'mini-cooper'], runden=1, gegner=5, schwierigkeit='mittel', fahrhilfe=['wenig', 'wenig'],
+EINST = dict(modus=os.environ.get('MODUS', 'solo'), streckeId=STRECKE, autoIds=['porsche-911', 'mini-cooper'], runden=1, gegner=5, schwierigkeit='mittel', fahrhilfe=['wenig', 'wenig'],
              wetter='sonne', jahreszeit='sommer', tempoKlasse='normal', tageszeit='daemmerung', verkehr=VERKEHR, geisterfahrer=False, schaden=False, polizei=False,
              variante=VAR, welt='', hindernisMenge='normal', spielart='rennen')
 HOOK = r'''() => {

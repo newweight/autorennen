@@ -1,0 +1,8 @@
+# Plan v31 (17.10.2026) – Rückmeldung nach v30. Basis v30. Nix verschlimmbessern.
+
+H1 Looping: „Autos fahren irgendwann außen“ – KI-/Spieler-Autos verlassen den Looping seitlich bzw. fahren außen an der Röhre? Reproduzieren (Fantasie, Welt Stunt/Alles, 8 Gegner, 3 Runden, Screenshots/Positionslog je Auto im Looping), Ursache (Looping-Pose vs. Physik, Seitenversatz q beim Einstieg zu groß → Auto hängt außen, Rempeln im Looping, Tier/Verkehr-Ausweichen am Einstieg?), Fix minimal (Einstiegs-Fang: q auf ±Halbbreite klemmen, im Looping kein Ausweichen/kein seitlicher Stoß).
+H2 Zweispieler (Split-Screen): Rückspiegel fehlt – je Hälfte einen Rückspiegel (oben Mitte der Hälfte), Leistung prüfen (2 Spiegel-Renderings → Auflösung halbieren).
+H3 Zweispieler am gleichen Rechner: Spieler mit WASD muss die LINKE Bildhälfte haben, Pfeiltasten die RECHTE (Tastatur-Lage). Heute vertauscht? Prüfen und umdrehen (nur Zuordnung Hälfte↔Steuerung, Fahrerwahl/Namen bleiben). Menü-Hinweis „links WASD · rechts Pfeile“.
+H4 Windows-Laptop mit Touchscreen über Internet: Touch-Steuerung (Handy-Modus, Pfeil-Knöpfe, Stern) erschien, obwohl Tastatur da. Erkennung heute vermutlich ontouchstart/pointer:coarse. Neu: Touch-Knöpfe nur, wenn KEINE Tastatur benutzt wird – erster Tastendruck blendet sie aus (Merken in localStorage), erste Berührung blendet sie wieder ein; zusätzlich kleiner Knopf „🎮 Touch an/aus“ im Pausemenü/HUD. Handy/iPad unverändert.
+Ablauf: Agent A (Sonnet) H1 · Agent B (Sonnet) H2+H3 · Agent C (Sonnet) H4 · Gegenlesen (Opus kurz) · Tests einzeln · sichern v31 · Installer Mini.
+Status: [x] H1 (+Fang ohne Ruck, Kolonne) [x] H2 [x] H3 [x] H4 [x] Gegenlesen (Mensch-Fang entfernt, Touch-Hinweis) [x] gesichert v31

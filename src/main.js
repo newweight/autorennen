@@ -442,6 +442,7 @@
       if (this.pokalAnzeige) this.pokalAnzeige.verstecken();
       this.zustand = 'menue';
       this.szeneAbbauen();
+      if (R.rueckspiegel && R.rueckspiegel.entsorgen) R.rueckspiegel.entsorgen();   // v31 (H2): Spiegel-Bilder freigeben
       this.ui.classList.remove('split');
       this.menue.zeigen(0);
     }
@@ -486,7 +487,7 @@
       for (let i = 0; i < (zwei ? 2 : 1); i++) this.kameraHinzufuegen(this.fahrzeuge[i]);
       const split = zwei;
       this.huds = this.kameras.map((k, i) => new R.Hud(this.hudWurzel, {
-        rennen: this.rennen, teilnehmer: this.rennen.teilnehmer[i], fahrzeug: this.fahrzeuge[i], nr: i, split,
+        rennen: this.rennen, teilnehmer: this.rennen.teilnehmer[i], fahrzeug: this.fahrzeuge[i], nr: i, split, seite: this.halbe(i),
       }));
       this.rennen.bei('fertig', () => this.rennenFertig());
       if (R.Feuerwerk) R.Feuerwerk.verbinden(this);   // v28 W8: Feuerwerk an Start/Ziel, wenn ein Spieler Erster wird (world/feuerwerk.js)
@@ -702,7 +703,7 @@
     autopilot(spielerIndex, an) {
       const f = this.fahrzeuge.find(x => x.istSpieler && x.spielerNr === spielerIndex);
       if (!f || !this.strecke) return false;
-      if (an === false) { f.autopilot = null; return true; }
+      if (an === false) { f.autopilot = null; f.vehicle.loopingFuehren = false; return true; }   // v31: Mensch wird vor dem Looping nicht geführt
       f.autopilot = new R.Driver(f.vehicle, this.strecke, {
         schwierigkeit: 'mittel', seed: 7000 + spielerIndex, name: 'Autopilot ' + (spielerIndex + 1),
       });
@@ -1947,6 +1948,11 @@
       f.stehZeit = 0; f.resetHinweis = false; f.falschHerum = false; f.falschZeit = 0;
     }
 
+    /** v31 (H3): Bildhälfte (0 = links, 1 = rechts) von Ansicht/Spieler i. Solo: 0. Zu zweit: config.tasten.zweiLinks = Index des linken Spielers. */
+    halbe(i) {
+      return this.kameras.length === 2 && R.config.tasten.zweiLinks === 1 ? 1 - i : i;
+    }
+
     zeichnen() {
       const r = this.renderer, w = window.innerWidth, h = window.innerHeight;
       r.info.reset();
@@ -1962,11 +1968,11 @@
         if (ks.length && R.rueckspiegel) R.rueckspiegel.zeichnen(this, 0, 0, w, h);   // 14.10. (v21): Rückspiegel
         return;
       }
-      // Split-Screen: eine Szene, zwei Kameras, je eine Bildhälfte (links Spieler 1, rechts Spieler 2)
+      // Split-Screen: eine Szene, zwei Kameras, je eine Bildhälfte (v31 H3: links der WASD-Spieler = Spieler 2, rechts Pfeile = Spieler 1; config.tasten.zweiLinks)
       const links = Math.floor(w / 2);
       r.setScissorTest(true);
       ks.forEach((k, i) => {
-        const x = i === 0 ? 0 : links, breite = i === 0 ? links : w - links;
+        const hb = this.halbe(i), x = hb === 0 ? 0 : links, breite = hb === 0 ? links : w - links;
         r.setViewport(x, 0, breite, h);
         r.setScissor(x, 0, breite, h);
         this._tunnelDimmen(i);

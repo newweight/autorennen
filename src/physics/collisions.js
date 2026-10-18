@@ -422,6 +422,7 @@
     if (drin.length < 2) return 0;
     const luft = KC().loopingAbstand !== undefined ? KC().loopingAbstand : 0.1;
     let n = 0;
+    const vOrig = new Map();
     // nach Winkel absteigend: vorderes zuerst, jedes folgende hält Abstand zum davor
     drin.sort((x, y) => y.looping.winkel - x.looping.winkel);
     for (let a = 0; a < drin.length; a++) {
@@ -436,7 +437,13 @@
         const wNeu = lv.winkel - mind / r;
         if (wNeu >= 0) {
           lh.winkel = wNeu; lh.winkelVorher = Math.min(lh.winkelVorher, wNeu);
-          lh.v = Math.min(lh.v, Math.max(lv.v, 0.6));
+          // v31 (H1c): das hintere Auto wird höchstens auf das Tempo des vorderen gebremst – aber nie unter das zum Durchkommen nötige
+          // Tempo vNoetig(w) = sqrt(g·r·(3 + 2·cos w)) (Energie; oben sqrt(g·r)). Vorher: vorn (höher, langsamer) bremste hinten
+          // jeden Schritt aufs Tempo des Vordermanns → Kolonne bricht auf 0,6 m/s ein, alle stürzen. Der Positionsabstand (wNeu) bleibt:
+          // das hintere Auto „schiebt“ nur nach, ohne Tempo zu verlieren.
+          const vNot = Math.sqrt(Math.max(0, 9.81 * r * (3 + 2 * Math.cos(wNeu)))) * (KC().loopingMinTempo !== undefined ? KC().loopingMinTempo : 1.0);
+          if (!vOrig.has(lh)) vOrig.set(lh, lh.v);                   // Ausgangstempo dieses Aufrufs (mehrere Paare: letzte, d. h. hinterste Lage zählt)
+          lh.v = Math.min(vOrig.get(lh), Math.max(lv.v, 0.6, vNot));
         } else {
           // noch kein Platz im Looping: zurück vor die Einfahrt (Bogenlänge −wNeu·r davor), gleich wieder einfahren
           const v = H.vehicle, sp = strecke.spline;
@@ -445,6 +452,7 @@
           v.vLaengs = Math.max(L.vMin * 1.02, Math.min(lh.v, Math.max(lv.v, L.vMin * 1.02))); v.vQuer = 0;
           v.y = strecke.hoeheAn(v.x, v.z);
           lh.aktiv = false; lh.winkel = 0; lh.winkelVorher = 0; lh.looping = null; v.imLooping = false;
+          lh.nachholen = 120;          // v31: ein Stoß über die Einfahrtslinie soll die Einfahrt nicht ausfallen lassen (looping.einfahrt, ≤ 2 m, 2 s)
           v._kollAlt = null;
         }
       }

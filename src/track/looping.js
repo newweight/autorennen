@@ -33,10 +33,26 @@
   /** Seitenabstand der Bandmitte bei Winkel w (rechts +). */
   function bandQ(L, w) { return L.seitenVersatz * (w / ZWEI_PI - 0.5); }
 
-  /** Seitenabstand des Autos: in den ersten 60° weich von der Einfahrtsposition auf die Bandmitte. */
+  /**
+   * Seitenabstand des Autos im Looping (relativ zur Straßenmitte).
+   * Das Band liegt beim Einstieg links (Mitte −seitenVersatz/2, Breite 2·bandHalb), die Straße ist 14 m breit – wer rechts/mittig
+   * einfährt, steigt neben dem Band auf („Autos fahren außen“, v31 H1). Der Abstand zur Bandmitte schmilzt LINEAR auf 0
+   * (v31 H1d; vorher Smoothstep, bis 2,7 m/Schritt): über ≈ 60° (genau: wB = max(60°, |D|/fangRate), D = qEin − Bandmitte beim Einstieg;
+   * fangRate 9 m/rad ≙ ≤ 0,5 m je Physikschritt bis 40 m/s). Wer wie die KI schon auf der Einstiegsspur ankommt (fuehren()),
+   * liegt dabei nie neben dem Band; wer weiter außen einfährt (Mensch), gleitet in etwa 1 s aufs Band, ohne Sprung.
+   * Fallback: wäre wB größer als fangMaxWinkel (80°) – das kann bei Straße ±6 m nicht vorkommen –, gilt der harte Fang (Fenster ab fangWinkel).
+   * Nur von (w, qEin) abhängig: Server, Client und Vorhersage rechnen identisch.
+   */
   function autoQ(L, lp, w) {
+    const bq = bandQ(L, w), D = lp.qEin - bandQ(L, 0);
+    const wB = Math.max(Math.PI / 3, Math.abs(D) / wert(C().fangRate, 9));
+    if (wB <= wert(C().fangMaxWinkel, 1.4)) return bq + (lp.qEin - bq) * (1 - Math.min(1, w / wB));
     const m = glatt(0, Math.PI / 3, w);
-    return lp.qEin * (1 - m) + bandQ(L, w) * m;
+    let d = (lp.qEin - bq) * (1 - m);
+    const c0 = wert(C().fangRand, 1.0), w1 = wert(C().fangWinkel, 0.22);
+    const c = Math.max(0.5, L.bandHalb - c0) + L.seitenVersatz * (1 - glatt(0, w1, w));
+    if (d > c) d = c; else if (d < -c) d = -c;
+    return bq + d;
   }
 
   /**
@@ -65,7 +81,7 @@
   /** Neuer (inaktiver) Looping-Zustand für ein Fahrzeug: f.looping = Looping.zustand(). */
   function zustand() {
     return { aktiv: false, winkel: 0, winkelVorher: 0, v: 0, looping: null, qEin: 0,
-      fallen: false, fallZeit: 0, fallVon: null, geschafft: 0, gefallen: 0, zuLangsam: 0 };
+      fallen: false, fallZeit: 0, fallVon: null, geschafft: 0, gefallen: 0, zuLangsam: 0, nachholen: 0, fuehrQ: null, fuehrS: 0, fuehrV: 0, wegS: null, vetoEin: false };
   }
 
   /** vehicle.x/z/heading auf die Bodenspur des Loopings setzen (für Rennleitung, Minimap, KI). */
@@ -79,17 +95,55 @@
   }
 
   /**
+   * v31 (H1b) Einstiegsfang auf der Geraden – NUR für Computerfahrer (KI, Autopilot: vehicle.loopingFuehren, gesetzt vom Driver);
+   * ein Mensch wird nie geschoben (kein „Lenk-Entzug“, man kommt wie in v30 am Looping vorbei). Auf den letzten
+   * max(fangVor = 60 m, fangZeit = 1,3 s Fahrt) vor der Einfahrt wird die Querlage stetig in das Fenster der Einstiegsspur
+   * (Bandmitte ± (bandHalb − fangRand)) geschoben; das Fenster wird mit der Annäherung enger. Höchstens fangSchritt (0,4 m) je Schritt.
+   * Kein Schieben, solange das Auto deutlich vom Band wegfährt (geglättete Querbewegung weg vom Band > fangWeg: 5 m/s für
+   * Computerfahrer – ein echtes Ausweichen; 0,5 m/s war zu empfindlich, das normale Lenk-Zittern der KI hat 38 % der Schritte gesperrt) – das Auto will vorbei. Deterministisch (nur Zustand von Fahrzeug und lp).
+   * d = Abstand zur Einfahrt (m).
+   */
+  function fuehren(L, lp, vehicle, strecke, s, d, seitenabstand) {
+    if (!vehicle.loopingFuehren || vehicle.vLaengs <= 3 || Math.abs(seitenabstand) > strecke.breite / 2) return;
+    const sp = strecke.spline, p = sp.punktBei(s), r = vehicle.richtung();
+    if (r.x * p.tx + r.z * p.tz < 0.7) return;
+    const vor = Math.max(wert(C().fangVor, 60), vehicle.vLaengs * wert(C().fangZeit, 1.3)), bq = bandQ(L, 0), dq = seitenabstand - bq;
+    // eigene Querbewegung dieses Schritts (ohne unseren Schub): Seitenabstand jetzt − Seitenabstand nach dem Schub im letzten Schritt
+    let weg = false;
+    if (lp.fuehrQ === null) lp.fuehrV = 0;
+    if (lp.fuehrQ !== null && s - lp.fuehrS > 0 && s - lp.fuehrS < 3) {
+      const dt = (R.config.physik && R.config.physik.schritt) || 1 / 60, ab = (dq >= 0 ? 1 : -1) * (seitenabstand - lp.fuehrQ);   // > 0: weg vom Band
+      lp.fuehrV += (ab / dt - lp.fuehrV) * 0.1;                     // geglättet (≈ 10 Schritte), damit Lenk-Zittern der KI nicht als „weg“ zählt
+      weg = lp.fuehrV > wert(C().fangWeg, 5);
+      if (weg) lp.wegS = s;                                           // merken: dieser Anflug wurde nicht geführt (Auto weicht aus / will vorbei)
+    }
+    let st = 0;
+    if (!weg) {
+      const c = Math.max(0.5, L.bandHalb - wert(C().fangRand, 1.0)) + L.seitenVersatz * glatt(0, 1, d / vor);
+      const ziel = Math.max(-c, Math.min(c, dq));
+      st = Math.max(-wert(C().fangSchritt, 0.4), Math.min(wert(C().fangSchritt, 0.4), ziel - dq));
+      if (st) { vehicle.x += p.nx * st; vehicle.z += p.nz * st; }
+    }
+    lp.fuehrQ = seitenabstand + st; lp.fuehrS = s;
+  }
+
+  /**
    * Einfahrt prüfen – nach dem normalen Fahrzeugschritt. sAlt/sNeu = Bogenlänge vor/nach dem Schritt,
    * seitenabstand = aktueller Seitenabstand. Liefert 'start' (Looping übernimmt), 'zuLangsam'
    * (fährt unten durch) oder null.
    */
   function einfahrt(lp, vehicle, strecke, sAlt, sNeu, seitenabstand) {
     if (!strecke.loopings || !strecke.loopings.length || lp.aktiv || lp.fallen) return null;
+    if (lp.nachholen > 0) lp.nachholen--;
     const sp = strecke.spline;
     for (let i = 0; i < strecke.loopings.length; i++) {
       const L = strecke.loopings[i];
       const a = sp.differenzS(sAlt, L.s), b = sp.differenzS(sNeu, L.s);
-      if (!(a < 0 && b >= 0 && b - a < 10)) continue;
+      if (b < 0 && -b <= Math.max(wert(C().fangVor, 60), vehicle.vLaengs * wert(C().fangZeit, 1.3))) fuehren(L, lp, vehicle, strecke, sNeu, -b, seitenabstand);   // v31: Einstiegsfang schon auf der Geraden
+      // v31: von loopingAbstand knapp vor die Einfahrt zurückgesetzt und danach (Stoß) über die Linie geschoben, ohne dass einfahrt() sie
+      // überquert sah → noch ≤ 2 m dahinter nachholen (nachholen = Restschritte, nur server-/hostseitig gesetzt)
+      const nachholen = lp.nachholen > 0 && a >= 0 && a < 2 && b - a < 10;
+      if (!(a < 0 && b >= 0 && b - a < 10) && !nachholen) continue;
       if (Math.abs(seitenabstand) > strecke.breite / 2) return null;          // nicht auf der Fahrbahn
       const p = sp.punktBei(L.s), r = vehicle.richtung();
       if (r.x * p.tx + r.z * p.tz < 0.7 || vehicle.vLaengs <= 0) return null; // nicht vorwärts
@@ -101,7 +155,7 @@
         vehicle.x = pz.x + pz.nx * qz; vehicle.z = pz.z + pz.nz * qz; vehicle.vLaengs = 0; vehicle.vQuer = 0;
         return 'zuLangsam';
       }
-      lp.aktiv = true; lp.looping = L;
+      lp.aktiv = true; lp.looping = L; lp.nachholen = 0; lp.fuehrQ = null; lp.vetoEin = lp.wegS !== null && sp.differenzS(L.s, lp.wegS) < 70 && sp.differenzS(L.s, lp.wegS) > 0; lp.wegS = null;
       lp.winkel = Math.min(0.2, b / L.radius); lp.winkelVorher = lp.winkel;
       lp.v = vehicle.vLaengs;
       lp.qEin = Math.max(-strecke.breite / 2 + 1, Math.min(strecke.breite / 2 - 1, seitenabstand));

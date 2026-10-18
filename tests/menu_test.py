@@ -265,7 +265,7 @@ with sync_playwright() as p:
     # Schwelle 120 (vorher 80): Deko-Instanzen sind seit Runde 2 in bis zu 3×3 Regionen geteilt (config.grafik.dekoZellen),
     # damit jede Kamera nur sichtbare Stücke zeichnet. Das kostet ein paar Draw-Calls mehr, spart aber Dreiecke;
     # ~100 Draw-Calls sind für die M1-GPU unkritisch (CPU-Anteil ≪ 1 ms).
-    pruefe('Draw-Calls im Split-Screen < 120', info['calls'] < 120, info['calls'])
+    pruefe('Draw-Calls im Split-Screen < 160', info['calls'] < 160, info['calls'])   # v31: 2 Rückspiegel (je 4. Bild) → 142 statt ~110
     # Einmal ALLES zeichnen (Culling kurz aus), damit auch noch nie sichtbare Geometrien hochgeladen sind:
     # Auto-Geometrien liegen absichtlich dauerhaft im Katalog-Cache. Seit Deko/Autos je Kamera gecullt werden,
     # würden Autos, die erst im Ergebnis ins Bild kommen, sonst fälschlich als "Leck" zählen.

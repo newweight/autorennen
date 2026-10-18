@@ -88,6 +88,7 @@ Rennspiel.config = {
       { gas: 'ArrowUp', bremse: 'ArrowDown', links: 'ArrowLeft', rechts: 'ArrowRight' },
       { gas: 'KeyW',    bremse: 'KeyS',      links: 'KeyA',      rechts: 'KeyD' },
     ],
+    zweiLinks: 1,              // v31 (H3): Zweispieler am selben Rechner – Spieler-Index der LINKEN Bildhälfte (1 = WASD links, Pfeile rechts wie auf der Tastatur; 0 = alte Lage)
     resetSpieler1: 'KeyR',     // Auto 1 zurück auf die Strecke
     resetSpieler2: 'KeyT',     // Auto 2 zurück auf die Strecke
     kamera: 'KeyC',            // Kamera wechseln (Verfolger / Cockpit / weit)
@@ -422,6 +423,7 @@ Rennspiel.config = {
     mindestAbstand: 0.1,       // m Luft nach der Auflösung
     restitution: 0.3, reibung: 0.3,
     loopingAbstand: 0.1,       // m Luft zwischen zwei Autos im selben Looping (Bogenlänge)
+    loopingMinTempo: 1.0,      // v31: das hintere Auto wird im Looping nie unter 1,0 × nötiges Tempo (sqrt(g·r·(3+2·cos w))) gebremst
     hoeheTrennung: 2,          // Runde 6 (W4-I): ab |Δy| ≥ 2 m keine Auto-Auto-Kollision (übereinander an einer Überführung)
     rempeln: {
       standard: 'sanft',
@@ -466,6 +468,14 @@ Rennspiel.config = {
       fallDauer: 0.9,          // s: Auto "fällt" sanft zurück zur Einfahrt
       zurueck: 6,              // m vor der Einfahrt wird ein gefallenes Auto abgesetzt
       kameraNachlauf: 0.5,     // rad: Verfolger-Kamera so weit hinter dem Auto auf dem Kreis
+      fangRand: 1.0,           // v31 (H1): Einstiegsfang – Auto-Mitte höchstens bandHalb − 1,0 m von der Bandmitte (Auto-Halbbreite)
+      fangWinkel: 0.22,        // rad (≈ 12,6°, Höhe ≈ 0,3 m): bis hierhin wird das Fenster stetig enger, danach liegt das Auto im Band
+      fangVor: 60,             // v31: m vor der Einfahrt, auf denen das Auto schon auf der Geraden in die Einstiegsspur geschoben wird
+      fangZeit: 1.3,           // s: bei hohem Tempo beginnt der Fang entsprechend früher (Strecke = max(fangVor, Tempo · fangZeit))
+      fangRate: 9,             // v31 H1d: m/rad, mit denen der Abstand zur Bandmitte im Looping schmilzt (≙ ≤ 0,5 m je Schritt bis 40 m/s; mind. 60°)
+      fangMaxWinkel: 1.4,      // rad (80°): länger darf das Gleiten nicht dauern, sonst harter Fang (Fenster ab fangWinkel)
+      fangWeg: 5,              // m/s (geglättet): fährt ein Computerauto schneller als das vom Band weg (echtes Ausweichen), schiebt fuehren() nicht
+      fangSchritt: 0.4,        // m: höchstens so viel Querversatz je Physikschritt beim Einfangen
       kameraVoraus: 0.3,       // rad: Blickpunkt so weit vor dem Auto (Blick fast tangential → Boden kopfüber sichtbar)
     },
     baelle: {
@@ -846,7 +856,11 @@ Rennspiel.config = {
       hoehe: 1.3,                              // Kamerahöhe über dem Auto (m)
       sicht: 220,                              // Sichtweite nach hinten (m)
       deko: true,                              // Bäume/Büsche/Zäune im Spiegel (schöner; false = ca. halbe Spiegel-Kosten). Bei langsamem Spiel schaltet die adaptive Qualität selbst ab: Stufe 1 ohne Deko, 2 halber Takt, 3 kein Spiegel
-      zweispieler: 'aus',                      // Zweispieler: 'aus' (kein Spiegel) | 'an' (je Hälfte, Takt dann ×1,5)
+      zweispieler: 'an',                       // Zweispieler: 'aus' (kein Spiegel) | 'an' (je Hälfte; v31 H2: halbe Auflösung, eigener Takt, versetzt, ohne Deko, kürzere Sicht – siehe zwei*)
+      zweiAufloesung: 0.5,                     // v31: Zweispieler-Spiegelbild = Solo-Auflösung × dieser Faktor
+      zweiTakt: 4,                             // v31: Zweispieler: Spiegelbild nur bei jedem N-ten Bild (die zweite Hälfte um N/2 versetzt → höchstens ein Spiegel pro Bild)
+      zweiDeko: false,                         // v31: Zweispieler: keine Bäume/Zäune im Spiegel (halbiert die Spiegel-Kosten)
+      zweiSicht: 140,                          // v31: Zweispieler: Sichtweite nach hinten (m)
     },
     // Scheibenwischer + Tropfen/Flocken bei Regen, Schnee, Hagel (nur bei Niederschlag, sonst kostenlos)
     wischer: {

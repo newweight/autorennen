@@ -177,7 +177,9 @@ Gäste öffnen den Einladungs-Link (oder den QR-Code aus der Online-Lobby) im Br
 - **Menü:** Karte antippen = wählen, **dieselbe Karte nochmal antippen = weiter** (allein). Unten stehen große Tasten „◀ Zurück“ / „Weiter ▶“, im letzten Schritt „🏁 Los!“. Der Raumcode wird mit den Tasten auf dem Bildschirm eingegeben.
 - **⛶ Vollbild** oben rechts im Menü (auf dem iPhone gibt es das nicht – dort hilft „Zum Home-Bildschirm“, dann läuft die Seite ohne Leiste).
 - Auf dem Handy ist die Grafik eine Stufe niedriger (flüssiger, Akku schont). Der Bildschirm bleibt im Rennen an.
-- Tastatur und Maus funktionieren weiter (auch am Touch-Laptop). `?touch=0` an die Adresse hängen schaltet die Bildschirm-Tasten ab, `?touch=1` erzwingt sie.
+- **Touch-Laptop (Windows mit Touchscreen):** das Spiel hält ihn für einen Computer – kein Handy-Layout, keine Bildschirm-Tasten, normales Cockpit/Tacho. Handy und Tablet starten mit den Bildschirm-Tasten.
+- **Umschalten:** Der erste Druck auf Pfeile oder W/A/S/D blendet die Bildschirm-Tasten aus (wird gemerkt, auch nach Neuladen). Wer wieder Touch will: im Rennen den unteren Bildschirm berühren, oder **🎮 Touch-Steuerung: an/aus** im Pausemenü (Esc) bzw. in den Einstellungen (neben „Ton“) – das merkt sich das Spiel ebenfalls.
+- Tastatur und Maus funktionieren immer weiter. `?touch=0` an die Adresse hängen schaltet die Bildschirm-Tasten ganz ab, `?touch=1` erzwingt sie.
 
 ## Tempo
 Neu: Schritt 5 hat die **Tempo-Klasse**. **Normal** (Standard) ist gemütlich: ca. **154–196 km/h** Höchsttempo (Formel-Renner 196), mit weniger Beschleunigung und Bremse. **Schnell** nutzt die vollen Katalogwerte unten.

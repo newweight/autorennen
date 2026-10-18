@@ -520,14 +520,14 @@
         titel = this.zwei ? 'Wer fährt? Wählt eure Fahrer!' : 'Wer fährt?';
         inhalt = this.htmlFahrer();
         hinweis = this.zwei
-          ? 'Spieler 1: <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> · Spieler 2: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · <kbd>Enter</kbd> weiter'
+          ? 'Spieler links (2): <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · Spieler rechts (1): <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> Pfeiltasten · <kbd>Enter</kbd> weiter'
           : '<kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> auswählen · <kbd>Enter</kbd> weiter · <kbd>Esc</kbd> zurück';
       }
       if (id === 'auto') {
         titel = this.zwei ? 'Wählt eure Autos!' : 'Welches Auto fährst du?';
         inhalt = this.htmlAuto();
         hinweis = this.zwei
-          ? '① <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> <kbd>,</kbd><kbd>.</kbd> drehen · ② <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>Enter</kbd> weiter'
+          ? '② <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <kbd>Q</kbd><kbd>E</kbd> drehen · ① <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> <kbd>,</kbd><kbd>.</kbd> drehen · <kbd>Enter</kbd> weiter'
           : '<kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> wählen · <kbd>,</kbd><kbd>.</kbd> / <kbd>Q</kbd><kbd>E</kbd> drehen · <kbd>Enter</kbd> weiter';
       }
       if (id === 'start') { titel = 'Fast geschafft!'; inhalt = this.htmlStart(); hinweis = '<kbd>↑</kbd><kbd>↓</kbd> Zeile · <kbd>←</kbd><kbd>→</kbd> ändern · <kbd>Enter</kbd> weiter / Start · <kbd>Esc</kbd> zurück'; }
@@ -611,7 +611,7 @@
         `<span class="pille${sa === 'pokal' && e.pokalGroesse === g ? ' aktiv' : ''}" data-a="pokalgroesse:${g}">${g} Rennen</span>`).join('') + `</div>`;
       return `<div class="reihe modus-reihe">` +
         k('solo', '🏁', 'Allein gegen Computer', 'Du fährst gegen die Computer-Autos') +
-        k('zwei', '👫', 'Zu zweit', 'Geteilter Bildschirm: links Pfeile, rechts WASD') +
+        k('zwei', '👫', 'Zu zweit', 'Geteilter Bildschirm: links WASD, rechts Pfeiltasten') +
         k('pokal', '🏆', 'Pokal', 'Mehrere Rennen, Punkte sammeln – wer gewinnt den Pokal?', groesse + sp('pokal')) +
         k('elimination', '🚪', 'Letzter fliegt raus', 'Nach jeder Runde scheidet der Letzte aus', sp('elimination')) +
         `</div>`;
@@ -678,7 +678,7 @@
     }
 
     htmlFahrer() {
-      const spieler = this.zwei ? [0, 1] : [0];
+      const spieler = this.zwei ? (R.config.tasten.zweiLinks === 1 ? [1, 0] : [0, 1]) : [0];   // v31 (H3): links der WASD-Spieler (Reihenfolge der Spalten = Bildhälften)
       const panels = spieler.map((sp) => {
         const andere = this.zwei ? this.e.fahrer[1 - sp] : null;
         const karten = R.config.fahrer.map((f) => {
@@ -693,7 +693,7 @@
             (R.Garage && R.Garage.konto(f.name) > 0 ? `<div class="karten-muenzen">🪙 ${R.Garage.konto(f.name)}</div>` : '') + `</div>`;   // W3-G
         }).join('');
         const kopf = this.zwei
-          ? `<h2 class="p${sp + 1}"><span class="marke">${sp + 1}</span> Spieler ${sp + 1}: ${R.fahrerEmoji(this.e.fahrer[sp])} ${this.e.fahrer[sp]}</h2>`
+          ? `<h2 class="p${sp + 1}"><span class="marke">${sp + 1}</span> Spieler ${sp + 1}${R.config.tasten.zweiLinks === 1 ? (sp === 1 ? ' (links, WASD)' : ' (rechts, Pfeile)') : ''}: ${R.fahrerEmoji(this.e.fahrer[sp])} ${this.e.fahrer[sp]}</h2>`
           : '';
         return `<div class="m-spieler p${sp + 1}">${kopf}<div class="raster">${karten}</div></div>`;
       }).join('');
@@ -702,7 +702,7 @@
 
     htmlAuto() {
       const AV = R.AutoVorschau, dreid = !!(AV && AV.verfuegbar);
-      const spieler = this.zwei ? [0, 1] : [0];
+      const spieler = this.zwei ? (R.config.tasten.zweiLinks === 1 ? [1, 0] : [0, 1]) : [0];   // v31 (H3): links der WASD-Spieler (Reihenfolge der Spalten = Bildhälften)
       const bar = (a, k, emoji, name, extra) =>
         `<div class="bar"><span class="b-ico">${emoji}</span>${name ? `<span class="b-name">${name}</span>` : ''}` +
         `<div class="spur"><i style="width:${Math.round(this.norm(a, k) * 100)}%"></i></div>${extra ? `<span class="b-wert">${extra}</span>` : ''}</div>`;
@@ -846,7 +846,7 @@
         `<div class="knopf klein ton" data-a="ton">${tonAn ? '🔊 Ton an' : '🔇 Ton aus'} <kbd>M</kbd></div>` +
         `<div class="knopf klein ton" data-a="tafel">🎮 Steuerung ${this.tafelOffen ? '▴' : '▾'}</div></div>`;
       const tafel = !this.tafelOffen ? '' :
-        `<div class="tafel"><div class="t-zeile"><b>Menü</b><span>${this.zwei ? '①' : ''} <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd>${this.zwei ? ' ② <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>' : ''} <kbd>Enter</kbd> weiter</span></div>` +
+        `<div class="tafel"><div class="t-zeile"><b>Menü</b><span>${this.zwei ? '①' : ''} <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd>${this.zwei ? ' ② <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> (links)' : ''} <kbd>Enter</kbd> weiter</span></div>` +
         `<div class="t-zeile p1"><b>${e.fahrer[0]}</b><span><kbd>↑</kbd> Gas <kbd>↓</kbd> Bremse <kbd>←</kbd><kbd>→</kbd> Lenken <kbd>R</kbd> zurück</span></div>` +
         `<div class="t-zeile p2${this.zwei ? '' : ' aus'}"><b>${e.fahrer[1]}</b><span><kbd>W</kbd> Gas <kbd>S</kbd> Bremse <kbd>A</kbd><kbd>D</kbd> Lenken <kbd>T</kbd> zurück</span></div>` +
         `<div class="t-zeile"><b>Alle</b><span><kbd>C</kbd> Kamera <kbd>F</kbd> Vollbild <kbd>Esc</kbd> Pause</span></div></div>`;
