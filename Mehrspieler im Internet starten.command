@@ -8,6 +8,7 @@
 # (funnel --https=10000 off) – das Spiel ist dann nicht mehr aus dem Internet erreichbar.
 # ============================================================
 cd "$(dirname "$0")" || exit 1
+xattr -cr . 2>/dev/null   # macOS-Download-Markierung entfernen (Node hing sonst stumm)
 # Läuft der Autostart-Server (installieren.command)? Dann nicht doppelt starten.
 if launchctl print system/de.newweight.autorennen >/dev/null 2>&1 || curl -s -o /dev/null --max-time 2 http://127.0.0.1:8444/; then
   echo "ℹ️  Der Autorennen-Server läuft schon automatisch (Autostart)."
