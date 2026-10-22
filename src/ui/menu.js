@@ -297,7 +297,7 @@
       if (code === T.pause) { this.zurueck(); return true; }
       if (T.bestaetigen.includes(code)) { this.weiter(); return true; }
       const id = SCHRITTE[this.schritt].id;
-      if (id === 'modus' && code === 'KeyG' && R.Garage) { this.garageOeffnen(); return true; }   // W3-G: Taste G = Garage
+      if (code === 'KeyG' && R.Garage) { this.garageOeffnen(); return true; }   // W3-G: Taste G = Garage
       if (id === 'auto' && DREH_TASTEN[code] && R.AutoVorschau) {
         const [sp, r] = DREH_TASTEN[code];
         R.AutoVorschau.drehen(this.zwei ? sp : 0, r);
@@ -536,7 +536,7 @@
         (this.schritt < SCHRITTE.length - 1 ? '<div class="knopf klein gruen" data-a="weiter">Weiter ▶</div>' : '<span></span>');
       this.wurzel.innerHTML =
         `<div class="m-kopf"><div class="m-logo"><div class="m-titel">🔥 ${R.config.titel} 🏎️</div>` +
-        `<div class="m-untertitel">${R.config.untertitel}</div>${WEITERE_SPIELE}</div><div class="m-schritte">${kopf}</div></div>` +
+        `<div class="m-untertitel">${R.config.untertitel}</div>${WEITERE_SPIELE}</div><div class="m-schritte">${kopf}</div>${R.Garage ? '<div class="knopf garage-knopf" id="garage-knopf" data-a="garage" title="Garage (Taste G)">🔧 Garage – Auto aufmotzen</div>' : ''}</div>` +
         `<div class="m-inhalt">${id === 'start' && this.tafelOffen ? '' : `<h1>${titel}</h1>`}${inhalt}</div>` +
         `<div class="m-fuss"><div class="m-nav">${nav}</div><div class="m-hinweis">${hinweis}</div></div>`;
       if (id === 'auto') this.buehnenBinden();

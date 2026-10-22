@@ -51,7 +51,7 @@
     a.farbe = Number.isFinite(a.farbe) ? a.farbe : null;
     a.farben = Array.isArray(a.farben) ? a.farben.filter(Number.isFinite) : [];
     ARTEN.forEach((k) => { a[k] = ganz(a[k], 0, 3, 0); });
-    a.rest = ganz(a.rest, 0, 100, 100);
+    a.rest = 100;   // v32 (N4): jedes Rennen startet mit 100 % – alter gespeicherter Schaden-Rest wird beim Laden verworfen
     f.autos[autoId] = a;
     return a;
   }
@@ -140,23 +140,17 @@
      * @returns {{ok:boolean, grund?:'nichtNoetig'|'geld', kosten:number, konto:number}}
      */
     reparieren(name, autoId, schadenAn) {
-      return aendern(name, autoId, (f, a) => {
-        if (!schadenAn || a.rest >= 100) return { ok: false, grund: 'nichtNoetig', kosten: 0, konto: f.muenzen };
-        const preis = wert(G().reparaturPreis, 10);
-        if (f.muenzen < preis) return { ok: false, grund: 'geld', kosten: preis, konto: f.muenzen };
-        f.muenzen -= preis; a.rest = 100;
-        return { ok: true, kosten: preis, konto: f.muenzen };
-      });
+      // v32 (N4): jedes Rennen startet mit 100 % – es gibt nichts zu reparieren (keine Kosten)
+      return { ok: false, grund: 'nichtNoetig', kosten: 0, konto: Garage.konto(name) };
     },
     /** Schaden-Prozent am Rennende merken (nur mit Schaden an aufrufen). */
     restSetzen(name, autoId, prozent) {
       if (!name || !autoId) return;
-      aendern(name, autoId, (f, a) => { a.rest = ganz(prozent, 0, 100, 100); });
+      aendern(name, autoId, (f, a) => { a.rest = 100; });   // v32 (N4): kein Schaden-Rest mehr (Schnittstelle bleibt)
     },
     /** Startprozent fürs nächste Rennen (mit Schaden an): gespeicherter Rest, mindestens restMin (30). */
     startProzent(name, autoId) {
-      const r = Garage.autoDaten(name, autoId).rest;
-      return Math.max(wert(G().restMin, 30), Math.min(100, r));
+      return 100;   // v32 (N4): jedes Rennen startet mit 100 %
     },
     /** Preisgeld für Platz (1-basiert). */
     preisgeld(platz) {
@@ -437,10 +431,9 @@
       const lack = `<div class="g-zeile${fk(0)}"><div class="g-label">🎨 Lack</div><div class="g-farben">${kreis(0, null)}${farben.map((h, i) => kreis(i + 1, h)).join('')}</div></div>`;
       // Reparatur
       const schadenAn = this.e.schaden === true;
-      const repText = !schadenAn ? 'Schaden ist aus – nicht nötig' : d.rest >= 100 ? 'Alles heil 💚 – nicht nötig' : `Startet mit ${Math.max(wert(G().restMin, 30), d.rest)} % → 🔧 auf 100 %`;
+      // v32 (N4): jedes Rennen startet mit 100 % – nichts zu reparieren, keine Kosten
       const rep = `<div class="g-zeile${fk(1)}"><div class="g-label">🔧 Reparatur</div>` +
-        `<div class="g-wert"><div class="g-knopf${!schadenAn || d.rest >= 100 ? ' aus' : ''}" data-g="reparatur">🔧 Reparieren <small>🪙 ${wert(G().reparaturPreis, 10)}</small></div>` +
-        `<span class="g-text">${repText}</span></div></div>`;
+        `<div class="g-wert"><span class="g-text">Alles heil ✓</span></div></div>`;
       // Upgrades
       const upg = ARTEN.map((k, j) => {
         const st = d[k], p = Garage.upgradePreis(st), u = UPG[k];

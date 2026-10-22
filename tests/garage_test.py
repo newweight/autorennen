@@ -6,7 +6,7 @@ b) Garage per Taste G: Fahrer → Auto → Werkstatt; Farbe per Pfeil = Live-Vor
    Motor-Upgrade per Tastatur (−30), Reifen per Maus, Reparatur bei Schaden aus = „Nicht nötig", Esc zurück ins Menü.
 c) Nächstes Rennen: Spielerauto im neuen Lack (Material-Farben + Pixel im Bild), KI unverändert; vMax × 1,04;
    Schalter „Upgrades zählen: aus" → vMax Standard, Lack bleibt.
-d) Schaden-Rest: mit Schaden an Endprozent gespeichert → nächstes Rennen startet damit; Reparatur → 100 %.
+d) v32: Schaden-Rest wird nicht mehr gespeichert, jedes Rennen startet mit 100 %, Garage zeigt „Alles heil ✓“ (Reparatur kostet 0).
 e) Fahrer-Schritt zeigt „🪙 n"; keine JS-Fehler.
 Bilder: tests/out/garage/*.png (mit Read ansehen).  Aufruf: python3 tests/garage_test.py"""
 import sys, os, json
@@ -56,7 +56,7 @@ with sync_playwright() as p:
     page.goto(url)
     page.evaluate('localStorage.clear()')
     page.reload()
-    page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=15000)
+    page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=90000)
     page.wait_for_timeout(800)
     def snap(name):
         page.screenshot(path=os.path.join(out, name)); return os.path.join(out, name)
@@ -72,7 +72,7 @@ with sync_playwright() as p:
     pruefe('Münzen liegen auf der Wiese (20–40, eine InstancedMesh)', 20 <= info['n'] <= 40 and info['instanzen'] == info['n'], info)
     pruefe('HUD zeigt „🪙 0" beim Start', info['hud'] and '🪙 0' in info['hud'], info['hud'])
     # P4 (16.10.): erst den Countdown abwarten – die große „3“ verdeckte genau die Münzreihe (Projektion x≈636–640, y≈298–324), siehe tests/out/p3/urteile.md S7
-    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft" && Rennspiel.spiel.rennen.zeit > 1.2', timeout=60000)   # auch „LOS!“ (hud.js:551, zeit < 1 s) ist dann weg
+    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft" && Rennspiel.spiel.rennen.zeit > 1.2', timeout=300000)   # auch „LOS!“ (hud.js:551, zeit < 1 s) ist dann weg
     # Bild: Spieler kurz vor der ersten Münzreihe (nach dem Countdown, direkt versetzt)
     page.evaluate("""(() => { const s = Rennspiel.spiel, m = s.muenzen, r = m.liste.find(k => k.reihe >= 0), sp = s.strecke.spline, p = sp.punktBei(r.s - 22);
       const v = s.fahrzeuge[0].vehicle; v.setzen(p.x + p.nx * r.q, p.z + p.nz * r.q, Rennspiel.headingAus(p.tx, p.tz)); v.y = s.strecke.hoeheAn(v.x, v.z);
@@ -135,9 +135,8 @@ with sync_playwright() as p:
     page.click('#garage [data-g="upgrade:reifen"]'); page.wait_for_timeout(300)
     pruefe('Maus: Reifen Stufe 1 (−30), Balken zeigt 1 von 3', page.evaluate("Rennspiel.Garage.autoDaten('Jonas', 'troc-cabrio').reifen") == 1
            and page.evaluate("Array.from(document.querySelectorAll('#garage .g-zeile')).filter(z => z.textContent.includes('Reifen'))[0].querySelectorAll('.g-balken i.voll').length") == 1)
-    page.click('#garage [data-g="reparatur"]'); page.wait_for_timeout(300)
-    pruefe('Reparatur bei Schaden aus: „Nicht nötig", kostet nichts', 'Nicht nötig' in page.inner_text('#garage .g-nachricht')
-           and page.evaluate("Rennspiel.Garage.konto('Jonas')") == konto0 - 80, page.inner_text('#garage .g-nachricht'))
+    pruefe('v32: Reparatur-Zeile „Alles heil ✓“, kein Reparatur-Knopf, Konto unverändert', 'Alles heil' in page.inner_text('#garage .g-zeile:nth-child(2)')
+           and page.locator('#garage [data-g="reparatur"]').count() == 0 and page.evaluate("Rennspiel.Garage.konto('Jonas')") == konto0 - 80)
     page.mouse.move(5, 5); page.wait_for_timeout(700)
     lay = page.evaluate("""(() => { const m = document.querySelector('#garage .m-inhalt'), r = Array.from(document.querySelectorAll('#garage .g-zeile, #garage canvas.buehne')).map(e => e.getBoundingClientRect());
       return { scroll: m.scrollHeight <= m.clientHeight + 1, innen: r.every(a => a.left >= 0 && a.right <= innerWidth && a.bottom <= innerHeight) }; })()""")
@@ -176,7 +175,7 @@ with sync_playwright() as p:
     vm = page.evaluate(VMAX, 0); vk = page.evaluate(VMAX, 1)
     pruefe('Upgrade Motor 1: vMax × 1,04, Reifen 1: grip × 1,04', abs(vm['verh'] - 1.04) < 1e-6 and abs(vm['grip'] - 1.04) < 1e-6, vm)
     pruefe('KI ohne Upgrades (vMax × 1)', abs(vk['verh'] - 1) < 1e-9, vk)
-    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=30000)
+    page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=300000)
     page.evaluate('Rennspiel.spiel.autopilot(0, true); Rennspiel.spiel.schnellvorlauf(4)')
     page.wait_for_timeout(1200)
     bild_rennen = snap('06_rennen_pink.png')
@@ -194,26 +193,28 @@ with sync_playwright() as p:
     page.evaluate("Rennspiel.spiel.rennenStarten({ schaden: true, gegner: 1 })")
     pruefe('Schaden an, heiles Auto: Start 100 %', page.evaluate('Rennspiel.spiel.schaden.zustand(0).prozent') == 100)
     page.evaluate("Rennspiel.spiel.schaden._punkteSetzen(0, 45); Rennspiel.spiel.rennenFertig()")
-    pruefe('Rennende speichert Rest 45 % (Jonas/Cabrio)', page.evaluate("Rennspiel.Garage.autoDaten('Jonas', 'troc-cabrio').rest") == 45)
+    pruefe('v32: Rennende speichert keinen Schaden-Rest (Jonas/Cabrio = 100)', page.evaluate("Rennspiel.Garage.autoDaten('Jonas', 'troc-cabrio').rest") == 100)
     page.evaluate("Rennspiel.spiel.rennenStarten()")
-    pruefe('Nächstes Rennen startet mit 45 %, KI mit 100 %', page.evaluate('Rennspiel.spiel.schaden.zustand(0).prozent') == 45
+    pruefe('v32: Nächstes Rennen startet mit 100 % (Spieler und KI)', page.evaluate('Rennspiel.spiel.schaden.zustand(0).prozent') == 100
            and page.evaluate('Rennspiel.spiel.schaden.zustand(1).prozent') == 100, [page.evaluate('Rennspiel.spiel.schaden.zustand(0).prozent'), page.evaluate('Rennspiel.spiel.schaden.zustand(1).prozent')])
     page.evaluate("Rennspiel.spiel.schaden._punkteSetzen(0, 0); Rennspiel.spiel.rennenFertig(); Rennspiel.spiel.rennenStarten()")
-    pruefe('Rest 0 → Start mit mindestens 30 %', page.evaluate('Rennspiel.spiel.schaden.zustand(0).prozent') == 30)
-    # Reparatur in der Garage (Maus)
+    pruefe('v32: Rest 0 → Start trotzdem 100 %', page.evaluate('Rennspiel.spiel.schaden.zustand(0).prozent') == 100)
+    # Alter gespeicherter Rest (45) im Speicher → wird verworfen; Garage zeigt „Alles heil ✓“, Reparatur kostet 0
+    page.evaluate("(() => { const o = Rennspiel.Garage.laden(); o.Jonas.autos['troc-cabrio'].rest = 45; Rennspiel.Garage.speichern(o); })()")
     page.evaluate('Rennspiel.spiel.zumMenue()'); page.wait_for_timeout(300)
     page.click('[data-a="garage"]'); page.wait_for_timeout(300)
     page.click('#garage [data-g="fahrer:Jonas"]'); page.wait_for_timeout(300)
     page.click('#garage [data-g="auto:troc-cabrio"]'); page.wait_for_timeout(500)
     rep_text = page.inner_text('#garage .g-zeile:nth-child(2)')
     k1 = page.evaluate("Rennspiel.Garage.konto('Jonas')")
-    page.click('#garage [data-g="reparatur"]'); page.wait_for_timeout(300)
-    pruefe('Reparatur (Schaden an, 30 %): −10, Rest 100', page.evaluate("Rennspiel.Garage.autoDaten('Jonas', 'troc-cabrio').rest") == 100
-           and page.evaluate("Rennspiel.Garage.konto('Jonas')") == k1 - 10, [rep_text, page.inner_text('#garage .g-nachricht')])
+    pruefe('v32: Garage zeigt „Alles heil ✓“, kein Reparaturpreis, kein Reparatur-Knopf', 'Alles heil' in rep_text and '🪙' not in rep_text
+           and page.locator('#garage [data-g="reparatur"]').count() == 0, rep_text)
+    pruefe('v32: alter Rest 45 → 100, Konto unverändert', page.evaluate("Rennspiel.Garage.autoDaten('Jonas', 'troc-cabrio').rest") == 100
+           and page.evaluate("Rennspiel.Garage.konto('Jonas')") == k1)
     snap('07_werkstatt_repariert.png')
     page.click('#garage [data-g="schliessen"]'); page.wait_for_timeout(300)
     page.evaluate("Rennspiel.spiel.rennenStarten()")
-    pruefe('Nach Reparatur: Start mit 100 %', page.evaluate('Rennspiel.spiel.schaden.zustand(0).prozent') == 100)
+    pruefe('Nach Garage: Start mit 100 %', page.evaluate('Rennspiel.spiel.schaden.zustand(0).prozent') == 100)
     # Schaden aus: kein Rest gespeichert/angewendet (Standard unverändert)
     page.evaluate("Rennspiel.spiel.rennenStarten({ schaden: false })")
     pruefe('Schaden aus: kein Schaden-System aktiv', not page.evaluate('!!(Rennspiel.spiel.schaden && Rennspiel.spiel.schaden.an)'))

@@ -135,7 +135,11 @@
           // Soll-Drehrate in Lenkwert umrechnen (über die mögliche Drehrate bei diesem Tempo)
           const rateMax = Math.max(0.2, this.drehrateMax());
           const hilfsLenkung = Math.max(-1, Math.min(1, -fehler * k / rateMax));   // heading größer = links = negativ
+          const spieler = lenkung;
           lenkung = Math.max(-1, Math.min(1, lenkung + hilfsLenkung));
+          // v32 (N2): abseits nimmt die Hilfe einer Spieler-Lenkung höchstens hilfeMax weg (sonst lenkt „links“ im Gras kaum)
+          const LA = Math.abs(spieler) > 0.1 ? this.abseitsLenkung() : null;
+          if (LA) lenkung = spieler > 0 ? Math.max(lenkung, spieler * (1 - LA.hilfeMax)) : Math.min(lenkung, spieler * (1 - LA.hilfeMax));
         }
       }
       if (hilfe.bremshilfe > 0 && vorwaerts && hilfe.zieltempo > 0) {
@@ -264,7 +268,13 @@
         const drehrateMax = this.drehrateMax();
         const richtungVz = this.vLaengs >= 0 ? 1 : -1;      // rückwärts lenkt spiegelverkehrt
         let drehrate = this.lenkung * drehrateMax * richtungVz;   // > 0 = Rechtskurve
-        if (this.drehImpuls) drehrate *= this.drehLenk !== undefined ? this.drehLenk : ((R.config.kollision && R.config.kollision.rempeln.drehLenkung) || 0.3);   // Runde 6
+        if (this.drehImpuls) {
+          const fD = this.drehLenk !== undefined ? this.drehLenk : ((R.config.kollision && R.config.kollision.rempeln.drehLenkung) || 0.3);   // Runde 6
+          const LA = this.abseitsLenkung();
+          // v32 (N2): abseits nicht Gras × Drehung multiplizieren – mindestens drehMindest × Asphalt-Drehrate (Asphalt/Öl: wie vorher)
+          if (LA) drehrate = this.lenkung * richtungVz * Math.max(drehrateMax * fD, LA.drehMindest * this._drehrateAuf(this.tempo, 'strasse'));
+          else drehrate *= fD;
+        }
         this.heading -= drehrate * dt;
         this._querBeschl = drehrate * this.vLaengs;
         // Fliehkraft: das Auto rutscht zur Kurvenaußenseite – proportional zur Querbeschleunigung,
@@ -376,9 +386,23 @@
      */
     drehrateMax(v) {
       const t = Math.abs(v === undefined ? this.vLaengs : v);
-      const grip = this.gripGesamt();
+      const r = this._drehrateAuf(t, this.untergrund);
+      // v32 (N2): abseits (Gras/Sand) nie unter mindest × Asphalt-Drehrate (gleiches Auto/Tempo/Schaden) – kindgerecht lenkbar
+      const LA = this.abseitsLenkung();
+      return LA ? Math.max(r, LA.mindest * this._drehrateAuf(t, 'strasse')) : r;
+    }
+
+    /** v32 (N2): config.physik.lenkung.abseits, wenn das Auto auf Gras/Sand (Untergrund mit vMaxAbs) steht, sonst null. */
+    abseitsLenkung() {
+      const LK = R.config.physik.lenkung, ug = R.config.physik.untergrund[this.untergrund];
+      return LK && LK.abseits && ug && ug.vMaxAbs !== undefined ? LK.abseits : null;
+    }
+
+    /** Drehrate bei Volleinschlag auf Untergrund `untergrund` (Formel bis v31 = drehrateMax). */
+    _drehrateAuf(t, untergrund) {
+      const grip = this.gripGesamt(untergrund);
       const langsam = this.daten.wendigkeit * (0.55 + 0.45 * grip) * Math.min(1, t / 4);
-      const haft = this.querBeschleunigungMax(t) / Math.max(t, 0.5);
+      const haft = this.querBeschleunigungMax(t, untergrund) / Math.max(t, 0.5);
       const LK = R.config.physik.lenkung;
       if (!LK) return Math.min(langsam, haft);
       // Untergrenze in rad/s für ein Auto mit Bezugs-Wendigkeit (langsam = LK.bezug), andere Autos × √(langsam/bezug)

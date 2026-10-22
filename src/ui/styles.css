@@ -125,6 +125,11 @@ kbd { display: inline-block; min-width: 1.2em; padding: .05em .4em; margin: 0 .1
 .m-schritt.aktiv { background: var(--gelb); color: #1a2550; opacity: 1; }
 .m-schritt.aktiv b { background: #1a2550; color: var(--gelb); }
 .m-schritt.fertig b { background: var(--gruen); }
+.m-kopf { position: relative; }
+.garage-knopf { position: absolute; top: .3em; right: 0; z-index: 3; background: var(--gelb); color: #1a2550; font-weight: 800; padding: .45em 1.1em; border-radius: 1.5em; cursor: pointer; white-space: nowrap; font-size: 1em; box-shadow: 0 .15em .5em rgba(0,0,0,.5); border: .15em solid #fff; pointer-events: auto; }
+.garage-knopf:hover { background: #fff; }
+html.touch-an .garage-knopf { right: 64px; }   /* Platz für die Vollbild-Taste ⛶ (#t-voll) */
+@media (max-width: 1100px) { .garage-knopf { font-size: .85em; padding: .4em .9em; } }
 .m-pfeil { opacity: .6; font-size: 1.2em; }
 .m-inhalt { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
 .m-inhalt h1 { margin: 0 0 .5em; font-size: 1.9em; text-shadow: 0 .08em .2em rgba(0,0,0,.6); }

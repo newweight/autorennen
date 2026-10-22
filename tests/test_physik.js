@@ -246,12 +246,21 @@ function fingerabdruck(umwelt) {
   const VORHER_V22 = '61.360003321236064,-4.5087142532100648,-1.6787553574715364,2.3244778201556078,0.0000000000000000';
   // 15.10. (v23): neu erzeugt nach der Rückwärts-Änderung (config.physik.rueckwaerts: stärkere Rückwärtsbeschleunigung, Gas bremst die Rückwärtsfahrt) – die feste Fahrt
   // bremst bis zum Stand und fährt dabei rückwärts. Ohne den Config-Block (delete) ergibt vehicle.js bitgenau den alten Wert VORHER_V22 (siehe nächste Prüfung).
-  const VORHER = '97.133986056685899,-90.158746307501616,0.32866790591501061,16.530887872192597,-0.27973854274458021';
+  const VORHER_V31 = '97.133986056685899,-90.158746307501616,0.32866790591501061,16.530887872192597,-0.27973854274458021';
+  // 22.10. (v32 N2): neu erzeugt nach Mindest-Lenkwirkung abseits (config.physik.lenkung.abseits; die feste Fahrt fährt ins Gras, mit Lenkhilfe).
+  // Ohne den Block (delete) ergibt vehicle.js bitgenau den alten Wert VORHER_V31 (nächste Prüfung).
+  const VORHER = '103.14427901065477,-84.033300723092466,0.26748269296335286,16.446468463867756,-0.27481547508574133';
   const ohne = fingerabdruck('ohne');
-  pruefe('Ohne umwelt: bitgenau wie vor Runde 4 (Stand v23: neu erzeugt nach Rückwärts-Änderung)', ohne === VORHER, ohne === VORHER ? '' : ohne);
+  pruefe('Ohne umwelt: bitgenau wie vor Runde 4 (Stand v32: neu erzeugt nach Lenkung abseits)', ohne === VORHER, ohne === VORHER ? '' : ohne);
   {
+    const LA = R.config.physik.lenkung.abseits; delete R.config.physik.lenkung.abseits;
+    const alt = fingerabdruck('ohne'); R.config.physik.lenkung.abseits = LA;
+    pruefe('Ohne config.physik.lenkung.abseits: bitgenau der Wert von v31', alt === VORHER_V31, alt === VORHER_V31 ? '' : alt);
+  }
+  {
+    const LA = R.config.physik.lenkung.abseits; delete R.config.physik.lenkung.abseits;
     const RW = R.config.physik.rueckwaerts; delete R.config.physik.rueckwaerts;
-    const alt = fingerabdruck('ohne'); R.config.physik.rueckwaerts = RW;
+    const alt = fingerabdruck('ohne'); R.config.physik.rueckwaerts = RW; R.config.physik.lenkung.abseits = LA;
     pruefe('Ohne config.physik.rueckwaerts: bitgenau der Wert von v22 (nur die Rückwärts-Änderung ist neu)', alt === VORHER_V22, alt === VORHER_V22 ? '' : alt);
   }
   pruefe('umwelt undefined / neutral {1,1,Wind 0}: identisch', fingerabdruck(undefined) === ohne &&

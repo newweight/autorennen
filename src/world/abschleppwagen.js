@@ -13,6 +13,16 @@
 //   a.zerstoeren()
 // Brauchbar ohne eigene Uhr: alles ist eine Funktion von zustand(i).liegeVergangen (deterministisch, pausiert mit dem Spiel).
 // Hilfsfunktion (rein, Node-Tests): Abschleppwagen.ablauf(t, gesamt, cfg) → { phase 0|1|2, u (0..1 in der Phase), schwund (0..1) }.
+// v32 (N1, 22.10.): „Auto fährt durch den Abschleppwagen“ – bis v31 war der Lkw NUR Optik (kein Körper in der Physik). Jetzt
+//   a.kollidieren(dt, { pickups })   je Physikschritt (main.js, nach Kollisionen.autoAuto): kinematischer Körper (8,0 × 2,55 m, unbeweglich,
+//                    Pose = dieselbe Spur wie die Optik, ohne Three.js) stößt Spieler, KI und Verkehr weich weg (autoAuto 'sanft', 1 Auto-Treffer
+//                    −5 % mit Abklingzeit, Schild fängt ab); der Lkw selbst bleibt unbeschädigt und auf seiner Spur. Kein Körper beim Verkleinern
+//                    (schwund) und für liegengebliebene Autos (eigenes Wrack). Wer beim Erscheinen schon tief im Lkw steckt (> durchTief 1,2 m), wird
+//                    ohne Stoß sanft herausgeschoben (≤ durchSchub 0,12 m je Schritt; kein Festklemmen/Wegschleudern); Stoß-Tempo so gedeckelt, dass ein angeschobenes Auto ≤ stossTempo (6 m/s) bekommt (Anfahrt startet optisch mit ~30 m/s).
+//                    v32 N1c: gestoßen werden alle Fahrzeuge (auch Polizei/Verkehr, die nach dem Schaden-System angelegt werden; die nehmen keinen Schaden).
+//                    config.schaden.abschlepp.kollision = false → alt (nur Optik).
+// v32 (N1b): Ab dem Aufladen (Phase 1) und beim Wegfahren ist das Wrack am alten Liegeplatz kollisionsfrei (f._abschleppFrei, a.frei,
+//   a.paarNur → Kollisionen.autoAuto-Paarfilter in main.js); auf der Ladefläche deckt es der Lkw-Körper ab. Kein unsichtbares Hindernis mehr.
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -21,6 +31,9 @@
   function wert(x, std) { return x === undefined ? std : x; }
   function glatt(t) { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); }
   const ORANGE = 0xffa21a, ORANGE_AUS = 0x5a3200;
+  // v32 N1: Körper des Lkw (Maße wie Verkehrs-Abschleppwagen; Modell reicht lokal von z −4,35 … +3,5 → Mitte 0,425 m vor dem Ursprung)
+  const KOERPER = { laenge: 8.0, breite: 2.55, masse: 1e7, vMax: 200, rueckwaertsMax: 200, beschleunigung: 1, bremsen: 1, wendigkeit: 1, grip: 1 };
+  const MITTE_VOR = 0.425;
 
   /** Phase zur Zeit t (s seit dem Liegenbleiben): 0 = anfahren, 1 = aufladen, 2 = wegfahren; u = Fortschritt in der Phase; schwund = Verkleinern am Ende. */
   function ablauf(t, gesamt, c) {
@@ -34,6 +47,8 @@
 
   class Abschleppwagen {
     constructor(strecke, fahrzeuge, schaden, szene) {
+      this.frei = false;
+      this.paarNur = (a, b) => !(a && a._abschleppFrei) && !(b && b._abschleppFrei);     // v32 N1b: Paarfilter für Kollisionen.autoAuto
       this.strecke = strecke; this.fahrzeuge = fahrzeuge; this.schaden = schaden; this.szene = szene || null;
       this.eintraege = [];            // je Fahrzeug: null | { lkw, ... , aktiv }
       this._hat = typeof THREE !== 'undefined';
@@ -89,12 +104,68 @@
     }
 
     /** Ablauf für Fahrzeug i starten: Liegeplatz, Fahrspur des Lkw (Bogenlänge, Querabstand), Ausgangslage des Meshes merken. */
-    _start(i, e) {
-      const f = this.fahrzeuge[i], v = f.vehicle, mesh = f.mesh, st = this.strecke, sp = st.spline, C = cfg();
+    /** v32 N1: Fahrspur des Lkw (Liegeplatz, Querabstand, Start/Weg) – ohne Three.js, gemeinsam für Optik und Kollision. */
+    _spur(i, e) {
+      const f = this.fahrzeuge[i], v = f.vehicle, st = this.strecke, C = cfg();
       const n = st.abfrage(v.x, v.z, f.index);
       const q = n.seitenabstand, seitlich = wert(C.seitlich, 3.6);
       e.s = n.s; e.qLkw = q >= 0 ? q - seitlich : q + seitlich;
       e.sStart = n.s - wert(C.anfahrtWeg, 38); e.weg = wert(C.abfahrtWeg, 34);
+      e.spurOk = true; e.warte = 0; e.aufgegeben = false;
+    }
+
+    /**
+     * v32 N1d: Wegfahren (Phase 2) ohne Bulldozer – steht/fährt ein Fahrzeug ≤ wegSicht (12 m) vor dem Lkw in seiner Spur, hält der Lkw
+     * Abstand (≥ wegLuecke 2 m), indem die Liege-Uhr des Wracks (schaden.z[i].liegen) angehalten wird: Optik, Körper und Reset bleiben
+     * dadurch gleich (alles hängt an liegeVergangen). Gesamtdauer höchstens wegMax (10 s), dann verkleinert er sich wie bisher.
+     * Läuft VOR schaden.schritt (main.js: kollidieren nach autoAuto, Schaden in Schritt 9) – deshalb +dt vorgehalten.
+     */
+    _wegHalten(i, e, zs, ab, dt, C, nAlle) {
+      const sc = this.schaden, z = sc.z[i], st = this.strecke, fz = this.fahrzeuge;
+      if (!z || ab.phase !== 2 || e.aufgegeben || ab.schwund > 0) return;
+      const t = zs.liegeVergangen, gesamt = zs.liegeGesamt, aZeit = wert(C.anfahrt, 2.5) + wert(C.aufladen, 1.5);
+      const rest = Math.max(0.05, gesamt - aZeit), sicht = wert(C.wegSicht, 12), luecke = wert(C.wegLuecke, 2), VORN = 4.35;
+      const sJetzt = this._sBei(e, ab), L = st.spline.laenge;
+      let sGrenze = Infinity;
+      const pj = this._pose(e, sJetzt);
+      for (let j = 0; j < nAlle; j++) {
+        if (j === i) continue;
+        const g = fz[j];
+        if (!g || !g.vehicle || g.ausgeschieden) continue;
+        const v = g.vehicle;
+        if (Math.abs(v.x - pj.x) > 60 || Math.abs(v.z - pj.z) > 60) continue;
+        const n = st.abfrage(v.x, v.z, g.index >= 0 ? g.index : undefined);
+        let d = n.s - sJetzt; if (d > L / 2) d -= L; if (d < -L / 2) d += L;
+        const hl = (v.daten.laenge || 4.4) / 2, hb = (v.daten.breite || 1.8) / 2;
+        const lueckeJetzt = d - hl - VORN;                                         // Lkw-Front bis Heck des Fahrzeugs
+        if (lueckeJetzt > sicht || lueckeJetzt < -1.5) continue;
+        if (Math.abs(n.seitenabstand - e.qLkw) > 1.275 + hb + 0.4) continue;      // nicht in seiner Spur
+        sGrenze = Math.min(sGrenze, sJetzt + d - hl - VORN - luecke);
+      }
+      if (!(sGrenze < Infinity)) return;
+      const weg = Math.max(0.01, e.weg), uGrenze = Math.sqrt(Math.max(0, Math.min(1, (sGrenze - e.s) / weg)));
+      const tGrenze = aZeit + uGrenze * rest;
+      const tZiel = Math.max(t, Math.min(t + dt, tGrenze));                         // nie zurück, höchstens normal weiter
+      if (tZiel >= t + dt - 1e-9) return;
+      e.warte = (e.warte || 0) + (t + dt - tZiel);
+      if (gesamt + e.warte > wert(C.wegMax, 10)) {                                 // zu lange gewartet → verkleinern wie bisher
+        e.aufgegeben = true;
+        z.liegen = Math.min(z.liegen, 0.35 + dt);
+        return;
+      }
+      z.liegen = gesamt - tZiel + dt;                                               // schaden.schritt zieht gleich dt ab → liegeVergangen = tZiel
+    }
+
+    /** v32 N1: Bogenlänge des Lkw zur Phase ab (gleiche Formel für Optik und Kollision). */
+    _sBei(e, ab) {
+      if (ab.phase === 0) return e.sStart + (e.s - e.sStart) * (1 - (1 - ab.u) * (1 - ab.u));     // bremst sanft ab
+      if (ab.phase === 1) return e.s;
+      return e.s + e.weg * ab.u * ab.u;                                                           // fährt an
+    }
+
+    _start(i, e) {
+      const f = this.fahrzeuge[i], v = f.vehicle, mesh = f.mesh, st = this.strecke, sp = st.spline;
+      if (!e.spurOk) this._spur(i, e);            // v32 N1: die Physik (kollidieren) hat die Spur meist schon gesetzt – dieselbe verwenden
       // v28 W4b: Höhe aus der Anzeige (Räder auf dem sichtbaren Belag, main.js radBodenPose) – sonst sackt das Wrack beim Anheben 6 cm ab
       e.auto = { x: v.x, y: isFinite(mesh.position.y) ? mesh.position.y : v.y, z: v.z, heading: v.heading, rx: mesh.rotation.x, rz: mesh.rotation.z, sx: mesh.scale.x, sy: mesh.scale.y, sz: mesh.scale.z };
       e.dist = 0;
@@ -116,7 +187,112 @@
         f.mesh.visible = true; f.mesh.scale.set(e.auto.sx, e.auto.sy, e.auto.sz);
       }
       if (e.lkw) e.lkw.visible = false;
-      e.aktiv = false;
+      e.aktiv = false; e.spurOk = false;
+    }
+
+    /** v32 N1b: Wracks ab Phase 1 (Aufladen/Wegfahren) für autoAuto ausblenden – Flag am Eintrag, a.frei = mindestens eins. */
+    _freiSetzen(C) {
+      const sc = this.schaden, fz = this.fahrzeuge;
+      let frei = false;
+      const an = !!(sc && sc.an && C.an !== false && C.kollision !== false);
+      for (let i = 0; i < fz.length; i++) {
+        const f = fz[i];
+        if (!f) continue;
+        let x = false;
+        if (an && sc.z[i]) { const zs = sc.zustand(i); x = zs.liegengeblieben && ablauf(zs.liegeVergangen, zs.liegeGesamt, C).phase >= 1; }
+        if (x) { f._abschleppFrei = true; frei = true; } else if (f._abschleppFrei) f._abschleppFrei = false;
+      }
+      this.frei = frei;
+    }
+
+    /**
+     * v32 N1: Kollision mit dem Abschleppwagen (je Physikschritt, nach Kollisionen.autoAuto). Der Lkw ist kinematisch (fährt seine Spur,
+     * wird nie verschoben, nimmt keinen Schaden); getroffene Autos werden über autoAuto (sanft) weggeschoben, an der Bande nachgeprüft
+     * und bekommen einen normalen Auto-Treffer (Abklingzeit in schaden.js – kein Dauerabzug beim Schleifen).
+     * @param {number} dt
+     * @param {{pickups?:object, countdown?:boolean}} [opt]
+     * @returns {{nr:number, i:number, staerke:number}[]} Stöße (nr = getroffenes Auto, i = liegengebliebenes Auto des Lkw)
+     */
+    kollidieren(dt, opt) {
+      const o = opt || {}, C = cfg(), K = R.Kollisionen, sc = this.schaden, out = [];
+      this._freiSetzen(C);
+      if (o.countdown || !sc || !sc.an || C.an === false || C.kollision === false || !K || !K.autoAuto || !R.Vehicle) return out;
+      // v32 N1c: Wracks nur aus dem Schaden-System (sc.z), gestoßen werden ALLE Fahrzeuge – auch Polizei/Verkehr, die main.js erst nach dem Schaden anlegt
+      const fz = this.fahrzeuge, n = Math.min(fz.length, sc.z.length), nAlle = fz.length, st = this.strecke;
+      const durchTief = wert(C.durchTief, 1.2);
+      this._tick = (this._tick || 0) + 1;
+      const alt = this._alt || (this._alt = []);
+      let aktiv = false;
+      for (let i = 0; i < n; i++) {
+        const f = fz[i];
+        if (!f || !f.vehicle) continue;
+        const zs = sc.zustand(i);
+        if (!zs.liegengeblieben) { const e0 = this.eintraege[i]; if (e0) { if (!e0.aktiv) e0.spurOk = false; e0.koerperAn = false; e0.durch = null; } continue; }
+        const e = this._holen(i);
+        if (!e.spurOk) this._spur(i, e);
+        const ab = ablauf(zs.liegeVergangen, zs.liegeGesamt, C);
+        if (C.wegHalten !== false) this._wegHalten(i, e, zs, ab, dt, C, nAlle);   // v32 N1d: nicht über Autos vor sich hinweg schieben
+        if (ab.schwund > 0) { e.koerperAn = false; continue; }                 // verkleinert sich gerade → kein Körper mehr
+        const s = this._sBei(e, ab), p = this._pose(e, s);
+        const b = e.koerper || (e.koerper = new R.Vehicle(KOERPER));
+        b.daten.laenge = KOERPER.laenge; b.daten.breite = KOERPER.breite; b.daten.masse = KOERPER.masse;
+        const bx = p.x - Math.sin(p.heading) * MITTE_VOR, bz = p.z - Math.cos(p.heading) * MITTE_VOR;
+        // Stoß-Tempo gedeckelt: die Anfahrt beginnt optisch mit ~30 m/s – ein angeschobenes Auto soll weggeschoben, nicht weggeschleudert werden.
+        // v32 N1c: Deckel = stossTempo (6 m/s) / (1 + Restitution) → das gestoßene Auto bekommt höchstens ~6 m/s (vorher 7,8)
+        const kc = (R.config && R.config.kollision) || {}, resti = kc.restitution !== undefined ? kc.restitution : 0.3;
+        const tempo = e.koerperAn && dt > 0 ? Math.min(wert(C.stossTempo, 6) / (1 + resti), Math.max(0, (s - e.sAlt) / dt)) : 0;
+        const vor = e.koerperAn ? { x: b.x, z: b.z, h: b.heading } : null;
+        e.sAlt = s; e.koerperAn = true; aktiv = true;
+        const by = isFinite(p.y) ? p.y : (f.vehicle.y || 0);
+        const setze = () => { b.x = bx; b.z = bz; b.y = by; b.heading = p.heading; b.vLaengs = tempo; b.vQuer = 0; b.drehImpuls = 0; b.imLooping = false; b.imFlug = false; b._anBande = false; };
+        setze();
+        const durch = e.durch || (e.durch = {});
+        for (let j = 0; j < nAlle; j++) {
+          if (j === i) continue;
+          const g = fz[j];
+          if (!g || !g.vehicle || g.ausgeschieden) continue;
+          const zj = j < n ? sc.zustand(j) : null;
+          if (zj && zj.liegengeblieben) continue;                                 // Wracks (auch das eigene) bleiben, wo sie liegen
+          const v = g.vehicle;
+          if (Math.hypot(v.x - bx, v.z - bz) > 4.9 + Math.hypot(v.daten.laenge || 4.4, v.daten.breite || 1.8) / 2) { durch[j] = false; continue; }
+          setze();
+          const tief = K.eindringung ? K.eindringung(v, b) : null;
+          // tief drin (Lkw erscheint im Auto, > durchTief): kein Wegschleudern/Festklemmen – sanft herausschieben (≤ durchSchub m je Schritt, kein Stoß)
+          if (tief && (durch[j] || tief.tief > durchTief)) {
+            durch[j] = true;
+            const sch = Math.min(tief.tief + 0.05, wert(C.durchSchub, 0.12));
+            v.x -= tief.nx * sch; v.z -= tief.nz * sch;
+            if (st && K.bande) K.bande(v, st);
+            continue;
+          }
+          durch[j] = false;
+          b._kollAlt = vor;
+          const a = alt[j];
+          v._kollAlt = a && a.t === this._tick - 1 ? { x: a.x, z: a.z, h: a.h } : null;
+          const xA = v.x, zA = v.z;
+          const res = K.autoAuto([g, b], { dt, rempeln: 'sanft' });
+          setze();                                                                // Lkw bleibt auf seiner Spur, Tempo unverändert
+          if (st && (v.x !== xA || v.z !== zA) && K.bande) K.bande(v, st);
+          if (!res.length) continue;
+          const stark = res[0].staerke;
+          out.push({ nr: j, i, staerke: stark });
+          const pk = o.pickups;
+          if (j < n) {                                                            // Verkehr/Polizei ohne Schaden-Eintrag: nur Stoß
+            if (pk && pk.hatSchild && pk.hatSchild(j) && sc.zaehlt(j, 'auto', stark) && pk.schildVerbrauchen(j)) sc.abfangen(j);
+            sc.treffer(j, 'auto', stark);
+          }
+          if (R.Audio && R.Audio.kollision && g.istSpieler && stark >= 1.5) { try { R.Audio.kollision(Math.min(6, stark)); } catch (err) { /* egal */ } }
+        }
+        b._kollAlt = { x: bx, z: bz, h: p.heading };
+      }
+      if (aktiv) for (let j = 0; j < nAlle; j++) {
+        const v = fz[j] && fz[j].vehicle;
+        if (!v) continue;
+        const a = alt[j] || (alt[j] = {});
+        a.x = v.x; a.z = v.z; a.h = v.heading; a.t = this._tick;
+      }
+      this.stoesse = out;
+      return out;
     }
 
     update(dt) {
@@ -139,10 +315,7 @@
       const f = this.fahrzeuge[i], mesh = f.mesh, lkw = e.lkw, U = lkw.userData, C = cfg();
       const ab = ablauf(t, gesamt, C), lade = wert(C.ladeHoehe, 1.15), kran = U.kran;
       // --- Lkw-Position ---
-      let s;
-      if (ab.phase === 0) s = e.sStart + (e.s - e.sStart) * (1 - (1 - ab.u) * (1 - ab.u));        // bremst sanft ab
-      else if (ab.phase === 1) s = e.s;
-      else s = e.s + e.weg * ab.u * ab.u;                                                            // fährt an
+      const s = this._sBei(e, ab);                                                                   // v32 N1: gleiche Formel wie die Kollision
       const p = this._pose(e, s);
       lkw.visible = true;
       lkw.position.set(p.x, p.y, p.z); lkw.rotation.set(0, p.heading, 0);
@@ -191,6 +364,7 @@
         const e = this.eintraege[i];
         if (!e) continue;
         if (e.aktiv) this._freigeben(i, e);
+        if (this.fahrzeuge[i]) this.fahrzeuge[i]._abschleppFrei = false;
         if (e.lkw) {
           if (e.lkw.parent) e.lkw.parent.remove(e.lkw);
           e.lkw.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });

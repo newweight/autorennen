@@ -287,7 +287,7 @@ C.reparaturJe10 = REP_STD;
   const G = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/cars/carCatalog.js', 'src/ui/garage.js']).Garage;
   if (G) {
     G.restSetzen('Test', 'passat', 40);
-    pruefe('Garage: gespeicherter Rest 40 % → Menü-Neustart startet mit 40 %', G.startProzent('Test', 'passat') === 40);
+    pruefe('v32: gespeicherter Rest 40 % → Menü-Neustart startet trotzdem mit 100 %', G.startProzent('Test', 'passat') === 100);
     G.restSetzen('Test', 'passat', 100);
     const { s } = neu(1, true); s._punkteSetzen(0, G.startProzent('Test', 'passat'));
     pruefe('Nochmal setzt Schaden zurück: Rest 100 → neues Schaden-Objekt startet bei 100 %, Stufe 0, Fahrwerte voll', s.zustand(0).prozent === 100 && s.zustand(0).stufe === 0 && s.z[0].wAkku === undefined);

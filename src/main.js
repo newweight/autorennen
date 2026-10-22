@@ -585,7 +585,7 @@
             preisgeld = R.Garage.preisgeld(t.zielPlatz || i + 1);
             muenzenRennen = this.muenzen ? this.muenzen.anzahlVon(t.nr) : 0;
             muenzenGesamt = R.Garage.gutschreiben(t.name, preisgeld);
-            if (this.schaden && this.schaden.an && f && f.auto) R.Garage.restSetzen(t.name, f.auto.id, this.schaden.zustand(t.nr).prozent);
+            if (this.schaden && this.schaden.an && f && f.auto) R.Garage.restSetzen(t.name, f.auto.id, 100);   // v32 (N4): kein Schaden-Rest mehr in die Garage (jedes Rennen startet mit 100 %)
             this._meldung(t.nr, '🏆 Preisgeld +' + preisgeld + ' 🪙', 4000);
             const hd = this.huds[f.spielerNr];
             if (hd && hd.muenzenSetzen && this.muenzen) hd.muenzenSetzen(muenzenRennen + preisgeld, preisgeld);
@@ -784,7 +784,7 @@
         // Runde 6 (W3-G): Spieler starten mit dem Schaden-Rest des letzten Rennens (Garage, min. 30 %; Reparatur = 100 %)
         if (this.schaden.an && R.Garage) {
           for (let i = 0; i < opt.spieler; i++) {
-            const f = this.fahrzeuge[i], pr = f && f.auto ? R.Garage.startProzent(spielerNamen[i], f.auto.id) : 100;
+            const f = this.fahrzeuge[i], pr = 100;   // v32 (N4): JEDES Rennen startet mit 100 % (Tuning bleibt, Schaden-Rest nicht)
             if (opt.nochmal) { if (f && f.auto) R.Garage.restSetzen(spielerNamen[i], f.auto.id, 100); continue; }   // v30 (G1): „Nochmal“ = repariertes Auto, Rest in der Garage ebenfalls zurück
             if (pr < 100) this.schaden._punkteSetzen(i, pr);
           }
@@ -1559,13 +1559,16 @@
       // nochmal (ein Auto an der Bande gilt beim Trennen als 10× so schwer → das andere weicht aus)
       const kxAlt = this._kollX || (this._kollX = []);
       for (let i = 0; i < this.fahrzeuge.length; i++) { const v = this.fahrzeuge[i].vehicle; kxAlt[2 * i] = v.x; kxAlt[2 * i + 1] = v.z; }
-      this.stoesse = R.Kollisionen.autoAuto(this.fahrzeuge, { countdown, rempeln, dt });
+      // v32 N1b: Wrack, das gerade aufgeladen wird / auf dem Lkw wegfährt, ist am alten Liegeplatz kollisionsfrei (Lkw-Körper trägt es)
+      const abFrei = this.abschlepp && this.abschlepp.frei ? this.abschlepp.paarNur : undefined;
+      this.stoesse = R.Kollisionen.autoAuto(this.fahrzeuge, abFrei ? { countdown, rempeln, dt, paarNur: abFrei } : { countdown, rempeln, dt });
       if (strecke && this.stoesse.length) {
         for (let i = 0; i < this.fahrzeuge.length; i++) {
           const v = this.fahrzeuge[i].vehicle;
           if (v.x !== kxAlt[2 * i] || v.z !== kxAlt[2 * i + 1]) bandeSt[i] = Math.max(bandeSt[i], R.Kollisionen.bande(v, strecke));
         }
       }
+      if (this.abschlepp && this.abschlepp.kollidieren) this.abschlepp.kollidieren(dt, { pickups, countdown });   // v32 N1: Abschleppwagen (nach Crash) ist fest – Spieler/KI stoßen weich ab
       if (strecke && R.Kollisionen.loopingAbstand) R.Kollisionen.loopingAbstand(this.fahrzeuge, strecke);   // Runde 6
       for (let k = 0; k < this.stoesse.length; k++) {
         const st = this.stoesse[k];

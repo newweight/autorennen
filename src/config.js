@@ -150,7 +150,12 @@ Rennspiel.config = {
     // Standard-Auto: vMax ≈ 0,52 rad/s (vorher 0,35–0,44), 50 % ≈ 0,80 rad/s (vorher 0,56–0,75).
     // Über der Haftgrenze: ueberDrift × Überschuss als Rutschen nach außen, ueberBremsen × Überschuss als Bremsung.
     // einschwingen/zurueck: Lenk-Glättung je s (vorher 6/9).
-    lenkung: { rateVmax: 0.52, rateHalb: 0.80, bezug: 1.8, ueberDrift: 0.35, ueberBremsen: 0.15, einschwingen: 9, zurueck: 12 },
+    lenkung: { rateVmax: 0.52, rateHalb: 0.80, bezug: 1.8, ueberDrift: 0.35, ueberBremsen: 0.15, einschwingen: 9, zurueck: 12,
+      // v32 (N2, „im Grünen lenkt es kaum"): nur abseits (Untergrund mit vMaxAbs = Gras/Sand), Asphalt/Rand/Öl unverändert.
+      // mindest: Drehrate ≥ mindest × Drehrate auf Asphalt (gleiches Auto, gleiches Tempo, gleicher Schaden) – vorher 60 % bei 10 m/s (Standard-Auto),
+      //   mit Schaden 55 %; drehMindest: während einer Schleuder-/Rempel-Drehung ≥ drehMindest × Asphalt (vorher Gras × 0,3 = 24 %);
+      // hilfeMax: die Lenkhilfe darf einer Lenkung des Spielers höchstens diesen Anteil wegnehmen (vorher bis 88–100 %).
+      abseits: { mindest: 0.78, drehMindest: 0.6, hilfeMax: 0.1 } },
     // grip/rollwiderstand: Haftung und Widerstand; vMaxFaktor: Deckel relativ zu vMax
     // (fehlt er: 0,25 + 0,75·grip²); vMaxAbs: zusätzlicher Deckel in m/s
     untergrund: {

@@ -6,3 +6,10 @@ H3 Zweispieler am gleichen Rechner: Spieler mit WASD muss die LINKE Bildhälfte 
 H4 Windows-Laptop mit Touchscreen über Internet: Touch-Steuerung (Handy-Modus, Pfeil-Knöpfe, Stern) erschien, obwohl Tastatur da. Erkennung heute vermutlich ontouchstart/pointer:coarse. Neu: Touch-Knöpfe nur, wenn KEINE Tastatur benutzt wird – erster Tastendruck blendet sie aus (Merken in localStorage), erste Berührung blendet sie wieder ein; zusätzlich kleiner Knopf „🎮 Touch an/aus“ im Pausemenü/HUD. Handy/iPad unverändert.
 Ablauf: Agent A (Sonnet) H1 · Agent B (Sonnet) H2+H3 · Agent C (Sonnet) H4 · Gegenlesen (Opus kurz) · Tests einzeln · sichern v31 · Installer Mini.
 Status: [x] H1 (+Fang ohne Ruck, Kolonne) [x] H2 [x] H3 [x] H4 [x] Gegenlesen (Mensch-Fang entfernt, Touch-Hinweis) [x] gesichert v31
+
+## Nachträge 19.10. (Rückmeldung Mini, v31 – vorher Cache-Verdacht klären!)
+N1 Auto fährt durch Abschleppwagen (offline oder online? Welche Strecke?) – reproduzieren: Teilnehmer↔Abschleppwagen-Kollision offline (collisions.js Verkehr) und online (simulation.js Z.76-79 stößt Verkehr; v28c trennen() Anzeige).
+N2 Im Grünen nach Crash/Öl: Lenkung links/rechts „funktioniert nicht wirklich“ – prüfen: Gras-Grip + Öl-Status + Schaden-Lenkstufe kumuliert → Lenkung fast null? Ölfleck-Effekt endet? Mindest-Lenkwirkung im Gras sicherstellen (kindgerecht).
+N3 Garage/Upgrade-Bildschirm: Karte „🔧 Garage“ unter Modus-Karten + Taste G – Sebastian findet sie nicht → sichtbarer machen (eigener Menü-Schritt oder Knopf oben), prüfen ob bei 1280×800 im Bild.
+N4 Start mit Garage-Restschaden – Entscheidung Sebastian ausstehend (jeder Start 100 %?).
+v31b (Zoom-Sperre) gebaut, menu+rennen grün, noch nicht gesichert/installiert.

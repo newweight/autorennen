@@ -26,6 +26,8 @@
 
       window.addEventListener('keydown', (e) => {
         if (this.spielTasten.has(e.code)) e.preventDefault();
+        // v31b (Sebastian): Browser-Zoom per Tastatur (⌘/Strg + Plus/Minus/0) im Spiel unterbinden – versehentlich gedrückt sah alles „riesig“ aus
+        if ((e.metaKey || e.ctrlKey) && (e.key === '+' || e.key === '-' || e.key === '=' || e.key === '0' || e.code === 'NumpadAdd' || e.code === 'NumpadSubtract')) e.preventDefault();
         const neu = !this.gedrueckt.has(e.code);
         if (neu) this.geradeGedrueckt.add(e.code);
         this.gedrueckt.add(e.code);
@@ -36,6 +38,8 @@
         this.gedrueckt.delete(e.code);
       });
       window.addEventListener('blur', () => this.gedrueckt.clear());
+      // v31b: Trackpad-Pinch-Zoom (kommt als wheel mit ctrlKey) ebenfalls aus
+      window.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
     }
 
     /** Wird einmal pro Frame nach der Verarbeitung aufgerufen. */

@@ -135,15 +135,21 @@ pruefe('4 Farben je Auto (alle Garage-Autos)', G.autos().every(a => G.farbenFuer
   pruefe('Reparatur mit Schaden aus: „nicht nötig"', G.reparieren('Jonas', 'troc-cabrio', false).grund === 'nichtNoetig');
   pruefe('Reparatur heiles Auto: „nicht nötig"', G.reparieren('Jonas', 'troc-cabrio', true).grund === 'nichtNoetig');
   pruefe('Startprozent ohne Rest = 100', G.startProzent('Jonas', 'troc-cabrio') === 100);
-  G.restSetzen('Jonas', 'troc-cabrio', 55);
-  pruefe('Rest 55 → nächstes Rennen startet mit 55 %', G.startProzent('Jonas', 'troc-cabrio') === 55);
-  G.restSetzen('Jonas', 'troc-cabrio', 0);
-  pruefe('Rest 0 (liegengeblieben) → mindestens 30 %', G.startProzent('Jonas', 'troc-cabrio') === 30);
   const k0 = G.konto('Jonas');
+  G.restSetzen('Jonas', 'troc-cabrio', 55);
+  pruefe('v32: Rest 55 gesetzt → Start trotzdem 100 %', G.startProzent('Jonas', 'troc-cabrio') === 100 && G.autoDaten('Jonas', 'troc-cabrio').rest === 100);
+  G.restSetzen('Jonas', 'troc-cabrio', 0);
+  pruefe('v32: Rest 0 (liegengeblieben) → Start 100 %', G.startProzent('Jonas', 'troc-cabrio') === 100);
   const r = G.reparieren('Jonas', 'troc-cabrio', true);
-  pruefe('Reparatur: −10 Münzen, Start wieder 100 %', r.ok && r.kosten === 10 && G.konto('Jonas') === k0 - 10 && G.startProzent('Jonas', 'troc-cabrio') === 100);
-  G.restSetzen('Emmy', 'multivan', 40);
-  pruefe('Reparatur ohne Geld: grund geld', G.reparieren('Emmy', 'multivan', true).grund === 'geld' && G.startProzent('Emmy', 'multivan') === 40);
+  pruefe('v32: Reparatur kostet nichts (nichtNoetig, Konto gleich)', !r.ok && r.grund === 'nichtNoetig' && r.kosten === 0 && G.konto('Jonas') === k0);
+  // alter gespeicherter Rest (40) wird beim Laden verworfen
+  {
+    const o = G.laden(); o.Alt = { muenzen: 50, autos: { multivan: { farbe: null, farben: [], motor: 1, reifen: 0, bremsen: 0, rest: 40 } } };
+    G.speichern(o);
+    const d = G.autoDaten('Alt', 'multivan');
+    pruefe('v32: alter Rest 40 → beim Laden 100, Tuning (Motor 1) bleibt, Start 100 %', d.rest === 100 && d.motor === 1 && G.startProzent('Alt', 'multivan') === 100);
+    pruefe('v32: Reparatur ohne Kosten, Konto bleibt 50', G.reparieren('Alt', 'multivan', true).kosten === 0 && G.konto('Alt') === 50);
+  }
 }
 
 // ------------------------------------------------------------ Speicherformat
