@@ -222,3 +222,41 @@ am: 'w'|'b', zuege: [...] (Schach: Text-Züge; 4 gewinnt: Spalten), ergebnis?: {
 
 **Wiederverbinden**: Verliert ein Spieler die Verbindung, behält er seinen Platz (`online:false` im `stand`). Mit `wiederverbinden` + Token kommt er zurück (die Seite merkt sich `code`/`token` im `sessionStorage`, auch über „Neu laden“). Ein Raum ohne verbundene Leute wird nach 10 Minuten gelöscht, ein Raum ohne Nachricht nach 3 h.
 **Limits**: 40 Räume, 60 Verbindungen, > 30 Nachrichten/s ignoriert, > 300/s getrennt, max. 8 Zuschauer, Nachrichten > 512 Byte trennen (Code 1009). Der Server schreibt keine Dateien, die Konsole nennt nur Raumcodes.
+
+# Radwelt: WebSocket `/ws-rad` („👥 Zusammen fahren“, R4-F, 23.10.)
+
+Datei: `server/radRaum.js` (eingebunden in `server.js` mit 1 require + 1 Upgrade-Zeile; `/ws` und `/ws-brett` unverändert). Client: `src/rad/mehrspieler.js`.
+Jeder fährt in seiner **lokalen** Radwelt (Physik, Rolle, Speichern lokal); der Server vermittelt nur Räume, Start, Rangliste und Ergebnis. Protokoll-Version 1.
+
+**Origin**: erlaubt `http://localhost:10100`, `http://127.0.0.1:10100`, `http://[::1]:10100`, gleiche Herkunft (Host / X-Forwarded-Host / `--oeffentlich`), https-Seiten im selben Tailnet (`*.<tailnet>.ts.net` wie der Host), Zusatzliste `RADWELT_ORIGINS` (Komma); ohne Origin (kein Browser) erlaubt; sonst `403`.
+**Limits**: 80 Verbindungen, 8 je Adresse (X-Forwarded-For), 30 Räume, 5 je Adresse, 8 Fahrer je Raum (Menschen vor Bots), Nachricht ≤ 6 KB (sonst Code 1009), > 25/s ignoriert, > 250/s getrennt, 5 falsche Codes je 10 s, Erstellen/Start höchstens alle 2 s.
+
+Zustände: `lobby` → `laden` (alle bauen die Strecke) → `countdown` (5 s) → `fahrt` → `ergebnis` (→ `lobby` per `zurLobby`).
+
+Browser → Server: `erstellen {name, optik, einst}` · `beitreten {code, name, optik}` · `wieder {code, id, token}` · `verlassen` · `einstellungen {einst}` (Gastgeber) ·
+`optik {name, optik}` · `bots {liste:[{name, optik}]}` (Gastgeber, Lobby) · `bereit {an}` · `start` (Gastgeber, alle bereit) · `geladen {L, zielM}` ·
+`z {d, s, r, v, w, wkg, q, k, fertig?, bots?:[…gleiche Felder je Bot]}` (5×/s; d = Gesamtweg m, v m/s, q Spur m, k Kadenz; `fertig` = Fahrt lokal beendet) ·
+`beenden` (Gastgeber: Ergebnis sofort) · `zurLobby` (Gastgeber) · `ping {z}`.
+`einst = { strecke: alpen|wiese|wald|mega|bauen, bau?: {km, anstiege, hm, maxSteig, art: rund|ab, thema, seed}, runden 1–20, wind, windRichtung (zufall → beim Start ausgewürfelt), realismus 50|75|100, windschatten }`.
+`optik = { g: m|w, haar, typ, rahmen, akzent, marke, trikot, helm, ul }` (Indizes der Farblisten, der Browser prüft noch einmal).
+
+Server → Browser: `hallo {v, pfad, max}` · `raum {code, id, token, host, wieder?, zustand?, einst?, zielM?, zeit?, du?}` · `wiederNein` ·
+`lobby {code, zustand, du, hostId, einst, fahrer:[{id, name, optik, bereit, host, online, bot}], max, lauf}` · `laden {einst, lauf}` · `countdown {ms, zielM}` · `los {zielM}` ·
+`stand {zeit, zielM, zustand, fahrer:[{id, platz, d, s, r, v, w, wkg, q, k, tz, ziel, zz, on, raus, dq, bot, gs, gm}]}` (5×/s, Rangliste, gs/gm = Abstand zum Ersten in s/m) ·
+`ergebnis {grund: alleImZiel|zeit|gastgeber, zeit, zielM, liste:[{platz, id, name, bot, zeit, gs, gm, d, avgW, status: ziel|raus|dq|unterwegs}], lauf}` ·
+`warnung {grund: watt|tempo|sprung|zurueck|wkg|zahl|strecke, id, dq, anzahl}` · `fehler {grund, text}` · `raumZu {grund}` · `pong`.
+
+**Regeln**: Rennuhr = Server-Uhr ab `los`. Zielstrecke = `zielM` des Gastgebers (Runden × Rundenlänge bzw. A→B-Länge). Ziel, wenn `d ≥ zielM` (Zielzeit zwischen zwei Meldungen interpoliert).
+Plausibilität je Meldung: ≤ 2500 W, ≤ 100 km/h, W/kg ≤ 35, kein Sprung (`d ≤ d_alt + 27,8 m/s · (Δt + 0,5 s) + 3 m`, `d ≤ 27,8 m/s · (Rennzeit + 1,5 s) + 5 m`), nicht rückwärts (> 2 m) –
+sonst verworfen + `warnung`; ab 15 Verstößen disqualifiziert. Ergebnis, wenn niemand mehr fährt (im Ziel / raus / DQ) oder 5 min nach dem Ersten. Reconnect mit `wieder` innerhalb 60 s;
+danach (oder 60 s ohne Zustandsmeldung) „raus“. Gastgeber weg → nächster Mensch wird Gastgeber (seine Bots fallen weg). Raum ohne verbundene Menschen schließt nach 10 min.
+Nur für Tests: Umgebungsvariable `RADWELT_RAUM_TEMPO` (Zeitraffer der Rennuhr + Sprung-Toleranz).
+
+**R4-F2 (Protokoll 2)**: `erstellen`/`beitreten` brauchen `v: 2` (sonst `fehler grund:'version'`) und `app` (Radwelt-Stand). `geladen {L, zielM, fp, app, sim}`; beim Countdown vergleicht der Server
+jeden Mitfahrer mit dem Gastgeber (app, Fingerabdruck `fp`, Zielstrecke ±0,5 m) → Abweichler bekommen `abweichung {grund: version|strecke, text}` und fahren nicht mit (`raus`, `grund:'abweichung'`);
+`countdown` trägt `{zielM, L, fp, app}` (der Browser prüft selbst noch einmal). Neu: `rauswerfen {id}` und `sperren {an}` (Gastgeber); `lobby.gesperrt`, `lobby.fahrer[].app/sim/abw`.
+`z` darf `sim` und `rtt` (ms) tragen; die Zielzeit wird um rtt/2 korrigiert; `fertig` mit `d ≥ zielM − 2 m` zählt als Ziel. `stand`/`ergebnis`: `sim`, `ergebnis.liste[].grund`
+(abweichung|rausgeworfen|getrennt|stale|aufgegeben|verlassen|gastgeber). „raus“ wegen `stale`/`getrennt` wird zurückgenommen, sobald wieder Daten kommen (bis zum Rennende).
+Limits: Code-Raten je Adresse/Tailnet-Identität (ab 5 Fehlversuchen 1, 2, 4 … s, max. 300 s, verfällt nach 10 min), höchstens 3 Räume je Adresse (lokal ohne Proxy-Header ausgenommen),
+X-Forwarded-For/Tailscale-Identität nur von 127.0.0.1/::1 (sonst Socket-Adresse), leerer Raum schließt nach 2 min. „Gleiche Herkunft“ nur für bekannte Hosts (localhost, IP-Adressen, *.ts.net,
+`--oeffentlich`) – gegen DNS-Rebinding. Alle Timer/Handler in radRaum.js fangen Fehler ab (ein Fehler beendet nie den Prozess).

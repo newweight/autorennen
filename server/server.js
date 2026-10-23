@@ -20,7 +20,9 @@ const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const { laden, Simulation, einstellungenPruefen } = require('./simulation');
+const RadApi = require('./radApi');                 // Radwelt R3c-D: Speicher-API (/api/rad/…, nur 127.0.0.1), eigene Datei
 const Brett = require('./brettspiele');            // Brettspiele (4 gewinnt, Schach): eigener WebSocket-Pfad /ws-brett, eigene Datei
+const RadRaum = require('./radRaum');              // Radwelt R4-F: „Zusammen fahren“, eigener WebSocket-Pfad /ws-rad, eigene Datei
 
 const WURZEL = path.resolve(__dirname, '..');
 const ERLAUBT = ['src', 'vendor', 'spiele'];        // Ordner, die ausgeliefert werden (dazu Autorennen.html); spiele/ = Brettspiele
@@ -143,7 +145,7 @@ function dateiFuer(urlPfad) {
   const teile = p.split('/').filter(Boolean);
   if (!teile.length || teile.some(t => t === '..' || t === '.' || t.startsWith('.'))) return null;
   if (teile.some(t => t === 'vorlage_swift' || t.startsWith('_'))) return null;      // Entwicklungsdateien (_werkzeug, _alt_…, Swift-Vorlage) nie ausliefern
-  if (!(teile.length === 1 && teile[0] === 'Autorennen.html') && !ERLAUBT.includes(teile[0])) return null;
+  if (!(teile.length === 1 && (teile[0] === 'Autorennen.html' || teile[0] === 'Radwelt.html')) && !ERLAUBT.includes(teile[0])) return null;
   const voll = path.resolve(WURZEL, ...teile);
   if (!voll.startsWith(WURZEL + path.sep)) return null;
   return voll;
@@ -189,6 +191,7 @@ function starten(opt) {
   const log = (...a) => { if (!opt.leise) console.log(new Date().toISOString().slice(11, 19), ...a); };
   const raeume = new Map();
   const brett = Brett.erzeugen(Object.assign({ leise: opt.leise }, opt.brett || {}));
+  const radRaum = RadRaum.erzeugen(Object.assign({ leise: opt.leise, oeffentlich }, opt.radRaum || {}));
   const fahrerNamen = R.config.fahrer.map(f => f.name);
   const autoIds = R.carCatalog.waehlbare().map(a => a.id);
   const hilfen = Object.keys(R.config.fahrhilfen);
@@ -196,12 +199,15 @@ function starten(opt) {
   const MAX_PRO_IP = 8, MAX_RAEUME_PRO_IP = 5, TEUER_MS = 3000, BEITRITT_FENSTER_MS = 10000, BEITRITT_FEHLER = 5;   // v27 F4
   const proIp = new Map();
 
-  const srv = http.createServer(httpAntwort);
+  const radApi = RadApi.erzeugen({ daten: opt.daten });      // Radwelt-Ablage: --daten bzw. RADWELT_DATEN, Standard ~/Documents/Radwelt-Projekt/Daten
+  if (radApi.aufgeraeumt) console.log('Radwelt-Ablage: ' + radApi.aufgeraeumt + ' Waisen-/Temp-Datei(en) aufgeräumt');
+  const srv = http.createServer((req, res) => { if (!radApi.behandeln(req, res)) httpAntwort(req, res); });
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false, clientTracking: true });
   srv.on('upgrade', (req, socket, kopf) => {
     let pfad = '';
     try { pfad = new URL(req.url, 'http://x').pathname; } catch (e) { /* ungültig */ }
     if (pfad === Brett.PFAD) return brett.upgrade(req, socket, kopf);       // Brettspiele (eigenes Protokoll, eigene Limits)
+    if (pfad === RadRaum.PFAD) return radRaum.upgrade(req, socket, kopf);   // Radwelt-Mehrspieler (eigenes Protokoll, Origin-Schutz, eigene Limits)
     if (pfad !== N.PFAD || verbindungen >= 80) { socket.write('HTTP/1.1 404 Not Found\r\n\r\n'); socket.destroy(); return; }
     // v27 F4: Limit je Adresse (wie Brettspiele MAX_PRO_IP): Schlüssel = erste X-Forwarded-For-Adresse; lokale Verbindungen ohne Header zählen nicht
     let ipKey = null;
@@ -699,9 +705,9 @@ function starten(opt) {
     srv.listen(opt.port, opt.host, () => {
       const port = srv.address().port;
       ok({
-        port, http: srv, wss, raeume, brett,
+        port, http: srv, wss, raeume, brett, radRaum, radDaten: radApi.wurzel,
         schliessen: () => new Promise((fertig) => {
-          clearInterval(schleife); brett.schliessen();
+          clearInterval(schleife); brett.schliessen(); radRaum.schliessen();
           for (const ws of wss.clients) ws.terminate();
           wss.close();
           srv.close(() => fertig());
@@ -719,10 +725,11 @@ if (require.main === module) {
   const port = +(arg('port') || process.env.PORT || 8444);
   const host = arg('host') || process.env.HOST || '0.0.0.0';
   const oeffentlich = arg('oeffentlich') || process.env.OEFFENTLICH || '';
+  const daten = arg('daten') || '';               // Radwelt: Ordner für gespeicherte Fahrten/Strecken (leer = Standard)
   const steuerung = arg('steuerung') || '';       // Ordner für den Internet-Schalter (wunsch.json / status.json); ohne = aus
   const statistik = Math.max(0, +(arg('statistik') || process.env.STATISTIK || 0)) || 0;   // v23: Sekunden zwischen den Tick-Statistik-Zeilen (0 = aus)
   const eingabeAlt = process.argv.includes('--eingabe-alt');       // nur Vergleich/Test: v22b-Verhalten der Eingabe-Warteschlange
-  starten({ port, host, oeffentlich, steuerung, statistik, eingabeAlt }).then((s) => {
+  starten({ port, host, oeffentlich, steuerung, statistik, eingabeAlt, daten }).then((s) => {
     const netz = [];
     for (const liste of Object.values(require('os').networkInterfaces())) {
       for (const a of liste || []) if (a.family === 'IPv4' && !a.internal) netz.push(a.address);
