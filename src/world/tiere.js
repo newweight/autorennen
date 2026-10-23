@@ -475,6 +475,39 @@
       return erg;
     }
 
+    /**
+     * v33 K2: Höchsttempo für ein Fahrzeug v, damit es vor Tieren in (oder auf dem Weg in) seiner Spur zum Stehen käme – für Verkehrswagen und Streifenwagen.
+     * Tier voraus, das die Spur kreuzt oder in ihr steht: Vorhersage der Tierlage bis zur Ankunft (höchstens vorher s), Spurbreite + Rand; cap = sqrt(2 · Bremse · Abstand).
+     * c = { tierBremse (m/s², 9), tierSicht (m, 25), tierVorher (s, 4), tierRand (m, 0,9) }; zielQuer = seitliche Lage des Lenkziels zum Wagen (m, + rechts): die Spur dorthin zählt mit.
+     * Gibt `soll` zurück, wenn nichts im Weg ist (soll darf Infinity sein).
+     */
+    bremsTempo(v, soll, c, zielQuer) {
+      if (!this.tiere.length || !this.slots) return soll;
+      c = c || {};
+      const r = v.richtung(), q = v.rechts(), tempo = Math.max(0, v.vLaengs);
+      const a = c.tierBremse || 9, sicht = Math.max(c.tierSicht || 25, tempo * tempo / (2 * a) + 8), halbL = ((v.daten && v.daten.laenge) || 4.5) / 2, halbB = ((v.daten && v.daten.breite) || 1.8) / 2;
+      const zq = Math.abs(zielQuer) < 8 ? (zielQuer || 0) : 0, cLo = Math.min(0, zq), cHi = Math.max(0, zq);
+      let best = soll;
+      for (let k = 0; k < this.slots.length; k++) {
+        const sl = this.slots[k];
+        if (!sl.aktiv || !ARTEN[sl.art]) continue;
+        const dx = sl.x - v.x, dz = sl.z - v.z;
+        if (dx * dx + dz * dz > (sicht + 8) * (sicht + 8)) continue;
+        const A = ARTEN[sl.art], ext = A._ext !== undefined ? A._ext : (A._ext = A.r + Math.max.apply(null, A.kreise.map(Math.abs)));
+        const vor = dx * r.x + dz * r.z, quer = dx * q.x + dz * q.z;
+        if (vor <= 0 || vor - ext - halbL > sicht) continue;
+        const t = sl.tier, wx = t ? t.wx : 0, wz = t ? t.wz : 0;
+        const vl = wx * r.x + wz * r.z, vq = wx * q.x + wz * q.z;
+        const tAnk = Math.max(0, vor - ext - halbL) / Math.max(3, tempo - vl), tp = Math.min(c.tierVorher || 4, tAnk + 0.5);      // +0,5 s Reserve: der Wagen bremst/lenkt träge, das Tier läuft weiter
+        const q1 = quer + vq * tp, rand = c.tierRand || 0.9, lo = Math.min(quer, q1) - ext - halbB - rand, hi = Math.max(quer, q1) + ext + halbB + rand;
+        if (lo > cHi || hi < cLo) continue;                                // kreuzt die Spur nicht
+        const dist = Math.max(0, vor - ext - halbL - 2);
+        const cap = Math.sqrt(2 * a * dist);
+        if (cap < best) best = cap;
+      }
+      return best;
+    }
+
     /** Tier erschrickt: rennt zum nächsten Rand weg (quer zur Fahrtrichtung des Autos). */
     _erschrecken(t, v) {
       const C = this.c, AR = ARTEN[t.art], sl = this.slots[t.slot];

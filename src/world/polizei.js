@@ -375,8 +375,22 @@
     /** Angehaltenes Auto: bremsen bis zum Stillstand, dann stehen (Bremse im Stand würde rückwärts fahren). */
     haltSteuerung(v) { return { gas: 0, bremse: v.vLaengs > 0.3 ? 1 : 0, lenkung: 0 }; }
 
-    /** Steuerung des Streifenwagens an Fahrzeug-Index i. */
+    /**
+     * Steuerung des Streifenwagens an Fahrzeug-Index i.
+     * v33 K2: Sicherheitsnetz für alle Phasen (auch Parken neben dem Ziel): steht ein Tier in der Spur und der Wagen käme nicht mehr davor zum Stehen, wird gebremst (kein Durchfahren).
+     */
     steuerung(i, dt, rennen) {
+      const s = this._steuerung(i, dt, rennen), T = this.spiel.tiere, f = this.spiel.fahrzeuge[i];
+      if (!s || !T || !T.tiere.length || !T.bremsTempo || !f) return s;
+      // v33 B (F1): nur in der Parkphase (kein Fahrer, der selbst ausweicht) und nur, wenn Anhalten noch möglich ist; dann voll bremsen
+      const k = this.idx.indexOf(i), st = k >= 0 ? this.logik._s(k) : null;
+      if (!st || st.phase !== 'halt') return s;
+      const v = f.vehicle, cap = T.bremsTempo(v, Infinity, this.c);
+      if (cap !== Infinity && v.vLaengs > cap + 0.5) return { gas: 0, bremse: 1, lenkung: s.lenkung };
+      return s;
+    }
+
+    _steuerung(i, dt, rennen) {
       const fz = this.spiel.fahrzeuge, f = fz[i], k = this.idx.indexOf(i), v = f.vehicle, d = f.polizeiFahrer, c = this.c;
       const st = this.logik._s(k), ziel = st.ziel >= 0 ? fz[st.ziel] : null;
       if (st.phase === 'halt' && ziel) return parkSteuerung(v, ziel.vehicle, this.seite[k], this._parkD(ziel, f), c.versatzVor);
