@@ -72,6 +72,15 @@ Notfall von Hand: `sudo /Library/PrivilegedHelperTools/de.newweight.autorennen.s
 Zustand: `cat /Users/Shared/autorennen-steuerung/status.json` · `…/Tailscale funnel status`.
 Tests: `bash tests/test_schalter.sh` (Helfer gegen Stub-Tailscale, bösartige Dateien), `node tests/test_netz.js` (Block J), `python3 tests/schalter_ui_test.py` (Browser, Tailscale-Attrappe `tests/tailscale_proxy_stub.js`).
 
+### Radwelt für Freunde (R6 / v34)
+- Derselbe Schalter öffnet auch den Radwelt-Mehrspieler (`/ws-rad`) für Freunde ohne Tailscale – **nur solange er an ist** (Server liest `status.json`; aus/fehlt/alt → `403`,
+  beim Ausschalten werden Internet-Verbindungen getrennt). In der Radwelt-Lobby: „🌐 Freunde ohne Tailscale einladen“ (Link `…:10000/rad/Radwelt.html?raum=CODE` + QR).
+- R6-2: Freunde brauchen den Link mit Einladungs-Schlüssel (`&k=…`), der Code allein reicht aus dem Internet nicht. Schalten nur von der Mac-mini-Seite (bzw. Autorennen-Menü),
+  nicht aus der eigenen Radwelt (localhost:10100). Der Autostart-Server hört nur auf 127.0.0.1 (`--host 127.0.0.1`), also nur über Tailscale, nicht im LAN.
+- Die Radwelt-Seite für Freunde ist eine eigene Kopie unter `<Spielordner>/rad` (legt `installieren.command` per `rad-kopieren.sh` an; Server-Option `--rad <Ordner>`).
+- Prüfen am Mac mini: `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8444/rad/Radwelt.html` → `200`;
+  `curl -s -o /dev/null -w "%{http_code}\n" -H "Tailscale-Funnel-Request: ?1" -H "X-Forwarded-For: 203.0.113.7" http://127.0.0.1:8444/api/rad/status` → `403`.
+
 ## Beenden
 
 `Ctrl+C` im Terminal-Fenster oder das Fenster schließen. Funnel von Hand abschalten:

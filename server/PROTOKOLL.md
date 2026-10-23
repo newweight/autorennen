@@ -260,3 +260,29 @@ jeden Mitfahrer mit dem Gastgeber (app, Fingerabdruck `fp`, Zielstrecke ±0,5 m)
 Limits: Code-Raten je Adresse/Tailnet-Identität (ab 5 Fehlversuchen 1, 2, 4 … s, max. 300 s, verfällt nach 10 min), höchstens 3 Räume je Adresse (lokal ohne Proxy-Header ausgenommen),
 X-Forwarded-For/Tailscale-Identität nur von 127.0.0.1/::1 (sonst Socket-Adresse), leerer Raum schließt nach 2 min. „Gleiche Herkunft“ nur für bekannte Hosts (localhost, IP-Adressen, *.ts.net,
 `--oeffentlich`) – gegen DNS-Rebinding. Alle Timer/Handler in radRaum.js fangen Fehler ab (ein Fehler beendet nie den Prozess).
+
+**R6 „Internet für Freunde“ (23.10.)**: Verbindungen aus dem offenen Internet (Header `Tailscale-Funnel-Request`, Header fremder Proxys `cf-*`/`X-Real-IP`/`Forwarded`,
+öffentliche Adresse in `X-Forwarded-For` vom lokalen Proxy oder öffentliche Socket-Adresse) nimmt `/ws-rad` **nur an, solange der Internet-Schalter an ist**
+(`status.json` des root-Helfers: `funnel:"an"`, höchstens 30 s alt; ohne `--steuerung` nie) – sonst `403`. Geht der Schalter aus, bekommen bestehende Internet-Verbindungen
+`fehler {grund:'internetAus'}` und werden mit Code 4003 getrennt (Prüfung alle 2 s; ihr Platz bleibt wie bei einem Netzabbruch reserviert). Internet-Gäste dürfen `beitreten`,
+aber nicht `erstellen` (`fehler {grund:'nurTailnet'}`). Schlüssel für Limits/Code-Raten: der **letzte** `X-Forwarded-For`-Eintrag (den setzt der lokale Proxy; vom Gast
+mitgeschickte stehen davor), bei Funnel nie die Tailnet-Identität.
+Neu Browser → Server: `schalterFrage` · `schalterUmschalten {an}` – wie beim Autorennen (`/ws`): dieselbe Rechte-Prüfung (`schalterBewertung`, hier ohne eigene Origin-Prüfung, weil
+`/ws-rad` den Origin schon geprüft hat – so geht es auch aus der eigenen Radwelt `http://localhost:10100`), dieselbe Wunsch-Datei, dasselbe Rate-Limit (1 Wunsch / 5 s für beide Pfade).
+Antwort `schalter {recht, funnel, wartet, rest, haengt?, helfer?, fehler?, einladung, radDa, radApp}`; `einladung` = `--oeffentlich` + `rad/Radwelt.html` (Browser hängt `?raum=CODE` an),
+`radDa` = Radwelt-Kopie liegt im Spielordner, `radApp` = deren `MP_APP`. Internet-Gäste bekommen immer nur `{recht:false}`.
+
+# Radwelt-Kopie `/rad/…` (R6)
+
+Der Server liefert unter `/rad/` eine **eigene Kopie** der Radwelt aus (`<Spielordner>/rad`, CLI `--rad <Ordner>`): nur `rad/Radwelt.html`, `rad/src/…`, `rad/vendor/…`
+(`/rad/` und `/rad` → `Radwelt.html`, Abfrage bleibt). Gleiche Regeln wie für die Spieldateien (kein `..`, keine `.`/`_`-Dateien, nur bekannte Endungen), zusätzlich wird der echte
+Pfad geprüft (kein Link aus `rad/` heraus). Die Kopie legt `server/autostart/rad-kopieren.sh` an (von `installieren.command` aufgerufen). Autorennen-Dateien (`/src/…`) bleiben unberührt –
+Radwelt und Autorennen überschreiben sich ihre gemeinsamen Dateien so nie. Die Speicher-API `/api/rad/…` bleibt nur direkt über 127.0.0.1 erreichbar (über Funnel/Tailnet-Proxy `403`).
+
+**R6-2 (Gegenlesen)**: Internet-Gäste brauchen beim `beitreten` zusätzlich `k` = Einladungs-Token des Raums (128 Bit, base64url, 22 Zeichen); ohne/falsch → `fehler {grund:'unbekannt'}`
+(zählt als Fehlversuch). Den Token holt der Gastgeber (nicht aus dem Internet): `einladung {neu?}` → `einladung {code, k}`; `neu:true` erzeugt einen neuen (alter ungültig).
+Internet aus → alle Tokens erlöschen, Gastgeber bekommt `einladung {code, k:null, grund:'internetAus'}`. Schlüssel für IPv6-Internet-Adressen = ihr /64. Gemeinsames Limit für
+alle Internet-Gäste: 30 Fehlversuche je Minute → 60 s kein Beitritt aus dem Internet. Höchstens 40 Internet-Verbindungen (`503`). Schalter über `/ws-rad`: Recht nur mit der
+strengen Prüfung wie `/ws` (Origin = Host/X-Forwarded-Host/`--oeffentlich`); Tailnet-Verbindungen von anderen erlaubten Seiten (eigene Radwelt `localhost:10100`, andere
+Tailnet-Geräte) bekommen `schalter {recht:false, grund:'seite', funnel, rest, miniSeite}` – geschaltet wird dann auf der Mac-mini-Seite (`/rad/Radwelt.html?schalter=1`).
+Autostart: Server mit `--host 127.0.0.1` (nur über `tailscale serve`/Funnel erreichbar, nicht mehr im LAN).

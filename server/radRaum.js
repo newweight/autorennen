@@ -13,6 +13,17 @@
 //   (Host / X-Forwarded-Host / --oeffentlich) · Seiten im selben Tailnet (*.<tailnet>.ts.net wie der Host) · opt.origins / RADWELT_ORIGINS.
 //   Fehlt Origin → kein Browser (Node/curl) → erlaubt (wie beim Internet-Schalter). Limits: 80 Verbindungen, 8 je Adresse (X-Forwarded-For),
 //   30 Räume, 5 Räume je Adresse, Nachricht ≤ 6 KB, > 25/s ignoriert, > 250/s getrennt, 5 falsche Codes je 10 s.
+// R6 Internet für Freunde: Verbindungen aus dem offenen Internet (Tailscale Funnel: Header Tailscale-Funnel-Request, oder öffentliche Adresse in
+//   X-Forwarded-For/Socket, oder Header anderer Proxys) nimmt /ws-rad NUR an, solange der Internet-Schalter an ist (opt.internetAn() = status.json
+//   des root-Helfers sagt „an“). Geht er aus, werden bestehende Internet-Verbindungen getrennt (Prüfung alle internetPruefMs). Internet-Gäste dürfen
+//   beitreten (Raumcode), aber keine Räume erstellen. Limits/Code-Raten-Sperre je öffentlicher Adresse (LETZTER X-Forwarded-For-Eintrag = vom lokalen
+//   Tailscale-Proxy gesetzt; vom Gast mitgeschickte Einträge stehen davor). Schalter-Nachrichten (schalterFrage/schalterUmschalten) wie beim Autorennen
+//   über opt.schalter (server.js: gleiche Wunsch-Datei, gleiche Rechte-Prüfung; Internet-Gäste haben nie Recht).
+// R6-2 (Gegenlesen): Internet-Gäste brauchen zum Beitreten den EINLADUNGS-TOKEN des Raums (128 Bit, im Link; der Code allein reicht aus dem Internet nicht).
+//   Token holt der Gastgeber (nicht aus dem Internet) mit „einladung {neu?}“; er erlischt mit dem Raum, beim Ausschalten des Internets und bei „neu“.
+//   IPv6-Internet-Adressen zählen je /64; zusätzlich ein gemeinsames Fehlversuch-Limit für alle Internet-Gäste (internetFehlMax je Minute → internetSperreMs).
+//   Höchstens maxInternet (40) Internet-Verbindungen. Schalter-Recht nur mit der strengen Origin-Prüfung von /ws; Tailnet-Seiten mit anderer Herkunft
+//   (z. B. eigene Radwelt http://localhost:10100) bekommen nur den Status + grund 'seite' + miniSeite (dort schalten).
 // Datenschutz: Konsole nennt nur Raumcodes und Zahlen (keine Namen/Adressen). Namen: max. 24 Zeichen, ohne Steuerzeichen/<>.
 // Protokoll: server/PROTOKOLL.md, Abschnitt „/ws-rad“ (und docs/MEHRSPIELER.md).
 // Tests: tests/test_radraum.js. Nur für Tests: RADWELT_RAUM_TEMPO (Zeitraffer der Rennuhr + Sprung-Toleranz, für vorgespulte Browser-Fahrten).
@@ -71,19 +82,65 @@ function bekannterHost(hp) {
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return true;
   return /^[a-z0-9-]+\.[a-z0-9-]+\.ts\.net$/.test(h);
 }
-/** Schlüssel für Limits/Sperren: X-Forwarded-For (bzw. Tailscale-Identität) nur vom lokalen Proxy (Loopback), sonst die Socket-Adresse; lokal ohne Header = 'lokal'. */
+/** Schlüssel für Limits/Sperren: X-Forwarded-For (bzw. Tailscale-Identität) nur vom lokalen Proxy (Loopback), sonst die Socket-Adresse; lokal ohne Header = 'lokal'.
+ *  R6: der LETZTE X-Forwarded-For-Eintrag zählt (den setzt der lokale Proxy aus der echten Quelladresse; davor könnte ein Gast eigene Einträge schmuggeln).
+ *  Bei Funnel-Anfragen zählt nie die Tailnet-Identität. */
 function adressSchluessel(req) {
   try {
     const h = (req && req.headers) || {}, ra = String((req && req.socket && req.socket.remoteAddress) || '');
     if (LOOPBACK.has(ra)) {
       const login = h['tailscale-user-login'];
-      if (typeof login === 'string' && /^[^\s,<>"'\\]{1,200}$/.test(login)) return 'id:' + login.slice(0, 100);
+      if (h['tailscale-funnel-request'] === undefined && typeof login === 'string' && /^[^\s,<>"'\\]{1,200}$/.test(login)) return 'id:' + login.slice(0, 100);
       const xff = h['x-forwarded-for'];
-      if (typeof xff === 'string' && xff.trim()) return 'ip:' + xff.split(',')[0].trim().slice(0, 64);
+      if (typeof xff === 'string' && xff.trim()) { const l = xff.split(',').map(x => x.trim()).filter(Boolean); if (l.length) return 'ip:' + v6Netz(l[l.length - 1], req).slice(0, 64); }
+      if (ausDemInternet(req)) return 'ip:internet';      // Funnel ohne X-Forwarded-For: nie wie „lokal“ behandeln (gemeinsamer Schlüssel für alle Internet-Gäste)
       return 'lokal';
     }
-    return 'ip:' + ra.replace(/^::ffff:/, '').slice(0, 64);
+    return 'ip:' + v6Netz(ra.replace(/^::ffff:/, ''), req).slice(0, 64);
   } catch (e) { return 'unbekannt'; }
+}
+/** R6-2: IPv6-Adresse aus dem Internet → ihr /64 (wer ein /64 hat, bekommt sonst je Adresse neue Versuche). IPv4/Tailnet/Heimnetz unverändert. */
+function v6Netz(a, req) {
+  a = ipNorm(a);
+  if (a.indexOf(':') < 0 || tailnetIP(a) || privatIP(a) || (req && !ausDemInternet(req))) return a;
+  const teile = a.split('::'); if (teile.length > 2) return a;
+  const vorn = teile[0] ? teile[0].split(':') : [], hinten = teile.length === 2 && teile[1] ? teile[1].split(':') : [];
+  const voll = teile.length === 2 ? vorn.concat(Array(Math.max(0, 8 - vorn.length - hinten.length)).fill('0'), hinten) : vorn;
+  if (voll.length !== 8 || !voll.every(x => /^[0-9a-f]{1,4}$/.test(x))) return a;
+  return voll.slice(0, 4).map(x => x.replace(/^0+(?=.)/, '')).join(':') + '::/64';
+}
+
+const ipNorm = (a) => String(a || '').trim().replace(/^\[|\]$/g, '').replace(/^::ffff:/i, '').toLowerCase();
+/** Tailnet-Adresse (100.64.0.0/10, fd7a:115c:a1e0::/48)? */
+function tailnetIP(a) {
+  a = ipNorm(a);
+  const m = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(a);
+  if (m) return +m[1] === 100 && +m[2] >= 64 && +m[2] <= 127;
+  return /^fd7a:115c:a1e0:/.test(a);
+}
+/** Heimnetz/Loopback (10/8, 172.16/12, 192.168/16, 169.254/16, 127/8, ::1, fc00::/7, fe80::/10)? */
+function privatIP(a) {
+  a = ipNorm(a);
+  const m = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(a);
+  if (m) { const x = +m[1], y = +m[2]; return x === 10 || x === 127 || (x === 172 && y >= 16 && y <= 31) || (x === 192 && y === 168) || (x === 169 && y === 254); }
+  return a === '::1' || /^f[cd][0-9a-f]{2}:/.test(a) || /^fe[89ab][0-9a-f]:/.test(a);
+}
+/** R6: Kommt die Anfrage aus dem offenen Internet? Funnel-Header, Header fremder Proxys, öffentliche Adresse in X-Forwarded-For (vom lokalen Proxy)
+ *  oder öffentliche Socket-Adresse → ja. Eigenes Tailnet (Serve), Heimnetz und lokal → nein. Im Zweifel ja. */
+function ausDemInternet(req) {
+  try {
+    const h = (req && req.headers) || {}, ra = String((req && req.socket && req.socket.remoteAddress) || '');
+    if (h['tailscale-funnel-request'] !== undefined) return true;
+    if (h['cf-connecting-ip'] !== undefined || h['cf-ray'] !== undefined || h['x-real-ip'] !== undefined || h['forwarded'] !== undefined) return true;
+    const ok = (x) => tailnetIP(x) || privatIP(x);
+    if (LOOPBACK.has(ra)) {
+      const xff = h['x-forwarded-for'];
+      if (xff === undefined) return false;
+      const l = String(xff).split(',').map(x => x.trim());
+      return !l.length || !l.every(ok);
+    }
+    return !ok(ra);
+  } catch (e) { return true; }
 }
 
 /** Darf diese Seite (Origin) /ws-rad öffnen? Ohne Origin (kein Browser) ja. */
@@ -111,7 +168,8 @@ function originErlaubt(req, oeffentlichHost, extra) {
 
 function erzeugen(opt) {
   opt = Object.assign({ leise: false, oeffentlich: '', origins: [], reconnectMs: 60000, leerMs: 2 * 60000, countdownMs: 5000, ladenMaxMs: 30000,
-    nachZielMs: 5 * 60000, staleMs: 30000, taktMs: 200, aufraeumenMs: 2000, maxRaeume: 30, tempo: 0, fehlFenster: 5, fehlSperreMaxS: 300, testFehler: null }, opt);
+    nachZielMs: 5 * 60000, staleMs: 30000, taktMs: 200, aufraeumenMs: 2000, maxRaeume: 30, tempo: 0, fehlFenster: 5, fehlSperreMaxS: 300, testFehler: null,
+    internetAn: null, schalter: null, internetPruefMs: 2000, internetCacheMs: 1000, maxInternet: 40, internetFehlMax: 30, internetSperreMs: 60000 }, opt);
   const testFehler = (stelle) => { if (opt.testFehler && opt.testFehler.has && opt.testFehler.has(stelle)) throw new Error('Testfehler ' + stelle); };   // nur Tests: Fehlerinjektion
   const tempo = opt.tempo > 0 ? opt.tempo : (Math.max(1, Math.min(100, +process.env.RADWELT_RAUM_TEMPO || 1)) || 1);   // Zeitraffer nur für Tests
   const extraOrigins = (opt.origins || []).concat(String(process.env.RADWELT_ORIGINS || '').split(',').map(x => x.trim()).filter(Boolean));
@@ -121,9 +179,24 @@ function erzeugen(opt) {
   const raeume = new Map();
   const proIp = new Map();
   const fehlVersuche = new Map();      // Code-Raten je Adresse/Tailnet-Identität: { n, sperreBis, letzte }
+  const netzFehl = { liste: [], sperreBis: 0 };      // R6-2: Fehlversuche ALLER Internet-Gäste zusammen (gleitende Minute)
+  let internetVerb = 0;
+  const tokenNeu = () => crypto.randomBytes(16).toString('base64url');      // 128 Bit, 22 Zeichen [A-Za-z0-9_-]
+  const tokenGleich = (a, b) => { try { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); } catch (e) { return false; } };
+  function netzFehlZaehlen(ms) {
+    netzFehl.liste = netzFehl.liste.filter(t => ms - t < 60000); netzFehl.liste.push(ms);
+    if (netzFehl.liste.length >= opt.internetFehlMax) { netzFehl.sperreBis = ms + opt.internetSperreMs; netzFehl.liste = []; log('Internet: zu viele falsche Einladungen – Beitritt aus dem Internet ' + Math.round(opt.internetSperreMs / 1000) + ' s gesperrt'); }
+  }
   let verbindungen = 0;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 6144, perMessageDeflate: false, clientTracking: true });
   const jetztMs = () => Date.now();
+  // R6: ist der Internet-Schalter an? (status.json des Helfers; höchstens 1×/internetCacheMs gelesen). Ohne opt.internetAn → nie.
+  let netz = { t: -Infinity, an: false };
+  function internetErlaubt(frisch) {
+    const ms = jetztMs();
+    if (frisch || ms - netz.t >= opt.internetCacheMs) { let an = false; try { an = typeof opt.internetAn === 'function' && opt.internetAn() === true; } catch (e) { an = false; } netz = { t: ms, an }; }
+    return netz.an;
+  }
   const rennZeit = (raum, ms) => raum.losMs ? Math.max(0, ((ms === undefined ? jetztMs() : ms) - raum.losMs) / 1000 * tempo) : 0;
 
   const senden = (ws, obj) => { if (ws && ws.readyState === 1) ws.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); };
@@ -413,13 +486,54 @@ function erzeugen(opt) {
   const aufrTimer = setInterval(() => { try { aufraeumen(); } catch (e) { console.error('[rad] Aufräumen:', e && e.stack); } }, opt.aufraeumenMs);
   if (aufrTimer.unref) aufrTimer.unref();
 
+  /** R6: Internet-Schalter aus → alle Verbindungen aus dem Internet trennen (Platz im Raum bleibt wie bei einem Netzabbruch reserviert). */
+  function internetPruefen() {
+    let n = 0;
+    for (const ws of wss.clients) if (ws.c && ws.c.internet) n++;
+    const an = internetErlaubt(true);
+    if (!an) {      // R6-2: Internet aus → alle Einladungs-Tokens erlöschen (Gastgeber erfährt es)
+      for (const raum of raeume.values()) if (raum.einladung) {
+        raum.einladung = ''; const h = hostVon(raum); if (h && h.ws) senden(h.ws, { t: 'einladung', code: raum.code, k: null, grund: 'internetAus' });
+      }
+    }
+    if (!n || an) return 0;
+    for (const ws of [...wss.clients]) {
+      if (!ws.c || !ws.c.internet) continue;
+      try { senden(ws, { t: 'fehler', grund: 'internetAus', text: 'Der Internet-Zugang am Mac mini wurde ausgeschaltet – Verbindung getrennt' }); ws.close(4003, 'internet aus'); } catch (e) { /* egal */ }
+      const t = setTimeout(() => { try { ws.terminate(); } catch (e) { /* egal */ } }, 1000); if (t.unref) t.unref();
+    }
+    log('Internet-Schalter aus: ' + n + ' Internet-Verbindung(en) getrennt');
+    return n;
+  }
+  const netzTimer = setInterval(() => { try { internetPruefen(); } catch (e) { console.error('[rad] Internet-Prüfung:', e && e.stack); } }, opt.internetPruefMs);
+  if (netzTimer.unref) netzTimer.unref();
+  /** Schalter-Antwort für diese Verbindung (Internet-Gäste / ohne Schalter: nur { recht:false }).
+   *  R6-2: Recht nur mit der strengen Prüfung (wie /ws). Tailnet-Gerät auf einer anderen Seite (eigene Radwelt localhost:10100, anderes Tailnet-Gerät):
+   *  nur Status (an/aus, Restzeit) + grund 'seite' + miniSeite – schalten geht dann auf der Mac-mini-Seite oder im Autorennen-Menü. */
+  function schalterNachricht(c, an) {
+    const nein = { t: 'schalter', recht: false };
+    if (c.internet || !opt.schalter || !c.schalterBew) return nein;
+    try {
+      if (!c.schalterBew.recht && c.schalterLose && c.schalterLose.recht && typeof opt.schalter.status === 'function') return Object.assign({ t: 'schalter' }, opt.schalter.status(), { recht: false, grund: 'seite' });
+      const m = an === undefined ? opt.schalter.frage(c.schalterBew) : opt.schalter.umschalten(c.schalterBew, an === true); return m && typeof m === 'object' ? m : nein;
+    } catch (e) { console.error('[rad] Schalter:', e && e.stack); return nein; }
+  }
+
   // ---------------------------------------------------------------- Nachrichten
   function nachricht(c, m) {
     const ws = c.ws, raum = c.raum, f = c.fahrer, ms = jetztMs();
     switch (m.t) {
       case 'hallo': return senden(ws, { t: 'hallo', v: VERSION, pfad: PFAD, max: MAX_FAHRER });
       case 'ping': return senden(ws, { t: 'pong', z: typeof m.z === 'number' ? m.z : 0, k: raum ? rennZeit(raum) : 0 });
+      case 'schalterFrage': return senden(ws, schalterNachricht(c));
+      case 'schalterUmschalten': return senden(ws, schalterNachricht(c, m.an === true));
+      case 'einladung': {      // R6-2: Einladungs-Token für Freunde aus dem Internet (nur Gastgeber, nicht aus dem Internet)
+        if (c.internet || !raum || !f || raum.hostId !== f.id) return fehler(ws, 'nurHost', 'Nur der Gastgeber lädt ein');
+        if (m.neu === true || !raum.einladung) { raum.einladung = tokenNeu(); if (m.neu === true) log('Raum ' + raum.code + ': neuer Einladungslink'); }
+        return senden(ws, { t: 'einladung', code: raum.code, k: raum.einladung });
+      }
       case 'erstellen': {
+        if (c.internet) return fehler(ws, 'nurTailnet', 'Räume erstellt der Gastgeber zu Hause – bitte mit dem Code bzw. Einladungslink beitreten');      // R6
         if (ms - (c.erstelltAm || 0) < 2000) return fehler(ws, 'zu_schnell', 'Bitte einen Moment warten');
         c.erstelltAm = ms;
         if (m.v !== VERSION) return fehler(ws, 'version', 'Deine Radwelt-Version passt nicht zum Server (Server ' + VERSION + ') – bitte aktualisieren');
@@ -440,15 +554,19 @@ function erzeugen(opt) {
       case 'beitreten': {
         // Code-Raten: Sperre je Adresse/Tailnet-Identität (nicht je Verbindung), ab 5 Fehlversuchen exponentiell 1, 2, 4 … s (höchstens fehlSperreMaxS)
         const fv = fehlVersuche.get(c.schluessel);
+        if (c.internet && ms < netzFehl.sperreBis) return fehler(ws, 'zu_schnell', 'Gerade zu viele falsche Einladungen – bitte in ' + Math.ceil((netzFehl.sperreBis - ms) / 1000) + ' s nochmal');
         if (fv && ms < fv.sperreBis) return fehler(ws, 'zu_schnell', 'Zu viele falsche Codes – bitte ' + Math.ceil((fv.sperreBis - ms) / 1000) + ' s warten');
         if (m.v !== VERSION) return fehler(ws, 'version', 'Deine Radwelt-Version passt nicht zum Server (Server ' + VERSION + ') – bitte aktualisieren');
-        const code = codeNormal(m.code), ziel = code && raeume.get(code);
+        const code = codeNormal(m.code);
+        let ziel = code && raeume.get(code);
+        if (c.internet && ziel && !(ziel.einladung && typeof m.k === 'string' && tokenGleich(m.k, ziel.einladung))) ziel = null;      // R6-2: aus dem Internet nur mit gültigem Einladungs-Token
         if (!ziel) {
+          if (c.internet) netzFehlZaehlen(ms);
           const x = fv || { n: 0, sperreBis: 0, letzte: 0 };
           x.n++; x.letzte = ms;
           if (x.n >= opt.fehlFenster) x.sperreBis = ms + Math.min(opt.fehlSperreMaxS, Math.pow(2, x.n - opt.fehlFenster)) * 1000;
           fehlVersuche.set(c.schluessel, x);
-          return fehler(ws, 'unbekannt', 'Diesen Raum gibt es nicht');
+          return fehler(ws, 'unbekannt', c.internet ? 'Einladung ungültig oder abgelaufen – bitte beim Gastgeber einen neuen Link holen' : 'Diesen Raum gibt es nicht');
         }
         if (ziel === raum) return lobbySenden(ziel);
         if (ziel.gesperrt) return fehler(ws, 'gesperrt', 'Der Gastgeber hat den Raum gesperrt');
@@ -581,7 +699,8 @@ function erzeugen(opt) {
 
   function verbinden(ws, req) {
     verbindungen++;
-    const c = { ws, raum: null, fahrer: null, zaehler: 0, zaehlerSeit: jetztMs(), lebt: true, schluessel: adressSchluessel(req) };
+    const c = { ws, raum: null, fahrer: null, zaehler: 0, zaehlerSeit: jetztMs(), lebt: true, schluessel: adressSchluessel(req), internet: ws.internet === true, schalterBew: ws.schalterBew || null, schalterLose: ws.schalterLose || null };
+    if (c.internet) internetVerb++;
     ws.c = c;
     ws.on('pong', () => { c.lebt = true; });
     ws.on('message', (daten, binaer) => { try {
@@ -597,7 +716,7 @@ function erzeugen(opt) {
     } catch (e) { console.error('[rad] Nachricht:', e && e.stack); } });
     ws.on('close', () => {
       try {
-        verbindungen--; clearInterval(c.herz);
+        verbindungen--; clearInterval(c.herz); if (c.internet) internetVerb--;
         if (ws.ipKey) { const n = (proIp.get(ws.ipKey) || 1) - 1; if (n > 0) proIp.set(ws.ipKey, n); else proIp.delete(ws.ipKey); }
         testFehler('close');
         getrennt(c);
@@ -618,17 +737,26 @@ function erzeugen(opt) {
     upgrade(req, socket, kopf) {
       try {
         if (!originErlaubt(req, oeffentlichHost, extraOrigins)) { socket.write('HTTP/1.1 403 Forbidden\r\n\r\n'); socket.destroy(); return; }
+        const internet = ausDemInternet(req);      // R6: aus dem Internet nur bei Schalter an
+        if (internet && !internetErlaubt()) { socket.write('HTTP/1.1 403 Forbidden\r\n\r\n'); socket.destroy(); return; }
+        if (internet && internetVerb >= opt.maxInternet) { socket.write('HTTP/1.1 503 Service Unavailable\r\n\r\n'); socket.destroy(); return; }      // R6-2: Rest bleibt fürs Tailnet
         if (verbindungen >= 80) { socket.write('HTTP/1.1 503 Service Unavailable\r\n\r\n'); socket.destroy(); return; }
         const sk = adressSchluessel(req), key = sk === 'lokal' ? null : sk;      // X-Forwarded-For nur vom lokalen Proxy, sonst Socket-Adresse
         if (key && (proIp.get(key) || 0) >= 8) { socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n'); socket.destroy(); return; }
+        let schalterBew = null, schalterLose = null;
+        if (!internet && opt.schalter && typeof opt.schalter.bewerten === 'function') {
+          try { schalterBew = opt.schalter.bewerten(req); if (!schalterBew.recht && typeof opt.schalter.bewertenLose === 'function') schalterLose = opt.schalter.bewertenLose(req); } catch (e) { schalterBew = null; }
+        }
         wss.handleUpgrade(req, socket, kopf, (ws) => {
+          ws.internet = internet; ws.schalterBew = schalterBew; ws.schalterLose = schalterLose;
           if (key) { ws.ipKey = key; proIp.set(key, (proIp.get(key) || 0) + 1); }
           wss.emit('connection', ws, req);
         });
       } catch (e) { console.error('[rad] Upgrade:', e && e.stack); try { socket.destroy(); } catch (e2) { /* egal */ } }
     },
-    schliessen() { clearInterval(taktTimer); clearInterval(aufrTimer); for (const ws of wss.clients) ws.terminate(); wss.close(); },
+    internetPruefen,
+    schliessen() { clearInterval(taktTimer); clearInterval(aufrTimer); clearInterval(netzTimer); for (const ws of wss.clients) ws.terminate(); wss.close(); },
   };
 }
 
-module.exports = { erzeugen, PFAD, VERSION, originErlaubt, adressSchluessel, bekannterHost, einstPruefen, optikPruefen, MAX_FAHRER, MAX_W, MAX_V };
+module.exports = { erzeugen, PFAD, VERSION, originErlaubt, adressSchluessel, ausDemInternet, v6Netz, tailnetIP, privatIP, bekannterHost, einstPruefen, optikPruefen, MAX_FAHRER, MAX_W, MAX_V };

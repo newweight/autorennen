@@ -4,6 +4,8 @@
 # - Start beim Hochfahren, auch ohne Anmeldung (LaunchDaemon), Neustart nach Absturz, verhindert Ruhezustand
 # - Zugang DAUERHAFT nur im eigenen Tailscale-Netz (tailscale serve) – aus dem offenen Internet unsichtbar
 # - Internet für Freunde ohne Tailscale nur bei Bedarf: „🌐 Internet-Zugang AN.command“ (geht nach 4 h von selbst aus)
+# - R6: legt die neueste Radwelt als eigene Kopie nach spiel/rad (Freunde fahren per Link mit, nur bei Internet-Schalter an).
+#   Nach jeder neuen RADWELT-Version ebenfalls nochmal doppelklicken (sonst „andere Version“ beim gemeinsamen Start).
 # - NEU (Internet-Schalter): „🌐 Internet für Freunde“ lässt sich im Spiel (Menü 🌐 Online) von jedem Tailscale-Gerät an/aus schalten.
 #   Der Spielserver darf dafür NICHTS ausführen – er schreibt nur eine Wunsch-Datei; ein winziger root-Helfer
 #   (LaunchDaemon de.newweight.autorennen.schalter, Skript internet-schalter.sh) prüft sie streng und ruft Tailscale auf (Auto-Aus nach 4 h).
@@ -31,6 +33,42 @@ sudo launchctl bootout "system/$SLABEL" 2>/dev/null
 # alte, von Hand gestartete Autorennen-Server (früher Port 8443) beenden – nur Prozesse mit server/server.js
 pkill -f "server/server.js --port 8443" 2>/dev/null; sleep 1
 sudo rm -rf "$UH/spiel"; sudo cp -R "$P/$V" "$UH/spiel"
+# --- R6 „Internet für Freunde“: eigene Radwelt-Kopie unter spiel/rad (Server liefert sie als /rad/… aus; Autorennen-Dateien bleiben unberührt) ---
+# Quelle: neueste Radwelt (~/Documents/Radwelt-Projekt, Starter „…NEUESTE….command“), sonst der jüngste Ordner in Radwelt-Versionen; RADWELT_QUELLE=<Ordner> überschreibt.
+# Kopiert wird als DEIN Benutzer (ohne sudo, nur Radwelt.html + src/ + vendor/, s. rad-kopieren.sh), erst die fertige Kopie legt sudo in den Spielordner.
+RP="$HOME/Documents/Radwelt-Projekt"; RADQ="${RADWELT_QUELLE:-}"
+if [ -z "$RADQ" ]; then
+  for _s in "$RP"/*NEUESTE*.command; do
+    [ -f "$_s" ] || continue
+    _v=$(grep -o 'Radwelt-Versionen/[^"/]*' "$_s" | head -1)
+    [ -n "$_v" ] || continue
+    brctl download "$RP/$_v" 2>/dev/null; sleep 2
+    [ -f "$RP/$_v/Radwelt.html" ] && { RADQ="$RP/$_v"; break; }
+  done
+fi
+if [ -z "$RADQ" ] && [ -d "$RP/Radwelt-Versionen" ]; then
+  _v=$(ls -1td "$RP"/Radwelt-Versionen/*/ 2>/dev/null | head -1); _v="${_v%/}"
+  [ -n "$_v" ] && { brctl download "$_v" 2>/dev/null; sleep 2; [ -f "$_v/Radwelt.html" ] && RADQ="$_v"; }
+fi
+sudo rm -rf "$UH/spiel/rad"
+if [ -n "$RADQ" ] && [ -f "$P/$V/server/autostart/rad-kopieren.sh" ]; then
+  RTMP=$(mktemp -d "${TMPDIR:-/tmp}/radkopie.XXXXXX") || RTMP=""
+  if [ -z "$RTMP" ] || [ ! -d "$RTMP" ]; then
+    echo "⚠️  Temp-Ordner ging nicht – Freunde-Link (/rad/) bleibt aus, Autorennen läuft normal."
+  elif /bin/bash "$P/$V/server/autostart/rad-kopieren.sh" "$RADQ" "$RTMP/rad"; then
+    # nur eigene, einfache Dateien (keine Hardlinks/fremden Dateien, die root sonst mitkopieren würde)
+    if [ -n "$(find "$RTMP/rad" \( -type f -links +1 \) -o \! -user "$(id -un)" 2>/dev/null | head -1)" ]; then
+      echo "⚠️  Radwelt-Kopie enthält fremde/verlinkte Dateien – nicht übernommen."
+    else
+      sudo cp -R "$RTMP/rad" "$UH/spiel/rad" && echo "   (Radwelt-Quelle: $RADQ)"
+    fi
+  else
+    echo "⚠️  Radwelt-Kopie fehlgeschlagen – Freunde-Link (/rad/) geht nicht, Autorennen läuft normal."
+  fi
+  [ -n "$RTMP" ] && rm -rf "$RTMP"
+else
+  echo "ℹ️  Keine Radwelt gefunden ($RP) – Freunde-Link (/rad/) bleibt aus, Autorennen läuft normal."
+fi
 sudo xattr -dr com.apple.quarantine "$UH/spiel" 2>/dev/null
 sudo chown -R "$U":staff "$UH/spiel"; sudo chmod -R go-w "$UH/spiel"; sudo chmod 700 "$UH"
 NODE="$UH/spiel/server/bin/node-macos-arm64"; sudo chmod +x "$NODE"
@@ -84,7 +122,7 @@ sudo tee /Library/LaunchDaemons/$LABEL.plist >/dev/null <<EOP
   <key>WorkingDirectory</key><string>$UH/spiel</string>
   <key>ProgramArguments</key><array>
     <string>/usr/bin/caffeinate</string><string>-i</string>
-    <string>$NODE</string><string>server/server.js</string><string>--port</string><string>8444</string>
+    <string>$NODE</string><string>server/server.js</string><string>--port</string><string>8444</string><string>--host</string><string>127.0.0.1</string>
     <string>--oeffentlich</string><string>$ADRESSE</string>$( [ -n "$STEUARG" ] && echo "<string>--steuerung</string><string>$STEU</string>" )</array>
   <key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ThrottleInterval</key><integer>10</integer>
   <key>StandardOutPath</key><string>$UH/server.log</string><key>StandardErrorPath</key><string>$UH/server.log</string>
@@ -93,7 +131,7 @@ EOP
 sudo chown root:wheel /Library/LaunchDaemons/$LABEL.plist; sudo chmod 644 /Library/LaunchDaemons/$LABEL.plist
 sudo launchctl bootstrap system /Library/LaunchDaemons/$LABEL.plist
 [ -n "$STEUARG" ] && sudo launchctl bootstrap system /Library/LaunchDaemons/$SLABEL.plist
-# Server intern auf 8444, Tailscale leitet :10000 → 127.0.0.1:8444 (seit 14.10.: Port 8443 gehört einem anderen Projekt!)
+# Server intern auf 8444, NUR 127.0.0.1 (v34: nicht mehr im LAN erreichbar), Tailscale leitet :10000 → 127.0.0.1:8444 (seit 14.10.: Port 8443 gehört einem anderen Projekt!)
 # Umzug: alte Autorennen-Freigabe auf :8443 entfernen – NUR wenn sie nachweislich auf 127.0.0.1:8444 (= Autorennen) zeigt.
 ALT=$(sudo "$TS" serve status --json 2>/dev/null | /usr/bin/python3 -c '
 import sys, json
@@ -117,12 +155,15 @@ fi
 # Tailscale: Internet (Funnel) AUS, nur eigenes Tailnet (Serve) AN
 sudo "$TS" funnel --https=10000 off >/dev/null 2>&1
 sudo "$TS" serve --bg --https=10000 http://127.0.0.1:8444 >/dev/null 2>&1 && echo "🔒 Zugang nur im eigenen Tailscale-Netz." || echo "⚠️ tailscale serve fehlgeschlagen"
-for i in $(seq 1 30); do curl -s -o /dev/null http://localhost:8444/ && break; sleep 1; done
+for i in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:8444/ && break; sleep 1; done
 echo ""
-if curl -s -o /dev/null http://localhost:8444/; then
+if curl -s -o /dev/null http://127.0.0.1:8444/; then
   echo "✅ Fertig. Server läuft als Benutzer „${U}“ und startet nach jedem Neustart von selbst (auch ohne Anmeldung)."
   echo "   Adresse (nur Geräte mit Tailscale): $ADRESSE"
   echo "   Freunde ohne Tailscale: im Spiel 🌐 Online → „Internet für Freunde“ (jedes Tailscale-Gerät) oder „🌐 Internet-Zugang AN.command“"
+  if curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8444/rad/Radwelt.html | grep -q 200; then
+    echo "   🚴 Radwelt für Freunde: in der Radwelt-Lobby „🌐 Freunde ohne Tailscale einladen“ (Link …/rad/Radwelt.html?raum=CODE)."
+  fi
 else
   echo "❌ Server antwortet nicht – Protokoll:"; sudo tail -20 "$UH/server.log"
 fi

@@ -16,5 +16,6 @@ else   # alte Installation ohne Helfer: kein sicheres Auto-Aus möglich (Tailsca
   read -r -p "Enter …" _; exit 1
 fi
 echo "🌐 Internet-Zugang AN für 4 Stunden: https://${NAME:-mac-mini-von-sebastian.tail39c1c2.ts.net}:10000/"
+echo "   Radwelt für Freunde: https://${NAME:-mac-mini-von-sebastian.tail39c1c2.ts.net}:10000/rad/Radwelt.html  (Raum-Code vom Gastgeber eingeben)"
 echo "   Früher aus: im Spiel (🌐 Online) oder „🔒 Internet-Zugang AUS.command“"
 read -r -p "Enter zum Schließen … " _

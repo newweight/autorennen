@@ -6,6 +6,8 @@
 //   --steuerung: Internet-Schalter im Spiel (nur Wunsch-Datei schreiben/Status lesen, s. u.) – ohne = Funktion aus
 //
 // - Liefert das Spiel per HTTP aus (nur Autorennen.html, src/, vendor/ – kein Verzeichnis-Listing, kein `..`).
+//   R6 (Internet für Freunde): /rad/… = EIGENE Kopie der Radwelt im Ordner <Spielordner>/rad (nur Radwelt.html, rad/src/, rad/vendor/;
+//   Kopie macht server/autostart/rad-kopieren.sh beim Installieren). Gemeinsame Dateien von Autorennen und Radwelt überschreiben sich so nie.
 //   „/“ = Autorennen.html. Funktioniert hinter einem HTTPS-Reverse-Proxy (Tailscale Funnel, cloudflared):
 //   alles relativ, WebSocket unter /ws.
 // - WebSocket /ws: Räume mit 4-stelligem Code (ohne 0/O/1/I), max. 6 Spieler, Zustände lobby → laden → rennen → ergebnis.
@@ -26,6 +28,8 @@ const RadRaum = require('./radRaum');              // Radwelt R4-F: „Zusammen 
 
 const WURZEL = path.resolve(__dirname, '..');
 const ERLAUBT = ['src', 'vendor', 'spiele'];        // Ordner, die ausgeliefert werden (dazu Autorennen.html); spiele/ = Brettspiele
+const RAD_ORDNER = path.join(WURZEL, 'rad');         // R6: eigene Radwelt-Kopie (für Freunde über den Internet-Schalter); fehlt der Ordner → /rad/… = 404
+const RAD_ERLAUBT = ['src', 'vendor'];               // in rad/: nur diese Ordner + rad/Radwelt.html
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.mp3': 'audio/mpeg',
@@ -86,7 +90,7 @@ function tailnetIP(a) {
  *   anderer Reverse-Proxy (cloudflared) hängt die öffentliche Adresse an die Liste (→ nein) und setzt cf-*-Header (→ nein).
  *   Reines „kommt von 127.0.0.1“ reicht bewusst NICHT (das täte auch cloudflared).
  */
-function schalterBewertung(req, oeffentlichHost) {
+function schalterBewertung(req, oeffentlichHost, o) {
   const nein = (grund) => ({ recht: false, grund, weg: '' });
   try {
     const h = (req && req.headers) || {};
@@ -102,7 +106,7 @@ function schalterBewertung(req, oeffentlichHost) {
     if (login !== undefined && !identOk) return nein('keinTailnet');
     if (!identOk && !(xffListe && xffListe.length && xffListe.every(tailnetIP))) return nein('keinTailnet');
     const origin = h['origin'];
-    if (origin !== undefined) {
+    if (origin !== undefined && !(o && o.originGeprueft === true)) {      // R6: /ws-rad prüft den Origin selbst (radRaum.originErlaubt: auch http://localhost:10100)
       let oh;
       try { const u = new URL(origin); oh = u.host.toLowerCase(); if (!/^https?:$/.test(u.protocol)) return nein('oeffentlich'); } catch (e) { return nein('oeffentlich'); }
       const ok = [h['host'], h['x-forwarded-host'], oeffentlichHost].some(x => typeof x === 'string' && x.toLowerCase() === oh);
@@ -135,31 +139,52 @@ function statusLesen(ordner, jetzt) {
 }
 
 // ------------------------------------------------------------------ statische Dateien
-/** URL-Pfad → Datei im Spielordner oder null (verboten/unbekannt). */
-function dateiFuer(urlPfad) {
+/** URL-Pfad → Datei im Spielordner oder null (verboten/unbekannt). radOrdner: Ordner der Radwelt-Kopie für /rad/… (Standard <Spielordner>/rad). */
+function dateiFuer(urlPfad, radOrdner) {
   let p;
   try { p = decodeURIComponent(urlPfad.split('?')[0].split('#')[0]); } catch (e) { return null; }
   if (p.includes('\0') || p.includes('\\')) return null;
   if (p === '/' || p === '') p = '/Autorennen.html';
+  else if (p === '/rad/') p = '/rad/Radwelt.html';      // R6
   else if (p.endsWith('/')) p += 'index.html';        // Brettspiele: /spiele/ → spiele/index.html
   const teile = p.split('/').filter(Boolean);
   if (!teile.length || teile.some(t => t === '..' || t === '.' || t.startsWith('.'))) return null;
   if (teile.some(t => t === 'vorlage_swift' || t.startsWith('_'))) return null;      // Entwicklungsdateien (_werkzeug, _alt_…, Swift-Vorlage) nie ausliefern
+  if (teile[0] === 'rad') {                            // R6: nur die eigene Radwelt-Kopie (rad/Radwelt.html, rad/src/…, rad/vendor/…)
+    const rest = teile.slice(1);
+    if (!rest.length || !((rest.length === 1 && rest[0] === 'Radwelt.html') || (rest.length > 1 && RAD_ERLAUBT.includes(rest[0])))) return null;
+    const basis = path.resolve(radOrdner || RAD_ORDNER);
+    const vollR = path.resolve(basis, ...rest);
+    return vollR.startsWith(basis + path.sep) ? vollR : null;
+  }
   if (!(teile.length === 1 && (teile[0] === 'Autorennen.html' || teile[0] === 'Radwelt.html')) && !ERLAUBT.includes(teile[0])) return null;
   const voll = path.resolve(WURZEL, ...teile);
   if (!voll.startsWith(WURZEL + path.sep)) return null;
   return voll;
 }
 
-function httpAntwort(req, res) {
+function httpAntwort(req, res, radOrdner) {
   const ende = (code, text) => { res.writeHead(code, { 'Content-Type': 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff' }); res.end(req.method === 'HEAD' ? undefined : text); };
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.setHeader('Allow', 'GET, HEAD'); return ende(405, 'Nicht erlaubt'); }
   if (/^\/spiele(\/(vier-gewinnt|schach))?(\?.*)?$/.test(req.url || '')) {      // ohne Schrägstrich → relative Links würden brechen
     const q = (req.url.match(/\?.*$/) || [''])[0], n = req.url.replace(/\?.*$/, '').split('/').pop();
     res.writeHead(301, { Location: n + '/' + q }); return res.end();
   }
-  const datei = dateiFuer(req.url || '/');
+  if (/^\/rad(\?.*)?$/.test(req.url || '')) {                     // R6: /rad → /rad/Radwelt.html (Abfrage, z. B. ?raum=, bleibt)
+    res.writeHead(301, { Location: '/rad/Radwelt.html' + (req.url.match(/\?.*$/) || [''])[0] }); return res.end();
+  }
+  const radBasis = path.resolve(radOrdner || RAD_ORDNER);
+  const datei = dateiFuer(req.url || '/', radBasis);
   if (!datei) return ende(404, 'Nicht gefunden');
+  // R6: in rad/ zusätzlich den echten Pfad prüfen (kein Link aus dem Ordner heraus)
+  if (datei.startsWith(radBasis + path.sep)) {
+    return fs.realpath(radBasis, (e1, basisEcht) => fs.realpath(datei, (e2, echt) => {
+      if (e1 || e2 || !echt.startsWith(basisEcht + path.sep)) return ende(404, 'Nicht gefunden');
+      ausliefern(echt);
+    }));
+  }
+  ausliefern(datei);
+  function ausliefern(datei) {
   fs.stat(datei, (err, st) => {
     if (err || !st.isFile()) return ende(404, 'Nicht gefunden');
     const typ = MIME[path.extname(datei).toLowerCase()];
@@ -169,6 +194,7 @@ function httpAntwort(req, res) {
     if (req.method === 'HEAD') return res.end();
     fs.createReadStream(datei).on('error', () => res.destroy()).pipe(res);
   });
+  }
 }
 
 // ------------------------------------------------------------------ Server
@@ -178,7 +204,8 @@ function httpAntwort(req, res) {
  */
 function starten(opt) {
   // tempo: Zeitraffer NUR für Tests (tests/test_netz.js), 1 = Echtzeit
-  opt = Object.assign({ port: 8444, host: '0.0.0.0', leise: false, ladenMaxMs: 20000, tempo: 1, oeffentlich: '', steuerung: '', statistik: 0, eingabeAlt: false }, opt);
+  opt = Object.assign({ port: 8444, host: '0.0.0.0', leise: false, ladenMaxMs: 20000, tempo: 1, oeffentlich: '', steuerung: '', statistik: 0, eingabeAlt: false, rad: '' }, opt);
+  const radOrdner = path.resolve(typeof opt.rad === 'string' && opt.rad ? opt.rad : RAD_ORDNER);      // R6: Radwelt-Kopie für /rad/ (Tests: eigener Ordner)
   // öffentliche Adresse (Tailscale Funnel), damit Link/QR in der Lobby auch stimmen, wenn der Host das Spiel über
   // http://localhost:8444 geöffnet hat. Nur https-Adressen ohne Pfad-Tricks.
   const oeffentlich = /^https:\/\/[a-z0-9.-]+(:\d{1,5})?\/?$/i.test(opt.oeffentlich || '') ? opt.oeffentlich.replace(/\/?$/, '/') : '';
@@ -191,7 +218,32 @@ function starten(opt) {
   const log = (...a) => { if (!opt.leise) console.log(new Date().toISOString().slice(11, 19), ...a); };
   const raeume = new Map();
   const brett = Brett.erzeugen(Object.assign({ leise: opt.leise }, opt.brett || {}));
-  const radRaum = RadRaum.erzeugen(Object.assign({ leise: opt.leise, oeffentlich }, opt.radRaum || {}));
+  // R6: /ws-rad bekommt den Internet-Schalter (gleiche Wunsch-Datei, gleiche Rechte-Prüfung) und „ist das Internet gerade an?“
+  const radRaum = RadRaum.erzeugen(Object.assign({ leise: opt.leise, oeffentlich,
+    internetAn: () => !!steuerung && statusLesen(steuerung, Date.now()).funnel === 'an',
+    schalter: {
+      // R6-2: Recht nur mit der STRENGEN Origin-Prüfung wie /ws; „lose“ (ohne Origin-Abgleich, radRaum hat den Origin geprüft) nur für den Status-Hinweis
+      bewerten: (req) => { const b = schalterBewertung(req, oeffentlichHost); if (!steuerung) b.recht = false; schalterProtokoll(b, req); return b; },
+      bewertenLose: (req) => { const b = schalterBewertung(req, oeffentlichHost, { originGeprueft: true }); if (!steuerung) b.recht = false; return b; },
+      status: () => { const st = steuerung ? statusLesen(steuerung, Date.now()) : { funnel: 'unbekannt', bis: null };
+        return { funnel: st.funnel, rest: st.funnel === 'an' && st.bis ? Math.max(0, Math.round((st.bis - Date.now()) / 1000)) : null, miniSeite: oeffentlich ? oeffentlich + 'rad/Radwelt.html' : '' }; },
+      frage: (b) => radSchalterExtra(schalterMeldung(b.recht, b.recht ? '' : b.grund)),
+      umschalten: (b, an) => radSchalterExtra(schalterWunsch(b.recht, b.recht ? '' : b.grund, an)),
+    } }, opt.radRaum || {}));
+  /** Zusatz für die Radwelt-Lobby (nur mit Recht): Einladungslink-Basis, liegt die Radwelt-Kopie auf dem Server, welche Mehrspieler-Version hat sie. */
+  let radInfo = { t: 0, da: false, app: '' };
+  function radSchalterExtra(m) {
+    if (!m || !m.recht) return m;
+    if (Date.now() - radInfo.t > 10000) {
+      let da = false, app = '';
+      try { da = fs.statSync(path.join(radOrdner, 'Radwelt.html')).isFile(); } catch (e) { /* fehlt */ }
+      try { const x = /MP_APP\s*=\s*'([a-z0-9_-]{1,24})'/.exec(fs.readFileSync(path.join(radOrdner, 'src', 'rad', 'mehrspieler.js'), 'utf8')); app = x ? x[1] : ''; } catch (e) { /* fehlt */ }
+      radInfo = { t: Date.now(), da, app };
+    }
+    m.einladung = oeffentlich ? oeffentlich + 'rad/Radwelt.html' : '';
+    m.radDa = radInfo.da; m.radApp = radInfo.app;
+    return m;
+  }
   const fahrerNamen = R.config.fahrer.map(f => f.name);
   const autoIds = R.carCatalog.waehlbare().map(a => a.id);
   const hilfen = Object.keys(R.config.fahrhilfen);
@@ -201,7 +253,7 @@ function starten(opt) {
 
   const radApi = RadApi.erzeugen({ daten: opt.daten });      // Radwelt-Ablage: --daten bzw. RADWELT_DATEN, Standard ~/Documents/Radwelt-Projekt/Daten
   if (radApi.aufgeraeumt) console.log('Radwelt-Ablage: ' + radApi.aufgeraeumt + ' Waisen-/Temp-Datei(en) aufgeräumt');
-  const srv = http.createServer((req, res) => { if (!radApi.behandeln(req, res)) httpAntwort(req, res); });
+  const srv = http.createServer((req, res) => { if (!radApi.behandeln(req, res)) httpAntwort(req, res, radOrdner); });
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false, clientTracking: true });
   srv.on('upgrade', (req, socket, kopf) => {
     let pfad = '';
@@ -314,12 +366,14 @@ function starten(opt) {
   /** Antwort auf schalterFrage/schalterUmschalten. Ohne Recht antworten Funnel-/Fremd-Verbindungen immer nur { recht:false } – verrät nichts.
    *  Tailnet-/lokale Verbindungen (grund 'keinTailnet') bekommen zusätzlich einen Grund, damit das Spiel erklären kann, warum der Knopf fehlt:
    *  'ohneSteuerung' (Server ohne --steuerung, aber Gerät sieht aus wie Tailnet) oder 'keinTailnet' (lokal/Heimnetz/ohne Tailscale-Merkmale). */
-  function schalterAntwort(c, extra) {
-    if (!steuerung || !c.schalter) {
+  function schalterAntwort(c, extra) { senden(c.ws, schalterMeldung(c.schalter, c.schalterGrund, extra)); }
+  /** R6: Inhalt der Schalter-Antwort (auch für /ws-rad). recht/grund wie c.schalter/c.schalterGrund. */
+  function schalterMeldung(recht, schalterGrund, extra) {
+    if (!steuerung || !recht) {
       const m = { t: 'schalter', recht: false };
-      if (c.schalterGrund === 'keinTailnet') m.grund = 'keinTailnet';
-      else if (!steuerung && c.schalterGrund === 'ok') m.grund = 'ohneSteuerung';          // Gerät hätte Recht, nur die Funktion ist aus
-      return senden(c.ws, m);
+      if (schalterGrund === 'keinTailnet') m.grund = 'keinTailnet';
+      else if (!steuerung && schalterGrund === 'ok') m.grund = 'ohneSteuerung';          // Gerät hätte Recht, nur die Funktion ist aus
+      return m;
     }
     const jetzt = Date.now();
     const st = statusLesen(steuerung, jetzt);
@@ -334,24 +388,27 @@ function starten(opt) {
       rest: st.funnel === 'an' && st.bis ? Math.max(0, Math.round((st.bis - jetzt) / 1000)) : null }, extra || {});
     if (haengt) m.haengt = letzterWunsch.art;
     if (st.helfer) m.helfer = st.helfer;                         // 'fehlt' | 'alt' | 'kaputt' – warum der Status unbekannt ist
-    senden(c.ws, m);
+    return m;
   }
 
-  function schalterUmschalten(c, an) {
-    if (!steuerung || !c.schalter) return schalterAntwort(c);
+  function schalterUmschalten(c, an) { senden(c.ws, schalterWunsch(c.schalter, c.schalterGrund, an)); }
+  /** R6: Wunsch schreiben (Rate-Limit 1 / 5 s für /ws und /ws-rad zusammen) → Schalter-Antwort. */
+  function schalterWunsch(recht, schalterGrund, an) {
+    const antwort = (extra) => schalterMeldung(recht, schalterGrund, extra);
+    if (!steuerung || !recht) return antwort();
     const jetzt = Date.now();
-    if (jetzt - letzterWunsch.zeit < 5000) return schalterAntwort(c, { fehler: 'zuSchnell' });
+    if (jetzt - letzterWunsch.zeit < 5000) return antwort({ fehler: 'zuSchnell' });
     const art = an === true ? 'an' : 'aus';
     try {
       // feste Form, nur zwei mögliche Werte + Zeit; der Helfer prüft sie noch einmal streng
       fs.writeFileSync(path.join(steuerung, 'wunsch.json'), JSON.stringify({ funnel: art, seit: jetzt }), { mode: 0o644 });
     } catch (e) {
       console.error('Internet-Schalter: wunsch.json nicht beschreibbar (' + (e && e.code) + ') – installieren.command erneut ausführen');
-      return schalterAntwort(c, { fehler: 'schreiben', code: String((e && e.code) || '').slice(0, 12) });
+      return antwort({ fehler: 'schreiben', code: String((e && e.code) || '').slice(0, 12) });
     }
     letzterWunsch = { art, zeit: jetzt };
     log('Internet-Schalter: ' + art + ' gewünscht');
-    schalterAntwort(c);
+    return antwort();
   }
 
   // --- Nachrichten ---
@@ -705,7 +762,7 @@ function starten(opt) {
     srv.listen(opt.port, opt.host, () => {
       const port = srv.address().port;
       ok({
-        port, http: srv, wss, raeume, brett, radRaum, radDaten: radApi.wurzel,
+        port, http: srv, wss, raeume, brett, radRaum, radDaten: radApi.wurzel, radOrdner,
         schliessen: () => new Promise((fertig) => {
           clearInterval(schleife); brett.schliessen(); radRaum.schliessen();
           for (const ws of wss.clients) ws.terminate();
@@ -727,9 +784,10 @@ if (require.main === module) {
   const oeffentlich = arg('oeffentlich') || process.env.OEFFENTLICH || '';
   const daten = arg('daten') || '';               // Radwelt: Ordner für gespeicherte Fahrten/Strecken (leer = Standard)
   const steuerung = arg('steuerung') || '';       // Ordner für den Internet-Schalter (wunsch.json / status.json); ohne = aus
+  const rad = arg('rad') || '';                   // R6: Ordner der Radwelt-Kopie für /rad/ (Standard <Spielordner>/rad)
   const statistik = Math.max(0, +(arg('statistik') || process.env.STATISTIK || 0)) || 0;   // v23: Sekunden zwischen den Tick-Statistik-Zeilen (0 = aus)
   const eingabeAlt = process.argv.includes('--eingabe-alt');       // nur Vergleich/Test: v22b-Verhalten der Eingabe-Warteschlange
-  starten({ port, host, oeffentlich, steuerung, statistik, eingabeAlt, daten }).then((s) => {
+  starten({ port, host, oeffentlich, steuerung, statistik, eingabeAlt, daten, rad }).then((s) => {
     const netz = [];
     for (const liste of Object.values(require('os').networkInterfaces())) {
       for (const a of liste || []) if (a.family === 'IPv4' && !a.internal) netz.push(a.address);

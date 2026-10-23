@@ -3,6 +3,7 @@
 // Origin-Schutz, Raum erstellen/beitreten (Code, bis 8, voll, falscher Code, Bremse), Gastgeber-Rechte + Einstellungen, Bereit/Start, Laden → Countdown → los,
 // Zustand 5×/s, Rangliste + Abstand s/m, Plausibilität (Watt, Tempo, Sprung, zurück, Disqualifikation), Ziel + Ergebnis, Reconnect (60 s → hier 0,8 s),
 // Gastgeber-Wechsel, Bots vom Gastgeber, Raum schließt leer, Limits (Größe, Rate), Autorennen-/ws und /ws-brett unberührt.
+// R6: Tailnet-Szenarien mit Tailnet-Adressen (100.x) – öffentliche Adressen gelten als „Internet“ (nur bei Schalter an, s. tests/test_rad_internet.js).
 'use strict';
 const path = require('path');
 const WebSocket = require(path.join(__dirname, '..', 'server', 'node_modules', 'ws'));
@@ -293,23 +294,25 @@ function verbinden(port, o) {
     lan.ws.close();
     const AS = RadRaum.adressSchluessel;
     pruefe('F2 #3 X-Forwarded-For nur vom lokalen Proxy: fremde Quelle → Socket-Adresse', AS({ socket: { remoteAddress: '192.168.1.9' }, headers: { 'x-forwarded-for': '1.2.3.4' } }) === 'ip:192.168.1.9');
-    pruefe('F2 #3 vom lokalen Proxy: X-Forwarded-For zählt', AS({ socket: { remoteAddress: '127.0.0.1' }, headers: { 'x-forwarded-for': '100.101.1.2, 1.1.1.1' } }) === 'ip:100.101.1.2');
+    pruefe('F2 #3 vom lokalen Proxy: X-Forwarded-For zählt (R6: der LETZTE Eintrag – den setzt der Proxy)', AS({ socket: { remoteAddress: '127.0.0.1' }, headers: { 'x-forwarded-for': '100.101.1.2, 1.1.1.1' } }) === 'ip:1.1.1.1');
+    pruefe('R6 eingeschmuggelter X-Forwarded-For-Eintrag zählt nicht', AS({ socket: { remoteAddress: '127.0.0.1' }, headers: { 'x-forwarded-for': '6.6.6.6, 203.0.113.7', 'tailscale-funnel-request': '?1' } }) === 'ip:203.0.113.7');
+    pruefe('R6 Funnel: Identitäts-Header wird ignoriert', AS({ socket: { remoteAddress: '127.0.0.1' }, headers: { 'tailscale-user-login': 'papa@example.com', 'x-forwarded-for': '203.0.113.7', 'tailscale-funnel-request': '?1' } }) === 'ip:203.0.113.7');
     pruefe('F2 #2 Tailnet-Identität als Schlüssel', AS({ socket: { remoteAddress: '::1' }, headers: { 'tailscale-user-login': 'papa@example.com', 'x-forwarded-for': '100.1.1.1' } }) === 'id:papa@example.com');
     pruefe('F2 lokal ohne Header → „lokal“', AS({ socket: { remoteAddress: '127.0.0.1' }, headers: {} }) === 'lokal');
 
     // Räume je Adresse (3)
     const rr = [];
-    for (let i = 0; i < 4; i++) { const c = await neu({ xff: '9.9.9.9' }); c.senden({ t: 'erstellen', v: 2, name: 'X' + i }); rr.push(c); }
+    for (let i = 0; i < 4; i++) { const c = await neu({ xff: '100.99.9.9' }); c.senden({ t: 'erstellen', v: 2, name: 'X' + i }); rr.push(c); }
     const rOk = []; for (const c of rr) rOk.push(await c.warten(m => m.t === 'raum' || m.t === 'fehler'));
     pruefe('F2 #3 höchstens 3 Räume je Adresse', rOk.slice(0, 3).every(m => m && m.t === 'raum') && rOk[3] && rOk[3].t === 'fehler' && rOk[3].grund === 'voll', rOk.map(m => m && (m.grund || m.t)));
     rr.forEach(c => c.ws.close());
 
     // Code-Raten je Adresse (über mehrere Verbindungen), exponentiell
     const ra = [];
-    for (let i = 0; i < 5; i++) { const c = await neu({ xff: '7.7.7.7' }); c.senden({ t: 'beitreten', v: 2, code: 'ZZZZ' }); await c.typ('fehler'); ra.push(c); }
-    const r6 = await neu({ xff: '7.7.7.7' }); r6.senden({ t: 'beitreten', v: 2, code: 'ZZZZ' }); const f6 = await r6.typ('fehler');
+    for (let i = 0; i < 5; i++) { const c = await neu({ xff: '100.77.7.7' }); c.senden({ t: 'beitreten', v: 2, code: 'ZZZZ' }); await c.typ('fehler'); ra.push(c); }
+    const r6 = await neu({ xff: '100.77.7.7' }); r6.senden({ t: 'beitreten', v: 2, code: 'ZZZZ' }); const f6 = await r6.typ('fehler');
     pruefe('F2 #2 Sperre gilt je Adresse, auch über neue Verbindungen', f6 && f6.grund === 'zu_schnell', f6 && f6.text);
-    const anders = await neu({ xff: '8.8.8.8' }); anders.senden({ t: 'beitreten', v: 2, code: 'ZZZZ' }); const fa = await anders.typ('fehler');
+    const anders = await neu({ xff: '100.88.8.8' }); anders.senden({ t: 'beitreten', v: 2, code: 'ZZZZ' }); const fa = await anders.typ('fehler');
     pruefe('F2 #2 andere Adresse nicht betroffen', fa && fa.grund === 'unbekannt');
     await warte(1100); r6.senden({ t: 'beitreten', v: 2, code: 'ZZZZ' }); await r6.typ('fehler');
     r6.senden({ t: 'beitreten', v: 2, code: 'ZZZZ' }); const f7 = await r6.typ('fehler');
@@ -318,13 +321,13 @@ function verbinden(port, o) {
 
     // Rauswerfen + Sperren + wieder auf fremdem Platz
     const h = await neu(); h.senden({ t: 'erstellen', v: 2, name: 'Host', einst: { strecke: 'wiese', runden: 1 } }); const hr = await h.typ('raum');
-    const gA = await neu({ xff: '5.5.5.5' }); gA.senden({ t: 'beitreten', v: 2, code: hr.code, name: 'A' }); const ar = await gA.typ('raum');
+    const gA = await neu({ xff: '100.65.5.5' }); gA.senden({ t: 'beitreten', v: 2, code: hr.code, name: 'A' }); const ar = await gA.typ('raum');
     const gB = await neu(); gB.senden({ t: 'beitreten', v: 2, code: hr.code, name: 'B' }); const br = await gB.typ('raum');
     gA.senden({ t: 'rauswerfen', id: br.id }); const nk = await gA.typ('fehler'); pruefe('F2 #2 nur der Gastgeber darf rauswerfen', nk && nk.grund === 'nurHost');
     h.senden({ t: 'rauswerfen', id: ar.id }); const zu = await gA.typ('raumZu');
     pruefe('F2 #2 Gastgeber wirft Mitfahrer raus', zu && zu.grund === 'rausgeworfen');
     let lb2 = await h.lobby(); pruefe('F2 #2 Rausgeworfener nicht mehr in der Lobby', lb2 && !lb2.fahrer.some(x => x.id === ar.id));
-    const gA2 = await neu({ xff: '5.5.5.5' }); gA2.senden({ t: 'beitreten', v: 2, code: hr.code, name: 'A' }); const fk = await gA2.typ('fehler');
+    const gA2 = await neu({ xff: '100.65.5.5' }); gA2.senden({ t: 'beitreten', v: 2, code: hr.code, name: 'A' }); const fk = await gA2.typ('fehler');
     pruefe('F2 #2 Rausgeworfener kommt mit dem Code nicht wieder rein', fk && fk.grund === 'gesperrt', fk);
     h.senden({ t: 'sperren', an: true }); lb2 = await h.lobby(); pruefe('F2 #2 Raum sperren', lb2 && lb2.gesperrt === true);
     const gC = await neu(); gC.senden({ t: 'beitreten', v: 2, code: hr.code, name: 'C' }); const fc = await gC.typ('fehler'); pruefe('F2 #2 gesperrter Raum: kein Beitritt', fc && fc.grund === 'gesperrt');

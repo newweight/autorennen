@@ -154,6 +154,13 @@ ist die Karte „🌐 Online“ grau („Online geht nur über ‚Mehrspieler st
 oder Taste **I**. Das sieht und kann nur, wer im eigenen Tailscale-Netz ist (Papas/Mamas Handy, Laptop). Nach 4 Stunden geht es von selbst aus. Freunde ohne Tailscale
 können nur mitspielen, solange es AN ist. Einrichtung/Prüfung: `server/README.md` (Abschnitt Internet-Schalter).
 
+**🚴 Radwelt für Freunde (v34):** Derselbe Schalter gilt auch für die Radwelt. In der Radwelt-Lobby (Gastgeber im Tailnet) „🌐 Freunde ohne Tailscale einladen“ → Link + QR-Code
+(`https://<mac-mini>.ts.net:10000/rad/Radwelt.html?raum=CODE&k=…`, der lange Schlüssel `k` ist nötig – der Code allein reicht aus dem Internet nicht). Aus der eigenen
+Radwelt (localhost:10100) wird über die Mac-mini-Seite eingeschaltet (Knopf öffnet sie). Der Freund öffnet den Link in Chrome/Edge, trägt seinen Namen ein und fährt mit Rolle
+oder Simulator mit – ohne Installation. Seit v34 hört der Spielserver auf dem Mac mini nur auf 127.0.0.1 (nur über Tailscale, nicht im LAN).
+Dafür legt `server/autostart/installieren.command` eine eigene Kopie der neuesten Radwelt nach `rad/` im Spielordner (nach jeder neuen Radwelt-Version nochmal doppelklicken).
+Das Autorennen und seine Dateien bleiben unverändert. Details: Radwelt-Projekt `docs/MEHRSPIELER.md`.
+
 ## ☔ Cabrio und Regen
 - Bei **Regen, Schnee oder Hagel** (auf der Megastrecke: wenn das Auto in so eine Wetterzone fährt; Rennstart bei Regen: schon im Countdown) wird das offene T-Roc Cabrio nass. Meldung „🌧️ Regen! Dach zu: ↑+↓ im Stand“.
 - **Dach schließen:** anhalten, ↑ + ↓ gleichzeitig (Spieler 2: W + S, Handy ▲ + ▼). 3 Sekunden steht das Auto still („Dach schließt … 3“), danach „Dach ist zu ✔“.
