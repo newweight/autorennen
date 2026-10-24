@@ -261,7 +261,9 @@ try:
         zuw = neu['calls'] / base['calls'] - 1
         pruefe(f"Draw-Calls zu zweit, Cockpit: vier Spiegel {neu['calls']:.1f} gegen zwei Autorennen-Spiegel {base['calls']:.1f} je Bild: {zuw*100:+.1f} % (höchstens +20 %)", zuw <= 0.20, f"Dreiecke {neu['tri']:.0f} / {base['tri']:.0f}")
         zs = ev('() => Rennspiel.Moto.cockpit.zustandSpiegel()')
-        pruefe('Zweispieler: Sparwerte des Autorennens (Spiegelbild 72 px breit = halbe Solo-Auflösung)', zs['groesse'][0][0][0] == 72 and zs['groesse'][1][0][0] == 72, zs['groesse'])
+        pruefe('Zweispieler: Spiegelbild 115 px breit (0,8 × halbe Solo-Auflösung; vorher 72 px, im 115-px-Fenster zu grob)', zs['groesse'][0][0][0] == 115 and zs['groesse'][1][0][0] == 115, zs['groesse'])
+        zr = ev("""() => { const s = Rennspiel.spiel; return [0, 1].map((i) => { const h = s.huds[i].el.getBoundingClientRect(); const sp = [...s.huds[i].el.parentElement.querySelectorAll('.cp-moto-spiegel')].map((e) => e.getBoundingClientRect()).filter((r) => r.left >= h.left - 1 && r.right <= h.right + 1 && r.width > 0); return sp.map((r) => [Math.round(r.width), Math.round(r.height)]); }); }""")
+        pruefe('Zweispieler: Spiegel-Fenster je Seite mindestens 130 × 70 px (solo-Maß war 113 × 71 bei halber Breite)', all(len(x) == 2 and all(w >= 130 and h >= 70 for (w, h) in x) for x in zr), zr)
         # Bild zu zweit: beide fahren (Autopilot), warten bis eine Kurve
         ev('() => { Rennspiel.spiel.pausiert = false; }')
         try:

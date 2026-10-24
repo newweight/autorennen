@@ -113,6 +113,20 @@ EINBLEND = '''() => { const s = Rennspiel.spiel, f = s.fahrzeuge[0], v = f.vehic
     liste.push({ n: e.className.split(' ')[0] + '[' + txt.slice(0, 40).replace(/\\n/g, ' ') + ']', r: [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)], ueberlappt: w > 1 && hh > 1 }); });
   return { bike, vorne, imBild: bike.r > 0 && bike.l < hd.right && bike.b > 0 && bike.t < hd.bottom, liste, treffer: liste.filter((e) => e.ueberlappt).map((e) => e.n) }; }'''
 
+# Abstände (m) zwischen den Umrissen von Motorrad (mit Fahrer), Helfer-Figur und Helfer-Fahrzeug in Straßenkoordinaten (längs / quer): Lücke = größere der beiden Achsen-Lücken, < 0 heißt überlappt
+ABSTAND = '''() => { const s = Rennspiel.spiel, f = s.fahrzeuge[0], u = __U.u(0), sz = u.szene, n = s.strecke.spline.naechster(f.vehicle.x, f.vehicle.z, f.index), p = s.strecke.spline.punktBei(n.s);
+  const tx = p.tx, tz = p.tz, nx = p.nx, nz = p.nz;
+  const box = (obj, ausser) => { const b = { a0: 1e9, a1: -1e9, q0: 1e9, q1: -1e9, y0: 1e9, y1: -1e9 }; obj.updateMatrixWorld(true);
+    const rein = (o) => { if (o === ausser) return; if (o.isMesh && o.geometry && o.visible !== false) { if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); const g = o.geometry.boundingBox;
+        for (const x of [g.min.x, g.max.x]) for (const y of [g.min.y, g.max.y]) for (const z of [g.min.z, g.max.z]) { const v = new THREE.Vector3(x, y, z).applyMatrix4(o.matrixWorld), dx = v.x - p.x, dz = v.z - p.z, a = dx * tx + dz * tz, q = dx * nx + dz * nz;
+          b.a0 = Math.min(b.a0, a); b.a1 = Math.max(b.a1, a); b.q0 = Math.min(b.q0, q); b.q1 = Math.max(b.q1, q); b.y0 = Math.min(b.y0, v.y); b.y1 = Math.max(b.y1, v.y); } }
+      o.children.forEach(rein); };
+    rein(obj); return b; };
+  const luecke = (A, B) => +Math.max(A.a0 - B.a1, B.a0 - A.a1, A.q0 - B.q1, B.q0 - A.q1).toFixed(2);
+  const qualm = f.mesh.getObjectByName('Qualm'), bike = box(f.mesh, qualm), figObj = sz && sz.figur && sz.figur.visible ? sz.figur : (u.stFigur && u.stFigur.visible ? u.stFigur : null), fahrz = sz && sz.helfer ? sz.helfer.mesh : null;
+  const fig = figObj ? box(figObj) : null, fz = fahrz ? box(fahrz) : null, r2 = (b) => b && { laenge: +(b.a1 - b.a0).toFixed(2), breite: +(b.q1 - b.q0).toFixed(2), hoch: +(b.y1 - b.y0).toFixed(2), a: [+b.a0.toFixed(2), +b.a1.toFixed(2)], q: [+b.q0.toFixed(2), +b.q1.toFixed(2)] };
+  return { bike: r2(bike), figur: r2(fig), fahrzeug: r2(fz), figurBike: fig ? luecke(fig, bike) : null, fahrzeugBike: fz ? luecke(fz, bike) : null, figurFahrzeug: fig && fz ? luecke(fig, fz) : null, fahrzeugDavor: fz ? +(fz.a0 - bike.a1).toFixed(2) : null }; }'''
+
 # Prüfung für Werkstatt/Krankenstation im Bild: Gebäude deckend (auch bei naher Kamera), Kamera nicht im Gebäude, Gebäude + Motorrad + Figur im Bild
 STATION_PRUEFUNG = '''(art) => { const s = Rennspiel.spiel, w = art === 'werkstatt' ? s.motoStationen.werkstatt : s.motoStationen.kranken, P = w.platz, u = __U.u(0), f = s.fahrzeuge[0], k = s.kameras[0].kamera;
   // Gebäude deckend: nach einem Animationsschritt mit allen Fahrzeugen (die Halle des Autorennens würde sich bei Kameraabstand < 8 m durchsichtig machen)
@@ -214,17 +228,17 @@ try:
         starte('wiese', autopilot=True)
         ev('() => { __U.lauf(8); Rennspiel.Moto.unfallStart.sturzFolge(Rennspiel.spiel, 0, { art: "schaden", schwer: false }); __U.lauf(2); Rennspiel.Moto.unfallStart.sturzFolge(Rennspiel.spiel, 0, { art: "schaden", schwer: false }); }')
         ev('() => { const u = __U.u(0); __U.lauf(30, () => !u.szene); __U.lauf(3); __U.halten(true); }'); page.wait_for_timeout(500); ev('() => __U.kameraSnap()'); page.wait_for_timeout(700)
-        q = ev('''() => { const s = Rennspiel.spiel, u = __U.u(0), f = s.fahrzeuge[0]; return { z: u.zustand, qualm: !!u.qualm, sichtbar: !!(u.qualm && u.qualm.visible), kinder: u.qualm ? u.qualm.children.filter((c) => c.visible && c.isMesh).length : 0, tris: u.qualm ? u.qualm.children[0].geometry.attributes.position.count / 3 : 0, mesh: f.mesh.children.includes(u.qualm), v: f.vehicle.tempoKmh, p: u.qualm ? __U.projiziere(f.mesh.position.x, f.mesh.position.y + 1.4, f.mesh.position.z) : null }; }''')
+        q = ev('''() => { const s = Rennspiel.spiel, u = __U.u(0), f = s.fahrzeuge[0], pts = u.qualm ? u.qualm.userData.pts : null; return { z: u.zustand, qualm: !!u.qualm, sichtbar: !!(u.qualm && u.qualm.visible), objekte: u.qualm ? u.qualm.children.filter((c) => c.visible).length : 0, punkte: !!(pts && pts.isPoints), n: pts ? pts.geometry.attributes.position.count : 0, mesh: f.mesh.children.includes(u.qualm), v: f.vehicle.tempoKmh, p: u.qualm ? __U.projiziere(f.mesh.position.x, f.mesh.position.y + 1.4, f.mesh.position.z) : null }; }''')
         bild(page, 'moto_unfall_schaden.png', f"(Motorrad {q['z']:.0f} %, Qualm)")
-        pruefe('Motorrad-Schaden: zweimal −20 % → 60 %, Qualm sichtbar (zwölf Wolken in EINEM Mesh am Motorrad = 1 Draw-Call), Motorrad im Bild', abs(q['z'] - 60) < 0.01 and q['sichtbar'] and q['kinder'] == 1 and q['tris'] == 96 and q['mesh'] and q['p']['drin'], q)
-        # Qualm wird bei mehr Schaden deutlicher: mehr Wolken, dunkler, größer, dichter (gleiche Zeit t, Stärke 0,35 gegen 0,95)
-        ds = ev("""() => { const W = Rennspiel.Moto.unfallWelt, u = __U.u(0), q = u.qualm, m = q.userData.mesh, out = {};
-          for (const [k, st] of [['leicht', 0.35], ['stark', 0.95]]) { W.qualmZeigen(q, 0.37, st); const p = m.geometry.attributes.position.array, c = m.geometry.attributes.color.array; let n = 0, grau = 0, vol = 0, gr = 0;
-            for (let i = 0; i < 12; i++) { let mn = 1e9, mx = -1e9; for (let v = 0; v < 24; v++) { const y = p[(i * 24 + v) * 3 + 1]; mn = Math.min(mn, y); mx = Math.max(mx, y); } if (mx - mn > 0.05) { n++; vol += mx - mn; } }
-            for (let i = 0; i < c.length; i += 3) { grau += c[i]; gr++; }
-            out[k] = { wolken: n, grau: +(grau / gr).toFixed(2), hoehe: +vol.toFixed(2), deck: +m.material.opacity.toFixed(2) }; }
-          W.qualmZeigen(q, 0.37, 0.4); return out; }""")
-        pruefe('Qualm: ab starkem Schaden (< 50 %) mehr Wolken, dunklere Farbe, größer und deckender als bei leichtem Schaden, weiter 1 Mesh', ds['stark']['wolken'] > ds['leicht']['wolken'] and ds['stark']['grau'] < ds['leicht']['grau'] - 0.05 and ds['stark']['hoehe'] > ds['leicht']['hoehe'] and ds['stark']['deck'] > ds['leicht']['deck'], ds)
+        pruefe('Motorrad-Schaden: zweimal −20 % → 60 %, Qualm sichtbar (runde weiche Scheiben in EINEM Points-Objekt am Motorrad = 1 Draw-Call), Motorrad im Bild', abs(q['z'] - 60) < 0.01 and q['sichtbar'] and q['objekte'] == 1 and q['punkte'] and q['n'] == 16 and q['mesh'] and q['p']['drin'], q)
+        # Qualm wird bei mehr Schaden deutlicher (Stärke 0,35 gegen 0,95), liegt VOR dem Fahrer (z < −0,5, nie an/hinter ihm: verdeckt aus der Verfolger-Kamera nichts), wird bei der Versorgung abgeschwächt (dim)
+        ds = ev("""() => { const W = Rennspiel.moto || Rennspiel.Moto.unfallWelt, u = __U.u(0), q = u.qualm, g = q.userData.pts.geometry.attributes, out = {};
+          const stat = () => { let n = 0, grau = 0, gr = 0, gross = 0, zMax = -1e9, yMin = 1e9, yMax = -1e9, xAbs = 0; for (let i = 0; i < 16; i++) { if (g.aAlpha.array[i] > 0.02) { n++; grau += g.aGrau.array[i]; gross = Math.max(gross, g.aSize.array[i]); zMax = Math.max(zMax, g.position.array[i * 3 + 2]); yMin = Math.min(yMin, g.position.array[i * 3 + 1]); yMax = Math.max(yMax, g.position.array[i * 3 + 1]); xAbs = Math.max(xAbs, Math.abs(g.position.array[i * 3])); } }
+            return { scheiben: n, grau: +(grau / Math.max(1, n)).toFixed(2), gross: +gross.toFixed(2), zMax: +zMax.toFixed(2), yMin: +yMin.toFixed(2), yMax: +yMax.toFixed(2), xAbs: +xAbs.toFixed(2) }; };
+          for (const [k, st, dim] of [['leicht', 0.35, 1], ['stark', 0.95, 1], ['versorgt', 0.95, 0.1]]) { const r = Rennspiel.Moto.unfallWelt.qualmZeigen(q, 0.37, st, dim); out[k] = Object.assign({ maxAlpha: +r.maxAlpha.toFixed(2), sicht: r.sichtbar }, stat()); }
+          Rennspiel.Moto.unfallWelt.qualmZeigen(q, 0.37, 0.4, 1); return out; }""")
+        pruefe('Qualm: ab starkem Schaden (< 50 %) mehr Scheiben, dunkler, größer, deckender als bei leichtem; alle Scheiben vor dem Fahrer (z < −0,5, schmal, steigen nach oben)', ds['stark']['scheiben'] > ds['leicht']['scheiben'] and ds['stark']['grau'] < ds['leicht']['grau'] - 0.05 and ds['stark']['gross'] > ds['leicht']['gross'] and ds['stark']['maxAlpha'] > ds['leicht']['maxAlpha'] and ds['stark']['zMax'] < -0.5 and ds['stark']['xAbs'] < 0.45 and ds['stark']['yMax'] - ds['stark']['yMin'] > 0.5, ds)
+        pruefe('Qualm: bei der Versorgung (dim 0,1) stark abgeschwächt (höchste Deckkraft %s gegen %s, ≤ 0,15 und ≤ ein Viertel)' % (ds['versorgt']['maxAlpha'], ds['stark']['maxAlpha']), ds['versorgt']['maxAlpha'] <= 0.15 and ds['versorgt']['maxAlpha'] <= ds['stark']['maxAlpha'] / 4 + 0.001, ds)
         ev('() => __U.halten(false)')
 
         # ---------------- Werkstatt ----------------
@@ -252,6 +266,8 @@ try:
         ev('() => { __U.zustand(0, 25, 100); __U.aufStation(0, "werkstatt", 6); __U.lauf(10, () => __U.u(0).halt && __U.u(0).halt.steht && __U.u(0).zustand > 52); __U.halten(true); }'); page.wait_for_timeout(500); ev('() => __U.kameraSnap()'); page.wait_for_timeout(700)
         wb = ev('''() => ({ a: __U.abgeleitet(), text: document.querySelector('.moto-mitte').textContent, zeile: document.querySelector('.moto-zustand').textContent, hall: Rennspiel.spiel.motoStationen.werkstatt._gruppe ? 1 : 0 })''')
         bild(page, 'moto_unfall_werkstatt.png', f"({wb['text']!r}, Zeile {wb['zeile']!r})")
+        ab1 = ev(ABSTAND)
+        pruefe('Werkstatt: Mechaniker steht neben dem Motorrad – Lücke zum Umriss (mit Fahrer) %s m ≥ 0,8' % ab1['figurBike'], ab1['figur'] is not None and ab1['figurBike'] >= 0.8, ab1)
         eb = ev(EINBLEND)
         pruefe('Einblendungen verdecken Fahrer und Motorrad nicht (Werkstatt): Motorrad bei x {}–{}, y {}–{}, {} Einblendung(en) geprüft'.format(eb['bike']['l'], eb['bike']['r'], eb['bike']['t'], eb['bike']['b'], len(eb['liste'])), eb['vorne'] and eb['imBild'] and len(eb['liste']) >= 1 and not eb['treffer'], eb)
         sp1 = ev(STATION_PRUEFUNG, 'werkstatt')
@@ -271,6 +287,8 @@ try:
         ev('() => { __U.zustand(0, 100, 20); __U.aufStation(0, "kranken", 6); __U.lauf(10, () => __U.u(0).halt && __U.u(0).halt.steht && __U.u(0).gesundheit > 45); __U.halten(true); }'); page.wait_for_timeout(500); ev('() => __U.kameraSnap()'); page.wait_for_timeout(700)
         kb = ev('''() => ({ a: __U.abgeleitet(), text: document.querySelector('.moto-mitte').textContent, zeile: document.querySelector('.moto-zustand').textContent })''')
         bild(page, 'moto_unfall_krankenstation.png', f"({kb['text']!r})")
+        ab2 = ev(ABSTAND)
+        pruefe('Krankenstation: Sanitäter steht neben dem Motorrad – Lücke zum Umriss (mit Fahrer) %s m ≥ 0,8' % ab2['figurBike'], ab2['figur'] is not None and ab2['figurBike'] >= 0.8, ab2)
         eb = ev(EINBLEND)
         pruefe('Einblendungen verdecken Fahrer und Motorrad nicht (Krankenstation): Motorrad bei x {}–{}, y {}–{}, {} Einblendung(en) geprüft'.format(eb['bike']['l'], eb['bike']['r'], eb['bike']['t'], eb['bike']['b'], len(eb['liste'])), eb['vorne'] and eb['imBild'] and len(eb['liste']) >= 1 and not eb['treffer'], eb)
         sp2 = ev(STATION_PRUEFUNG, 'kranken')
@@ -318,6 +336,8 @@ try:
         ev('() => { __U.lauf(3); __U.aufStrecke(0, __U.sicherS(), 24, 1.5); __U.zustand(0, 100, 100); Rennspiel.Moto.unfallStart.sturzFolge(Rennspiel.spiel, 0, { art: "schwer" }); const u = __U.u(0); __U.lauf(30, () => u.szene && u.szene.plan && u.gesundheit > 66); __U.halten(true); }'); page.wait_for_timeout(500); ev('() => __U.kameraSnap()'); page.wait_for_timeout(700)
         kwb = ev('''() => { const s = Rennspiel.spiel, u = __U.u(0), sz = u.szene, h = sz.helfer.mesh; return { a: __U.abgeleitet(), text: document.querySelector('.moto-mitte').textContent, helfer: __U.projiziere(h.position.x, h.position.y + 1.2, h.position.z), figur: sz.figur ? sz.figur.visible : false, sichtbar: h.visible, zeile: document.querySelector('.moto-zustand').textContent }; }''')
         bild(page, 'moto_unfall_krankenwagen.png', f"({kwb['text']!r})")
+        ab3 = ev(ABSTAND)
+        pruefe('Krankenwagen vor Ort: Sanitäter %s m seitlich vom Motorrad-Umriss (≥ 0,8), Krankenwagen %s m davor (≥ 1,5, vor dem Motorrad), Figur–Wagen %s m (> 0)' % (ab3['figurBike'], ab3['fahrzeugBike'], ab3['figurFahrzeug']), ab3['figur'] is not None and ab3['fahrzeug'] is not None and ab3['figurBike'] >= 0.8 and ab3['fahrzeugBike'] >= 1.5 and ab3['fahrzeugDavor'] >= 1.5 and ab3['figurFahrzeug'] > 0, ab3)
         eb = ev(EINBLEND)
         pruefe('Einblendungen verdecken Fahrer und Motorrad nicht (Krankenwagen): Motorrad bei x {}–{}, y {}–{}, {} Einblendung(en) geprüft'.format(eb['bike']['l'], eb['bike']['r'], eb['bike']['t'], eb['bike']['b'], len(eb['liste'])), eb['vorne'] and eb['imBild'] and len(eb['liste']) >= 1 and not eb['treffer'], eb)
         pruefe('Krankenwagen-Bild: Krankenwagen steht neben dem Motorrad (im Bild), Sanitäter steht daneben, Text „Sanitäter verbinden … NN %“ zählt hoch', kwb['helfer']['drin'] and kwb['figur'] and 'Sanitäter verbinden' in kwb['text'], kwb['text'].replace('\n', ' | ') + ' ' + str(kwb['helfer']))
@@ -341,6 +361,8 @@ try:
         ev('() => { __U.lauf(2); __U.aufStrecke(0, __U.sicherS(), 24, 1.5); __U.zustand(0, 100, 100); Rennspiel.Moto.unfallStart.sturzFolge(Rennspiel.spiel, 0, { art: "schaden", schwer: true }); const u = __U.u(0); __U.lauf(30, () => u.szene && u.szene.plan && u.zustand > 66); __U.halten(true); }'); page.wait_for_timeout(500); ev('() => __U.kameraSnap()'); page.wait_for_timeout(700)
         abb = ev('''() => { const s = Rennspiel.spiel, u = __U.u(0), sz = u.szene, h = sz.helfer.mesh; return { a: __U.abgeleitet(), text: document.querySelector('.moto-mitte').textContent, helfer: __U.projiziere(h.position.x, h.position.y + 1.5, h.position.z), figur: sz.figur ? sz.figur.visible : false, art: sz.helfer.art }; }''')
         bild(page, 'moto_unfall_abschlepp.png', f"({abb['text']!r})")
+        ab4 = ev(ABSTAND)
+        pruefe('Abschleppwagen vor Ort: Mechaniker %s m seitlich vom Motorrad-Umriss (≥ 0,8), Abschleppwagen %s m davor (≥ 1,5, vor dem Motorrad), Figur–Wagen %s m (> 0)' % (ab4['figurBike'], ab4['fahrzeugBike'], ab4['figurFahrzeug']), ab4['figur'] is not None and ab4['fahrzeug'] is not None and ab4['figurBike'] >= 0.8 and ab4['fahrzeugBike'] >= 1.5 and ab4['fahrzeugDavor'] >= 1.5 and ab4['figurFahrzeug'] > 0, ab4)
         eb = ev(EINBLEND)
         pruefe('Einblendungen verdecken Fahrer und Motorrad nicht (Abschleppwagen): Motorrad bei x {}–{}, y {}–{}, {} Einblendung(en) geprüft'.format(eb['bike']['l'], eb['bike']['r'], eb['bike']['t'], eb['bike']['b'], len(eb['liste'])), eb['vorne'] and eb['imBild'] and len(eb['liste']) >= 1 and not eb['treffer'], eb)
         pruefe('Abschleppwagen-Bild: Abschleppwagen (Kran) steht neben dem Motorrad (im Bild), Mechaniker steht daneben, Text „Mechaniker schraubt … NN %“', abb['art'] == 'abschlepp' and abb['helfer']['drin'] and abb['figur'] and 'Mechaniker schraubt' in abb['text'], abb['text'].replace('\n', ' | ') + ' ' + str(abb['helfer']))

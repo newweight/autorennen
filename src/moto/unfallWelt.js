@@ -9,7 +9,7 @@
 //   helferBauen(art)                 Krankenwagen (Modell aus dem Autorennen) bzw. Abschleppwagen (R.Abschleppwagen._lkwBauen) → { mesh, art, laenge }
 //   helferPose(h, strecke, s, q, bl) Pose setzen (s = Bogenlänge der Mitte, q = Querabstand), Blaulicht/Rundumleuchte blinken
 //   figurBauen(art)                  kleiner Helfer (Sanitäter / Mechaniker) neben dem Motorrad
-//   qualmBauen() / qualmZeigen(q, t, staerke)   zwölf dunkle Rauchwolken in EINEM Mesh am Motor (Zustand unter 75 %, ab < 50 % deutlich stärker)
+//   qualmBauen() / qualmZeigen(q, t, staerke)   runde weiche Rauchscheiben in EINEM Points-Objekt über dem Vorderrad (Zustand unter 75 %, ab < 50 % deutlich stärker)
 //   figurAnimieren(fig, t)           Mechaniker schraubt / Sanitäter beugt sich
 //   freigeben(obj)                   Geometrien/Materialien aufräumen
 // ============================================================
@@ -196,25 +196,42 @@ window.Rennspiel = window.Rennspiel || {};
 
   // ---------- Helfer-Fahrzeuge ----------
   /** art 'krankenwagen' | 'abschlepp'. Rückgabe { mesh, art, laenge, blink } – mesh hat den Ursprung am Boden, Front bei −z (wie die Autos). */
+  /** Abschleppwagen-Räder (world/abschleppwagen.js, unverändert): zur Laufzeit runder (28 statt 14 Ecken) und mit hellgrauer Felge auf der Außenseite. 6 Felgen = 6 Draw-Calls nur solange der Wagen da ist. */
+  function raederVerfeinern(m) {
+    try {
+      const reifen = new THREE.CylinderGeometry(0.58, 0.58, 0.38, 28); reifen.rotateZ(Math.PI / 2);
+      const felge = new THREE.CylinderGeometry(0.34, 0.34, 0.05, 18); felge.rotateZ(Math.PI / 2);
+      const nabe = new THREE.CylinderGeometry(0.12, 0.12, 0.09, 10); nabe.rotateZ(Math.PI / 2);
+      const mf = new THREE.MeshLambertMaterial({ color: 0xc4c8cf }), mn = new THREE.MeshLambertMaterial({ color: 0x4a4f57 });
+      const liste = [];
+      m.traverse((o) => { if (o.isMesh && o.geometry && o.geometry.type === 'CylinderGeometry' && o.geometry.parameters && Math.abs(o.geometry.parameters.radiusTop - 0.58) < 1e-6) liste.push(o); });
+      liste.forEach((r) => { const alt = r.geometry; r.geometry = reifen; const sx = r.position.x >= 0 ? 1 : -1, f = new THREE.Mesh(felge, mf); f.position.x = sx * 0.2; r.add(f); const n = new THREE.Mesh(nabe, mn); n.position.x = sx * 0.22; r.add(n); r.userData.alteGeometrie = alt; });
+      return liste.length;
+    } catch (e) { return 0; }
+  }
+  /** Länge des Modells (m, entlang z) und Versatz seiner Mitte vom Ursprung: so lässt sich das Fahrzeug mit der Mitte auf eine Stelle der Strecke setzen. */
+  function masse(m) {
+    try { const b = new THREE.Box3().setFromObject(m), g = b.getSize(new THREE.Vector3()), c = b.getCenter(new THREE.Vector3()); return { laenge: Math.max(g.z, 1), versatz: c.z }; } catch (e) { return {}; }
+  }
   function helferBauen(art) {
     if (typeof THREE === 'undefined') return null;
     if (art === 'abschlepp') {
       const A = R.Abschleppwagen;
       if (!A || !A.prototype._lkwBauen) return null;
       const m = A.prototype._lkwBauen.call({});
-      m.visible = true;
-      return { mesh: m, art, laenge: 8.2, blink: 0 };
+      m.visible = true; raederVerfeinern(m);
+      return Object.assign({ mesh: m, art, laenge: 8.2, blink: 0, versatz: 0 }, masse(m));
     }
     const kat = (R.carCatalog || []).find((a) => a.id === 'krankenwagen');
     if (!kat || !R.carBuilder) return null;
     const m = R.carBuilder.bauen(kat);
     m.visible = true;
-    return { mesh: m, art, laenge: 4.9, blink: 0 };
+    return Object.assign({ mesh: m, art, laenge: 4.9, blink: 0, versatz: 0 }, masse(m));
   }
   /** Pose + Blinken. s = Bogenlänge der Fahrzeugmitte, q = Querabstand von der Strecken-Mitte (m), zeit = Spielzeit. */
   function helferPose(h, strecke, s, q, zeit) {
     if (!h || !h.mesh) return;
-    const U = R.Moto.unfall, p = U.fahrPose(strecke, s, q);
+    const U = R.Moto.unfall, p = U.fahrPose(strecke, s + (h.versatz || 0), q);       // Mitte des Modells (nicht der Ursprung) steht auf s
     h.mesh.position.set(p.x, p.y, p.z);
     h.mesh.rotation.y = p.heading;
     const phase = Math.floor(zeit * 4) % 2;
@@ -259,44 +276,59 @@ window.Rennspiel = window.Rennspiel || {};
   }
 
   // ---------- Qualm ----------
-  // EIN Mesh (1 Draw-Call, egal wie viele Wolken): QUALM_N Oktaeder-Wolken in einer dynamischen Geometrie, Scheitel-Farben (oben heller), eine gemeinsame Deckkraft.
-  // Die Wolken blenden über ihre Größe ein und aus (sie schrumpfen am Ende), nicht über die Deckkraft.
-  const QUALM_N = 12;
-  let qualmBasis = null;
+  // EIN Points-Objekt (1 Draw-Call, egal wie viele Wölkchen): QUALM_N runde, weiche Scheiben (Rand läuft im Shader transparent aus, keine Textur nötig).
+  // Jede Scheibe steigt langsam auf, wird größer und verblasst. Sie entsteht VOR dem Fahrer (über dem Vorderrad/Motor, Front = −z) und zieht nach oben/vorn:
+  // aus der Verfolger-Kamera (hinten) liegt sie so immer HINTER Fahrer und Motorrad (Tiefentest) und verdeckt nichts.
+  const QUALM_N = 16;
   function qualmBauen() {
     if (typeof THREE === 'undefined') return null;
-    if (!qualmBasis) qualmBasis = new THREE.OctahedronGeometry(1, 0).attributes.position.array.slice();       // 8 Flächen, 24 Eckpunkte, nicht indiziert
-    const nv = qualmBasis.length / 3, geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(QUALM_N * nv * 3), 3).setUsage(THREE.DynamicDrawUsage));
-    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(QUALM_N * nv * 3), 3).setUsage(THREE.DynamicDrawUsage));
-    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false }));
-    mesh.frustumCulled = false; mesh.name = 'QualmWolken';
-    const g = new THREE.Group(); g.name = 'Qualm'; g.add(mesh); g.userData.mesh = mesh; g.visible = false;
+    const geo = new THREE.BufferGeometry(), dyn = (n) => new THREE.BufferAttribute(new Float32Array(QUALM_N * n), n).setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('position', dyn(3)); geo.setAttribute('aSize', dyn(1)); geo.setAttribute('aAlpha', dyn(1)); geo.setAttribute('aGrau', dyn(1));
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uScale: { value: 600 } }, transparent: true, depthWrite: false, depthTest: true,
+      vertexShader: 'attribute float aSize; attribute float aAlpha; attribute float aGrau; uniform float uScale; varying float vA; varying float vG;\n' +
+        'void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv; gl_PointSize = clamp(aSize * uScale / max(0.2, -mv.z), 1.0, 420.0); vA = aAlpha; vG = aGrau; }',
+      fragmentShader: 'varying float vA; varying float vG;\n' +
+        'void main() { float r = length(gl_PointCoord - vec2(0.5)) * 2.0; float a = (1.0 - smoothstep(0.3, 1.0, r)) * vA; if (a < 0.004) discard; gl_FragColor = vec4(vec3(vG), a); }',
+    });
+    const pts = new THREE.Points(geo, mat);
+    pts.frustumCulled = false; pts.name = 'QualmWolken';
+    pts.onBeforeRender = function (renderer, scene, camera) {               // Punktgröße in Pixel = Weltgröße × Bildhöhe/2 × cot(fov/2) / Abstand
+      const rt = renderer.getRenderTarget ? renderer.getRenderTarget() : null;
+      let h = rt && rt.height; if (!h) { const v = renderer.getDrawingBufferSize ? renderer.getDrawingBufferSize(new THREE.Vector2()) : renderer.getSize(new THREE.Vector2()); h = v.y; }
+      mat.uniforms.uScale.value = camera.projectionMatrix.elements[5] * h / 2;
+    };
+    const g = new THREE.Group(); g.name = 'Qualm'; g.add(pts); g.userData.pts = pts; g.visible = false;
     return g;
   }
-  /** staerke 0..1 (0 = aus): wie kaputt das Motorrad ist (ab 75 % sacht, ab < 50 % stark). Position lokal zum Motorrad (Motor etwa mittig, Front bei −z). */
-  function qualmZeigen(q, t, staerke) {
-    if (!q) return;
-    const an = staerke > 0.02;
+  /**
+   * staerke 0..1 (0 = aus): wie kaputt das Motorrad ist (ab 75 % sacht, ab < 50 % stark). dim 0..1 (Standard 1): Faktor für die Deckkraft –
+   * bei der Versorgung (Werkstatt, Station, vor Ort) klein, damit nichts verdeckt wird. Position lokal zum Motorrad (Front bei −z).
+   * Liefert die Kennzahlen { sichtbar (Zahl der Scheiben mit Deckkraft > 0,02), maxAlpha } (für Tests).
+   */
+  function qualmZeigen(q, t, staerke, dim) {
+    if (!q) return null;
+    const d = dim === undefined ? 1 : dim, an = staerke > 0.02 && d > 0.01;
     q.visible = an;
-    if (!an) return;
-    const mesh = q.userData.mesh, pos = mesh.geometry.attributes.position, col = mesh.geometry.attributes.color, nv = qualmBasis.length / 3;
-    const anzahl = Math.max(4, Math.round(QUALM_N * (0.4 + 0.6 * staerke)));          // mehr Schaden = mehr Wolken (nicht benutzte schrumpfen auf 0)
-    const dunkel = 0.24 - 0.22 * Math.min(1, staerke);                                 // Scheitelfarbe (linear, wird heller dargestellt): 0,24 (mittelgrau) … 0,02 (fast schwarz)
-    mesh.material.opacity = 0.62 + 0.3 * staerke;
+    if (!an) return { sichtbar: 0, maxAlpha: 0 };
+    const geo = q.userData.pts.geometry, pos = geo.attributes.position.array, sz = geo.attributes.aSize.array, al = geo.attributes.aAlpha.array, gr = geo.attributes.aGrau.array;
+    const anzahl = Math.max(6, Math.round(QUALM_N * (0.45 + 0.55 * staerke)));         // mehr Schaden = mehr Scheiben
+    const grau0 = 0.40 - 0.33 * Math.min(1, staerke);                                  // 0,50 (hellgrau) … 0,10 (fast schwarz)
+    const maxA = (0.6 + 0.3 * staerke) * d;
+    let sichtbar = 0, maxAlpha = 0;
     for (let i = 0; i < QUALM_N; i++) {
-      const ph = (t * (0.75 + 0.55 * staerke) + i / QUALM_N + (i % 3) * 0.07) % 1, aktiv = i < anzahl;
-      const env = aktiv ? Math.sin(Math.PI * Math.min(1, ph * 1.08)) : 0;
-      const sk = (0.2 + ph * (0.45 + 0.55 * staerke)) * env;
-      const cx = 0.42 + ph * 0.55 + (((i * 37) % 7) - 3) * 0.04 + Math.sin(t * 2 + i) * 0.06 * ph, cy = 0.75 + ph * (1.3 + 0.7 * staerke), cz = -0.35 + ph * (0.55 + 0.25 * staerke) + (((i * 53) % 5) - 2) * 0.05;   // quillt seitlich am Motor (rechts) heraus: der Fahrer bleibt von hinten sichtbar
-      for (let v = 0; v < nv; v++) {
-        const o = (i * nv + v) * 3, bx = qualmBasis[v * 3], by = qualmBasis[v * 3 + 1], bz = qualmBasis[v * 3 + 2];
-        pos.array[o] = cx + bx * sk; pos.array[o + 1] = cy + by * sk * 0.85; pos.array[o + 2] = cz + bz * sk;
-        const gr = Math.max(0.05, dunkel + by * 0.1);                                  // Oberseite etwas heller
-        col.array[o] = gr; col.array[o + 1] = gr; col.array[o + 2] = gr * 1.03;
-      }
+      const ph = (t * (0.38 + 0.2 * staerke) + i / QUALM_N + (i % 3) * 0.05) % 1, aktiv = i < anzahl;
+      const ein = Math.min(1, ph / 0.12), aus = 1 - Math.pow(ph, 1.6);                  // schnell einblenden, langsam verblassen
+      const a = aktiv ? maxA * ein * aus : 0;
+      pos[i * 3] = (((i * 37) % 7) - 3) * 0.06 + Math.sin(t * 1.3 + i * 1.7) * 0.12 * ph;
+      pos[i * 3 + 1] = 0.9 + ph * (2.0 + 0.8 * staerke);
+      pos[i * 3 + 2] = -0.62 - ph * (1.0 + 0.4 * staerke) - (((i * 53) % 5) - 2) * 0.03;
+      sz[i] = 0.65 + ph * (1.4 + 0.8 * staerke);                                        // wird beim Aufsteigen größer
+      al[i] = a; gr[i] = Math.max(0.05, grau0 - ph * 0.08);
+      if (a > 0.02) sichtbar++; if (a > maxAlpha) maxAlpha = a;
     }
-    pos.needsUpdate = true; col.needsUpdate = true;
+    const at = geo.attributes; at.position.needsUpdate = true; at.aSize.needsUpdate = true; at.aAlpha.needsUpdate = true; at.aGrau.needsUpdate = true;
+    return { sichtbar, maxAlpha };
   }
 
   function freigeben(obj) {

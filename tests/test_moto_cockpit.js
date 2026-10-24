@@ -102,7 +102,9 @@ for (const [nSp, T, bezug, name] of [[2, 4, 0.5, 'solo'], [4, 8, 0.5, 'zu zweit'
   pruefe(`Auflösung solo: ${g.b}×${g.h} je Spiegel = halbe Breite des Autorennen-Spiegels (${auto.b}×${auto.h})`, g.b === Math.round(auto.b * cfg.spiegel.aufloesungFaktor));
   pruefe(`Bildpunkte je Bild (Mittel, beide Spiegel): ${Math.round(proBild)} ≤ ${Math.round(autoProBild)} beim einen Autorennen-Spiegel`, proBild <= autoProBild);
   const z = C.rechtecke(640, 800, true, null, [MINI(800)], true).spiegel[0], gz = C.rtGroesse(z, true);
-  pruefe(`Auflösung zu zweit: ${gz.b}×${gz.h} (× zweiAufloesung ${sp.zweiAufloesung}), nie größer als der Ausschnitt (${Math.round(z.b)} px)`, gz.b <= Math.round(z.b * 1.1) && gz.b <= Math.round(sp.aufloesung * cfg.spiegel.aufloesungFaktor * sp.zweiAufloesung));
+  pruefe(`Auflösung zu zweit: ${gz.b}×${gz.h} (Faktor zweiFaktor ${cfg.spiegel.zweiFaktor}, vorher 72 px), nie größer als der Ausschnitt (${Math.round(z.b)} px), nicht gröber als 100 px`, gz.b <= Math.round(z.b * 1.1) && gz.b === Math.min(Math.round(z.b * 1.1), Math.round(sp.aufloesung * cfg.spiegel.aufloesungFaktor * cfg.spiegel.zweiFaktor)) && gz.b >= 100);
+  const ze = C.rechtecke(640, 800, true, null, [MINI(800)], false).spiegel[0];
+  pruefe(`Zweispieler: Spiegel größer als mit dem Solo-Maß (${Math.round(z.b)}×${Math.round(z.h)} gegen ${Math.round(ze.b)}×${Math.round(ze.h)} px), Blickwinkel enger (${cfg.spiegel.blickWinkelZwei}° gegen ${cfg.spiegel.blickWinkel}°)`, z.b > ze.b * 1.15 && z.h > ze.h * 1.15 && cfg.spiegel.blickWinkelZwei < cfg.spiegel.blickWinkel);
 }
 
 // ---------- 6. Kippung ----------

@@ -54,6 +54,8 @@ window.Rennspiel = window.Rennspiel || {};
       anfahrt: 1.6, abfahrt: 0.9,                        // Fahrzeit des Helfer-Fahrzeugs heran / weg (s); dazwischen läuft die Pflege
       reserve: 10,                                       // Zeitlimit = Plan + Pflege + reserve (s) – danach Rückfall auf „zurück an den Kontrollpunkt“ (v32 N1d)
       wartenMax: 4,                                      // so lange wartet der Start der Szene auf Stillstand/Boden
+      helferSeitlich: 2.0, helferVor: 1.5,               // feste Plätze: Helfer-Figur steht so weit seitlich der Motorradmitte (≥ 0,8 m Lücke zum Umriss) und so weit vor der Motorradmitte (m)
+      fahrzeugLuecke: 1.8,                               // Lücke zwischen Motorrad-Umriss und Helfer-Fahrzeug davor (m, Soll ≥ 1,5)
       anfahrtWeg: 38, abfahrtWeg: 34, seitlich: 3.4,     // Fahrzeug der Szene: Anfahrt-/Abfahrtweg (m), Abstand zur Fahrspur des Motorrads (m)
     },
   };

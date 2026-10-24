@@ -170,10 +170,15 @@
         qH = klemme(qH, -(halb - 1.4), halb - 1.4);
         if (Math.abs(qH - sz.qB) < 2.6) qH = sz.qB >= 0 ? sz.qB - 2.6 : sz.qB + 2.6;
         sz.qH = qH;
-        sz.sStop = sz.sB + (sz.art === 'abschlepp' ? -1.0 : 0.3);
+        qH = sz.qB + (qH >= sz.qB ? 1 : -1) * Math.max(Math.abs(qH - sz.qB), c.helferSeitlich + 1.9);         // Platz für die Figur zwischen Motorrad und Fahrzeug
+        sz.qH = qH;
+        sz.dir = qH >= sz.qB ? 1 : -1;
+        sz.sStop = null;                                                        // wird beim Bauen des Helfer-Fahrzeugs aus dessen Länge bestimmt (DAVOR, mit Lücke)
         sz.pflege = U.pflegeDauer(sz.was === 'motorrad' ? u.zustand : u.gesundheit, 'vorOrt');
         sz.plan = U.szenePlan(sz.pflege);
         sz.helfer = W.helferBauen(sz.art);
+        if (sz.helfer) sz.sStop = sz.sB + 1.3 + c.fahrzeugLuecke + sz.helfer.laenge / 2;     // Motorrad-Umriss reicht ≈ 1,3 m vor die Mitte, das Fahrzeug steht davor
+        else sz.sStop = sz.sB + 6;
         if (sz.helfer) { spiel.szene.add(sz.helfer.mesh); helferSetzen(spiel, sz, 0); }
         sz.phase = 'lauf'; sz.t = 0;
       }
@@ -212,7 +217,7 @@
     if (sz.figur) {
       sz.figur.visible = pflegt;
       if (pflegt) {
-        const qF = sz.qB + (sz.qH - sz.qB) * 0.42, p = U.fahrPose(strecke, sz.sB + 0.4, qF), pb = U.fahrPose(strecke, sz.sB, sz.qB);
+        const qF = sz.qB + sz.dir * c.helferSeitlich, p = U.fahrPose(strecke, sz.sB + c.helferVor, qF), pb = U.fahrPose(strecke, sz.sB, sz.qB);
         sz.figur.position.set(p.x, p.y, p.z); sz.figur.userData.basisY = p.y;
         sz.figur.rotation.y = Math.atan2(-(pb.x - p.x), -(pb.z - p.z));
         W.figurAnimieren(sz.figur, zeit);
@@ -230,9 +235,10 @@
       u.stFigur = W.figurBauen(art); spiel.szene.add(u.stFigur);
     }
     const n = f.nah, dir = P.seite;                                                   // Platz-Werte sind je Seite positiv: Gebäudeseite = P.seite
-    let qF = n.seitenabstand + dir * 0.35;                                            // Figur neben dem Vorderrad, leicht zur Gebäudeseite (die Kamera steht hinten auf der Straßenseite: Figur und Motorrad verdecken sich nicht)
-    if (dir * qF > P.qB - 0.4) qF = n.seitenabstand - dir * 0.35;                     // dort kein Platz mehr: auf die Straßenseite
-    const sF = n.s + (art === 'mechaniker' ? 1.75 : 1.45), p = U.fahrPose(spiel.strecke, sF, qF), pb = U.fahrPose(spiel.strecke, n.s, n.seitenabstand);
+    const cs = CFG().szene;
+    let qF = n.seitenabstand + dir * cs.helferSeitlich;                               // fester Platz: seitlich neben dem Motorrad (Gebäudeseite), ≥ 0,8 m Lücke zum Umriss; der Fahrer sitzt auf dem Motorrad
+    if (dir * qF > P.qB - 0.5) qF = n.seitenabstand - dir * cs.helferSeitlich;        // dort kein Platz mehr: auf die Straßenseite
+    const sF = n.s + cs.helferVor, p = U.fahrPose(spiel.strecke, sF, qF), pb = U.fahrPose(spiel.strecke, n.s, n.seitenabstand);
     const fg = u.stFigur; fg.visible = true; fg.position.set(p.x, p.y, p.z); fg.userData.basisY = p.y;
     fg.rotation.y = Math.atan2(-(pb.x - p.x), -(pb.z - p.z));
     W.figurAnimieren(fg, zeit);
@@ -245,14 +251,14 @@
     const f = spiel._fahrzeugVon ? spiel._fahrzeugVon(k.ziel) : null; if (!f || !f.nah) return null;
     const i = spiel.fahrzeuge.indexOf(f), u = spiel.unfall && spiel.unfall.fz[i]; if (!u) return null;
     const c = CFG().kamera, strecke = spiel.strecke;
-    let sB, qB, dir, ausgleich = 0;
+    let sB, qB, dir, ausgleich = 0, vor = 0.4, camSeite = -1;      // camSeite: −1 = Kamera auf der Gegenseite von dir (Station: Straßenseite), +1 = auf derselben Seite (vor Ort: auf der Seite von Figur und Fahrzeug, die liegen dann nicht hinter dem Motorrad)
     if (u.halt && u.halt.steht && spiel.motoStationen) {
       const w = u.halt.art === 'werkstatt' ? spiel.motoStationen.werkstatt : spiel.motoStationen.kranken, P = w.platz;
       sB = f.nah.s; qB = f.nah.seitenabstand; dir = P.seite;                       // Platz-Werte sind je Seite positiv: das Gebäude liegt auf der Seite P.seite
     } else if (u.szene && u.szene.phase === 'lauf' && !u.szene.frei && u.szene.plan) {
-      const sz = u.szene; sB = sz.sB; qB = sz.qB; dir = (sz.qH - sz.qB) >= 0 ? 1 : -1; ausgleich = (sz.qH - sz.qB) * 0.5 - dir * c.blickSeitlich;     // Blickpunkt zwischen Motorrad und Helfer-Fahrzeug
+      const sz = u.szene; sB = sz.sB; qB = sz.qB; dir = (sz.qH - sz.qB) >= 0 ? 1 : -1; ausgleich = (sz.qH - sz.qB) * 0.5 - dir * c.blickSeitlich; vor = 2.0; camSeite = 1;     // Blickpunkt zwischen Motorrad und Helfer-Fahrzeug
     } else return null;
-    const cp = U.fahrPose(strecke, sB - c.hinter, qB - dir * c.seitlich), bp = U.fahrPose(strecke, sB + 0.4, qB + dir * c.blickSeitlich + ausgleich);
+    const cp = U.fahrPose(strecke, sB - c.hinter, qB + camSeite * dir * c.seitlich), bp = U.fahrPose(strecke, sB + vor, qB + dir * c.blickSeitlich + ausgleich);
     return { cam: { x: cp.x, y: Math.max(cp.y, strecke.hoeheAn(f.vehicle.x, f.vehicle.z)) + c.hoehe, z: cp.z }, blick: { x: bp.x, y: bp.y + c.blickHoeher + 0.9, z: bp.z } };
   }
   /** Versorgungs-Kamera über die normale Verfolger-/Weit-Kamera legen (weich ein und aus). */
@@ -475,7 +481,12 @@ html .hud.moto-mitte-an .hud-meldung { top: var(--moto-meldung-top, 30%) !import
       if (un.modus !== 'aus') {
         const q = CFG().qualmUnter, min = CFG().minimum, an = u.zustand < q;
         if (an && !u.qualm) { u.qualm = W.qualmBauen(); if (u.qualm) f.mesh.add(u.qualm); }
-        if (u.qualm) W.qualmZeigen(u.qualm, zeit, an ? qualmStaerke(u.zustand, q, min) : 0);
+        if (u.qualm) {
+          // Während der Versorgung (Station: u.halt, vor Ort: u.szene) weich auf ein Wölkchen abschwächen: Helfer, Fahrer und Motorrad bleiben frei sichtbar
+          const ziel = (u.halt || (u.szene && u.szene.phase === 'lauf')) ? 0.1 : 1, k = 1 - Math.exp(-5 * Math.max(0.016, dt || 0.016));
+          u.qualmDim = (u.qualmDim === undefined ? ziel : u.qualmDim) + (ziel - (u.qualmDim === undefined ? ziel : u.qualmDim)) * k;
+          W.qualmZeigen(u.qualm, zeit, an ? qualmStaerke(u.zustand, q, min) : 0, u.qualmDim);
+        }
       }
       if (u.szene && u.szene.helfer) helferSetzen(spiel, u.szene, zeit);
       stationsFigur(spiel, f, u, zeit);

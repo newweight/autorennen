@@ -40,10 +40,13 @@ window.Rennspiel = window.Rennspiel || {};
       spiegelX: 0.115,                // Spiegel-Mitte: Abstand vom Lenker-Bildrand (Anteil Bildbreite)
       spiegelOben: 0.08,              // Spiegel-Mitte liegt so viel (Anteil Bildhöhe) ÜBER der Oberkante des Lenker-Bildes
       spiegelB: 0.205, spiegelH: 0.44, // Spiegelgröße (Anteil Lenker-Bildbreite / -höhe) – oval
+      spiegelXZwei: 0.15, spiegelBZwei: 0.27, spiegelHZwei: 0.54,   // Zweispieler (halbe Bildbreite): Spiegel größer und etwas weiter innen, damit man die Gegner erkennt
     },
     spiegel: {
       winkel: 26,                     // Grad: so weit schaut jeder Spiegel von „genau hinten“ nach außen
       blickWinkel: 58,                // waagerechter Blickwinkel (Grad)
+      blickWinkelZwei: 40,            // Zweispieler: engerer Blick (Gegner erscheinen größer, die Sicht reicht dafür weniger weit zur Seite)
+      zweiFaktor: 0.8,                // Zweispieler: Spiegelbild-Breite = Autorennen-Auflösung × aufloesungFaktor × diesen Faktor (v34-Wert zweiAufloesung 0,5 war hier zu grob: 72 px für ein 115-px-Fenster)
       seitlich: 0.42, vor: 0.35,      // Lage der Spiegel-Kamera am Motorrad (m): seitlich der Mitte, vor der Mitte
       aufloesungFaktor: 0.5,          // Breite des Spiegelbilds = config.cockpit.spiegel.aufloesung × diesen Faktor (halbe Auflösung je Spiegel)
       lueckeOben: 6,                  // Verfolger/Weit: Lücke zwischen den beiden Spiegeln (px)
@@ -79,10 +82,11 @@ window.Rennspiel = window.Rennspiel || {};
         H = W / L.seitenverh;
       }
     }
-    const y0 = vh - H, bm = L.spiegelB * W, hm = L.spiegelH * H, cy = y0 - L.spiegelOben * H;
+    const z2 = !!(split && L.spiegelBZwei), sx = z2 ? L.spiegelXZwei : L.spiegelX;
+    const y0 = vh - H, bm = (z2 ? L.spiegelBZwei : L.spiegelB) * W, hm = (z2 ? L.spiegelHZwei : L.spiegelH) * H, cy = y0 - L.spiegelOben * H;
     return {
       lenker: { x: x0, y: y0, b: W, h: H },
-      spiegel: [{ x: x0 + L.spiegelX * W - bm / 2, y: cy - hm / 2, b: bm, h: hm }, { x: x0 + (1 - L.spiegelX) * W - bm / 2, y: cy - hm / 2, b: bm, h: hm }],
+      spiegel: [{ x: x0 + sx * W - bm / 2, y: cy - hm / 2, b: bm, h: hm }, { x: x0 + (1 - sx) * W - bm / 2, y: cy - hm / 2, b: bm, h: hm }],
     };
   }
 
@@ -126,7 +130,7 @@ window.Rennspiel = window.Rennspiel || {};
    */
   function rtGroesse(rc, split) {
     const sp = R.config.cockpit.spiegel, mc = CFG().spiegel;
-    const af = split ? (sp.zweiAufloesung !== undefined ? sp.zweiAufloesung : 0.5) : 1, auf = sp.aufloesung * mc.aufloesungFaktor * af;
+    const af = split ? (mc.zweiFaktor !== undefined ? mc.zweiFaktor : (sp.zweiAufloesung !== undefined ? sp.zweiAufloesung : 0.5)) : 1, auf = sp.aufloesung * mc.aufloesungFaktor * af;
     const b = Math.max(40, Math.round(Math.min(auf, rc.b * 1.1)));
     return { b, h: Math.max(16, Math.round(b * rc.h / rc.b)) };
   }
@@ -269,7 +273,7 @@ window.Rennspiel = window.Rennspiel || {};
       kam.rotation.set(-0.03, dir.yaw, 0);
       kam.far = Math.min(split ? (cfg.zweiSicht !== undefined ? cfg.zweiSicht : cfg.sicht) : cfg.sicht, k.kamera.far);
       kam.aspect = rc.b / rc.h;
-      kam.fov = 2 * Math.atan(Math.tan(mc.blickWinkel * Math.PI / 360) / kam.aspect) * 180 / Math.PI;
+      kam.fov = 2 * Math.atan(Math.tan((split && mc.blickWinkelZwei ? mc.blickWinkelZwei : mc.blickWinkel) * Math.PI / 360) / kam.aspect) * 180 / Math.PI;
       kam.updateProjectionMatrix(); kam.updateMatrixWorld(true);
       const alt = r.getRenderTarget(), sz = spiel.szene, schatten = r.shadowMap.autoUpdate;
       const scissor = r.getScissorTest(), vp = r.getViewport(_vp), sc = r.getScissor(_sc);
@@ -373,7 +377,7 @@ window.Rennspiel = window.Rennspiel || {};
     for (const seite of [-1, 1]) {
       g.save(); if (seite > 0) { g.translate(LW, 0); g.scale(-1, 1); }
       // Spiegel-Stiel von der Klemme nach oben (endet im Spiegel-Rahmen)
-      g.strokeStyle = '#16181c'; g.lineWidth = 10; g.beginPath(); g.moveTo(178, 200); g.lineTo(CFG().lenker.spiegelX * LW, 48); g.stroke();
+      g.strokeStyle = '#16181c'; g.lineWidth = 10; g.beginPath(); g.moveTo(178, 200); g.lineTo((p.zwei ? CFG().lenker.spiegelXZwei : CFG().lenker.spiegelX) * LW, 48); g.stroke();
       // Hebel, Griff, Arm und Handschuh sitzen 44 Einheiten weiter innen: der Arm läuft dann zum Bildrand hin weich aus (siehe unten)
       g.save(); g.translate(44, 0);
       // Hebel (Kupplung / Bremse): vorn am Griff, nach innen gebogen, Kugelende
@@ -407,7 +411,7 @@ window.Rennspiel = window.Rennspiel || {};
     }
     g.restore();
     // --- Anzeige-Instrument (steht fest) ---
-    // Zu zweit (p.zwei) ist das Bild klein: das Instrument wird größer, nur km/h groß, Gang klein, Drehzahl-Segmente dünn
+    // Zu zweit (p.zwei) ist das Bild klein: das Instrument wird größer, nur km/h groß, kein Gang, Drehzahl-Segmente dünn
     const zwei = !!p.zwei;
     const px = cx, py = zwei ? 148 : 100, pr = zwei ? 134 : 92;
     g.save(); g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowBlur = 16; g.shadowOffsetY = 5; g.fillStyle = '#1b1f26'; g.beginPath(); g.arc(px, py, pr, 0, TAU); g.fill(); g.restore();
@@ -428,7 +432,7 @@ window.Rennspiel = window.Rennspiel || {};
     const gross = zwei ? (p.kmh > 99 ? 92 : 108) : (p.kmh > 99 ? 48 : 56);
     g.fillStyle = '#ffffff'; g.font = '800 ' + gross + 'px ' + SCHRIFT; g.fillText(String(p.kmh), px, py + (zwei ? 4 : 2));
     g.fillStyle = '#7fc4ff'; g.font = '700 ' + (zwei ? 22 : 15) + 'px ' + SCHRIFT; g.fillText('km/h', px, py + (zwei ? 62 : 36));
-    g.fillStyle = '#ffb347'; g.font = '800 ' + (zwei ? 20 : 16) + 'px ' + SCHRIFT; g.fillText(zwei ? p.gang.replace('GANG ', '') : p.gang, px, py - (zwei ? 70 : 40));
+    g.fillStyle = '#ffb347'; g.font = '800 ' + (zwei ? 20 : 16) + 'px ' + SCHRIFT; if (!zwei) g.fillText(p.gang, px, py - 40);                                      // zu zweit ohne Gang: km/h reicht, die Ziffer wäre nur ~10 px groß
     g.strokeStyle = 'rgba(255,255,255,.14)'; g.lineWidth = 3; g.beginPath(); g.arc(px, py, pr - 12, Math.PI * 1.1, Math.PI * 1.55); g.stroke();   // Glanz
   }
 
