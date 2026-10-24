@@ -336,7 +336,7 @@ try:
               if (s.fahrzeuges) {} }''')
             if modus == 'zwei':
                 ev('''() => { const s = Rennspiel.spiel, i = s.fahrzeuge.findIndex((f) => f.istSpieler && f.spielerNr === 1); const u = s.unfall.fz[i]; u.zustand = 33; u.gesundheit = 70; u.halt = { art: 'werkstatt', t: 0, steht: true }; }''')
-            ev('() => __U.halten(true)'); page.wait_for_timeout(500)
+            ev('() => __U.halten(true)'); page.wait_for_timeout(500); ev('() => __U.kameraSnap()'); page.wait_for_timeout(500)
             ev("() => (Rennspiel.spiel.huds || []).forEach((hd) => { hd.eCountdown.className = 'hud-countdown'; hd.eCountdown.style.animation = 'none'; hd.eCountdown.textContent = ''; })"); page.wait_for_timeout(300)
             r = ev('() => __U.hudKollisionen()')
             txt = ev("() => [...document.querySelectorAll('.moto-mitte')].map((e) => getComputedStyle(e).display === 'none' ? '-' : e.textContent.replace(/\\n/g, ' | '))")
