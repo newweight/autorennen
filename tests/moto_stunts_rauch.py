@@ -69,7 +69,47 @@ JS_HELFER = '''() => {
         return orig.call(this, dt);
       };
     },
-    autoAus() { delete Rennspiel.spiel.physikSchritt; },
+    autoAus() { delete Rennspiel.spiel.physikSchritt; window.__frozen = null; Rennspiel.spiel.pausiert = false; },
+    // Zustand des Spielers für Bild-Bedingungen: alles Wichtige in einem Objekt (c.*) – wird nach JEDEM Physikschritt geprüft
+    ctx() {
+      const s = Rennspiel.spiel, f = s.fahrzeuge[0], v = f.vehicle, z = s.stunt.fz[0], D = Rennspiel.Moto.stuntWelt.stuntDaten(s.strecke), St = Rennspiel.Moto.stunts;
+      let ringD = null, ringY = null, reiheA = null, reiheQ = null;
+      if (D.ringe.length) { const r = D.ringe[0]; ringD = (v.x - r.x) * r.tx + (v.z - r.z) * r.tz; ringY = r.y; }
+      if (D.reihen.length) { const L = D.reihen[D.reihen.length - 1]; reiheA = (v.x - L.x) * L.tx + (v.z - L.z) * L.tz; reiheQ = (v.x - L.x) * L.nx + (v.z - L.z) * L.nz; }
+      const cm = St.comboRest(z.combo, z.jetzt), mine = s.stunt.alle.filter((e) => e.fahrzeug === 0), letzter = mine.length ? mine[mine.length - 1] : null;
+      const f1 = s.fahrzeuge.find((g) => g.istSpieler && g.spielerNr === 1);
+      return { luft: !!f.flug.aktiv, luft1: f1 ? !!f1.flug.aktiv : false, flug: f.flug.fluege, t: f.flug.t, y: v.y, yBoden: s.strecke.hoeheAn(v.x, v.z), salto: Math.abs(z.pose.salto), trickArt: z.trick ? z.trick.art : null,
+        s: f.nah ? f.nah.s : 0, ringD, ringY, reiheA, reiheQ, mult: cm.mult, punkte: z.punkte, n: mine.length, letzter: letzter ? letzter.art : null, kmh: Math.round(v.tempoKmh), zeit: s.stunt.zeit, zustand: s.zustand };
+    },
+    // Regie: nach jedem Physikschritt Bedingung prüfen; trifft sie zu, wird das Spiel auf der Stelle angehalten (Standbild für den Screenshot).
+    // opt.taps = Tipps der Trick-Taste je Flug (echte Tastenereignisse), opt.bedingung = JS-Ausdruck über c (siehe ctx).
+    regie(opt) {
+      const s = Rennspiel.spiel, orig = Object.getPrototypeOf(s).physikSchritt; let letzter = -1;
+      const cond = opt.bedingung ? new Function('c', 'return (' + opt.bedingung + ');') : null;
+      window.__frozen = null; s.pausiert = false;
+      s.physikSchritt = function (dt) {
+        if (window.__frozen) return;
+        const fl = this.fahrzeuge[0].flug;
+        if (opt.taps && fl.aktiv && fl.fluege !== letzter && fl.t > 0.22) { letzter = fl.fluege;
+          for (let i = 0; i < opt.taps; i++) { window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ShiftRight' })); window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ShiftRight' })); } }
+        const r = orig.call(this, dt);
+        if (cond) { const c = __T.ctx(); if (cond(c)) { window.__frozen = c; this.pausiert = true; } }
+        return r;
+      };
+    },
+    // nach einem Standbild weiterlaufen (neue Bedingung) – die Taps-Zählung läuft weiter
+    weiter(bedingung, taps) { const s = Rennspiel.spiel; delete s.physikSchritt; __T.regie({ bedingung, taps }); },
+    // Kameras hart auf das Ziel setzen (nach vorgespulter Zeit ohne Bilder sonst Kameraverzug)
+    kameraSnap() { Rennspiel.spiel.kameras.forEach((k) => { k._erstesMal = true; k.update(0.0167); }); },
+    halten(an) { Rennspiel.spiel.pausiert = !!an; },
+    // projizierte Lage (NDC) und Abstand des Motorrads in jeder Kamera/Bildhälfte
+    projektion() {
+      const s = Rennspiel.spiel, out = [];
+      s.kameras.forEach((k, i) => { const f = s.fahrzeuge.find((g) => g.vehicle === k.ziel); if (!f) return; const m = f.mesh.position.clone(); m.y += 0.9;
+        const cam = k.kamera; cam.updateMatrixWorld(); const n = m.clone().project(cam);
+        out.push({ spieler: f.spielerNr, halbe: s.halbe(i), abstand: +m.distanceTo(cam.position).toFixed(1), ndc: [+n.x.toFixed(2), +n.y.toFixed(2)], drin: Math.abs(n.x) < 0.95 && Math.abs(n.y) < 0.95 && n.z < 1, luft: !!f.flug.aktiv }); });
+      return out;
+    },
     // echte Tastaturereignisse (wie ein Spieler): Doppeltippen = zwei keydown im Abstand von ~160 ms
     tippen(n) {
       const schlaf = (ms) => new Promise((r) => setTimeout(r, ms));

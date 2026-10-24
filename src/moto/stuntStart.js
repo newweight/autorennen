@@ -79,6 +79,13 @@
     if (sz && (spiel.zustand !== 'rennen' || spiel.pausiert)) {            // Tastendrücke außerhalb des Rennens (Menü, Pause) nicht nachholen
       sz.fz.forEach((z, i) => { const f = spiel.fahrzeuge[i]; if (z && f && f.istSpieler && f.spielerNr >= 0) { z.tippGesehen = TIPP[CFG().taste[f.spielerNr]] || 0; z.tippOffen = 0; } });
     }
+    // Ergebnistafel nach dem Ziel sicher zeigen: Das Spiel wartet bei laufendem Feuerwerk (config.feuerwerk.tafelNach, 6 s) auf BILDER – wird die Zeit nur vorgespult
+    // (kein Zeichnen), käme die Tafel nie. Darum zählt hier die Spielzeit im Physikschritt mit; die Tafel erscheint nach derselben Wartezeit.
+    if (sz && spiel._tafelWarten && spiel.zustand === 'rennen' && !spiel.pausiert) {
+      sz.tafelT = (sz.tafelT || 0) + dt;
+      const fw = spiel.feuerwerk;
+      if (sz.tafelT >= ((fw && fw.c && fw.c.tafelNach) || 6)) { sz.tafelT = 0; spiel.rennenFertig(true); return; }
+    } else if (sz) sz.tafelT = 0;
     if (!sz || spiel.zustand !== 'rennen' || !strecke || !rennen || spiel.pausiert) return;
     const cfg = CFG(), D = W.stuntDaten(strecke), input = spiel.input, sch = R.Moto.schraeglage;
     sz.zeit += dt;

@@ -1,9 +1,9 @@
 // ============================================================
 // Motorrad-Stunts (Stufe M2) – Anzeige: Stuntpunkte + Combo oben im HUD, große Einblendungen („Salto! +400"), Ergebnistafel beim Stuntrennen.
-// Reine DOM-Anzeige, hängt eigene Elemente an die vorhandenen HUD-Wurzeln (Hud.el); styles.css bleibt unverändert (Stil inline/per <style>).
+// Reine DOM-Anzeige: Stuntfeld im Spieler-Chip (kein Überlappen), Einblendungen über den Meldungsplatz des HUDs; styles.css bleibt unverändert (Stil per <style>).
 // Im Zweispieler hat jede Bildhälfte ihr eigenes Feld. Aufruf aus stuntStart.js:
 //   anlegen(spiel)            nach dem Rennstart: Felder in jedes HUD
-//   ereignis(spiel, i, e)     Stunt von Fahrzeug i (nur Spieler zeigen es an)
+//   ereignis(spiel, i, e)     Stunt von Fahrzeug i (nur Spieler zeigen es an; eine Einblendung ersetzt die vorige)
 //   frame(spiel)              je Bild: Punkte, Combo-Balken, Live-Anzeige (Wheelie/Stoppie)
 //   ergebnisHtml(spiel, erg)  Inhalt der Ergebnistafel (Stuntrennen), sortiert nach Gesamtpunkten
 // ============================================================
@@ -13,34 +13,35 @@ window.Rennspiel = window.Rennspiel || {};
   const R = window.Rennspiel;
   R.Moto = R.Moto || {};
 
+  // Aufbau: Das Stuntfeld (Punkte, Combo, Zeitbalken, Live-Zeile) steckt IM Spieler-Chip (.hud-links, oben links in jeder Bildhälfte) und wächst mit ihm nach unten –
+  // dadurch kann es keine Nachbar-Elemente überdecken (Platz-Chip, Zeiten, Spiegel, Minikarte, Zählrad, Banner liegen woanders).
+  // Einblendungen („Salto! +400“) laufen über denselben Meldungsplatz wie die HUD-Meldungen des Spiels (hud.meldung: „Sprung!“, „Preisgeld“): immer nur EINE,
+  // die nächste ersetzt die vorige. Der Meldungsplatz wird nur im Motorradmodus unter den Platz-Chip gelegt (sonst überdeckt ihn der Platz-Chip im Splitscreen).
   const STIL = `
-.moto-stunt { position: absolute; left: 50%; top: 6.6em; transform: translateX(-50%); min-width: 9em; text-align: center; pointer-events: none;
-  background: rgba(14,24,58,.7); border: .15em solid rgba(255,255,255,.3); border-radius: .8em; padding: .25em .9em .3em; white-space: nowrap; }
-.hud.links .moto-stunt, .hud.rechts .moto-stunt { left: .5em; top: 6.3em; transform: none; min-width: 7.5em; padding: .15em .6em .2em; }
-.hud.links .moto-stunt .ms-punkte, .hud.rechts .moto-stunt .ms-punkte { font-size: 1.35em; }
-.hud.links .moto-pop, .hud.rechts .moto-pop { font-size: 1.9em; }
-.moto-stunt .ms-punkte { font-size: 1.7em; color: #ffd23a; line-height: 1.1; }
-.moto-stunt .ms-combo { display: block; font-size: 1.15em; color: #ff8a1a; min-height: 1.2em; }
-.moto-stunt .ms-balken { display: block; height: .3em; margin-top: .15em; border-radius: .15em; background: rgba(255,255,255,.18); overflow: hidden; }
+.hud-links .moto-stunt { display: block; margin-top: .3em; padding-top: .25em; border-top: .1em solid rgba(255,255,255,.28); white-space: nowrap; pointer-events: none; }
+.moto-stunt .ms-punkte { display: block; font-size: 1.25em; color: #ffd23a; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.moto-stunt .ms-combo { display: none; font-size: 1.1em; color: #ff9a2a; line-height: 1.2; font-weight: 900; }
+.moto-stunt .ms-combo.an { display: block; }
+.moto-stunt .ms-combo.gross { font-size: 1.45em; color: #ff7a00; text-shadow: 0 0 .5em rgba(255,160,40,.7), 0 .1em .2em rgba(0,0,0,.7); }
+.moto-stunt .ms-balken { display: none; height: .3em; margin-top: .15em; border-radius: .15em; background: rgba(255,255,255,.18); overflow: hidden; }
+.moto-stunt .ms-balken.an { display: block; }
 .moto-stunt .ms-balken b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ff8a1a, #ffd23a); }
-.moto-stunt .ms-live { display: block; font-size: 1.05em; color: #7fe3ff; min-height: 1.2em; }
-.moto-popups { position: absolute; left: 0; right: 0; top: 24%; display: flex; flex-direction: column; align-items: center; gap: .15em; pointer-events: none; }
-.moto-pop { font-size: 2.7em; font-weight: 900; color: #fff; white-space: nowrap; padding: .05em .6em; border-radius: .6em; border: .06em solid #fff;
-  background: linear-gradient(90deg, #ff7a00, #ffb000); text-shadow: 0 .06em .12em rgba(0,0,0,.6); opacity: 0; transform: scale(.5) translateY(.6em);
-  transition: opacity .15s, transform .25s cubic-bezier(.3,1.6,.6,1); }
-.moto-pop.an { opacity: 1; transform: scale(1) translateY(0); }
-.moto-pop.weg { opacity: 0; transform: scale(1) translateY(-1.2em); transition: opacity .4s, transform .5s; }
-.moto-pop.ring { background: linear-gradient(90deg, #ff3b00, #ff9a00); }
-.moto-pop.voll { background: linear-gradient(90deg, #ff2d6f, #ffb000); font-size: 3.1em; }
-.moto-pop.bus { background: linear-gradient(90deg, #1c5fd0, #2f8bff); }
-.moto-pop.zone { background: linear-gradient(90deg, #0f8f5a, #2fcf8a); }
-.moto-pop small { font-size: .55em; opacity: .9; margin-left: .4em; }
+.moto-stunt .ms-live { display: none; font-size: 1.05em; color: #7fe3ff; line-height: 1.2; }
+.moto-stunt .ms-live.an { display: block; }
+.hud.links .hud-meldung, .hud.rechts .hud-meldung { font-size: 1.45em !important; left: 66% !important; }
+.hud.links .hud-countdown, .hud.rechts .hud-countdown { top: 27% !important; }
 .moto-touch { right: var(--rand); bottom: calc(var(--rand) * 2 + var(--tb) * 1.15 + 6px); width: calc(var(--tb) * .95); height: calc(var(--tb) * .95); font-size: calc(var(--tb) * .5);
   background: rgba(255,138,26,.38); border-color: rgba(255,230,190,.9); }
 .moto-touch.an { background: rgba(255,138,26,.8); }
 .ergebnis .moto-erg td.punkte, .ergebnis .moto-erg th.punkte { text-align: right; }
 .ergebnis .moto-erg tr.gesamt-spitze td { font-weight: 900; }
 `;
+  const MELDUNG_STANDARD = 'linear-gradient(90deg, rgba(255,90,170,.9), rgba(150,110,255,.9))';
+  const MELDUNG_FARBE = {
+    ring: 'linear-gradient(90deg, rgba(255,59,0,.95), rgba(255,154,0,.95))', voll: 'linear-gradient(90deg, rgba(255,45,111,.95), rgba(255,176,0,.95))',
+    bus: 'linear-gradient(90deg, rgba(28,95,208,.95), rgba(47,139,255,.95))', zone: 'linear-gradient(90deg, rgba(15,143,90,.95), rgba(47,207,138,.95))',
+    trick: 'linear-gradient(90deg, rgba(255,122,0,.95), rgba(255,176,0,.95))',
+  };
   let stilDa = false;
   function stilEinbauen() {
     if (stilDa || typeof document === 'undefined') return;
@@ -52,19 +53,24 @@ window.Rennspiel = window.Rennspiel || {};
 
   const zahl = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 
-  /** Felder in jedes HUD hängen. */
+  /** Stuntfeld in den Spieler-Chip jedes HUDs hängen; Meldungsplatz des HUDs übernehmen (immer nur eine Einblendung). */
   function anlegen(spiel) {
     stilEinbauen();
     (spiel.huds || []).forEach((hd) => {
       if (!hd || !hd.el || hd._motoStunt) return;
+      const chip = hd.el.querySelector('.hud-links') || hd.el;
       const wrap = document.createElement('div');
       wrap.className = 'moto-stunt';
       wrap.innerHTML = '<span class="ms-punkte">⭐ 0</span><span class="ms-combo"></span><span class="ms-balken"><b></b></span><span class="ms-live"></span>';
-      const pops = document.createElement('div');
-      pops.className = 'moto-popups';
-      hd.el.appendChild(wrap); hd.el.appendChild(pops);
-      hd._motoStunt = { wrap, pops, ePunkte: wrap.querySelector('.ms-punkte'), eCombo: wrap.querySelector('.ms-combo'), eBalken: wrap.querySelector('.ms-balken b'),
-        eLive: wrap.querySelector('.ms-live'), zuletzt: { p: -1, c: '', b: -1, l: '' } };
+      chip.appendChild(wrap);
+      hd._motoStunt = { wrap, ePunkte: wrap.querySelector('.ms-punkte'), eCombo: wrap.querySelector('.ms-combo'), eBalken: wrap.querySelector('.ms-balken b'), eBalkenBox: wrap.querySelector('.ms-balken'),
+        eLive: wrap.querySelector('.ms-live'), zuletzt: { p: -1, c: '', b: -1, l: '', g: null } };
+      // Meldungsplatz: Standardfarbe zurücksetzen, wenn eine normale Spielmeldung kommt (z. B. „Sprung!“ nach einer farbigen Stunt-Einblendung)
+      if (typeof hd.meldung === 'function' && !hd._motoMeldungOrig) {
+        const orig = hd.meldung;
+        hd._motoMeldungOrig = orig;
+        hd.meldung = function (text, ms, farbe) { if (this.eMeldung) this.eMeldung.style.background = farbe || MELDUNG_STANDARD; return orig.call(this, text, ms); };
+      }
     });
   }
 
@@ -74,28 +80,20 @@ window.Rennspiel = window.Rennspiel || {};
     return (spiel.huds || []).find((hd) => hd && hd.nr === f.spielerNr && hd._motoStunt) || null;
   }
 
-  /** Große Einblendung für einen Stunt. */
+  /** Einblendung für einen Stunt („Salto! +400 ×2“) auf dem Meldungsplatz des HUDs – ersetzt die vorige Einblendung, überdeckt kein anderes Feld. */
   function ereignis(spiel, fi, e) {
     const hd = hudFuer(spiel, fi);
-    if (!hd) return;
-    const m = hd._motoStunt;
-    let text = e.name + ' +' + zahl(e.punkte), klein = '';
-    if (e.art === 'bus') text = 'Bus-Sprung! +' + zahl(e.punkte), klein = e.n + ' × ' + R.config.motoStunts.punkte.busProFahrzeug;
-    else if (e.art === 'wheelie' || e.art === 'stoppie') klein = e.meter + ' m';
-    if (e.mult > 1) klein += (klein ? ' · ' : '') + '×' + e.mult;
-    const klasse = e.art === 'volltreffer' ? 'voll' : e.art === 'feuerring' ? 'ring' : e.art === 'bus' ? 'bus' : (e.art === 'wheelie' || e.art === 'stoppie') ? 'zone' : '';
-    const el = document.createElement('div');
-    el.className = 'moto-pop ' + klasse;
-    el.textContent = text;
-    if (klein) { const s = document.createElement('small'); s.textContent = klein; el.appendChild(s); }
-    m.pops.appendChild(el);
-    while (m.pops.children.length > 3) m.pops.removeChild(m.pops.firstChild);
-    requestAnimationFrame(() => requestAnimationFrame(() => { el.classList.add('an'); }));
-    setTimeout(() => { el.classList.remove('an'); el.classList.add('weg'); }, 1300);
-    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 1900);
+    if (!hd || typeof hd.meldung !== 'function') return;
+    let text = e.name + ' +' + zahl(e.punkte);
+    if (e.art === 'bus') text = 'Bus-Sprung! +' + zahl(e.punkte) + ' (' + e.n + ' Busse)';
+    else if (e.art === 'wheelie' || e.art === 'stoppie') text += ' (' + e.meter + ' m)';
+    if (e.mult > 1) text += ' ×' + e.mult;
+    const farbe = e.art === 'volltreffer' ? MELDUNG_FARBE.voll : e.art === 'feuerring' ? MELDUNG_FARBE.ring : e.art === 'bus' ? MELDUNG_FARBE.bus :
+      (e.art === 'wheelie' || e.art === 'stoppie') ? MELDUNG_FARBE.zone : MELDUNG_FARBE.trick;
+    hd.meldung(text, e.art === 'volltreffer' || e.art === 'bus' ? 1700 : 1300, farbe);
   }
 
-  /** Punkte, Combo und Live-Anzeige aktualisieren. */
+  /** Punkte, Combo und Live-Anzeige aktualisieren. Combo ist sichtbar, sobald ein Stunt im Fenster liegt (ab ×2 groß und leuchtend). */
   function frame(spiel) {
     const sz = spiel.stunt;
     if (!sz) return;
@@ -106,13 +104,14 @@ window.Rennspiel = window.Rennspiel || {};
       const z = sz.fz[fi];
       if (!z) return;
       const m = hd._motoStunt, zl = m.zuletzt;
+      if (zl.f !== hd.el.style.fontSize) { zl.f = hd.el.style.fontSize; hd.el.style.setProperty('--hf', zl.f); }
       if (zl.p !== z.punkte) { zl.p = z.punkte; m.ePunkte.textContent = '⭐ ' + zahl(z.punkte); }
-      const c = St.comboRest(z.combo, z.jetzt), ct = c.mult > 1 ? 'Combo ×' + c.mult : (c.mult === 1 ? 'Combo… (' + c.rest.toFixed(1) + ' s)' : '');
+      const c = St.comboRest(z.combo, z.jetzt), ct = c.mult >= 1 ? 'Combo ×' + c.mult : '';
       const b = c.mult ? Math.round(c.rest / R.config.motoStunts.combo.fenster * 100) : 0;
-      if (zl.c !== ct) { zl.c = ct; m.eCombo.textContent = ct; }
+      if (zl.c !== ct) { zl.c = ct; m.eCombo.textContent = ct; m.eCombo.classList.toggle('an', !!ct); m.eBalkenBox.classList.toggle('an', !!ct); m.eCombo.classList.toggle('gross', c.mult >= 2); }
       if (zl.b !== b) { zl.b = b; m.eBalken.style.width = b + '%'; }
       const live = z.wheelie.aktiv ? '🔥 Wheelie ' + Math.round(z.wheelie.meter) + ' m' : z.stoppie.aktiv ? '🔥 Stoppie ' + Math.round(z.stoppie.meter) + ' m' : '';
-      if (zl.l !== live) { zl.l = live; m.eLive.textContent = live; }
+      if (zl.l !== live) { zl.l = live; m.eLive.textContent = live; m.eLive.classList.toggle('an', !!live); }
     });
   }
 

@@ -201,7 +201,7 @@ window.Rennspiel = window.Rennspiel || {};
           tx: pr.tx, tz: pr.tz, nx: pr.nx, nz: pr.nz, radius: cfg.ring.radius, innen: cfg.ring.innen, boden: strecke.hoeheAn(pr.x, pr.z), sK, yKante: yK });
       }
       if (e.moto.reihe) {
-        const breite = (strecke.breiteBei ? strecke.breiteBei(sK) : strecke.breite) + 0.5;
+        const breite = (strecke.breiteBei ? strecke.breiteBei(sK) : strecke.breite) - 0.6;       // Busse 0,3 m schmaler als der Asphalt je Seite: liegen sicher auf der Fahrbahn, auch wenn sie dahinter leicht in eine Kurve geht
         const L = R.Moto.stunts.reiheLage(e.moto.reihe, breite, cfg);
         reihen.push(Object.assign({ nr: i, x: pK.x, z: pK.z, tx: pK.tx, tz: pK.tz, nx: pK.nx, nz: pK.nz, sK, breite, yKante: yK }, L));
       }
