@@ -15,8 +15,11 @@
 //   R.rueckspiegel.zeichnen/sichtbar/vorwaermen/entsorgen/zuruecksetzen   umhüllt
 //   Kosten wie der eine Spiegel des Autorennens: halbe Auflösung je Spiegel, doppelter Takt je Spiegel, die beiden werden abwechselnd
 //   neu gezeichnet (in jedem Bild höchstens einer; Zweispieler mit den Sparwerten zweiAufloesung/zweiTakt/zweiDeko/zweiSicht des Autorennens).
-//   Cockpit-Ansicht: die Spiegel sitzen an den Lenkerenden. Verfolger/Weit: sie teilen sich den Platz des einen Spiegels oben Mitte
-//   (gezeigt wird genau dort, wo das Autorennen einen Spiegel zeigt: config.cockpit.spiegel.modi).
+//   Cockpit-Ansicht: die Spiegel sitzen an den Lenkerenden, mindestens 25 % der Ansichtsbreite von der Mitte entfernt (spiegel.mitteAbstand).
+//   Verfolger/Weit (24.10., Wunsch des Vaters „wirklich links und rechts“): linker Spiegel am linken, rechter am rechten Bildrand, beide auf derselben Höhe
+//   UNTER den oberen HUD-Chips (Spieler-Chip links, Zeiten rechts; Platz-Chip bleibt oben Mitte); reicht der Platz im oberen Drittel nicht, auf ~40 % Bildhöhe.
+//   Zweispieler: je Bildhälfte an deren Rändern. Gezeigt in allen Ansichten: im Motorradmodus wird config.cockpit.spiegel.modi zur Laufzeit auf
+//   ['cockpit','verfolger','weit'] gesetzt (config.js bleibt unverändert).
 // Reine Funktionen (Node-testbar): rechtecke, spiegelRichtung, spiegelPosition, taktPlan, faellig, rollWinkel, leanFuerKamera.
 // ============================================================
 window.Rennspiel = window.Rennspiel || {};
@@ -49,7 +52,13 @@ window.Rennspiel = window.Rennspiel || {};
       zweiFaktor: 0.8,                // Zweispieler: Spiegelbild-Breite = Autorennen-Auflösung × aufloesungFaktor × diesen Faktor (v34-Wert zweiAufloesung 0,5 war hier zu grob: 72 px für ein 115-px-Fenster)
       seitlich: 0.42, vor: 0.35,      // Lage der Spiegel-Kamera am Motorrad (m): seitlich der Mitte, vor der Mitte
       aufloesungFaktor: 0.5,          // Breite des Spiegelbilds = config.cockpit.spiegel.aufloesung × diesen Faktor (halbe Auflösung je Spiegel)
-      lueckeOben: 6,                  // Verfolger/Weit: Lücke zwischen den beiden Spiegeln (px)
+      lueckeOben: 6,                  // (alt, ungenutzt seit 24.10.)
+      randAnteil: 0.012,              // Verfolger/Weit: Abstand zum Bildrand (Anteil Ansichtsbreite, mindestens 6 px)
+      maxAnteil: 0.17,                // Verfolger/Weit: ein Spiegel höchstens so breit (Anteil Ansichtsbreite) → bleibt am Rand (< 20 %)
+      untenLuecke: 8,                 // Verfolger/Weit: Abstand unter den oberen HUD-Chips (px)
+      bandMax: 1 / 3,                 // Verfolger/Weit: Spiegel müssen im oberen Drittel enden, sonst …
+      ersatzMitte: 0.40,              // … sitzt die Mitte der Spiegel auf dieser Bildhöhe (35–45 %)
+      mitteAbstand: 0.27,             // Cockpit: Spiegel-Mitte mindestens so weit (Anteil Ansichtsbreite) von der Bildmitte; gefordert sind ≥ 25 %
     },
   };
   const CFG = () => R.config.motoCockpit;
@@ -62,11 +71,14 @@ window.Rennspiel = window.Rennspiel || {};
    * cockpit = true: Spiegel an den Lenkerenden; sonst teilen sie sich das Rechteck `basis` (= Platz des einen Spiegels des Autorennens).
    * Rückgabe { lenker: {x,y,b,h} | null, spiegel: [links, rechts] }.
    */
-  function rechtecke(vw, vh, cockpit, basis, hind, split) {
+  function rechtecke(vw, vh, cockpit, basis, hind, split, oben) {
     const C = CFG();
     if (!cockpit) {
-      const luecke = Math.min(C.spiegel.lueckeOben, basis.b * 0.04), b = (basis.b - luecke) / 2;
-      return { lenker: null, spiegel: [{ x: basis.x, y: basis.y, b, h: basis.h }, { x: basis.x + b + luecke, y: basis.y, b, h: basis.h }] };
+      // oben = untere Kante der oberen HUD-Chips (px, 0/undefined = unbekannt): die Spiegel sitzen darunter, am linken und rechten Rand der Ansicht
+      const M = C.spiegel, rand = Math.max(6, vw * M.randAnteil), b = Math.max(20, Math.min(basis.b / 2, vw * M.maxAnteil)), h = Math.min(basis.h, b);
+      let y = Math.max(basis.y, oben > 0 ? oben + M.untenLuecke : 0);
+      if (y + h > vh * M.bandMax) y = Math.max(basis.y, vh * M.ersatzMitte - h / 2);
+      return { lenker: null, spiegel: [{ x: rand, y, b, h }, { x: vw - rand - b, y, b, h }] };
     }
     const L = C.lenker;
     let H = Math.min(vh * L.maxHoehe, vw * (split && L.breiteZwei ? L.breiteZwei : L.breite) / L.seitenverh), W = H * L.seitenverh, x0 = (vw - W) / 2;
@@ -84,9 +96,20 @@ window.Rennspiel = window.Rennspiel || {};
     }
     const z2 = !!(split && L.spiegelBZwei), sx = z2 ? L.spiegelXZwei : L.spiegelX;
     const y0 = vh - H, bm = (z2 ? L.spiegelBZwei : L.spiegelB) * W, hm = (z2 ? L.spiegelHZwei : L.spiegelH) * H, cy = y0 - L.spiegelOben * H;
+    // Spiegel-Mitte: am Lenkerende, aber mindestens `mitteAbstand` der Ansichtsbreite von der Bildmitte (weiter außen, auch über das Lenker-Bild hinaus);
+    // nie ganz aus dem Bild und nie auf ein Hindernis (Minimap) – dann bleibt die alte Lage
+    const lim = vw * (0.5 - C.spiegel.mitteAbstand);
+    const bau = (aussen) => [0, 1].map((m) => {
+      const c0 = m === 0 ? x0 + sx * W : x0 + (1 - sx) * W;
+      const c = aussen ? klemme(m === 0 ? Math.min(c0, lim) : Math.max(c0, vw - lim), bm / 2 + 3, vw - bm / 2 - 3) : c0;
+      return { x: c - bm / 2, y: cy - hm / 2, b: bm, h: hm };
+    });
+    let sp = bau(true);
+    if (hind && sp.some((rc) => hind.some((o) => rc.x < o.x + o.b && rc.x + rc.b > o.x && rc.y < o.y + o.h && rc.y + rc.h > o.y))) sp = bau(false);   // beide zusammen, sonst unsymmetrisch
     return {
       lenker: { x: x0, y: y0, b: W, h: H },
-      spiegel: [{ x: x0 + sx * W - bm / 2, y: cy - hm / 2, b: bm, h: hm }, { x: x0 + (1 - sx) * W - bm / 2, y: cy - hm / 2, b: bm, h: hm }],
+      spiegel: sp,
+      stiel: sp.map((rc, m) => klemme(m === 0 ? (rc.x + bm / 2 - x0) / W : 1 - (rc.x + bm / 2 - x0) / W, 0.02, 0.5)),   // Anteil Lenker-Bildbreite von der eigenen Seite (für den Spiegel-Stiel)
     };
   }
 
@@ -156,6 +179,8 @@ window.Rennspiel = window.Rennspiel || {};
   if (R.config.kamera && R.config.kamera.cockpit) R.config.kamera.cockpit.vor = CFG().kameraVor;
   // Scheibenwischer = Windschutzscheibe: gibt es am Motorrad nicht
   if (R.config.cockpit && R.config.cockpit.wischer) R.config.cockpit.wischer.modi = [];
+  // Spiegel in allen Ansichten (Wunsch des Vaters); config.js bleibt unverändert, die Laufzeit-Konfig gilt nur im Motorradmodus
+  if (R.config.cockpit && R.config.cockpit.spiegel) R.config.cockpit.spiegel.modi = ['cockpit', 'verfolger', 'weit'];
 
   // ---------- Kamera: Kippung mit der Schräglage ----------
   const kUpdate = R.FahrzeugKamera.prototype.update;
@@ -224,6 +249,18 @@ window.Rennspiel = window.Rennspiel || {};
     return liste;
   }
 
+  /** Untere Kante der oberen HUD-Chips (Spieler-Chip links mit Stunt-/Unfallanzeige, Zeiten rechts) in px relativ zur Ansicht. Nur Verfolger/Weit. Wächst nur (kein Springen), Rückstellung bei Größenänderung. */
+  let obenWert = [0, 0];
+  function messeOben(spiel, i) {
+    const h = spiel.huds && spiel.huds[i];
+    if (!h || !h.el) return obenWert[i];
+    const hr = h.el.getBoundingClientRect();
+    let u = 0;
+    ['.hud-links', '.hud-zeiten'].forEach((q) => { const e = h.el.querySelector(q); if (e) { const r = e.getBoundingClientRect(); if (r.height > 0) u = Math.max(u, r.bottom - hr.top); } });
+    if (u > obenWert[i]) obenWert[i] = u;
+    return obenWert[i];
+  }
+
   function vorbereiten(i, m, rc, split) {
     const g = rtGroesse(rc, split), pb = g.b, ph = g.h;
     if (!rts[i][m] || rtB[i][m] !== pb || rtH[i][m] !== ph) {
@@ -246,7 +283,7 @@ window.Rennspiel = window.Rennspiel || {};
 
   function ansichtRechtecke(spiel, i, vw, vh) {
     const split = spiel.kameras.length > 1, cockpit = spiel.kameras[i].modus === 'cockpit';
-    return rechtecke(vw, vh, cockpit, S.rechteck(vw, vh, split), cockpit ? hindernisse(spiel, i, vw, vh) : null, split);
+    return rechtecke(vw, vh, cockpit, S.rechteck(vw, vh, split), cockpit ? hindernisse(spiel, i, vw, vh) : null, split, cockpit ? 0 : (obenWert[i] || messeOben(spiel, i)));
   }
 
   S.zeichnen = function (spiel, i, vx, vw, vh) {
@@ -323,7 +360,7 @@ window.Rennspiel = window.Rennspiel || {};
       try { r.setRenderTarget(rts[i][0]); r.compile(spiel.szene, kams[0]); } finally { r.setRenderTarget(alt); }
     }
   };
-  S.zuruecksetzen = function () { zuruecksetzenOrig.apply(S, arguments); hindCache = {}; zaehler[0] = zaehler[1] = 0; for (let i = 0; i < 2; i++) geladen[i][0] = geladen[i][1] = false; };
+  S.zuruecksetzen = function () { zuruecksetzenOrig.apply(S, arguments); hindCache = {}; obenWert = [0, 0]; zaehler[0] = zaehler[1] = 0; for (let i = 0; i < 2; i++) geladen[i][0] = geladen[i][1] = false; };
   S.entsorgen = function () {
     entsorgenOrig.apply(S, arguments);
     for (let i = 0; i < 2; i++) for (let m = 0; m < 2; m++) { if (rts[i][m]) { rts[i][m].dispose(); rts[i][m] = null; } rtB[i][m] = rtH[i][m] = 0; }
@@ -377,7 +414,7 @@ window.Rennspiel = window.Rennspiel || {};
     for (const seite of [-1, 1]) {
       g.save(); if (seite > 0) { g.translate(LW, 0); g.scale(-1, 1); }
       // Spiegel-Stiel von der Klemme nach oben (endet im Spiegel-Rahmen)
-      g.strokeStyle = '#16181c'; g.lineWidth = 10; g.beginPath(); g.moveTo(178, 200); g.lineTo((p.zwei ? CFG().lenker.spiegelXZwei : CFG().lenker.spiegelX) * LW, 48); g.stroke();
+      g.strokeStyle = '#16181c'; g.lineWidth = 10; g.beginPath(); g.moveTo(178, 200); g.lineTo(((p.stiel && p.stiel[seite < 0 ? 0 : 1]) || (p.zwei ? CFG().lenker.spiegelXZwei : CFG().lenker.spiegelX)) * LW, 48); g.stroke();
       // Hebel, Griff, Arm und Handschuh sitzen 44 Einheiten weiter innen: der Arm läuft dann zum Bildrand hin weich aus (siehe unten)
       g.save(); g.translate(44, 0);
       // Hebel (Kupplung / Bremse): vorn am Griff, nach innen gebogen, Kugelende
@@ -470,10 +507,12 @@ window.Rennspiel = window.Rennspiel || {};
       const split = spiel.kameras.length > 1;
       // Spiegel-Rahmen
       if (sp) {
-        const key = vw + 'x' + vh + (cockpit ? 'c' : 'v') + (split ? 's' : '');
+        if (!cockpit && (this.messZ = (this.messZ || 0) + 1) % 8 === 1) messeOben(spiel, hud.nr);       // Chip-Höhe nur alle 8 Aufrufe messen (kein Layout-Lesen je Bild)
+        const ob = cockpit ? 0 : Math.round(obenWert[hud.nr] || 0);
+        const key = vw + 'x' + vh + (cockpit ? 'c' : 'v' + ob) + (split ? 's' : '');
         if (key !== this.layoutKey || !this.spAn) {
           this.layoutKey = key;
-          const rs = rechtecke(vw, vh, cockpit, S.rechteck(vw, vh, split), cockpit ? hindernisse(spiel, hud.nr, vw, vh) : null, split);
+          const rs = rechtecke(vw, vh, cockpit, S.rechteck(vw, vh, split), cockpit ? hindernisse(spiel, hud.nr, vw, vh) : null, split, ob);
           rs.spiegel.forEach((rc, m) => {
             const rand = Math.max(2, Math.min(5, Math.round(rc.h * 0.06)));
             styl(this.rahmen[m], { left: (rc.x - 3) + 'px', top: (rc.y - 3) + 'px', width: (rc.b + 6) + 'px', height: (rc.h + 6) + 'px', borderWidth: rand + 'px', display: 'block' });
@@ -507,12 +546,12 @@ window.Rennspiel = window.Rennspiel || {};
       const anteil = klemme((this.rpm - gt.leerlauf) / Math.max(1, gt.begr - gt.leerlauf), 0, 1);
       const kmh = Math.abs(Math.round(v.vLaengs * 3.6)), steer = Math.round(klemme(v.lenkung || 0, -1, 1) * 20) / 20;
       const gang = Math.abs(v.vLaengs) < 0.3 ? 'N' : (gt.gang < 0 ? 'R' : 'GANG ' + gt.gang);
-      const key = kmh + '|' + Math.round(anteil * 22) + '|' + gang + '|' + steer + '|' + cw + (split ? 'z' : '');
+      const key = kmh + '|' + Math.round(anteil * 22) + '|' + gang + '|' + steer + '|' + cw + (split ? 'z' : '') + (rs.stiel ? '|' + Math.round(rs.stiel[0] * 100) : '');
       if (key === this.schluessel) return;
       this.schluessel = key;
       const o = (auto && auto.optionen) || {};
       lenkerZeichnen(this.g, cw, ch, LH, { steer, kmh, anteil, gang, bike: auto ? auto.farbe : 0xff6a10, fahrer: auto && auto.farbe2 !== undefined ? auto.farbe2 : 0x1d4ed8,
-        helm: o.helm !== undefined ? o.helm : 0xf4f4f4, nr: o.nummer !== undefined ? o.nummer : 1, zwei: split });
+        helm: o.helm !== undefined ? o.helm : 0xf4f4f4, nr: o.nummer !== undefined ? o.nummer : 1, zwei: split, stiel: rs.stiel });
     }
 
     _aus() {
@@ -528,7 +567,10 @@ window.Rennspiel = window.Rennspiel || {};
       const mc = new MotoCockpit(anz, hud);
       const upd = anz.update.bind(anz), grs = anz.groesse.bind(anz);
       anz.update = function () { upd(); try { mc.update(); } catch (e) { console.error('Motorrad-Cockpit:', e); } };
-      anz.groesse = function (vw, vh) { grs(vw, vh); mc.layoutKey = ''; hindCache = {}; };
+      anz.groesse = function (vw, vh) { grs(vw, vh); mc.layoutKey = ''; hindCache = {}; obenWert = [0, 0]; };
+      // Der Platz-Chip rückt im Autorennen neben den Spiegel oben Mitte – hier sitzen die Spiegel am Rand: der Chip bleibt oben Mitte
+      const platz = anz._platzChip && anz._platzChip.bind(anz);
+      if (platz) anz._platzChip = function () { return platz(false); };
       anz.moto = mc;
     } catch (e) { console.error('Motorrad-Cockpit (HUD):', e); }
     return anz;

@@ -74,9 +74,44 @@ pruefe(`Cockpit-Ansicht, ${GROESSEN.length} Fenstergrößen (solo/zu zweit): all
 { const z = C.rechtecke(640, 800, true, null, null, true), e = C.rechtecke(640, 800, true, null, null, false);
   pruefe(`Zweispieler: Lenker-Bild breiter als solo bei gleicher Ansichtsbreite (${Math.round(z.lenker.b)} gegen ${Math.round(e.lenker.b)} px), höchstens ${cfg.lenker.maxHoehe * 100} % der Höhe`, z.lenker.b > e.lenker.b * 1.3 && z.lenker.h <= 800 * cfg.lenker.maxHoehe + 0.5 && z.lenker.x >= 0 && z.lenker.x + z.lenker.b <= 640); }
 { const rs = C.rechtecke(1280, 800, true, null, null); pruefe('ohne Hindernisse sitzt der Lenker mittig, unten, Spiegel symmetrisch', nah(rs.lenker.x + rs.lenker.b / 2, 640, 0.5) && nah(rs.lenker.y + rs.lenker.h, 800, 0.5) && nah(rs.spiegel[0].x + rs.spiegel[0].b / 2 + rs.spiegel[1].x + rs.spiegel[1].b / 2, 1280, 0.5)); }
-{ const basis = { x: 480, y: 6, b: 320, h: 68 }, rs = C.rechtecke(1280, 800, false, basis);
-  const [l, r] = rs.spiegel;
-  pruefe('Verfolger-/Weit-Ansicht: zwei Spiegel teilen sich den Platz des einen (oben Mitte), kein Lenker', rs.lenker === null && l.x >= basis.x - 0.01 && r.x + r.b <= basis.x + basis.b + 0.01 && !schnitt(l, r) && l.y === basis.y && l.h === basis.h && r.h === basis.h && l.b > 100); }
+// Verfolger/Weit (24.10.): Spiegel wirklich links und rechts, beide auf einer Höhe, unter den oberen Chips, im oberen Drittel (sonst ~40 %), nie auf HUD-Teilen
+{
+  const basis = { x: 480, y: 6, b: 320, h: 68 }, bad = [];
+  const CHIPS = (vw, vh, split) => ({ links: { x: 10, y: 8, b: Math.min(vw * 0.3, 190), h: Math.min(vh * 0.2, 120) }, rechts: { x: vw - 10 - Math.min(vw * 0.3, 190), y: 8, b: Math.min(vw * 0.3, 190), h: Math.min(vh * 0.14, 90) },
+    platz: { x: vw / 2 - 45, y: 8, b: 90, h: 60 } });
+  for (const [vw, vh, split] of [[1280, 800, false], [1920, 1080, false], [1024, 768, false], [640, 800, true], [960, 1080, true], [500, 375, true], [1280, 520, false]]) {
+    const b0 = split ? { x: vw * 0.18, y: 8, b: vw * 0.64, h: vh * 0.11 } : { x: vw * 0.375, y: 6, b: vw * 0.25, h: vh * 0.085 };
+    const ch = CHIPS(vw, vh, split), oben = Math.max(ch.links.y + ch.links.h, ch.rechts.y + ch.rechts.h), tag = `${vw}x${vh}${split ? ' (zwei)' : ''}`;
+    for (const ob of [0, oben, oben + 60, vh * 0.5]) {
+      const rs = C.rechtecke(vw, vh, false, b0, null, split, ob), [l, r] = rs.spiegel;
+      if (rs.lenker !== null) bad.push(tag + ': Lenker');
+      if (!(l.x + l.b < vw * 0.2 && r.x > vw * 0.8)) bad.push(`${tag} ob=${ob}: nicht am Rand (${Math.round(l.x)}..${Math.round(l.x + l.b)} / ${Math.round(r.x)})`);
+      if (!(innen(l, vw, vh) && innen(r, vw, vh))) bad.push(tag + ': nicht im Bild');
+      if (schnitt(l, r)) bad.push(tag + ': überlappen');
+      if (l.y !== r.y || l.h !== r.h || l.b !== r.b) bad.push(tag + ': nicht auf einer Höhe');
+      if (ob > 0 && ob < vh * 0.25 && (l.y < ob || r.y < ob)) bad.push(`${tag} ob=${ob}: unter den Chips erwartet (${l.y})`);
+      if (!(l.y + l.h <= vh / 3 + 0.5 || nah((l.y + l.h / 2) / vh, cfg.spiegel.ersatzMitte, 0.02))) bad.push(`${tag} ob=${ob}: weder im oberen Drittel noch bei 40 % (${Math.round(l.y)})`);
+      if (ob === oben) for (const k of ['links', 'rechts', 'platz']) if (schnitt(l, ch[k]) || schnitt(r, ch[k])) bad.push(`${tag}: Spiegel auf Chip ${k}`);
+    }
+  }
+  pruefe('Verfolger/Weit (solo/zu zweit, 7 Größen, Chip-Höhen 0 … 50 %): Spiegel links < 20 % / rechts > 80 %, gleiche Höhe, unter den Chips, oberes Drittel oder ~40 %, nichts überlappt', bad.length === 0, bad.slice(0, 3).join('; '));
+  const frei = C.rechtecke(1280, 800, false, { x: 480, y: 6, b: 320, h: 68 }, null, false, 0);
+  pruefe('Verfolger/Weit ohne Chip-Maß: Spiegel in der Basis-Höhe, beide Ränder', frei.spiegel[0].y === 6 && frei.spiegel[0].x < 1280 * 0.05 && frei.spiegel[1].x + frei.spiegel[1].b > 1280 * 0.95);
+}
+// Cockpit: Spiegel-Mitten mindestens 25 % der Ansichtsbreite von der Bildmitte entfernt (links ≤ 25 %, rechts ≥ 75 % der Breite)
+{
+  const bad = [];
+  for (const [vw, vh, split] of GROESSEN) {
+    const rs = C.rechtecke(vw, vh, true, null, null, split), [l, r] = rs.spiegel;
+    const cl = l.x + l.b / 2, cr = r.x + r.b / 2, tag = `${vw}x${vh}${split ? ' (zwei)' : ''}`;
+    if (!(Math.abs(vw / 2 - cl) >= vw * 0.25 - 0.5 && Math.abs(cr - vw / 2) >= vw * 0.25 - 0.5)) bad.push(`${tag}: Mitten ${Math.round(cl)} / ${Math.round(cr)}`);
+    if (!(Math.abs((vw - cl) - cr) < 0.5)) bad.push(tag + ': unsymmetrisch');
+    if (!(rs.stiel && rs.stiel[0] > 0 && rs.stiel[0] <= 0.5)) bad.push(tag + ': Stiel');
+  }
+  pruefe('Cockpit: Spiegel-Mitten ≥ 25 % der Ansichtsbreite von der Bildmitte (links/rechts außen), symmetrisch, Stiel-Anteil gültig', bad.length === 0, bad.slice(0, 3).join('; '));
+  const ohne = C.rechtecke(1920, 1080, true, null, null).spiegel;
+  pruefe('Cockpit 1920×1080 ohne Minimap: Spiegel-Mitten bei ≤ 25 % bzw. ≥ 75 % der Breite', ohne[0].x + ohne[0].b / 2 <= 1920 * 0.25 + 0.5 && ohne[1].x + ohne[1].b / 2 >= 1920 * 0.75 - 0.5);
+}
 
 // ---------- 4. Takt ----------
 function takttest(nSp, T) {

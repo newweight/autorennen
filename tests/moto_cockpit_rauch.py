@@ -7,12 +7,12 @@ Startet einen lokalen http-Server (Repo-Wurzel), lädt Motorrad.html und prüft:
   - die beiden Spiegel-Kameras schauen hinten-links bzw. hinten-rechts (echte Kameras im Spiel, Vorzeichen), seitlich versetzt
   - Spiegelbilder erscheinen im Bild (Pixel), links und rechts unterschiedlich; Auflösung halb, nie größer als der Ausschnitt
   - Draw-Call-Zuwachs gegenüber dem einen Autorennen-Spiegel höchstens +20 % (solo und zu zweit, Mittel über 32 Bilder)
-  - Verfolger-/Weit-Ansicht: zwei Spiegel nur, wenn das Autorennen dort einen Spiegel zeigt (config.cockpit.spiegel.modi)
+  - Verfolger-/Weit-Ansicht: Spiegel links/rechts am Bildrand (je HUD-Hälfte), gleiche Höhe, ohne HUD-Überlappung; Laufzeit-Konfig modi = alle drei Ansichten
   - Touch (Klasse t-rennen): kein Lenker, keine Spiegel, alter Tacho bleibt
   - HUD ohne Überlappung (inkl. beider Spiegel und des Lenkers) bei 1280×800, 1920×1080, 844×390, solo und zu zweit; mit Unfall-HUD und Meldung
   - Purzelbaum: eigenes Motorrad im Solo-Cockpit ausgeblendet (und danach wieder sichtbar)
   - Autorennen.html: 0 JS-Fehler, keine Motorrad-Datei, ein Spiegel wie bisher
-Bilder: tests/out/moto/moto_cockpit.png, moto_cockpit_zwei.png (+ moto_cockpit_verfolger.png)"""
+Bilder: tests/out/moto/moto_cockpit.png, moto_cockpit_zwei.png (+ moto_cockpit_verfolger.png, moto_spiegel_verfolger.png, moto_spiegel_cockpit.png, moto_spiegel_zwei.png)"""
 import os, sys, json, time, socket, subprocess
 from playwright.sync_api import sync_playwright
 
@@ -68,6 +68,24 @@ JS_HELFER = '''() => {
       document.querySelectorAll('.hud').forEach((h, hi) => { const m = [...h.querySelectorAll('.cp-moto-spiegel')].filter((e) => getComputedStyle(e).display !== 'none').map((e) => e.getBoundingClientRect());
         if (m.length === 2 && Math.min(m[0].right, m[1].right) - Math.max(m[0].left, m[1].left) > 0) out.push(hi + ': Spiegel überlappen sich'); });
       return { elemente: els.length, spiegel: els.filter((x) => x.e.classList.contains('cp-moto-spiegel')).length, lenker: els.filter((x) => x.e.classList.contains('cp-moto-lenker')).length, kollisionen: out };
+    },
+    // Lage der Spiegel-Rahmen je HUD relativ zur HUD-Breite/-Höhe (Verfolger/Weit: am Rand; Cockpit: Mitten außen)
+    spiegelLage() {
+      return [...document.querySelectorAll('.hud')].map((h) => { const hr = h.getBoundingClientRect(), m = [...h.querySelectorAll('.cp-moto-spiegel')].filter((e) => getComputedStyle(e).display !== 'none').map((e) => { const r = e.getBoundingClientRect(); return { l: (r.left - hr.left) / hr.width, r: (r.right - hr.left) / hr.width, o: (r.top - hr.top) / hr.height, u: (r.bottom - hr.top) / hr.height, mx: ((r.left + r.right) / 2 - hr.left) / hr.width }; });
+        const chip = h.querySelector('.hud-platz'); return { m, chipPos: chip.style.position || '', b: hr.width, h: hr.height }; });
+    },
+    // Einblendungen sind mittig zentrierter Text: gemessen wird der Text (Range), nicht das ganze Element
+    textKollisionen() {
+      const out = [];
+      document.querySelectorAll('.hud').forEach((h, hi) => {
+        const sp = [...h.querySelectorAll('.cp-moto-spiegel')].filter((e) => getComputedStyle(e).display !== 'none').map((e) => e.getBoundingClientRect());
+        h.querySelectorAll('.hud-countdown, .hud-banner, .hud-meldung, .moto-mitte, .hud-hinweis, .hud-platz').forEach((e) => {
+          if (getComputedStyle(e).display === 'none' || !(e.textContent || '').trim()) return;
+          const rg = document.createRange(); rg.selectNodeContents(e); [...rg.getClientRects()].forEach((q) => { if (q.width < 2) return;
+            sp.forEach((s2) => { const w = Math.min(q.right, s2.right) - Math.max(q.left, s2.left), h2 = Math.min(q.bottom, s2.bottom) - Math.max(q.top, s2.top); if (w > 2 && h2 > 2) out.push(hi + ': ' + e.className + ' x Spiegel (' + Math.round(w) + 'x' + Math.round(h2) + ')'); }); });
+        });
+      });
+      return out;
     },
     // Hinweis „Festgefahren? R drücken“ kurz zeigen (bleibt nur in diesem Aufruf): Lage gegen Spiegel/Lenker prüfen
     hinweisKollision() {
@@ -210,16 +228,22 @@ try:
           const fr = [...h.querySelectorAll('.cp-moto-spiegel')], alt = Rennspiel.rueckspiegel.rechteck(window.innerWidth, window.innerHeight, false);
           return { modus: Rennspiel.spiel.kameras[0].modus, lenker: getComputedStyle(h.querySelector('.cp-moto-lenker')).display, frames: fr.map((e) => getComputedStyle(e).display), rects: fr.map(r), alt, alterTacho: getComputedStyle(h.querySelector('.hud-tacho')).display,
             chip: h.querySelector('.hud-platz').style.position, hinweis: h.querySelector('.hud-hinweis').style.bottom }; }''')
-        innen = v['rects'][0][0] >= v['alt']['x'] - 8 and v['rects'][1][2] <= v['alt']['x'] + v['alt']['b'] + 8 and abs(v['rects'][0][1] - v['alt']['y']) <= 8
-        pruefe('Verfolger-Ansicht: zwei Spiegel teilen sich den Platz des einen (oben Mitte), kein Lenker, alter Tacho da, Chip neben dem Spiegel', v['modus'] == 'verfolger' and v['lenker'] == 'none' and v['frames'] == ['block', 'block'] and innen and v['alterTacho'] != 'none' and v['chip'] == 'absolute', v)
-        bild(page, 'moto_cockpit_verfolger.png', '(Verfolger-Ansicht: zwei Spiegel oben Mitte)')
-        # Autorennen zeigt in einer Ansicht keinen Spiegel -> hier auch nicht
+        lg = ev('() => __C.spiegelLage()')[0]; m0, m1 = lg['m'][0], lg['m'][1]
+        pruefe('Verfolger-Ansicht: linker Spiegel am linken Rand (< 20 %), rechter am rechten (> 80 %), gleiche Höhe (oberes Drittel oder ~40 %), kein Lenker, alter Tacho da, Platz-Chip bleibt oben Mitte',
+               v['modus'] == 'verfolger' and v['lenker'] == 'none' and v['frames'] == ['block', 'block'] and m0['r'] < 0.2 and m1['l'] > 0.8 and abs(m0['o'] - m1['o']) < 0.005 and (m0['u'] <= 1 / 3 + 0.01 or 0.35 <= (m0['o'] + m0['u']) / 2 <= 0.45) and v['alterTacho'] != 'none' and lg['chipPos'] == '', lg)
+        tk = ev('() => __C.textKollisionen()'); hk = ev('() => __C.hudKollisionen()')
+        pruefe('Verfolger-Ansicht: Spiegel überlappen kein HUD-Teil (Spieler-Chip, Zeiten, Platz, Minimap, Tacho, Einblendungen)', not hk['kollisionen'] and not tk, (hk['kollisionen'] + tk)[:3])
+        bild(page, 'moto_cockpit_verfolger.png', '(Verfolger-Ansicht)')
+        md = ev('() => Rennspiel.config.cockpit.spiegel.modi')
+        pruefe('Laufzeit-Konfig im Motorradmodus: config.cockpit.spiegel.modi = [cockpit, verfolger, weit] (config.js unverändert)', md == ['cockpit', 'verfolger', 'weit'], md)
+        # Config bleibt maßgeblich: ohne Modus kein Spiegel
         ev("() => { Rennspiel.config.cockpit.spiegel.modi = ['cockpit']; }"); page.wait_for_timeout(500)
         v2 = ev('''() => ({ frames: [...document.querySelectorAll('.hud .cp-moto-spiegel')].map((e) => getComputedStyle(e).display), sichtbar: Rennspiel.rueckspiegel.sichtbar(Rennspiel.spiel, 0) })''')
         pruefe('Verfolger-Ansicht ohne Spiegel im Autorennen (config.cockpit.spiegel.modi = [cockpit]): auch hier keine Spiegel', v2['frames'] == ['none', 'none'] and v2['sichtbar'] is False, v2)
         ev("() => { Rennspiel.config.cockpit.spiegel.modi = ['cockpit', 'verfolger', 'weit']; __C.modus(2); }"); page.wait_for_timeout(600)
         w = ev('''() => ({ modus: Rennspiel.spiel.kameras[0].modus, frames: [...document.querySelectorAll('.hud .cp-moto-spiegel')].map((e) => getComputedStyle(e).display) })''')
-        pruefe('Weit-Ansicht: zwei Spiegel wie im Autorennen (modi enthält weit)', w['modus'] == 'weit' and w['frames'] == ['block', 'block'], w)
+        lw = ev('() => __C.spiegelLage()')[0]['m']; tkw = ev('() => __C.textKollisionen()'); hkw = ev('() => __C.hudKollisionen()')
+        pruefe('Weit-Ansicht: zwei Spiegel links (< 20 %) und rechts (> 80 %) am Rand, gleiche Höhe, keine Überlappung', w['modus'] == 'weit' and w['frames'] == ['block', 'block'] and lw[0]['r'] < 0.2 and lw[1]['l'] > 0.8 and abs(lw[0]['o'] - lw[1]['o']) < 0.005 and not hkw['kollisionen'] and not tkw, lw)
 
         # ---------------- Touch ----------------
         ev("() => { document.documentElement.classList.add('t-rennen'); __C.modus(1); }"); page.wait_for_timeout(700)
@@ -235,10 +259,10 @@ try:
         pruefe('Purzelbaum im Solo-Cockpit: eigenes Motorrad für diese Zeit ausgeblendet, sonst sichtbar, danach wieder sichtbar', pz['normal'][0] is True and pz['tumble'][0] is False and pz['danach'] is True, pz)
 
         # ---------------- HUD ohne Überlappung ----------------
-        def hud_pruefen(w, h, modus, name):
+        def hud_pruefen(w, h, modus, name, ansicht=1, bildname=None):
             page.set_viewport_size({'width': w, 'height': h}); page.wait_for_timeout(300)
             starte('wiese', modus=modus, autopilot=False)
-            ev('''() => { const s = Rennspiel.spiel; s.pausiert = false; s.kameras.forEach((k) => { k.modusIndex = 1; }); __C.snap(); }''')
+            ev('''() => { const s = Rennspiel.spiel; s.pausiert = false; s.kameras.forEach((k) => { k.modusIndex = %d; }); __C.snap(); }''' % ansicht)
             # Unfall-HUD (Zustände, Mitte-Text) und Meldung zeigen
             ev('''() => { const s = Rennspiel.spiel; s.unfall.fz.forEach((u, i) => { if (!u) return; u.zustand = 62; u.gesundheit = 41; });
               s.fahrzeuge.forEach((f, i) => { if (f.istSpieler) { const u = s.unfall.fz[i]; u.zustand = 33; u.gesundheit = 70; u.halt = { art: 'werkstatt', t: 0, steht: true }; } });
@@ -247,10 +271,22 @@ try:
             ev('() => { __C.leerCountdown(); }')
             r = ev('() => __C.hudKollisionen()'); hk = ev('() => __C.hinweisKollision()')
             erwartet = 2 if modus == 'solo' else 4
-            pruefe(f'HUD {name} {modus}, Cockpit: {r["elemente"]} Elemente ({r["spiegel"]} Spiegel, {r["lenker"]} Lenker), keine Überlappung (auch Hinweis „Festgefahren?“)', r['spiegel'] == erwartet and r['lenker'] == erwartet // 2 and not r['kollisionen'] and not hk, (r['kollisionen'] + hk)[:4])
+            ans = ['Verfolger', 'Cockpit', 'Weit'][ansicht]
+            lg = ev('() => __C.spiegelLage()'); tk = ev('() => __C.textKollisionen()'); lageok = True
+            for hl in lg:
+                if len(hl['m']) != 2: lageok = False; continue
+                a0, a1 = hl['m']
+                if ansicht == 1: lageok = lageok and abs(a0['mx'] - 0.5) >= 0.25 - 0.002 and abs(a1['mx'] - 0.5) >= 0.25 - 0.002
+                else: lageok = lageok and a0['r'] < 0.2 and a1['l'] > 0.8 and abs(a0['o'] - a1['o']) < 0.005 and (a0['u'] <= 1 / 3 + 0.01 or 0.35 <= (a0['o'] + a0['u']) / 2 <= 0.45) and hl['chipPos'] == ''
+            if bildname: bild(page, bildname, f'({ans}, {name}, {modus})')
+            pruefe(f'HUD {name} {modus}, {ans}: {r["elemente"]} Elemente ({r["spiegel"]} Spiegel, {r["lenker"]} Lenker), Spiegel links/rechts außen, keine Überlappung (auch Hinweis, Einblendungen)', r['spiegel'] == erwartet and r['lenker'] == (erwartet // 2 if ansicht == 1 else 0) and lageok and not r['kollisionen'] and not hk and not tk, (r['kollisionen'] + hk + tk)[:4] if lageok else lg)
             return r
         for (w, h, modus, name) in [(1280, 800, 'solo', '1280x800'), (1920, 1080, 'solo', '1920x1080'), (844, 390, 'solo', '844x390'), (1280, 800, 'zwei', '1280x800'), (844, 390, 'zwei', '844x390')]:
-            hud_pruefen(w, h, modus, name)
+            hud_pruefen(w, h, modus, name, 1, 'moto_spiegel_cockpit.png' if (w, modus) == (1280, 'solo') else None)
+        for ansicht in (0, 2):
+            for (w, h, modus, name) in [(1280, 800, 'solo', '1280x800'), (1920, 1080, 'solo', '1920x1080'), (844, 390, 'solo', '844x390'), (1280, 800, 'zwei', '1280x800'), (844, 390, 'zwei', '844x390')]:
+                bn = 'moto_spiegel_verfolger.png' if (ansicht, w, modus) == (0, 1280, 'solo') else ('moto_spiegel_zwei.png' if (ansicht, w, modus) == (0, 1280, 'zwei') else None)
+                hud_pruefen(w, h, modus, name, ansicht, bn)
         # Zweispieler: Draw-Calls und Bild
         page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
         starte('wiese', 'zwei')
