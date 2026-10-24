@@ -3,7 +3,7 @@
 Aufruf: python3 tests/moto_optik_rauch.py
 Prüft und fotografiert (Bilder nach tests/out/moto/):
   - Busse: Bus-Reihe als erkennbare Busse (Schulbus gelb, Linienbusse rot/blau/weiß/grün, Fensterband, Räder, Front-/Heckscheibe, Dach), ein Mesh (1 Draw-Call),
-    Lage/Höhe wie zuvor (Oberkante = Reihenhöhe), moto_busse.png (Anfahrt) und moto_busse_nah.png (schräg von vorn)
+    Lage/Höhe wie zuvor (Oberkante = Reihenhöhe), moto_busse.png (Überflug, Kamera schräg hinten) und moto_busse_nah.png (schräg von vorn)
   - Touch (844×390, 667×375, 932×430, 1024×768, 1280×800): Trick-Knopf beschriftet „Trick“, ⭐-Knopf ausgegraut + „kein Item“, Trick-Knopf berührt weder Minikarte noch
     Gas/Bremse/Tacho/Zeiten/Spieler-Chip (getBoundingClientRect); moto_touch_knoepfe.png
   - Menü: fünf Modus-Karten liegen vollständig im Inhaltsbereich (nichts angeschnitten) bei 844×390, 1024×768, 1280×800, 1920×1080; moto_menue_modus.png
@@ -58,13 +58,27 @@ try:
           return { n: L.n, hoehe: L.hoehe, yMax: +yMax.toFixed(2), yMin: +yMin.toFixed(2), tris: pos.count / 3, meshe: s.motoStuntGruppe.children.filter((c) => c.name === 'BusReihe').length, farben: farben.size, sK: L.sK, a0: L.a0, a1: L.a1 }; }''')
         pruefe(f"Busse: ein Mesh (1 Draw-Call) mit {info['tris']:.0f} Dreiecken, viele Farben (Karosserie, Glas, Reifen, Licht: {info['farben']} Töne), Oberkante {info['yMax']} m ≈ Reihenhöhe {info['hoehe']} m (± Geländeneigung quer über 15 m; der genaue Wert an der Kante steht im Stunt-Test)",
                info['meshe'] == 1 and info['farben'] >= 8 and abs(info['yMax'] - info['hoehe']) <= 0.3 and info['yMin'] >= -0.3, info)
-        # Anfahrt: Autopilot fährt bis 38 m vor die Rampe (echter Anlauf), dann Standbild
-        page.evaluate("""() => { const s = Rennspiel.spiel, L = Rennspiel.Moto.stuntWelt.stuntDaten(s.strecke).reihen[0], f = s.fahrzeuge[0]; s.autopilot(0, true); let davor = false, n = 0;
-          for (; n < 60 * 240 && s.zustand === 'rennen'; n++) { s.physikSchritt(1 / 60); if (f.nah && f.nah.s < L.sK - 100) davor = true; if (davor && !f.flug.aktiv && f.nah && f.nah.s >= L.sK - 16 - 38) break; }
-          s.pausiert = true; s.kameras.forEach((k) => { k._erstesMal = true; k.update(0.0167); });
-          (s.huds || []).forEach((hd) => { hd.eCountdown.className = 'hud-countdown'; hd.eCountdown.style.animation = 'none'; hd.eCountdown.textContent = ''; hd.meldung('x', 1); }); }""")
+        # Überflug: Autopilot fährt über die Rampe; Standbild, sobald das Motorrad in der Luft über der Reihe ist (a zwischen Anfang und Ende, über der Oberkante)
+        ueb = page.evaluate("""() => { const s = Rennspiel.spiel, L = Rennspiel.Moto.stuntWelt.stuntDaten(s.strecke).reihen[0], f = s.fahrzeuge[0], v = f.vehicle; s.autopilot(0, true); let ok = false, n = 0;
+          const A = () => (v.x - L.x) * L.tx + (v.z - L.z) * L.tz, Q = () => (v.x - L.x) * L.nx + (v.z - L.z) * L.nz;
+          for (; n < 60 * 300 && s.zustand === 'rennen'; n++) { s.physikSchritt(1 / 60); if (f.flug.aktiv && A() > L.a0 + 3 && A() < L.a1 - 6 && Math.abs(Q()) < 2.5 && v.y - s.strecke.hoeheAn(v.x, v.z) - L.hoehe > 0.3) { ok = true; break; } }
+          s.pausiert = true; s.kameras[0].update = () => {};
+          const h = new THREE.Vector3(v.x, v.y, v.z), st = s.strecke, k = s.kameras[0].kamera, tx = L.tx, tz = L.tz, nx = L.nx, nz = L.nz;
+          // Kamera schräg hinten (5 m hinter, 14 m seitlich, 5,5 m hoch: die Rampe verdeckt die Busse nicht), Blick auf einen Punkt 3 m vor dem Motorrad, 3 m tiefer
+          k.position.set(h.x - tx * 5 + nx * 14, h.y + 4.5, h.z - tz * 5 + nz * 14); k.fov = 62; k.updateProjectionMatrix(); k.lookAt(h.x + tx * 3, h.y - 3.0, h.z + tz * 3); k.updateMatrixWorld();
+          (s.huds || []).forEach((hd) => { hd.eCountdown.className = 'hud-countdown'; hd.eCountdown.style.animation = 'none'; hd.eCountdown.textContent = ''; hd.meldung('x', 1); });
+          // Busreihe im Kamerakegel: Mittelpunkte der Busse (Mitte der Fahrbahn) und Eckpunkte der Reihe (Grundfläche) projizieren
+          const proj = (a, q, y) => { const P = new THREE.Vector3(L.x + tx * a + nx * q, st.hoeheAn(L.x + tx * a + nx * q, L.z + tz * a + nz * q) + y, L.z + tz * a + nz * q).project(k); return { x: +P.x.toFixed(2), y: +P.y.toFixed(2), drin: Math.abs(P.x) < 0.98 && Math.abs(P.y) < 0.98 && P.z < 1 }; };
+          const mitten = [], ecken = [], N = L.n, dA = (L.a1 - L.a0) / N;
+          for (let b = 0; b < N; b++) mitten.push(proj(L.a0 + (b + 0.5) * dA, 0, L.hoehe * 0.6));
+          for (const a of [L.a0, L.a1]) for (const q of [-L.halb, L.halb]) ecken.push(proj(a, q, 0));
+          const pm = h.clone(); pm.y += 0.9; pm.project(k);
+          return { ok, n, a: +A().toFixed(1), q: +Q().toFixed(1), ueber: +(v.y - st.hoeheAn(v.x, v.z) - L.hoehe).toFixed(2), a0: L.a0, a1: L.a1, mitten, ecken, bike: { x: +pm.x.toFixed(2), y: +pm.y.toFixed(2), drin: Math.abs(pm.x) < 0.95 && Math.abs(pm.y) < 0.95 && pm.z < 1 }, luft: !!f.flug.aktiv }; }""")
         page.wait_for_timeout(900)
-        bild(page, 'moto_busse.png', '(Anfahrt auf die Bus-Reihe)')
+        bild(page, 'moto_busse.png', '(Überflug über die Bus-Reihe, %.1f m über der Oberkante, Kamera schräg hinten)' % ueb['ueber'])
+        pruefe('Bild Busse: Motorrad in der Luft über der Reihe (a %s zwischen %s und %s, ≥ 0,3 m über der Oberkante), Kamera schräg hinten' % (ueb['a'], round(ueb['a0'], 1), round(ueb['a1'], 1)), ueb['ok'] and ueb['luft'] and ueb['a0'] < ueb['a'] < ueb['a1'] and ueb['ueber'] >= 0.3, ueb)
+        pruefe('Bild Busse: Busreihe im Kamerakegel (alle %d Bus-Mittelpunkte und mindestens 3 der 4 Reihen-Ecken im Bild), Motorrad im Bild' % len(ueb['mitten']),
+               all(m['drin'] for m in ueb['mitten']) and sum(1 for e in ueb['ecken'] if e['drin']) >= 3 and ueb['bike']['drin'], {'mitten': ueb['mitten'], 'ecken': ueb['ecken'], 'bike': ueb['bike']})
         # schräg von vorn, nah: Kamera von Hand
         nah = page.evaluate('''() => { const s = Rennspiel.spiel, st = s.strecke, L = Rennspiel.Moto.stuntWelt.stuntDaten(st).reihen[0], k = s.kameras[0].kamera;
           const P = (a, q, y) => ({ x: L.x + L.tx * a + L.nx * q, z: L.z + L.tz * a + L.nz * q, y }), c = P(L.a0 - 9, L.halb + 3.5, 0), ziel = P(L.a0 + 3, L.halb - 2.5, 0);

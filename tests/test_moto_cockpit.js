@@ -71,6 +71,8 @@ for (const [vw, vh, split] of GROESSEN) {
   if (lk.b < 40) bad3.push(tag + ': Lenker zu schmal ' + Math.round(lk.b));
 }
 pruefe(`Cockpit-Ansicht, ${GROESSEN.length} Fenstergrößen (solo/zu zweit): alles im Bild, Spiegel/Lenker nie auf der Minimap, Spiegel nicht aufeinander`, bad3.length === 0, bad3.slice(0, 3).join('; '));
+{ const z = C.rechtecke(640, 800, true, null, null, true), e = C.rechtecke(640, 800, true, null, null, false);
+  pruefe(`Zweispieler: Lenker-Bild breiter als solo bei gleicher Ansichtsbreite (${Math.round(z.lenker.b)} gegen ${Math.round(e.lenker.b)} px), höchstens ${cfg.lenker.maxHoehe * 100} % der Höhe`, z.lenker.b > e.lenker.b * 1.3 && z.lenker.h <= 800 * cfg.lenker.maxHoehe + 0.5 && z.lenker.x >= 0 && z.lenker.x + z.lenker.b <= 640); }
 { const rs = C.rechtecke(1280, 800, true, null, null); pruefe('ohne Hindernisse sitzt der Lenker mittig, unten, Spiegel symmetrisch', nah(rs.lenker.x + rs.lenker.b / 2, 640, 0.5) && nah(rs.lenker.y + rs.lenker.h, 800, 0.5) && nah(rs.spiegel[0].x + rs.spiegel[0].b / 2 + rs.spiegel[1].x + rs.spiegel[1].b / 2, 1280, 0.5)); }
 { const basis = { x: 480, y: 6, b: 320, h: 68 }, rs = C.rechtecke(1280, 800, false, basis);
   const [l, r] = rs.spiegel;
@@ -99,7 +101,7 @@ for (const [nSp, T, bezug, name] of [[2, 4, 0.5, 'solo'], [4, 8, 0.5, 'zu zweit'
   const proBild = C.taktFuer(false, 0, 1).proBild * g.b * g.h, autoProBild = (1 / sp.takt) * auto.b * auto.h;      // Bildpunkte je Bild im Mittel
   pruefe(`Auflösung solo: ${g.b}×${g.h} je Spiegel = halbe Breite des Autorennen-Spiegels (${auto.b}×${auto.h})`, g.b === Math.round(auto.b * cfg.spiegel.aufloesungFaktor));
   pruefe(`Bildpunkte je Bild (Mittel, beide Spiegel): ${Math.round(proBild)} ≤ ${Math.round(autoProBild)} beim einen Autorennen-Spiegel`, proBild <= autoProBild);
-  const z = C.rechtecke(640, 800, true, null, [MINI(800)]).spiegel[0], gz = C.rtGroesse(z, true);
+  const z = C.rechtecke(640, 800, true, null, [MINI(800)], true).spiegel[0], gz = C.rtGroesse(z, true);
   pruefe(`Auflösung zu zweit: ${gz.b}×${gz.h} (× zweiAufloesung ${sp.zweiAufloesung}), nie größer als der Ausschnitt (${Math.round(z.b)} px)`, gz.b <= Math.round(z.b * 1.1) && gz.b <= Math.round(sp.aufloesung * cfg.spiegel.aufloesungFaktor * sp.zweiAufloesung));
 }
 

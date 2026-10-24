@@ -112,8 +112,8 @@ pruefe('Schwere Schäden: im Modus „echt“ häufiger (≈ 1/3) als im Modus �
   const u = U.zNeu('echt'); u.zustand = 50; U.pflegeSchritt(u, 'motorrad', 'station', 0.5); // 0,5 s = 10 %
   pruefe('Zählt gleichmäßig hoch: 50 % + 0,5 s Station = 60 %; Reparatur lässt die Gesundheit in Ruhe', nah(u.zustand, 60, 1e-9) && u.gesundheit === 100 && U.brauchtWerkstatt(u) && !U.brauchtKranken(u));
   const h = (z, g) => { const x = U.zNeu('sanft'); x.zustand = z; x.gesundheit = g === undefined ? 100 : g; return U.hudZustand(x); };
-  pruefe('HUD: 100/75 % grün, 60 % gelb, 30 % rot; Fahrer 😀 (100) / 🩹 / 🩼 (< 75), Prozent gerundet',
-    h(100).farbe === 'gruen' && h(75).farbe === 'gruen' && h(60).farbe === 'gelb' && h(30).farbe === 'rot' && h(100).symbol === '😀' && h(100, 85).symbol === '🩹' && h(100, 40).symbol === '🩼' && h(100, 40).fahrerFarbe === 'rot' && h(54.6).prozent === 55);
+  pruefe('HUD: 100/75 % grün, 60 % gelb, 30 % rot; Fahrer 😀 (100) / immer 🩹 darunter, Prozent gerundet',
+    h(100).farbe === 'gruen' && h(75).farbe === 'gruen' && h(60).farbe === 'gelb' && h(30).farbe === 'rot' && h(100).symbol === '😀' && h(100, 85).symbol === '🩹' && h(100, 40).symbol === '🩹' && h(100, 40).fahrerFarbe === 'rot' && h(54.6).prozent === 55);
 }
 
 // ---------- 5b. Losfahren ab 30 % ----------

@@ -99,6 +99,36 @@ JS_HELFER = '''() => {
   };
 }'''
 
+
+# Einblendungen (Text mitten im Bild, Meldung, Banner) dürfen Fahrer und Motorrad nicht verdecken: Bildschirm-Rechteck des Motorrads (acht Eckpunkte der Hüllbox, Fahrer inklusive) gegen die DOM-Rechtecke
+EINBLEND = '''() => { const s = Rennspiel.spiel, f = s.fahrzeuge[0], v = f.vehicle, k = s.kameras[0].kamera, cv = document.querySelector('canvas'), cr = cv.getBoundingClientRect(); k.updateMatrixWorld();
+  const hd = (s.huds && s.huds[0]) ? s.huds[0].el.getBoundingClientRect() : cr;
+  const h = v.heading, fx = -Math.sin(h), fz = -Math.cos(h), lx = -fz, lz = fx; let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, vorne = true;
+  for (const a of [-1.0, 1.0]) for (const b of [-0.5, 0.5]) for (const y of [0, 1.9]) { const P = new THREE.Vector3(v.x + fx * a + lx * b, v.y + y, v.z + fz * a + lz * b).project(k); if (P.z > 1) vorne = false;
+    const px = hd.left + (P.x + 1) / 2 * hd.width, py = hd.top + (1 - P.y) / 2 * hd.height; x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py); }
+  const bike = { l: Math.round(x0), t: Math.round(y0), r: Math.round(x1), b: Math.round(y1) }, liste = [];
+  document.querySelectorAll('.moto-mitte, .hud-meldung, .hud-banner').forEach((e) => { const cs = getComputedStyle(e), r = e.getBoundingClientRect(), txt = (e.textContent || '').trim();
+    if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.05 || r.width < 4 || r.height < 4 || !txt || txt === 'x') return;
+    const w = Math.min(r.right, bike.r) - Math.max(r.left, bike.l), hh = Math.min(r.bottom, bike.b) - Math.max(r.top, bike.t);
+    liste.push({ n: e.className.split(' ')[0] + '[' + txt.slice(0, 40).replace(/\\n/g, ' ') + ']', r: [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)], ueberlappt: w > 1 && hh > 1 }); });
+  return { bike, vorne, imBild: bike.r > 0 && bike.l < hd.right && bike.b > 0 && bike.t < hd.bottom, liste, treffer: liste.filter((e) => e.ueberlappt).map((e) => e.n) }; }'''
+
+# Prüfung für Werkstatt/Krankenstation im Bild: Gebäude deckend (auch bei naher Kamera), Kamera nicht im Gebäude, Gebäude + Motorrad + Figur im Bild
+STATION_PRUEFUNG = '''(art) => { const s = Rennspiel.spiel, w = art === 'werkstatt' ? s.motoStationen.werkstatt : s.motoStationen.kranken, P = w.platz, u = __U.u(0), f = s.fahrzeuge[0], k = s.kameras[0].kamera;
+  // Gebäude deckend: nach einem Animationsschritt mit allen Fahrzeugen (die Halle des Autorennens würde sich bei Kameraabstand < 8 m durchsichtig machen)
+  // main.js ruft spiel.werkstatt.animieren(t, fahrzeuge, kameras): das ist hier die Schnittstelle (stub) – sie darf die Halle nie ausblenden
+  for (let i = 0; i < 20; i++) s.werkstatt.animieren(5 + i / 60, s.fahrzeuge, s.kameras);
+  const durchsichtig = []; let meshe = 0;
+  w._gruppe.traverse((o) => { if (!o.isMesh || !o.material) return; const ms = Array.isArray(o.material) ? o.material : [o.material]; ms.forEach((m) => { meshe++; if (m.opacity < 0.999 || (m.transparent && m.opacity < 1)) durchsichtig.push((o.name || o.parent && o.parent.name || '?') + ':' + m.opacity.toFixed(2)); }); });
+  // Lage der Kamera in Stationskoordinaten (Platz-Werte sind je Seite positiv)
+  const n = s.strecke.spline.naechster(k.position.x, k.position.z, f.index), qs = n.seitenabstand * P.seite, ds = s.strecke.spline.differenzS(n.s, P.s);
+  const imGebaeude = Math.abs(ds) < P.gebBreite / 2 + 0.5 && qs > P.gebQ - P.gebTiefe / 2 - 0.5 && qs < P.gebQ + P.gebTiefe / 2 + 0.5 && k.position.y < s.strecke.hoeheAn(k.position.x, k.position.z) + (Rennspiel.config.werkstatt.gebaeudeHoehe || 4.4) + 1;
+  const proj = (x, y, z) => { k.updateMatrixWorld(); const v = new THREE.Vector3(x, y, z).project(k); return { ndc: [+v.x.toFixed(2), +v.y.toFixed(2)], drin: Math.abs(v.x) < 0.95 && Math.abs(v.y) < 0.95 && v.z < 1 }; };
+  const pm = proj(f.vehicle.x, f.vehicle.y + 0.8, f.vehicle.z), g = u.stFigur ? proj(u.stFigur.position.x, u.stFigur.position.y + 0.9, u.stFigur.position.z) : null;
+  const mitte = w.welt(P.s, P.qE !== undefined ? P.qE : P.qA), gb = w.welt(P.s, P.gebQ), pg = proj(gb.x, s.strecke.hoeheAn(gb.x, gb.z) + 2, gb.z);
+  const e1 = w.welt(P.s - P.gebBreite / 2 + 2, P.gebQ), e2 = w.welt(P.s + P.gebBreite / 2 - 2, P.gebQ), pe1 = proj(e1.x, s.strecke.hoeheAn(e1.x, e1.z) + 2, e1.z), pe2 = proj(e2.x, s.strecke.hoeheAn(e2.x, e2.z) + 2, e2.z);
+  return { meshe, durchsichtig: durchsichtig.slice(0, 6), nDurch: durchsichtig.length, imGebaeude, kamAbstand: +Math.hypot(k.position.x - gb.x, k.position.z - gb.z).toFixed(1), motorrad: pm, figur: g, gebaeude: pg, ecken: [pe1, pe2], figurDa: !!(u.stFigur && u.stFigur.visible), figurArt: u.stFigur && u.stFigur.userData.art }; }'''
+
 EINST = "({ modus: '%s', streckeId: '%s', autoIds: ['crossmaschine', 'crossmaschine-rot'], runden: 1, gegner: 3, schwierigkeit: 'mittel', fahrhilfe: ['wenig', 'wenig'], stuntrennen: %s, unfall: '%s' })"
 
 try:
@@ -184,9 +214,17 @@ try:
         starte('wiese', autopilot=True)
         ev('() => { __U.lauf(8); Rennspiel.Moto.unfallStart.sturzFolge(Rennspiel.spiel, 0, { art: "schaden", schwer: false }); __U.lauf(2); Rennspiel.Moto.unfallStart.sturzFolge(Rennspiel.spiel, 0, { art: "schaden", schwer: false }); }')
         ev('() => { const u = __U.u(0); __U.lauf(30, () => !u.szene); __U.lauf(3); __U.halten(true); }'); page.wait_for_timeout(500); ev('() => __U.kameraSnap()'); page.wait_for_timeout(700)
-        q = ev('''() => { const s = Rennspiel.spiel, u = __U.u(0), f = s.fahrzeuge[0]; return { z: u.zustand, qualm: !!u.qualm, sichtbar: !!(u.qualm && u.qualm.visible), kinder: u.qualm ? u.qualm.children.filter((c) => c.visible).length : 0, mesh: f.mesh.children.includes(u.qualm), v: f.vehicle.tempoKmh, p: u.qualm ? __U.projiziere(f.mesh.position.x, f.mesh.position.y + 1.4, f.mesh.position.z) : null }; }''')
+        q = ev('''() => { const s = Rennspiel.spiel, u = __U.u(0), f = s.fahrzeuge[0]; return { z: u.zustand, qualm: !!u.qualm, sichtbar: !!(u.qualm && u.qualm.visible), kinder: u.qualm ? u.qualm.children.filter((c) => c.visible && c.isMesh).length : 0, tris: u.qualm ? u.qualm.children[0].geometry.attributes.position.count / 3 : 0, mesh: f.mesh.children.includes(u.qualm), v: f.vehicle.tempoKmh, p: u.qualm ? __U.projiziere(f.mesh.position.x, f.mesh.position.y + 1.4, f.mesh.position.z) : null }; }''')
         bild(page, 'moto_unfall_schaden.png', f"(Motorrad {q['z']:.0f} %, Qualm)")
-        pruefe('Motorrad-Schaden: zweimal −20 % → 60 %, Qualm sichtbar (6 Kugeln am Motorrad, Draw-Calls ≤ 6), Motorrad im Bild', abs(q['z'] - 60) < 0.01 and q['sichtbar'] and q['kinder'] == 6 and q['mesh'] and q['p']['drin'], q)
+        pruefe('Motorrad-Schaden: zweimal −20 % → 60 %, Qualm sichtbar (zwölf Wolken in EINEM Mesh am Motorrad = 1 Draw-Call), Motorrad im Bild', abs(q['z'] - 60) < 0.01 and q['sichtbar'] and q['kinder'] == 1 and q['tris'] == 96 and q['mesh'] and q['p']['drin'], q)
+        # Qualm wird bei mehr Schaden deutlicher: mehr Wolken, dunkler, größer, dichter (gleiche Zeit t, Stärke 0,35 gegen 0,95)
+        ds = ev("""() => { const W = Rennspiel.Moto.unfallWelt, u = __U.u(0), q = u.qualm, m = q.userData.mesh, out = {};
+          for (const [k, st] of [['leicht', 0.35], ['stark', 0.95]]) { W.qualmZeigen(q, 0.37, st); const p = m.geometry.attributes.position.array, c = m.geometry.attributes.color.array; let n = 0, grau = 0, vol = 0, gr = 0;
+            for (let i = 0; i < 12; i++) { let mn = 1e9, mx = -1e9; for (let v = 0; v < 24; v++) { const y = p[(i * 24 + v) * 3 + 1]; mn = Math.min(mn, y); mx = Math.max(mx, y); } if (mx - mn > 0.05) { n++; vol += mx - mn; } }
+            for (let i = 0; i < c.length; i += 3) { grau += c[i]; gr++; }
+            out[k] = { wolken: n, grau: +(grau / gr).toFixed(2), hoehe: +vol.toFixed(2), deck: +m.material.opacity.toFixed(2) }; }
+          W.qualmZeigen(q, 0.37, 0.4); return out; }""")
+        pruefe('Qualm: ab starkem Schaden (< 50 %) mehr Wolken, dunklere Farbe, größer und deckender als bei leichtem Schaden, weiter 1 Mesh', ds['stark']['wolken'] > ds['leicht']['wolken'] and ds['stark']['grau'] < ds['leicht']['grau'] - 0.05 and ds['stark']['hoehe'] > ds['leicht']['hoehe'] and ds['stark']['deck'] > ds['leicht']['deck'], ds)
         ev('() => __U.halten(false)')
 
         # ---------------- Werkstatt ----------------
@@ -214,6 +252,11 @@ try:
         ev('() => { __U.zustand(0, 25, 100); __U.aufStation(0, "werkstatt", 6); __U.lauf(10, () => __U.u(0).halt && __U.u(0).halt.steht && __U.u(0).zustand > 52); __U.halten(true); }'); page.wait_for_timeout(500); ev('() => __U.kameraSnap()'); page.wait_for_timeout(700)
         wb = ev('''() => ({ a: __U.abgeleitet(), text: document.querySelector('.moto-mitte').textContent, zeile: document.querySelector('.moto-zustand').textContent, hall: Rennspiel.spiel.motoStationen.werkstatt._gruppe ? 1 : 0 })''')
         bild(page, 'moto_unfall_werkstatt.png', f"({wb['text']!r}, Zeile {wb['zeile']!r})")
+        eb = ev(EINBLEND)
+        pruefe('Einblendungen verdecken Fahrer und Motorrad nicht (Werkstatt): Motorrad bei x {}–{}, y {}–{}, {} Einblendung(en) geprüft'.format(eb['bike']['l'], eb['bike']['r'], eb['bike']['t'], eb['bike']['b'], len(eb['liste'])), eb['vorne'] and eb['imBild'] and len(eb['liste']) >= 1 and not eb['treffer'], eb)
+        sp1 = ev(STATION_PRUEFUNG, 'werkstatt')
+        pruefe('Werkstatt deckend: alle %d Meshe der Halle undurchsichtig (Deckkraft 1), auch mit Kameraabstand < 8 m (kein Geisterhaus)' % sp1['meshe'], sp1['meshe'] > 20 and sp1['nDurch'] == 0, sp1)
+        pruefe('Werkstatt im Bild: Kamera steht nicht im Gebäude (%.0f m von der Gebäudemitte), Gebäude (Mitte und beide Enden), Motorrad und Mechaniker im Bild' % sp1['kamAbstand'], not sp1['imGebaeude'] and sp1['gebaeude']['drin'] and sp1['motorrad']['drin'] and sp1['figurDa'] and sp1['figurArt'] == 'mechaniker' and sp1['figur']['drin'] and sp1['kamAbstand'] > 8, sp1)
         pruefe('Werkstatt-Bild: Motorrad steht auf der Fläche, Text „Mechaniker schraubt … NN %“ und „Noch kurz warten …“/„Gas = weiterfahren“, beide Prozentwerte im Chip', wb['a']['halt'] == 'werkstatt:steht' and 'Mechaniker schraubt' in wb['text'] and ('Gas = weiterfahren' in wb['text'] or 'Noch kurz warten' in wb['text']) and '%' in wb['zeile'], wb['text'].replace('\n', ' | '))
         ev('() => __U.halten(false)')
 
@@ -228,6 +271,15 @@ try:
         ev('() => { __U.zustand(0, 100, 20); __U.aufStation(0, "kranken", 6); __U.lauf(10, () => __U.u(0).halt && __U.u(0).halt.steht && __U.u(0).gesundheit > 45); __U.halten(true); }'); page.wait_for_timeout(500); ev('() => __U.kameraSnap()'); page.wait_for_timeout(700)
         kb = ev('''() => ({ a: __U.abgeleitet(), text: document.querySelector('.moto-mitte').textContent, zeile: document.querySelector('.moto-zustand').textContent })''')
         bild(page, 'moto_unfall_krankenstation.png', f"({kb['text']!r})")
+        eb = ev(EINBLEND)
+        pruefe('Einblendungen verdecken Fahrer und Motorrad nicht (Krankenstation): Motorrad bei x {}–{}, y {}–{}, {} Einblendung(en) geprüft'.format(eb['bike']['l'], eb['bike']['r'], eb['bike']['t'], eb['bike']['b'], len(eb['liste'])), eb['vorne'] and eb['imBild'] and len(eb['liste']) >= 1 and not eb['treffer'], eb)
+        sp2 = ev(STATION_PRUEFUNG, 'kranken')
+        pruefe('Krankenstation deckend: alle %d Meshe undurchsichtig, auch mit Kameraabstand < 8 m' % sp2['meshe'], sp2['meshe'] > 20 and sp2['nDurch'] == 0, sp2)
+        pruefe('Krankenstation im Bild: Kamera nicht im Gebäude (%.0f m von der Gebäudemitte), Gebäude, Motorrad und Sanitäter im Bild' % sp2['kamAbstand'], not sp2['imGebaeude'] and sp2['gebaeude']['drin'] and sp2['motorrad']['drin'] and sp2['figurDa'] and sp2['figurArt'] == 'sanitaeter' and sp2['figur']['drin'] and sp2['kamAbstand'] > 8, sp2)
+        kr = ev("""() => { const w = Rennspiel.spiel.motoStationen.kranken, g = w._gruppe, n = {}; g.traverse((o) => { if (o.name) n[o.name] = (n[o.name] || 0) + 1; });
+          let weiss = 0, rot = 0; g.traverse((o) => { if (o.isMesh && o.material && o.material.color) { const h = o.material.color.getHex(); if (h === 0xffffff || h === 0xfbfcfd || h === 0xeef2f5) weiss++; if (h === 0xe0342c || (h >> 16) > 0xc0 && ((h >> 8) & 255) < 0x60) rot++; } });
+          return { kreuzFront: n.KrankenKreuzFront || 0, kreuzDach: n.KrankenKreuzDach || 0, weiss, rot, tafel: !!w._tafel }; }""")
+        pruefe('Krankenstation erkennbar: große rote Kreuze an der Front (≥ 2) und auf dem Dach (2), weiße Wände/Dach, rote Teile', kr['kreuzFront'] >= 2 and kr['kreuzDach'] == 2 and kr['weiss'] >= 4 and kr['rot'] >= 2, kr)
         pruefe('Krankenstation-Bild: Motorrad hält auf der Fläche, Text „Sanitäter verbinden … NN %“', kb['a']['halt'] == 'kranken:steht' and 'Sanitäter verbinden' in kb['text'], kb['text'].replace('\n', ' | '))
         ev('() => __U.halten(false)')
 
@@ -235,7 +287,7 @@ try:
         # ---------------- Beschilderung: Wegweiser vor der Zufahrt ----------------
         for art, name in [('werkstatt', 'Werkstatt'), ('kranken', 'Krankenstation')]:
             starte('wiese', autopilot=False)
-            ev('() => { __U.zustand(0, 100, 100); __U.lauf(1); }')
+            ev('(art) => { __U.zustand(0, art === "werkstatt" ? 40 : 100, art === "werkstatt" ? 100 : 45); __U.lauf(1); }', art)
             w = ev('''(art) => { const s = Rennspiel.spiel, m = s.motoStationen, w = art === 'werkstatt' ? m.werkstatt : m.kranken, P = w.platz, sp = s.strecke.spline; const sB = P.s - P.laenge / 2 - P.zufahrt - 120;
               __U.aufStrecke(0, sB, 6, -P.seite * 2.5); __U.lauf(0.1); __U.halten(true);
               const tafeln = m.gruppe.children.filter((c) => c.type === 'Group' && c.name === '' && c.children.some((k) => k.geometry && k.geometry.type === 'PlaneGeometry'));
@@ -246,6 +298,8 @@ try:
               const hall = w.welt(P.s, P.gebQ), halle = __U.projiziere(hall.x, s.strecke.hoeheAn(hall.x, hall.z) + 5, hall.z);
               return { schild70: pr[1], schild160: pr[0], halle }; }''', art)
             bild(page, 'moto_unfall_wegweiser_%s.png' % ('werkstatt' if art == 'werkstatt' else 'krankenstation'), f"({name}: Wegweiser 70 m / 160 m vor der Zufahrt)")
+            eb = ev(EINBLEND)
+            pruefe(f'Einblendungen verdecken Fahrer und Motorrad nicht ({name} voraus): Motorrad x {eb["bike"]["l"]}–{eb["bike"]["r"]}, y {eb["bike"]["t"]}–{eb["bike"]["b"]}', eb['vorne'] and eb['imBild'] and any('voraus' in e['n'] for e in eb['liste']) and not eb['treffer'], eb)
             pruefe(f'Beschilderung {name}: Wegweiser „{name.upper()} 70 m“ im Bild, wenn man 120 m vor der Zufahrt steht', r['schild70']['drin'] or r['schild160']['drin'], r)
             ev('() => __U.halten(false)')
 
@@ -264,6 +318,8 @@ try:
         ev('() => { __U.lauf(3); __U.aufStrecke(0, __U.sicherS(), 24, 1.5); __U.zustand(0, 100, 100); Rennspiel.Moto.unfallStart.sturzFolge(Rennspiel.spiel, 0, { art: "schwer" }); const u = __U.u(0); __U.lauf(30, () => u.szene && u.szene.plan && u.gesundheit > 66); __U.halten(true); }'); page.wait_for_timeout(500); ev('() => __U.kameraSnap()'); page.wait_for_timeout(700)
         kwb = ev('''() => { const s = Rennspiel.spiel, u = __U.u(0), sz = u.szene, h = sz.helfer.mesh; return { a: __U.abgeleitet(), text: document.querySelector('.moto-mitte').textContent, helfer: __U.projiziere(h.position.x, h.position.y + 1.2, h.position.z), figur: sz.figur ? sz.figur.visible : false, sichtbar: h.visible, zeile: document.querySelector('.moto-zustand').textContent }; }''')
         bild(page, 'moto_unfall_krankenwagen.png', f"({kwb['text']!r})")
+        eb = ev(EINBLEND)
+        pruefe('Einblendungen verdecken Fahrer und Motorrad nicht (Krankenwagen): Motorrad bei x {}–{}, y {}–{}, {} Einblendung(en) geprüft'.format(eb['bike']['l'], eb['bike']['r'], eb['bike']['t'], eb['bike']['b'], len(eb['liste'])), eb['vorne'] and eb['imBild'] and len(eb['liste']) >= 1 and not eb['treffer'], eb)
         pruefe('Krankenwagen-Bild: Krankenwagen steht neben dem Motorrad (im Bild), Sanitäter steht daneben, Text „Sanitäter verbinden … NN %“ zählt hoch', kwb['helfer']['drin'] and kwb['figur'] and 'Sanitäter verbinden' in kwb['text'], kwb['text'].replace('\n', ' | ') + ' ' + str(kwb['helfer']))
         ev('() => __U.halten(false)')
         # Gas ab 30 %: sofort weiter, sobald der Wagen da ist
@@ -285,6 +341,8 @@ try:
         ev('() => { __U.lauf(2); __U.aufStrecke(0, __U.sicherS(), 24, 1.5); __U.zustand(0, 100, 100); Rennspiel.Moto.unfallStart.sturzFolge(Rennspiel.spiel, 0, { art: "schaden", schwer: true }); const u = __U.u(0); __U.lauf(30, () => u.szene && u.szene.plan && u.zustand > 66); __U.halten(true); }'); page.wait_for_timeout(500); ev('() => __U.kameraSnap()'); page.wait_for_timeout(700)
         abb = ev('''() => { const s = Rennspiel.spiel, u = __U.u(0), sz = u.szene, h = sz.helfer.mesh; return { a: __U.abgeleitet(), text: document.querySelector('.moto-mitte').textContent, helfer: __U.projiziere(h.position.x, h.position.y + 1.5, h.position.z), figur: sz.figur ? sz.figur.visible : false, art: sz.helfer.art }; }''')
         bild(page, 'moto_unfall_abschlepp.png', f"({abb['text']!r})")
+        eb = ev(EINBLEND)
+        pruefe('Einblendungen verdecken Fahrer und Motorrad nicht (Abschleppwagen): Motorrad bei x {}–{}, y {}–{}, {} Einblendung(en) geprüft'.format(eb['bike']['l'], eb['bike']['r'], eb['bike']['t'], eb['bike']['b'], len(eb['liste'])), eb['vorne'] and eb['imBild'] and len(eb['liste']) >= 1 and not eb['treffer'], eb)
         pruefe('Abschleppwagen-Bild: Abschleppwagen (Kran) steht neben dem Motorrad (im Bild), Mechaniker steht daneben, Text „Mechaniker schraubt … NN %“', abb['art'] == 'abschlepp' and abb['helfer']['drin'] and abb['figur'] and 'Mechaniker schraubt' in abb['text'], abb['text'].replace('\n', ' | ') + ' ' + str(abb['helfer']))
         ev('() => __U.halten(false)')
 

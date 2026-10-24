@@ -9,7 +9,8 @@
 //   helferBauen(art)                 Krankenwagen (Modell aus dem Autorennen) bzw. Abschleppwagen (R.Abschleppwagen._lkwBauen) → { mesh, art, laenge }
 //   helferPose(h, strecke, s, q, bl) Pose setzen (s = Bogenlänge der Mitte, q = Querabstand), Blaulicht/Rundumleuchte blinken
 //   figurBauen(art)                  kleiner Helfer (Sanitäter / Mechaniker) neben dem Motorrad
-//   qualmBauen() / qualmZeigen(q, t, staerke)   sechs weiche Rauchkugeln am Motor (Zustand unter 75 %)
+//   qualmBauen() / qualmZeigen(q, t, staerke)   zwölf dunkle Rauchwolken in EINEM Mesh am Motor (Zustand unter 75 %, ab < 50 % deutlich stärker)
+//   figurAnimieren(fig, t)           Mechaniker schraubt / Sanitäter beugt sich
 //   freigeben(obj)                   Geometrien/Materialien aufräumen
 // ============================================================
 window.Rennspiel = window.Rennspiel || {};
@@ -96,20 +97,59 @@ window.Rennspiel = window.Rennspiel || {};
     return g;
   }
 
+  /** Rotes Kreuz als zwei dünne Quader (kein Licht, keine Textur). groesse = Kantenlänge, dick = Armbreite; Fläche zeigt nach +x (lokal), wird vom Aufrufer gedreht. */
+  function kreuzBauen(groesse, dick, rot) {
+    const g = new THREE.Group(), mt = new THREE.MeshLambertMaterial({ color: rot === undefined ? 0xe0201a : rot });
+    const a = new THREE.Mesh(new THREE.BoxGeometry(0.1, groesse, dick), mt), b = new THREE.Mesh(new THREE.BoxGeometry(0.1, dick, groesse), mt);
+    g.add(a); g.add(b);
+    return g;
+  }
+  /** Krankenstation klar erkennbar machen: weiße Wände und Dach, Tore als Glas, große rote Kreuze an der Front (auf den Wandpfeilern) und weiße Kreuz-Tafeln auf dem Dach
+   *  neben dem Dachschild „KRANKENSTATION“. Alles Quader: ein paar Draw-Calls, keine Lichter. */
+  function krankenFassade(w, gr) {
+    const P = w.platz, segs = w._halleSeg || [], halb = w._halleHalb || [2.75, 3.875], hGeb = (R.config.werkstatt && R.config.werkstatt.gebaeudeHoehe) || 4.4;
+    const zurStrasse = -P.seite, xFront = zurStrasse * (halb[0] + 0.06);
+    gr.traverse((o) => {
+      const m = o.material;
+      if (!m || !m.color || m.map) return;
+      const hex = m.color.getHex();
+      if (hex === 0xd8dde4) { m.color.setHex(0xffffff); if (m.emissive) m.emissive.setHex(0x5c5f62); }          // Wände: weiß (leicht selbstleuchtend, damit der Schatten sie nicht grau macht)
+      else if (hex === 0xa8382c) m.color.setHex(0xeef2f5);     // Dach: weiß (Kreuze heben sich ab)
+      else if (hex === 0x3b414a) m.color.setHex(0x8fd0ee);     // Tor: helles Glas
+      else if (hex === 0x59616c) m.color.setHex(0xcfe9f6);
+      else if (hex === 0x2f6fd0) m.color.setHex(0xe0342c);     // Band über dem Tor: rot
+    });
+    for (let k = 0; k < segs.length; k++) {
+      const sg = segs[k];
+      // Dachtafeln (weiß, mit rotem Kreuz) vorn auf dem Dach: nur auf dem ersten und letzten Segment, damit das Dachschild frei bleibt
+      if (k === 0 || k === segs.length - 1) {
+        const tafel = new THREE.Group(), grund = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.6, 4.6), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+        tafel.add(grund);
+        const kr = kreuzBauen(3.7, 1.15); kr.position.x = 0.14; tafel.add(kr);
+        tafel.position.set(xFront, hGeb + 0.35 + 2.3, 0); tafel.name = 'KrankenKreuzDach';
+        sg.add(tafel);
+        if (zurStrasse < 0) kr.position.x = -0.14;
+      }
+      // große rote Kreuze an der Front auf dem Wandpfeiler zwischen zwei Toren (am Segmentrand)
+      if (k < segs.length - 1) {
+        const a = segs[k], b = segs[k + 1];
+        const m = new THREE.Group(); m.name = 'KrankenKreuzFront';
+        const kr = kreuzBauen(2.9, 0.95); m.add(kr);
+        m.position.set((a.position.x + b.position.x) / 2, (a.position.y + b.position.y) / 2 + 2.05, (a.position.z + b.position.z) / 2);
+        m.rotation.y = a.rotation.y;
+        const dir = new THREE.Vector3(xFront, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), a.rotation.y);
+        m.position.add(dir);
+        gr.add(m);
+      }
+    }
+  }
+
   /** Autorennen-Werkstatt bauen, dann Tafeln tauschen / Halle umfärben. */
   function stationBauen(strecke, szene, w, art) {
     w._tafel = tafelFabrik(art);
     const gr = w.bauen();
     if (!gr) return null;
-    if (art === 'kranken') {
-      gr.traverse((o) => {
-        const m = o.material;
-        if (!m || !m.color || m.map) return;
-        const hex = m.color.getHex();
-        if (hex === 0xa8382c) m.color.setHex(0x2fa86a);          // Dach: grün
-        else if (hex === 0x2f6fd0) m.color.setHex(0xe0342c);     // Band über dem Tor: rot
-      });
-    }
+    if (art === 'kranken') krankenFassade(w, gr);
     if (w.platz.raeumen && w.freiraeumen) w.freiraeumen(szene);
     gr.name = art === 'kranken' ? 'Krankenstation' : 'Werkstatt';
     return gr;
@@ -143,7 +183,8 @@ window.Rennspiel = window.Rennspiel || {};
       schritt() { /* nichts: kein Schaden-System im Motorradmodus */ },
       zustand() { return { status: 'aus', vorhanden: true, heilt: false }; },
       kiSteuerung() { return null; },
-      animieren(t, fahrzeuge, kameras) { teile.forEach((x) => x.animieren(t, fahrzeuge, kameras)); },
+      // kameras bewusst NICHT weitergeben: die Halle des Autorennens blendet sich bei naher Kamera aus (sonst „Geisterhaus“); im Motorradmodus bleiben beide Gebäude immer deckend
+      animieren(t, fahrzeuge) { teile.forEach((x) => x.animieren(t, fahrzeuge, null)); },
       zerstoeren() {
         teile.forEach((x) => x.zerstoeren());
         g.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
@@ -186,55 +227,83 @@ window.Rennspiel = window.Rennspiel || {};
     }
   }
 
-  /** Kleiner Helfer: Sanitäter (weiß/rot) bzw. Mechaniker (orange) – Körper, Kopf, Mütze/Helm, Koffer. 4 Meshes. */
+  /** Kleiner Helfer, Low-Poly, ohne eigenes Licht: Sanitäter (weiß, rote Hose/Mütze, rotes Kreuz auf dem Rücken, Verbandskoffer) bzw. Mechaniker (orange Overall, gelber Helm,
+   *  Schraubenschlüssel). Körper, Beine, Arme, Kopf, Kopfbedeckung, Werkzeug: 9 Meshes. Front bei −z. userData.arm = [links, rechts] zum Winken/Schrauben. */
   function figurBauen(art) {
     const g = new THREE.Group(), mat = (c) => new THREE.MeshLambertMaterial({ color: c });
-    const rock = art === 'mechaniker' ? 0xf08a00 : 0xf4f4f0;
-    const k = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.85, 0.3), mat(rock)); k.position.y = 0.95; g.add(k);
-    const hose = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.55, 0.26), mat(art === 'mechaniker' ? 0x2c3e66 : 0xd33a32)); hose.position.y = 0.3; g.add(hose);
-    const kopf = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), mat(0xf2c9a0)); kopf.position.y = 1.58; g.add(kopf);
-    const hut = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), mat(art === 'mechaniker' ? 0xffd23a : 0xd33a32)); hut.position.y = 1.62; g.add(hut);
-    const koffer = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.26, 0.14), mat(art === 'mechaniker' ? 0x30343a : 0xe8f0ec)); koffer.position.set(0.42, 0.55, 0); g.add(koffer);
-    g.userData.art = art;
+    const mech = art === 'mechaniker', rock = mech ? 0xf08a00 : 0xfafaf6, hose = mech ? 0x2c3e66 : 0xd33a32, haut = 0xf2c9a0;
+    const add = (geo, c, x, y, z, nm) => { const m = new THREE.Mesh(geo, mat(c)); m.position.set(x, y, z); if (nm) m.name = nm; g.add(m); return m; };
+    add(new THREE.BoxGeometry(0.58, 0.82, 0.34), rock, 0, 1.18, 0, 'koerper');
+    add(new THREE.BoxGeometry(0.22, 0.78, 0.26), hose, -0.15, 0.39, 0, 'bein');
+    add(new THREE.BoxGeometry(0.22, 0.78, 0.26), hose, 0.15, 0.39, 0, 'bein2');
+    const armL = add(new THREE.BoxGeometry(0.17, 0.66, 0.17), rock, -0.4, 1.2, -0.02, 'armL'), armR = add(new THREE.BoxGeometry(0.17, 0.66, 0.17), rock, 0.4, 1.2, -0.02, 'armR');
+    add(new THREE.SphereGeometry(0.21, 9, 7), haut, 0, 1.78, 0, 'kopf');
+    add(new THREE.SphereGeometry(0.235, 9, 5, 0, Math.PI * 2, 0, Math.PI / 2), mech ? 0xffd23a : 0xd33a32, 0, 1.83, 0, 'hut');
+    if (mech) { const sw = add(new THREE.BoxGeometry(0.07, 0.07, 0.5), 0xcfd3d8, 0.42, 0.9, -0.38, 'werkzeug'); g.userData.werkzeug = sw; }
+    else {
+      add(new THREE.BoxGeometry(0.3, 0.24, 0.12), 0xe8f0ec, 0.46, 0.7, -0.05, 'koffer');
+      add(new THREE.BoxGeometry(0.34, 0.1, 0.02), 0xe0201a, 0.46, 0.7, -0.12, 'kofferKreuz');
+      add(new THREE.BoxGeometry(0.34, 0.1, 0.02), 0xe0201a, 0, 1.3, 0.18, 'rueckenKreuzQ');
+      add(new THREE.BoxGeometry(0.1, 0.34, 0.02), 0xe0201a, 0, 1.3, 0.18, 'rueckenKreuzL');
+    }
+    g.userData.art = art; g.userData.arm = [armL, armR];
     return g;
+  }
+  /** Figur je Bild bewegen: Mechaniker schraubt (Arm nickt), Sanitäter beugt sich (Oberkörper nickt leicht, Arm winkt). t = Zeit in s. */
+  function figurAnimieren(fig, t) {
+    if (!fig || !fig.userData.arm) return;
+    const mech = fig.userData.art === 'mechaniker', a = fig.userData.arm;
+    a[1].rotation.x = -0.9 + Math.sin(t * (mech ? 9 : 4)) * (mech ? 0.5 : 0.3);
+    a[0].rotation.x = mech ? -0.5 + Math.sin(t * 9 + 1.7) * 0.25 : -0.4;
+    fig.position.y = fig.userData.basisY !== undefined ? fig.userData.basisY + Math.abs(Math.sin(t * 5)) * 0.03 : fig.position.y;
   }
 
   // ---------- Qualm ----------
-  const QUALM_N = 6;
-  let qualmGeo = null;
+  // EIN Mesh (1 Draw-Call, egal wie viele Wolken): QUALM_N Oktaeder-Wolken in einer dynamischen Geometrie, Scheitel-Farben (oben heller), eine gemeinsame Deckkraft.
+  // Die Wolken blenden über ihre Größe ein und aus (sie schrumpfen am Ende), nicht über die Deckkraft.
+  const QUALM_N = 12;
+  let qualmBasis = null;
   function qualmBauen() {
     if (typeof THREE === 'undefined') return null;
-    if (!qualmGeo) qualmGeo = new THREE.SphereGeometry(0.2, 7, 5);
-    const g = new THREE.Group(); g.name = 'Qualm';
-    for (let i = 0; i < QUALM_N; i++) {
-      const m = new THREE.Mesh(qualmGeo, new THREE.MeshBasicMaterial({ color: 0x777777, transparent: true, opacity: 0, depthWrite: false }));
-      m.visible = false; g.add(m);
-    }
+    if (!qualmBasis) qualmBasis = new THREE.OctahedronGeometry(1, 0).attributes.position.array.slice();       // 8 Flächen, 24 Eckpunkte, nicht indiziert
+    const nv = qualmBasis.length / 3, geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(QUALM_N * nv * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(QUALM_N * nv * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false }));
+    mesh.frustumCulled = false; mesh.name = 'QualmWolken';
+    const g = new THREE.Group(); g.name = 'Qualm'; g.add(mesh); g.userData.mesh = mesh; g.visible = false;
     return g;
   }
-  /** staerke 0..1 (0 = aus): wie kaputt das Motorrad ist. Position lokal zum Motorrad (Motor etwa mittig, Front bei −z). */
+  /** staerke 0..1 (0 = aus): wie kaputt das Motorrad ist (ab 75 % sacht, ab < 50 % stark). Position lokal zum Motorrad (Motor etwa mittig, Front bei −z). */
   function qualmZeigen(q, t, staerke) {
     if (!q) return;
     const an = staerke > 0.02;
     q.visible = an;
     if (!an) return;
-    const grau = Math.round(0x99 - 0x70 * Math.min(1, staerke));          // mehr Schaden = dunklerer Rauch
-    for (let i = 0; i < q.children.length; i++) {
-      const m = q.children[i], ph = (t * (0.7 + 0.5 * staerke) + i / QUALM_N) % 1;
-      m.visible = true;
-      m.position.set(((i * 37) % 7 - 3) * 0.02, 0.95 + ph * 1.5, -0.2 + ph * 1.1);
-      const sk = 0.6 + ph * (1.2 + staerke);
-      m.scale.set(sk, sk, sk);
-      m.material.opacity = (0.35 + 0.3 * staerke) * Math.sin(Math.PI * Math.min(1, ph * 1.15));
-      m.material.color.setRGB(grau / 255, grau / 255, grau / 255);
+    const mesh = q.userData.mesh, pos = mesh.geometry.attributes.position, col = mesh.geometry.attributes.color, nv = qualmBasis.length / 3;
+    const anzahl = Math.max(4, Math.round(QUALM_N * (0.4 + 0.6 * staerke)));          // mehr Schaden = mehr Wolken (nicht benutzte schrumpfen auf 0)
+    const dunkel = 0.24 - 0.22 * Math.min(1, staerke);                                 // Scheitelfarbe (linear, wird heller dargestellt): 0,24 (mittelgrau) … 0,02 (fast schwarz)
+    mesh.material.opacity = 0.62 + 0.3 * staerke;
+    for (let i = 0; i < QUALM_N; i++) {
+      const ph = (t * (0.75 + 0.55 * staerke) + i / QUALM_N + (i % 3) * 0.07) % 1, aktiv = i < anzahl;
+      const env = aktiv ? Math.sin(Math.PI * Math.min(1, ph * 1.08)) : 0;
+      const sk = (0.2 + ph * (0.45 + 0.55 * staerke)) * env;
+      const cx = 0.42 + ph * 0.55 + (((i * 37) % 7) - 3) * 0.04 + Math.sin(t * 2 + i) * 0.06 * ph, cy = 0.75 + ph * (1.3 + 0.7 * staerke), cz = -0.35 + ph * (0.55 + 0.25 * staerke) + (((i * 53) % 5) - 2) * 0.05;   // quillt seitlich am Motor (rechts) heraus: der Fahrer bleibt von hinten sichtbar
+      for (let v = 0; v < nv; v++) {
+        const o = (i * nv + v) * 3, bx = qualmBasis[v * 3], by = qualmBasis[v * 3 + 1], bz = qualmBasis[v * 3 + 2];
+        pos.array[o] = cx + bx * sk; pos.array[o + 1] = cy + by * sk * 0.85; pos.array[o + 2] = cz + bz * sk;
+        const gr = Math.max(0.05, dunkel + by * 0.1);                                  // Oberseite etwas heller
+        col.array[o] = gr; col.array[o + 1] = gr; col.array[o + 2] = gr * 1.03;
+      }
     }
+    pos.needsUpdate = true; col.needsUpdate = true;
   }
 
   function freigeben(obj) {
     if (!obj) return;
-    obj.traverse((o) => { if (o.geometry && o.geometry !== qualmGeo) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+    obj.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
     if (obj.parent) obj.parent.remove(obj);
   }
 
-  R.Moto.unfallWelt = { stationenBauen, helferBauen, helferPose, figurBauen, qualmBauen, qualmZeigen, freigeben, wegweiser, tafelFabrik, ART };
+  R.Moto.unfallWelt = { stationenBauen, helferBauen, helferPose, figurBauen, figurAnimieren, kreuzBauen, qualmBauen, qualmZeigen, freigeben, wegweiser, tafelFabrik, ART };
 })();

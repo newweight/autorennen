@@ -184,6 +184,13 @@ try:
         lean = ev('() => Rennspiel.spiel.fahrzeuge[0].motoZ.lean')
         bild(page, 'moto_cockpit.png', f'(Kurve, Schräglage {lean:.2f} rad = {lean*57.3:.0f}°)')
         pruefe('Bild moto_cockpit.png in einer Kurve aufgenommen (Schräglage ≥ 0,25 rad)', abs(lean) >= 0.25, f'{lean:.2f}')
+        # Weiche Ränder: der Lenker-Canvas endet links/rechts nicht an einer harten Kante (Deckkraft am Rand ≈ 0, nach innen steigend)
+        def kanten(nr=0):
+            return ev("""(nr) => { const c = document.querySelectorAll('.cp-moto-lenker')[nr]; const g = c.getContext('2d'), w = c.width, h = c.height;
+              const a = (x) => { const d = g.getImageData(x, 0, 1, h).data; let m = 0; for (let i = 3; i < d.length; i += 4) m = Math.max(m, d[i]); return m; };
+              return { rand: [a(0), a(w - 1)], innen: [a(Math.round(w * 0.12)), a(Math.round(w * 0.88))], b: c.getBoundingClientRect().width }; }""", nr)
+        k = kanten(0)
+        pruefe('Lenker-Bild: Ränder laufen weich aus (Deckkraft ganz außen < 20, bei 12 % Breite voll sichtbar > 200)', max(k['rand']) < 20 and min(k['innen']) > 200, k)
         ev('() => { Rennspiel.spiel.pausiert = false; }')
 
         # ---------------- Draw-Calls ----------------
@@ -264,6 +271,9 @@ try:
         ev('() => { Rennspiel.spiel.pausiert = true; }'); page.wait_for_timeout(600)
         ev('() => { __C.leerCountdown(); __C.snap(); }'); page.wait_for_timeout(600)
         bild(page, 'moto_cockpit_zwei.png', '(Zweispieler, beide im Cockpit)')
+        for nr in (0, 1):
+            k = kanten(nr)
+            pruefe(f'Zweispieler, Lenker {nr}: Ränder weich und Ziffern groß genug (km/h-Ziffer ≥ 40 px hoch auf dem Bildschirm)', max(k['rand']) < 20 and min(k['innen']) > 200 and k['b'] / 1000 * 92 >= 40, k)
         ev('() => { Rennspiel.spiel.pausiert = false; }')
 
         pruefe('Motorrad.html: 0 JS-Fehler im ganzen Lauf', not fehler, '; '.join(fehler[:3]))

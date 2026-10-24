@@ -34,6 +34,7 @@ window.Rennspiel = window.Rennspiel || {};
     lenker: {
       seitenverh: 3.4,                // Breite : Höhe des Lenker-Bildes
       breite: 0.62,                   // höchstens so viel der Ansichtsbreite
+      breiteZwei: 0.86,               // Zweispieler (halbe Bildbreite): der Lenker darf breiter sein, damit das Instrument lesbar bleibt
       maxHoehe: 0.29,                 // höchstens so viel der Ansichtshöhe
       lenkWinkel: 0.07,               // rad: so weit dreht sich der Lenker bei vollem Einschlag
       spiegelX: 0.115,                // Spiegel-Mitte: Abstand vom Lenker-Bildrand (Anteil Bildbreite)
@@ -58,14 +59,14 @@ window.Rennspiel = window.Rennspiel || {};
    * cockpit = true: Spiegel an den Lenkerenden; sonst teilen sie sich das Rechteck `basis` (= Platz des einen Spiegels des Autorennens).
    * Rückgabe { lenker: {x,y,b,h} | null, spiegel: [links, rechts] }.
    */
-  function rechtecke(vw, vh, cockpit, basis, hind) {
+  function rechtecke(vw, vh, cockpit, basis, hind, split) {
     const C = CFG();
     if (!cockpit) {
       const luecke = Math.min(C.spiegel.lueckeOben, basis.b * 0.04), b = (basis.b - luecke) / 2;
       return { lenker: null, spiegel: [{ x: basis.x, y: basis.y, b, h: basis.h }, { x: basis.x + b + luecke, y: basis.y, b, h: basis.h }] };
     }
     const L = C.lenker;
-    let H = Math.min(vh * L.maxHoehe, vw * L.breite / L.seitenverh), W = H * L.seitenverh, x0 = (vw - W) / 2;
+    let H = Math.min(vh * L.maxHoehe, vw * (split && L.breiteZwei ? L.breiteZwei : L.breite) / L.seitenverh), W = H * L.seitenverh, x0 = (vw - W) / 2;
     // Hindernisse (Minimap links unten): der Lenker wird schmaler, notfalls nach rechts neben das Hindernis geschoben – nie darüber
     if (hind && hind.length) {
       const rand = 6, rechts = vw - 4, bandOben = vh - H * 1.35;
@@ -241,7 +242,7 @@ window.Rennspiel = window.Rennspiel || {};
 
   function ansichtRechtecke(spiel, i, vw, vh) {
     const split = spiel.kameras.length > 1, cockpit = spiel.kameras[i].modus === 'cockpit';
-    return rechtecke(vw, vh, cockpit, S.rechteck(vw, vh, split), cockpit ? hindernisse(spiel, i, vw, vh) : null);
+    return rechtecke(vw, vh, cockpit, S.rechteck(vw, vh, split), cockpit ? hindernisse(spiel, i, vw, vh) : null, split);
   }
 
   S.zeichnen = function (spiel, i, vx, vw, vh) {
@@ -364,7 +365,7 @@ window.Rennspiel = window.Rennspiel || {};
     // Halterung des Instruments
     g.fillStyle = '#22262d'; g.fillRect(cx - 34, 168, 68, 40);
     // Lenkerrohr (Mitte höher, Enden zum Fahrer hin tiefer)
-    const stange = () => { g.beginPath(); g.moveTo(66, 236); g.quadraticCurveTo(cx, 96, LW - 66, 236); };
+    const stange = () => { g.beginPath(); g.moveTo(96, 236); g.quadraticCurveTo(cx, 96, LW - 96, 236); };
     g.strokeStyle = '#15181d'; g.lineWidth = 26; stange(); g.stroke();
     g.strokeStyle = 'rgba(255,255,255,.28)'; g.lineWidth = 6; g.save(); g.translate(0, -7); stange(); g.stroke(); g.restore();
     g.fillStyle = '#2b3037'; g.fillRect(160, 192, 40, 30); g.fillRect(LW - 200, 192, 40, 30);   // Klemmen
@@ -373,6 +374,8 @@ window.Rennspiel = window.Rennspiel || {};
       g.save(); if (seite > 0) { g.translate(LW, 0); g.scale(-1, 1); }
       // Spiegel-Stiel von der Klemme nach oben (endet im Spiegel-Rahmen)
       g.strokeStyle = '#16181c'; g.lineWidth = 10; g.beginPath(); g.moveTo(178, 200); g.lineTo(CFG().lenker.spiegelX * LW, 48); g.stroke();
+      // Hebel, Griff, Arm und Handschuh sitzen 44 Einheiten weiter innen: der Arm läuft dann zum Bildrand hin weich aus (siehe unten)
+      g.save(); g.translate(44, 0);
       // Hebel (Kupplung / Bremse): vorn am Griff, nach innen gebogen, Kugelende
       g.strokeStyle = '#d4d8df'; g.lineWidth = 9; g.beginPath(); g.moveTo(112, 212); g.bezierCurveTo(140, 184, 184, 168, 244, 166); g.stroke();
       g.fillStyle = '#eef1f5'; g.beginPath(); g.arc(246, 166, 8, 0, TAU); g.fill();
@@ -392,10 +395,21 @@ window.Rennspiel = window.Rennspiel || {};
       g.fillStyle = heller(p.fahrer, 0.12); g.strokeStyle = dunkler(p.fahrer, 0.5); g.lineWidth = 3;
       g.beginPath(); g.ellipse(116, 214, 26, 15, -0.5, 0, TAU); g.fill(); g.stroke();                                                 // Daumen
       g.restore();
+      g.restore();
+    }
+    g.restore();
+    // Weiche Ränder: links und rechts blendet das Bild über 70 Einheiten aus (kein harter senkrechter Rand, der Arm „läuft aus“)
+    g.save(); g.globalCompositeOperation = 'destination-out';
+    for (const seite of [0, 1]) {
+      const x0 = seite ? LW : 0, x1 = seite ? LW - 70 : 70, ra = g.createLinearGradient(x0, 0, x1, 0);
+      ra.addColorStop(0, 'rgba(0,0,0,1)'); ra.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = ra; g.fillRect(seite ? LW - 70 : 0, 0, 70, LH);
     }
     g.restore();
     // --- Anzeige-Instrument (steht fest) ---
-    const px = cx, py = 100, pr = 92;
+    // Zu zweit (p.zwei) ist das Bild klein: das Instrument wird größer, nur km/h groß, Gang klein, Drehzahl-Segmente dünn
+    const zwei = !!p.zwei;
+    const px = cx, py = zwei ? 148 : 100, pr = zwei ? 134 : 92;
     g.save(); g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowBlur = 16; g.shadowOffsetY = 5; g.fillStyle = '#1b1f26'; g.beginPath(); g.arc(px, py, pr, 0, TAU); g.fill(); g.restore();
     gr = g.createLinearGradient(px - pr, py - pr, px + pr, py + pr); gr.addColorStop(0, '#d6dbe2'); gr.addColorStop(0.5, '#6b727d'); gr.addColorStop(1, '#2c3037');
     g.fillStyle = gr; g.beginPath(); g.arc(px, py, pr, 0, TAU); g.fill();
@@ -403,7 +417,7 @@ window.Rennspiel = window.Rennspiel || {};
     g.fillStyle = gr; g.beginPath(); g.arc(px, py, pr - 9, 0, TAU); g.fill();
     // Drehzahl-Segmente (270°, von links unten über oben nach rechts unten)
     const N = 22, A0 = Math.PI * 0.75, SW = Math.PI * 1.5, an = Math.max(1, Math.round(p.anteil * N));
-    g.lineWidth = 11; g.lineCap = 'butt';
+    g.lineWidth = zwei ? 9 : 11; g.lineCap = 'butt';
     for (let s = 0; s < N; s++) {
       const a0 = A0 + SW * s / N + 0.012, a1 = A0 + SW * (s + 0.8) / N, f = s / N;
       g.strokeStyle = s < an ? (f < 0.6 ? '#35e08a' : f < 0.82 ? '#ffc233' : '#ff4a3a') : 'rgba(255,255,255,.12)';
@@ -411,9 +425,10 @@ window.Rennspiel = window.Rennspiel || {};
     }
     g.lineCap = 'round';
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillStyle = '#ffffff'; g.font = '800 ' + (p.kmh > 99 ? 48 : 56) + 'px ' + SCHRIFT; g.fillText(String(p.kmh), px, py + 2);
-    g.fillStyle = '#7fc4ff'; g.font = '700 15px ' + SCHRIFT; g.fillText('km/h', px, py + 36);
-    g.fillStyle = '#ffb347'; g.font = '800 16px ' + SCHRIFT; g.fillText(p.gang, px, py - 40);
+    const gross = zwei ? (p.kmh > 99 ? 92 : 108) : (p.kmh > 99 ? 48 : 56);
+    g.fillStyle = '#ffffff'; g.font = '800 ' + gross + 'px ' + SCHRIFT; g.fillText(String(p.kmh), px, py + (zwei ? 4 : 2));
+    g.fillStyle = '#7fc4ff'; g.font = '700 ' + (zwei ? 22 : 15) + 'px ' + SCHRIFT; g.fillText('km/h', px, py + (zwei ? 62 : 36));
+    g.fillStyle = '#ffb347'; g.font = '800 ' + (zwei ? 20 : 16) + 'px ' + SCHRIFT; g.fillText(zwei ? p.gang.replace('GANG ', '') : p.gang, px, py - (zwei ? 70 : 40));
     g.strokeStyle = 'rgba(255,255,255,.14)'; g.lineWidth = 3; g.beginPath(); g.arc(px, py, pr - 12, Math.PI * 1.1, Math.PI * 1.55); g.stroke();   // Glanz
   }
 
@@ -454,7 +469,7 @@ window.Rennspiel = window.Rennspiel || {};
         const key = vw + 'x' + vh + (cockpit ? 'c' : 'v') + (split ? 's' : '');
         if (key !== this.layoutKey || !this.spAn) {
           this.layoutKey = key;
-          const rs = rechtecke(vw, vh, cockpit, S.rechteck(vw, vh, split), cockpit ? hindernisse(spiel, hud.nr, vw, vh) : null);
+          const rs = rechtecke(vw, vh, cockpit, S.rechteck(vw, vh, split), cockpit ? hindernisse(spiel, hud.nr, vw, vh) : null, split);
           rs.spiegel.forEach((rc, m) => {
             const rand = Math.max(2, Math.min(5, Math.round(rc.h * 0.06)));
             styl(this.rahmen[m], { left: (rc.x - 3) + 'px', top: (rc.y - 3) + 'px', width: (rc.b + 6) + 'px', height: (rc.h + 6) + 'px', borderWidth: rand + 'px', display: 'block' });
@@ -470,7 +485,7 @@ window.Rennspiel = window.Rennspiel || {};
         if (!cockpit && hud.eHinweis) hud.eHinweis.style.bottom = '';
       }
       if (!cockpit) return;
-      const rs = this.rects && this.layoutKey === (vw + 'x' + vh + 'c' + (split ? 's' : '')) ? this.rects : rechtecke(vw, vh, true, S.rechteck(vw, vh, split), hindernisse(spiel, hud.nr, vw, vh));
+      const rs = this.rects && this.layoutKey === (vw + 'x' + vh + 'c' + (split ? 's' : '')) ? this.rects : rechtecke(vw, vh, true, S.rechteck(vw, vh, split), hindernisse(spiel, hud.nr, vw, vh), split);
       const lb = rs.lenker;
       if (!lb) return;
       // Hinweis („Festgefahren? R drücken“) mittig über die Oberkante der Spiegel setzen, sonst läge der breite Text auf ihnen
@@ -488,12 +503,12 @@ window.Rennspiel = window.Rennspiel || {};
       const anteil = klemme((this.rpm - gt.leerlauf) / Math.max(1, gt.begr - gt.leerlauf), 0, 1);
       const kmh = Math.abs(Math.round(v.vLaengs * 3.6)), steer = Math.round(klemme(v.lenkung || 0, -1, 1) * 20) / 20;
       const gang = Math.abs(v.vLaengs) < 0.3 ? 'N' : (gt.gang < 0 ? 'R' : 'GANG ' + gt.gang);
-      const key = kmh + '|' + Math.round(anteil * 22) + '|' + gang + '|' + steer + '|' + cw;
+      const key = kmh + '|' + Math.round(anteil * 22) + '|' + gang + '|' + steer + '|' + cw + (split ? 'z' : '');
       if (key === this.schluessel) return;
       this.schluessel = key;
       const o = (auto && auto.optionen) || {};
       lenkerZeichnen(this.g, cw, ch, LH, { steer, kmh, anteil, gang, bike: auto ? auto.farbe : 0xff6a10, fahrer: auto && auto.farbe2 !== undefined ? auto.farbe2 : 0x1d4ed8,
-        helm: o.helm !== undefined ? o.helm : 0xf4f4f4, nr: o.nummer !== undefined ? o.nummer : 1 });
+        helm: o.helm !== undefined ? o.helm : 0xf4f4f4, nr: o.nummer !== undefined ? o.nummer : 1, zwei: split });
     }
 
     _aus() {

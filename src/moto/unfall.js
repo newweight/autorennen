@@ -47,6 +47,8 @@ window.Rennspiel = window.Rennspiel || {};
     vorOrtSekundenJe10: 1.5,
     weiterfahrenAb: 30,                                  // ab so viel % bei Fahrer UND Motorrad beendet Gas geben die Pflege (vor Ort und an der Station); darunter gesperrt
     stationSekundenJe10: 0.5,
+    // Kamera bei der Versorgung (Verfolger/Weit): von der Straßenseite schräg von hinten, Gebäude bzw. Helfer-Fahrzeug und Motorrad zusammen im Bild, die Kamera steckt nie im Gebäude
+    kamera: { an: true, hoehe: 4.5, hinter: 9, seitlich: 9, blickSeitlich: 3.5, blickHoeher: 0.55, weichheit: 4 },
     ki: { drossel: 2.0, faktor: 0.45 },                  // KI hält nicht an: beim Vorbeifahren an der Station 2 s lang nur 45 % Höchsttempo (Zeitverlust statt Halt)
     szene: {
       anfahrt: 1.6, abfahrt: 0.9,                        // Fahrzeit des Helfer-Fahrzeugs heran / weg (s); dazwischen läuft die Pflege
@@ -143,11 +145,11 @@ window.Rennspiel = window.Rennspiel || {};
     return { vMax: (1 - c.tempo.motorrad * m) * (1 - c.tempo.fahrer * f), beschleunigung: 1 - c.tempo.motorrad * m };
   }
 
-  /** Anzeige im Spieler-Chip: „🏍️ 75 %“ und „😀 100 %“, je grün ab 75, gelb ab 50, sonst rot; Fahrer-Symbol 😀 / 🩹 / 🩼. */
+  /** Anzeige im Spieler-Chip: „🏍️ 75 %“ und „😀 100 %“, je grün ab 75, gelb ab 50, sonst rot; Fahrer-Symbol 😀 (100 %) sonst 🩹 (immer Pflaster: weniger Angst bei Kindern). */
   function hudZustand(u, cfg) {
     const c = cfg || CFG(), farbe = (p) => p >= c.farben.gelbUnter ? 'gruen' : p >= c.farben.rotUnter ? 'gelb' : 'rot';
     const p = Math.round(u.zustand), g = Math.round(u.gesundheit);
-    return { prozent: p, farbe: farbe(p), gesundheit: g, fahrerFarbe: farbe(g), symbol: g >= 100 ? '😀' : g >= c.farben.gelbUnter ? '🩹' : '🩼' };
+    return { prozent: p, farbe: farbe(p), gesundheit: g, fahrerFarbe: farbe(g), symbol: g >= 100 ? '😀' : '🩹' };
   }
 
   // ---------- Szenen-Zeitplan (Helfer-Fahrzeug kommt zum Unfallort, versorgt vor Ort, fährt weg) ----------
