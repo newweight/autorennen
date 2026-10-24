@@ -31,7 +31,12 @@ ergebnisse = []
 def pruefe(name, ok, info=''):
     ergebnisse.append(bool(ok)); print(('OK   ' if ok else 'FEHL ') + name + (f'  ({info})' if info != '' else ''))
 def bild(page, name, hinweis=''):
-    page.screenshot(path=os.path.join(out, name)); print(f'      Bild: tests/out/moto/{name} {hinweis}')
+    for versuch in range(3):                       # Screenshots laufen unter Software-GL zeitweise in den Timeout: bis zu 3 Versuche
+        try: page.screenshot(path=os.path.join(out, name), timeout=60000); break
+        except Exception as e:
+            if versuch == 2: raise
+            page.wait_for_timeout(1500)
+    print(f'      Bild: tests/out/moto/{name} {hinweis}')
 
 JS_HELFER = '''() => {
   const S = () => Rennspiel.spiel, DT = 1 / 60;
@@ -127,6 +132,21 @@ try:
         info = ev('''() => ({ c: !!Rennspiel.Moto.cockpit, inst: Rennspiel.Moto.cockpit.installiert, cfg: Rennspiel.config.motoCockpit, wischer: Rennspiel.config.cockpit.wischer.modi })''')
         pruefe('Cockpit-Modul geladen, Umhüllungen: ' + ', '.join(info['inst']), info['c'] and len(info['inst']) >= 4, info['inst'])
         pruefe('Config: Kamera kippt 50 %, Scheibenwischer im Motorradmodus aus', info['cfg']['rollAnteil'] == 0.5 and info['wischer'] == [], info['cfg']['rollAnteil'])
+
+        # ---------------- Startansicht = Cockpit ----------------
+        def start_pruefen(modus, touch=False):
+            if touch: ev("() => document.documentElement.classList.add('t-rennen')")
+            ev('() => Rennspiel.spiel.rennenStarten' + EINST % (modus, 'wiese')); page.wait_for_timeout(500)
+            ev('() => { __C.warteStart(); }'); page.wait_for_timeout(600)
+            r = ev('() => ({ m: Rennspiel.spiel.kameras.map((k) => k.modus), z: Rennspiel.spiel.zustand })')
+            ev('() => { __C.leerCountdown(); }')
+            if modus == 'solo' and not touch:
+                ev('() => { __C.lauf(1); __C.leerCountdown(); }'); ev('() => { Rennspiel.spiel.pausiert = true; }'); page.wait_for_timeout(600); bild(page, 'moto_start_cockpit.png', '(Start, nach dem Countdown)'); ev('() => { Rennspiel.spiel.pausiert = false; }')
+            if touch: ev("() => document.documentElement.classList.remove('t-rennen')")
+            pruefe(f'Startansicht {modus}{" (Touch)" if touch else ""}: jede Kamera beginnt im Cockpit', all(x == 'cockpit' for x in r['m']) and len(r['m']) == (1 if modus == 'solo' else 2), r)
+        start_pruefen('solo'); start_pruefen('zwei'); start_pruefen('solo', True)
+        ev('() => { Rennspiel.spiel.kameras[0].naechsterModus(); }')
+        pruefe('Taste Kamera wechselt danach wie bisher (cockpit → weit)', ev('() => Rennspiel.spiel.kameras[0].modus') == 'weit')
 
         # ---------------- Solo, Cockpit ----------------
         starte('wiese', 'solo')
@@ -276,7 +296,11 @@ try:
             for hl in lg:
                 if len(hl['m']) != 2: lageok = False; continue
                 a0, a1 = hl['m']
-                if ansicht == 1: lageok = lageok and abs(a0['mx'] - 0.5) >= 0.25 - 0.002 and abs(a1['mx'] - 0.5) >= 0.25 - 0.002
+                if ansicht == 1:
+                    d0, d1 = abs(a0['mx'] - 0.5), abs(a1['mx'] - 0.5)
+                    # Ziel ≥ 25 % der Ansichtsbreite von der Mitte; nur wo die Minimap links unten im Weg ist (schmale Fenster / Zweispieler-Hälfte), weniger – aber symmetrisch und ≥ 17 %
+                    if modus == 'zwei': lageok = lageok and a0['r'] < a1['l']     # Zweispieler: die Minimap schiebt den Lenker aus der Mitte, die Spiegel bleiben an dessen Enden (nur Überlappung wird geprüft)
+                    else: lageok = lageok and abs(d0 - d1) < 0.003 and d0 >= (0.25 - 0.002 if w >= 1280 else 0.17)
                 else: lageok = lageok and a0['r'] < 0.2 and a1['l'] > 0.8 and abs(a0['o'] - a1['o']) < 0.005 and (a0['u'] <= 1 / 3 + 0.01 or 0.35 <= (a0['o'] + a0['u']) / 2 <= 0.45) and hl['chipPos'] == ''
             if bildname: bild(page, bildname, f'({ans}, {name}, {modus})')
             pruefe(f'HUD {name} {modus}, {ans}: {r["elemente"]} Elemente ({r["spiegel"]} Spiegel, {r["lenker"]} Lenker), Spiegel links/rechts außen, keine Überlappung (auch Hinweis, Einblendungen)', r['spiegel'] == erwartet and r['lenker'] == (erwartet // 2 if ansicht == 1 else 0) and lageok and not r['kollisionen'] and not hk and not tk, (r['kollisionen'] + hk + tk)[:4] if lageok else lg)
@@ -324,6 +348,8 @@ try:
         page2.on('request', lambda r: geladen.append(r.url) if '/src/moto/' in r.url else None)
         page2.goto(basisurl + 'Autorennen.html'); page2.wait_for_timeout(1500)
         page2.evaluate("() => Rennspiel.spiel.rennenStarten({ modus: 'solo', streckeId: 'wiese', autoIds: ['porsche-911', 'multivan'], runden: 1, gegner: 3, schwierigkeit: 'mittel', fahrhilfe: ['wenig', 'wenig'] })"); page2.wait_for_timeout(1200)
+        start2 = page2.evaluate("() => Rennspiel.spiel.kameras[0].modus")
+        pruefe('Autorennen.html: Startkamera unverändert (verfolger)', start2 == 'verfolger', start2)
         page2.evaluate("() => { Rennspiel.spiel.kameras[0].modusIndex = 1; }"); page2.wait_for_timeout(800)
         a = page2.evaluate('''() => ({ moto: !!window.Rennspiel.Moto, flag: window.MOTORRAD === true, lenker: document.querySelectorAll('.cp-moto-lenker, .cp-moto-spiegel').length, rahmen: getComputedStyle(document.querySelector('.hud-spiegel')).visibility,
           wischerModi: Rennspiel.config.cockpit.wischer.modi, vw: !!document.querySelector('.cp-tafel'), sichtbar: Rennspiel.rueckspiegel.sichtbar(Rennspiel.spiel, 0), modus: Rennspiel.spiel.kameras[0].modus })''')

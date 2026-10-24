@@ -4,7 +4,7 @@
 // (Autorennen.html lädt diese Datei nicht).
 //
 // Kamera (Taste „Kamera“, Ansicht „cockpit“): Die Cockpit-Kamera sitzt schon auf Helmhöhe (config.kamera.cockpit, motoKatalog.js).
-//   FahrzeugKamera.prototype.update   umhüllt: in der Cockpit-Ansicht kippt die Kamera mit der Schräglage des Motorrads, gedämpft (rollAnteil 50 %).
+//   FahrzeugKamera.prototype.update   umhüllt: jede neue Kamera startet im Cockpit (Wunsch des Vaters, config.motoCockpit.startCockpit); in der Cockpit-Ansicht kippt die Kamera mit der Schräglage des Motorrads, gedämpft (rollAnteil 50 %).
 // Lenker (nur Cockpit-Ansicht, nicht auf dem Handy mit Touch-Tasten – dort liegen unten die Knöpfe, wie beim Auto):
 //   R.cockpit.fuerHud                 umhüllt: je HUD ein Zusatz-Objekt, das ein Bild (Canvas) unten in der Mitte zeichnet:
 //                                     Vorderrad-Kotflügel mit Startnummer, Gabel, Lenker mit Griffen und Handschuhen, Bremshebel,
@@ -30,6 +30,7 @@ window.Rennspiel = window.Rennspiel || {};
   R.Moto = R.Moto || {};
 
   R.config.motoCockpit = {
+    startCockpit: true,               // Startansicht jedes Rennens = Cockpit (Taste Kamera wechselt weiter)
     aus: false,                       // true = Autorennen-Spiegel (ein Spiegel oben Mitte), kein Lenker (nur für Vergleichsmessungen)
     rollAnteil: 0.5,                  // die Kamera kippt so viel der Schräglage des Motorrads mit (0,5 = halb so stark)
     rollWeichheit: 9,                 // 1/s: zusätzliche Glättung der Kamera-Kippung
@@ -105,7 +106,13 @@ window.Rennspiel = window.Rennspiel || {};
       return { x: c - bm / 2, y: cy - hm / 2, b: bm, h: hm };
     });
     let sp = bau(true);
-    if (hind && sp.some((rc) => hind.some((o) => rc.x < o.x + o.b && rc.x + rc.b > o.x && rc.y < o.y + o.h && rc.y + rc.h > o.y))) sp = bau(false);   // beide zusammen, sonst unsymmetrisch
+    // Liegt ein Spiegel (weiter außen) auf einem Hindernis (Minimap), bleiben BEIDE am Lenkerende (symmetrisch, wie bisher): die Minimap blockt dort den Rand
+    if (hind && sp.some((rc) => hind.some((o) => rc.x < o.x + o.b && rc.x + rc.b > o.x && rc.y < o.y + o.h && rc.y + rc.h > o.y))) {
+      let nach = 0;     // so weit nach innen, bis der linke Spiegel rechts neben der Minimap sitzt (der rechte spiegelbildlich)
+      hind.forEach((o) => { if (sp[0].y < o.y + o.h && sp[0].y + sp[0].h > o.y && o.x + o.b / 2 < vw / 2) nach = Math.max(nach, o.x + o.b + 6 - sp[0].x); });
+      sp = sp.map((rc, m) => ({ x: Math.min(vw - rc.b - 3, rc.x + (m === 0 ? nach : -nach)), y: rc.y, b: rc.b, h: rc.h }));
+      if (sp[0].x + sp[0].b > sp[1].x - 4 || sp.some((rc) => hind.some((o) => rc.x < o.x + o.b && rc.x + rc.b > o.x && rc.y < o.y + o.h && rc.y + rc.h > o.y))) sp = bau(false);
+    }
     return {
       lenker: { x: x0, y: y0, b: W, h: H },
       spiegel: sp,
@@ -185,6 +192,13 @@ window.Rennspiel = window.Rennspiel || {};
   // ---------- Kamera: Kippung mit der Schräglage ----------
   const kUpdate = R.FahrzeugKamera.prototype.update;
   R.FahrzeugKamera.prototype.update = function (dt) {
+    // Startansicht im Motorradmodus = Cockpit (jede neue Kamera, solo und zu zweit, auch Touch); die Taste Kamera wechselt danach wie bisher.
+    // Das Autorennen merkt sich keine Kamera (kein localStorage) – deshalb gibt es auch hier keinen Schlüssel.
+    if (!this._motoStart) {
+      this._motoStart = true;
+      const ci = R.config.kamera.modi.indexOf('cockpit');
+      if (!CFG().aus && CFG().startCockpit !== false && ci >= 0) { this.modusIndex = ci; this._erstesMal = true; }
+    }
     const erst = this._erstesMal;
     const r = kUpdate.apply(this, arguments);
     try {

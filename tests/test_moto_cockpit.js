@@ -156,5 +156,7 @@ pruefe('Kamera-Kippung = 50 % der Schräglage, Vorzeichen bleibt (links +)', nah
   const motorraeder = (R.carCatalog || []).filter((a) => a.sonderbau === 'motorrad');
   pruefe('Kein Auto-Cockpit (VW/Porsche) für Motorräder: config.cockpit.stile kennt keine Crossmaschine', !Object.keys(st).some((k) => /cross|moto/i.test(k)) && motorraeder.every((a) => !st[a.id]), `${motorraeder.length} Motorräder`); }
 
+// ---------- Startkamera ----------
+pruefe('Config: Startansicht im Motorradmodus = Cockpit (startCockpit), Autorennen-Reihenfolge der Kamera-Modi unverändert (verfolger, cockpit, weit)', cfg.startCockpit === true && R.config.kamera.modi.join() === 'verfolger,cockpit,weit');
 console.log(`\n${anzahl - fehler}/${anzahl} Prüfungen bestanden`);
 process.exit(fehler ? 1 : 0);
