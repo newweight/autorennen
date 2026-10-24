@@ -79,7 +79,7 @@ window.Rennspiel = window.Rennspiel || {};
     g.position.set(p.x, strecke.hoeheAn(p.x, p.z), p.z);
     g.rotation.y = Math.atan2(-p.tx, -p.tz);
     const mat = new THREE.MeshLambertMaterial({ color: 0x666b73 });
-    const b = 3.6, hh = 1.35;
+    const b = 6.4, hh = 2.4;        // groß: von weitem lesbar
     [-b / 2 + 0.2, b / 2 - 0.2].forEach((dx) => { const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, hoehe, 0.14), mat); post.position.set(dx, hoehe / 2, 0); g.add(post); });
     const tex = canvasTafel((x, cw, ch) => {
       x.fillStyle = K.farbe; x.fillRect(0, 0, cw, ch);
@@ -91,7 +91,7 @@ window.Rennspiel = window.Rennspiel || {};
     }, b, hh, false);
     if (tex) {
       const brett = new THREE.Mesh(new THREE.PlaneGeometry(b, hh), new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }));
-      brett.position.set(0, hoehe + hh / 2 - 0.1, 0.1); g.add(brett);
+      brett.position.set(0, hoehe + hh / 2 - 0.2, 0.1); g.add(brett);
     }
     return g;
   }
@@ -127,8 +127,8 @@ window.Rennspiel = window.Rennspiel || {};
     if (gw) g.add(gw);
     if (gk) g.add(gk);
     [[b.werkstatt, 'werkstatt'], [b.kranken, 'kranken']].forEach(([w, art]) => {
-      g.add(wegweiser(strecke, w, art, 160, 2.6));
-      g.add(wegweiser(strecke, w, art, 70, 2.6));
+      g.add(wegweiser(strecke, w, art, 160, 4.2));
+      g.add(wegweiser(strecke, w, art, 70, 4.2));
     });
     const teile = [b.werkstatt, b.kranken];
     const stub = {

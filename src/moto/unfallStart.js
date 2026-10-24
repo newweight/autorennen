@@ -155,6 +155,7 @@
   function szeneSchritt(spiel, i, f, u, dt) {
     const sz = u.szene, v = f.vehicle, mz = f.motoZ, c = CFG().szene, strecke = spiel.strecke;
     f.stehZeit = 0; if (f.driver) f.driver.festZeit = 0;
+    if (u.gasEingabe <= 0.3) sz.gasLos = true;                                        // Gas muss erst losgelassen und NEU gedrückt werden (wer das Gas einfach hält, wird trotzdem versorgt)
     if (sz.phase === 'warten') {
       sz.warte += dt;
       const luft = !!(f.flug && f.flug.aktiv), purzelt = !!(mz && mz.purzel.aktiv);
@@ -183,7 +184,7 @@
     if (!sz.frei) {
       if (ph.name === 'pflege') U.pflegeSchritt(u, sz.was, 'vorOrt', dt);
       else if (ph.name === 'abfahrt') U.pflegeSchritt(u, sz.was, 'vorOrt', 1e6);                // Rundungsrest: jetzt sicher 100 %
-      const darf = U.darfWeiter(u), gas = istMensch(f) ? u.gasEingabe > 0.3 : true;
+      const darf = U.darfWeiter(u), gas = istMensch(f) ? (sz.gasLos && u.gasEingabe > 0.3) : true;
       if ((ph.index >= 1 && darf && gas) || ph.name === 'abfahrt') {
         sz.frei = true; sz.tFrei = Math.max(sz.t, sz.plan.phasen[1].t0); u.halteBremse = false;
         if (istMensch(f)) meldung(spiel, i, sz.art === 'abschlepp' ? 'Repariert! 🔧' : 'Gute Besserung! 💚', 1500);
@@ -251,10 +252,11 @@
     h.t += dt; f.stehZeit = 0;
     if (!h.steht && Math.abs(v.vLaengs) < 1.2) h.steht = true;
     if (!U.stationBereich(w, f.nah) && !h.steht) return haltEnde(spiel, i, f, u, true);       // von der Fläche abgekommen, bevor er stand
+    if (u.gasEingabe <= 0.3) h.gasLos = true;                                         // wie in der Szene: erst loslassen, dann neu Gas geben
     if (h.steht) {
       const fertig = U.pflegeSchritt(u, K.was, 'station', dt);
       if (fertig) return haltEnde(spiel, i, f, u, false);
-      if (U.darfWeiter(u) && u.gasEingabe > 0.3) return haltEnde(spiel, i, f, u, false);
+      if (U.darfWeiter(u) && h.gasLos && u.gasEingabe > 0.3) return haltEnde(spiel, i, f, u, false);
     }
     if (h.t > 25) return haltEnde(spiel, i, f, u, true);                                       // Sicherung: nie festhängen
   }
@@ -295,12 +297,13 @@
 .hud-links .moto-zustand { display: block; margin-top: .2em; white-space: nowrap; font-weight: 900; font-size: .95em; line-height: 1.2; pointer-events: none; }
 .moto-zustand span { margin-right: .5em; }
 .moto-zustand .gruen { color: #7dffa0; } .moto-zustand .gelb { color: #ffe14a; } .moto-zustand .rot { color: #ff7a6a; }
-.hud .moto-mitte { position: absolute; left: 50%; top: 44%; transform: translateX(-50%); box-sizing: border-box; max-width: 92%; text-align: center; white-space: pre-line;
+.hud .moto-mitte { position: absolute; left: 50%; top: 36%; transform: translateX(-50%); box-sizing: border-box; max-width: 92%; text-align: center; white-space: pre-line;
   font-weight: 900; line-height: 1.25; color: #fff; padding: .25em .8em; border-radius: 1em; border: .08em solid #fff; pointer-events: none; display: none;
   text-shadow: 0 .06em .12em rgba(0,0,0,.5); background: linear-gradient(90deg, rgba(31,111,209,.92), rgba(70,150,235,.92)); }
 .hud .moto-mitte.krank { background: linear-gradient(90deg, rgba(31,157,85,.92), rgba(70,200,120,.92)); }
 .hud .moto-mitte .hinweis { display: block; font-size: .8em; opacity: .95; }
-.hud.links .moto-mitte, .hud.rechts .moto-mitte { top: 47%; }
+.hud.links .moto-mitte, .hud.rechts .moto-mitte { top: 41%; }
+@media (max-height: 520px) { .hud .moto-mitte, .hud.links .moto-mitte, .hud.rechts .moto-mitte { top: 37%; max-width: 86%; } }       /* niedriger Bildschirm: über die Minikarte (unten links) */
 `;
   let stilDa = false;
   function stilEinbauen() {
