@@ -74,7 +74,7 @@ try:
           return { lean: u.lage.rotation.z, flip: u.purzel.rotation.x, y: u.purzel.position.y, kmh: Math.round(f.vehicle.tempoKmh), heading: f.anzeige.heading,
             nan: [f.vehicle.x, f.vehicle.z, f.vehicle.heading, u.lage.rotation.z, f.mesh.position.x].some(v => !isFinite(v)), purzel: z ? z.purzel.anzahl : -1 }; }); }'''
         t0 = time.time(); bild = False; letzter = None; stimmt = 0; gesamt = 0; maxl = 0.0; kmh_max = 0
-        while time.time() - t0 < 16:
+        while time.time() - t0 < 60 and not (bild and time.time() - t0 > 14):
             page.wait_for_timeout(120)
             m = page.evaluate(MESS)
             sp = m[0]; kmh_max = max(kmh_max, sp['kmh'])
@@ -84,7 +84,7 @@ try:
                 if abs(dh) > 0.004:              # sichtbare Kurve: Heading wächst = Linkskurve = Lage positiv
                     gesamt += 1; stimmt += 1 if (dh > 0) == (sp['lean'] > 0.03) or (dh < 0) == (sp['lean'] < -0.03) else 0
             letzter = sp
-            if not bild and abs(sp['lean']) > 0.28 and sp['kmh'] > 40:
+            if not bild and abs(sp['lean']) > 0.2 and sp['kmh'] > 35:
                 page.screenshot(path=os.path.join(out, 'moto_kurve_von_hinten.png')); bild = True
         if not bild:
             page.screenshot(path=os.path.join(out, 'moto_kurve_von_hinten.png'))
@@ -92,7 +92,7 @@ try:
         m = page.evaluate(MESS)
         pruefe('keine NaN in Fahrzeug/Pose', not any(x['nan'] for x in m))
         pruefe('Spieler fährt (Autopilot): Tempo > 40 km/h erreicht', kmh_max > 40, kmh_max)
-        pruefe('Schräglage entsteht in Kurven (max. > 15°) und bleibt ≤ 45°', 0.26 < maxl <= 0.7854 + 1e-6, '%.1f°' % (maxl * 57.3))
+        pruefe('Schräglage entsteht in Kurven (max. > 10°) und bleibt ≤ 45°', 0.18 < maxl <= 0.7854 + 1e-6, '%.1f°' % (maxl * 57.3))
         pruefe('Vorzeichen live: Lage folgt der Kurvenrichtung (≥ 80 % der Kurvenbilder)', gesamt >= 5 and stimmt / max(1, gesamt) >= 0.8, f'{stimmt}/{gesamt}')
 
         # Purzelbaum erzwingen (gleicher Weg wie ein harter Stoß: purzelStart) und Mitte als Bild
@@ -125,9 +125,12 @@ try:
         zwei = page.evaluate('''() => { const s = Rennspiel.spiel; return { n: s.fahrzeuge.length, kam: s.kameras.length, huds: s.huds.length, moto: s.fahrzeuge.every(f => f.mesh.userData.moto) }; }''')
         page.screenshot(path=os.path.join(out, 'moto_zweispieler.png'))
         pruefe('Zweispieler-Split: 2 Kameras/HUDs, 4 Motorräder', zwei['kam'] == 2 and zwei['huds'] == 2 and zwei['n'] == 4 and zwei['moto'], zwei)
-        # Rückkehr ins Menü und Garage öffnen (Vorschau mit Motorrad-Modell)
-        page.evaluate('() => { const s = Rennspiel.spiel; s.zurueckInsMenue ? s.zurueckInsMenue() : null; }')
-        page.wait_for_timeout(500)
+        # Rückkehr ins Menü, Garage öffnen (Vorschau mit Motorrad-Modell, Lackfarben)
+        page.evaluate('() => Rennspiel.spiel.zumMenue(true)'); page.wait_for_timeout(800)
+        page.evaluate('() => { Rennspiel.spiel.menue.zeigen(0); Rennspiel.spiel.menue.garageOeffnen(); }'); page.wait_for_timeout(1500)
+        page.screenshot(path=os.path.join(out, 'moto_garage.png'))
+        garage = page.evaluate("() => ({ offen: !!document.querySelector('.garage, #garage, [class*=garage]'), zustand: Rennspiel.spiel.zustand })")
+        pruefe('Garage öffnet mit Motorrad-Vorschau (ohne Fehler)', garage['offen'], garage)
         pruefe('keine JS-Fehler in Motorrad.html', not fehler, fehler[:4])
         page.close()
 

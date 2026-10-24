@@ -5,3 +5,11 @@ Zweig `motorrad` im Repo newweight/autorennen (Basis v34). Regel: NUR neue Datei
 - [ ] tests/test_moto.js (Node) + 1 Browser-Rauchtest mit Bild
 - [ ] Prüfung (Hauptmodell): git diff nur neue Dateien, Tests, Bild ansehen
 - [ ] Sichern: Commit + Tag m1 auf Zweig motorrad, Mac-Ordner
+
+# Stufe M2 Stunts (beauftragt 24.10., nach M1-Prüfung, sparsam: 1 Sonnet-Agent, nur neue Dateien)
+- [ ] Schanzen im Motorrad-Modus an (vorhandene track/schanze.js nutzen), Salto/Drehung per Taste in der Luft (gelingt fast immer)
+- [ ] Feuerring über Schanzen (Treffer-Bonus), Bus-/Autoreihe hinter einer Schanze
+- [ ] Wheelie-/Stoppie-Zonen (markierte Abschnitte, Taste)
+- [ ] Stuntpunkte + Combo im HUD, Modus „Stuntrennen“ (Platz + Punkte)
+- [ ] KI macht einfache Stunts
+- [ ] Prüfung + Tag m2

@@ -5,7 +5,7 @@
 //   Spiel.rennenStarten      umhüllt: Voreinstellungen erzwingen (Schaden, Krankenwagen, Abschleppwagen, Geisterfahrer, „Nur Rennautos“ aus;
 //                            Autowahl auf eine Crossmaschine, falls die gespeicherte/Standard-Autowahl ein Auto war)
 //   Menue.zeigen             umhüllt: ungültige Autowahl (Standard 'troc-cabrio'/'multivan') auf Crossmaschinen setzen
-//   Menue.zeichnen           umhüllt: Zeilen „Schaden“ und „Verkehr“ ausblenden (gelten im Motorradmodus nicht)
+//   Menue.zeichnen           umhüllt: Zeilen „Schaden“ und „Verkehr“ ausblenden (gelten im Motorradmodus nicht), Menütexte Auto → Motorrad
 //   Menue.htmlOnlineKarte    ersetzt: Online-Karte ausblenden (Server kennt die Motorräder erst ab M4); onlineOeffnen/modusKarte('online') ohne Wirkung
 //   R.Online.verfuegbar      ersetzt: immer false
 //   Spiel.physikSchritt, R.dach.frame   umhüllt in schraeglage.js (Schräglage, Sturz-Purzelbaum)
@@ -43,6 +43,17 @@
   const zeigen = M.zeigen;
   M.zeigen = function () { autoWahlReparieren(this.spiel && this.spiel.einstellungen); return zeigen.apply(this, arguments); };
 
+  // Texte im Menü: Auto → Motorrad (nur Anzeige; ganze Textknoten, exakt)
+  const TEXTE = { 'Welches Auto fährst du?': 'Welches Motorrad fährst du?', 'Wählt eure Autos!': 'Wählt eure Motorräder!', 'Auto': 'Motorrad',
+    'Du fährst gegen die Computer-Autos': 'Du fährst gegen die Computer-Motorräder', 'Garage – Auto aufmotzen': 'Garage – Motorrad aufmotzen' };
+  function texteErsetzen(wurzel) {
+    const w = document.createTreeWalker(wurzel, NodeFilter.SHOW_TEXT, null);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      const t = n.nodeValue.trim();
+      if (TEXTE[t]) n.nodeValue = n.nodeValue.replace(t, TEXTE[t]);
+    }
+  }
+
   const zeichnen = M.zeichnen;
   M.zeichnen = function () {
     autoWahlReparieren(this.spiel && this.spiel.einstellungen);
@@ -51,6 +62,7 @@
       this.wurzel.querySelectorAll('[data-a^="wert:schaden:"], [data-a^="wert:geister:"], [data-a^="wert:krankenwagen:"], [data-a^="wert:abschleppwagen:"]').forEach((el) => {
         const zeile = el.closest('.zeile'); if (zeile) zeile.style.display = 'none';
       });
+      texteErsetzen(this.wurzel);
     } catch (err) { /* nur Optik */ }
     return r;
   };

@@ -9,6 +9,7 @@
 //  - nurRennautos() liefert immer false (Formel-Modus gibt es für Motorräder nicht).
 //  - Einträge tragen sonderbau:'motorrad' → carBuilder.bauen() ruft R.sonderbauten.motorrad (src/moto/motoModell.js).
 //  - Eigene Speicher-Schlüssel (Einstellungen, Garage, Pokale), damit Autorennen.html (gleiche Herkunft) nicht überschrieben wird.
+//  - R.config: Titel/Untertitel, Verfolger-/Weit-/Cockpit-Kamera näher am (kleineren) Motorrad.
 // Fahrwerte im selben Format wie src/cars/carCatalog.js: wendiger und leichter als Autos, Tempo wie ein Mittelklasse-Auto (240 km/h).
 // Reine Funktionen (motorradKatalog, gegnerMotorraeder) hängen nur von R.carCatalog-Daten ab und sind in Node testbar.
 // ============================================================
@@ -102,6 +103,12 @@ window.Rennspiel = window.Rennspiel || {};
   // eigene Speicherstände (Einstellungen/Garage/Pokale) – getrennt von Autorennen.html
   if (R.config) {
     if (R.config.titel) R.config.titel = 'Motorrad-Rennen';
+    R.config.untertitel = 'Cross-Rennen';
+    // Kamera näher heran: das Motorrad ist nur halb so lang wie ein Auto (Werte werden je Bild aus R.config.kamera gelesen)
+    const kam = R.config.kamera;
+    if (kam && kam.verfolger) Object.assign(kam.verfolger, { abstand: 5.6, abstandSchnell: 7.6, hoehe: 2.5, hoeheSchnell: 3.2, vorausblick: 4.0, vorausblickSchnell: 7.5 });
+    if (kam && kam.weit) Object.assign(kam.weit, { abstand: 11, abstandSchnell: 13, hoehe: 5.5, hoeheSchnell: 6.3 });
+    if (kam && kam.cockpit) Object.assign(kam.cockpit, { hoehe: 1.72, vor: 0.12 });
     [R.config.ui, R.config.garage, R.config.pokal].forEach((c) => {
       if (c && typeof c.speicherSchluessel === 'string' && !/\.motorrad$/.test(c.speicherSchluessel)) c.speicherSchluessel += '.motorrad';
     });
