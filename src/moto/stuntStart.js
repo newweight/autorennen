@@ -119,7 +119,7 @@
       for (let ri = 0; ri < D.ringe.length; ri++) {
         const r = D.ringe[ri], dx = v.x - r.x, dz = v.z - r.z, d = dx * r.tx + dz * r.tz, q = dx * r.nx + dz * r.nz, vor = z.ringPrev[ri];
         if (luft && vor) {
-          const hit = St.ringDurchflug(vor.d, d, vor.q, q, vor.y, v.y, r.y, cfg);
+          const hit = St.ringDurchflug(vor.d, d, vor.q, q, vor.y, v.y, r.y, r.cfgRing || cfg);
           if (hit && hit.bewertung !== 'vorbei' && (!ring || hit.bewertung === 'volltreffer')) ring = hit;
         }
         z.ringPrev[ri] = luft ? { d, q, y: v.y } : null;

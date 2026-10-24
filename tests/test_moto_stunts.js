@@ -124,7 +124,7 @@ function fliegen(T, taps, opt) {
       const r = S.fahrzeugSchritt(fz, v, strecke, { gas: 0, bremse: 0, lenkung: 0 }, dt, index); index = r.index;
       if (fz.aktiv) { flog = true; if (yStart === null) yStart = v.y; yMax = Math.max(yMax, v.y); }
       if (ring && fz.aktiv) { const dx = v.x - ring.x, dz = v.z - ring.z, d = dx * ring.tx + dz * ring.tz, q = dx * ring.nx + dz * ring.nz;
-        if (prev) { const h = St.ringDurchflug(prev.d, d, prev.q, q, prev.y, v.y, ring.y, cfg); if (h) res = h; if (prev.d < 0 && d >= 0) yRing = prev.y + (v.y - prev.y) * (-prev.d / (d - prev.d)); } prev = { d, q, y: v.y }; }
+        if (prev) { const h = St.ringDurchflug(prev.d, d, prev.q, q, prev.y, v.y, ring.y, ring.cfgRing || cfg); if (h) res = h; if (prev.d < 0 && d >= 0) yRing = prev.y + (v.y - prev.y) * (-prev.d / (d - prev.d)); } prev = { d, q, y: v.y }; }
       if (reihe) { const dx = v.x - reihe.x, dz = v.z - reihe.z, a = dx * reihe.tx + dz * reihe.tz, q = dx * reihe.nx + dz * reihe.nz;
         if (a >= reihe.a0 && a <= reihe.a1 && Math.abs(q) <= reihe.halb) { drin = true; if (fz.aktiv) minAb = Math.min(minAb, v.y - strecke.hoeheAn(v.x, v.z) - reihe.hoehe); } }
       if (r.ereignis === 'landung' || r.ereignis === 'landungSchraeg') break;
@@ -152,14 +152,14 @@ function fliegen(T, taps, opt) {
           if (!e.moto || !e.moto.ring) return;
           const ring = D.ringe.find((r) => r.nr === i), r = sim(st, i, cfg.ring.auslegung, 0); n++;
           const dy = r.yRing - (ring.y - cfg.ring.fahrerHoehe); maxDy = Math.max(maxDy, Math.abs(dy));
-          const boden = st.hoeheAn(ring.x, ring.z); minUnter = Math.min(minUnter, ring.y - cfg.ring.radius - boden); maxUeber = Math.max(maxUeber, ring.y - boden); minMitte = Math.min(minMitte, ring.y - boden);
+          const boden = st.hoeheAn(ring.x, ring.z); minUnter = Math.min(minUnter, ring.y - ring.radius - boden); maxUeber = Math.max(maxUeber, ring.y - boden); minMitte = Math.min(minMitte, ring.y - boden);
           if (welt === 'stunt') zeilen.push(`${id}: Ring-Mitte ${(ring.y - boden).toFixed(2)} m über Boden, Bahn ${(r.yRing + cfg.ring.fahrerHoehe - boden).toFixed(2)} m, Scheitel ${(r.yMax + cfg.ring.fahrerHoehe - boden).toFixed(2)} m`);
         });
       });
     });
     pruefe('Feuerring-Mitte liegt auf der berechneten Flugbahn (alle Strecken/Welten, Auslegungstempo ' + cfg.ring.auslegung + ' m/s): Abweichung ≤ 0,15 m (max. ' + maxDy.toFixed(3) + ' m)', n >= 20 && maxDy <= 0.15, n + ' Ringe');
     zeilen.forEach((z) => console.log('      ' + z));
-    pruefe('Feuerring schwebt: Unterkante nie im Boden (≥ 0,25 m darüber), Ring-Mitte 3–5,5 m über dem Boden (nicht auf Straßenhöhe)', minUnter >= 0.25 && minMitte >= 3 && maxUeber <= 5.5, 'tiefste Unterkante ' + minUnter.toFixed(2) + ' m, Mitte ' + minMitte.toFixed(2) + ' … ' + maxUeber.toFixed(2) + ' m');
+    pruefe('Feuerring schwebt: Unterkante überall ≥ 1,0 m über dem Boden (Alpen vorher 0,31 m), Ring-Mitte 3–5,5 m über dem Boden (nicht auf Straßenhöhe)', minUnter >= 1.0 && minMitte >= 3 && maxUeber <= 5.5, 'tiefste Unterkante ' + minUnter.toFixed(2) + ' m, Mitte ' + minMitte.toFixed(2) + ' … ' + maxUeber.toFixed(2) + ' m');
   }
   // seitlich versetzt: ±1 m noch Treffer/Volltreffer, ±4 m vorbei (Ring ist 6,4 m breit)
   const sw = mk('wiese'), iW = sw.schanzen.findIndex((e) => e.moto && e.moto.ring);

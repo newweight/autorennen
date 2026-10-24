@@ -21,7 +21,7 @@ window.Rennspiel = window.Rennspiel || {};
   R.Moto = R.Moto || {};
 
   // ---------- Stuntplan je Strecke (Bogenlänge s in m, Normalmaß; XL skaliert die Lage mit) ----------
-  // schanzen: { s, winkel, laenge, moto?: { ring: true } | { reihe: { art: 'bus', n } }, bestand?: true (Schanze aus dem Autokatalog übernommen) }
+  // schanzen: { s, winkel, laenge, moto?: { ring: true | { radius, innen } } | { reihe: { art: 'bus', n } }, bestand?: true (Schanze aus dem Autokatalog übernommen) }
   //   kleine Schanze 8°/10 m, Standard-Schanze 12°/10 m, Bus-Schanze 12°/16 m (Kante 3,4 m hoch, damit die 2,5 m hohen Busse sicher unterflogen werden)
   // zonen: { s0, s1, art }
   const S8 = { winkel: 8, laenge: 10 }, S12 = { winkel: 12, laenge: 10 }, SB = { winkel: 12, laenge: 16 };
@@ -30,7 +30,7 @@ window.Rennspiel = window.Rennspiel || {};
       schanzen: [Object.assign({ s: 75, bestand: true }, S8), Object.assign({ s: 640, moto: { ring: true } }, S12), Object.assign({ s: 2760, moto: { reihe: { art: 'bus', n: 4 } } }, SB)],
       zonen: [{ s0: 110, s1: 170, art: 'stoppie' }, { s0: 1655, s1: 1735, art: 'wheelie' }] },
     wald: { laenge: 2477,
-      schanzen: [Object.assign({ s: 65, bestand: true, moto: { ring: true } }, S12), Object.assign({ s: 2082, bestand: true, moto: { reihe: { art: 'bus', n: 3 } } }, SB)],
+      schanzen: [Object.assign({ s: 65, bestand: true, moto: { ring: { radius: 2.8, innen: 1.4 } } }, S12), Object.assign({ s: 2082, bestand: true, moto: { reihe: { art: 'bus', n: 3 } } }, SB)],
       zonen: [{ s0: 2255, s1: 2305, art: 'wheelie' }, { s0: 2412, s1: 2465, art: 'stoppie' }] },
     wueste: { laenge: 3331,
       schanzen: [Object.assign({ s: 2030, moto: { ring: true } }, S12), Object.assign({ s: 2850, moto: { reihe: { art: 'bus', n: 5 } } }, SB), Object.assign({ s: 3250 }, S8)],
@@ -42,7 +42,7 @@ window.Rennspiel = window.Rennspiel || {};
       schanzen: [Object.assign({ s: 150, moto: { ring: true } }, S12), Object.assign({ s: 1410, moto: { reihe: { art: 'bus', n: 4 } } }, SB), Object.assign({ s: 2715 }, S8)],
       zonen: [{ s0: 25, s1: 95, art: 'wheelie' }] },
     alpen: { laenge: 2921,
-      schanzen: [Object.assign({ s: 65, bestand: true, moto: { ring: true } }, S8), Object.assign({ s: 280 }, S12), Object.assign({ s: 2400, moto: { reihe: { art: 'bus', n: 4 } } }, SB)],
+      schanzen: [Object.assign({ s: 65, bestand: true, moto: { ring: { radius: 2.3, innen: 1.1 } } }, S8), Object.assign({ s: 280 }, S12), Object.assign({ s: 2400, moto: { reihe: { art: 'bus', n: 4 } } }, SB)],
       zonen: [{ s0: 795, s1: 865, art: 'wheelie' }, { s0: 1005, s1: 1075, art: 'stoppie' }] },
     formel1: { laenge: 4408,
       schanzen: [Object.assign({ s: 250 }, S8), Object.assign({ s: 850, moto: { ring: true } }, S12), Object.assign({ s: 1900, moto: { reihe: { art: 'bus', n: 5 } } }, SB), Object.assign({ s: 3300 }, S8)],
@@ -197,8 +197,9 @@ window.Rennspiel = window.Rennspiel || {};
       const sK = S.s + S.laenge, pK = sp.punktBei(sK), yK = strecke.hoeheAn(pK.x, pK.z) + S.hoehe;
       if (e.moto.ring) {
         const d = cfg.ring.abstand, pr = sp.punktBei(sK + d);
+        const ro = typeof e.moto.ring === 'object' ? e.moto.ring : {}, rad = ro.radius || cfg.ring.radius, inn = ro.innen || cfg.ring.innen;      // Alpen: kleinerer Ring, damit die Unterkante nicht im ansteigenden Hang steckt
         ringe.push({ nr: i, x: pr.x, z: pr.z, y: R.Moto.stunts.ringHoehe(yK, S.winkel, d, cfg.ring.auslegung, cfg, vyMax) + cfg.ring.fahrerHoehe,
-          tx: pr.tx, tz: pr.tz, nx: pr.nx, nz: pr.nz, radius: cfg.ring.radius, innen: cfg.ring.innen, boden: strecke.hoeheAn(pr.x, pr.z), sK, yKante: yK });
+          tx: pr.tx, tz: pr.tz, nx: pr.nx, nz: pr.nz, radius: rad, innen: inn, cfgRing: Object.assign({}, cfg, { ring: Object.assign({}, cfg.ring, { radius: rad, innen: inn }) }), boden: strecke.hoeheAn(pr.x, pr.z), sK, yKante: yK });
       }
       if (e.moto.reihe) {
         const breite = (strecke.breiteBei ? strecke.breiteBei(sK) : strecke.breite) - 0.6;       // Busse 0,3 m schmaler als der Asphalt je Seite: liegen sicher auf der Fahrbahn, auch wenn sie dahinter leicht in eine Kurve geht

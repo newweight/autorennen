@@ -263,7 +263,7 @@ try:
         zs = ev('() => Rennspiel.Moto.cockpit.zustandSpiegel()')
         pruefe('Zweispieler: Spiegelbild 115 px breit (0,8 × halbe Solo-Auflösung; vorher 72 px, im 115-px-Fenster zu grob)', zs['groesse'][0][0][0] == 115 and zs['groesse'][1][0][0] == 115, zs['groesse'])
         zr = ev("""() => { const s = Rennspiel.spiel; return [0, 1].map((i) => { const h = s.huds[i].el.getBoundingClientRect(); const sp = [...s.huds[i].el.parentElement.querySelectorAll('.cp-moto-spiegel')].map((e) => e.getBoundingClientRect()).filter((r) => r.left >= h.left - 1 && r.right <= h.right + 1 && r.width > 0); return sp.map((r) => [Math.round(r.width), Math.round(r.height)]); }); }""")
-        pruefe('Zweispieler: Spiegel-Fenster je Seite mindestens 130 × 70 px (solo-Maß war 113 × 71 bei halber Breite)', all(len(x) == 2 and all(w >= 130 and h >= 70 for (w, h) in x) for x in zr), zr)
+        pruefe('Zweispieler: Spiegel-Fenster je Seite mindestens 135 × 78 px (solo-Maß war 113 × 71 bei halber Breite)', all(len(x) == 2 and all(w >= 135 and h >= 78 for (w, h) in x) for x in zr), zr)
         # Bild zu zweit: beide fahren (Autopilot), warten bis eine Kurve
         ev('() => { Rennspiel.spiel.pausiert = false; }')
         try:
