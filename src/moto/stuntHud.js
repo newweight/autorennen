@@ -28,7 +28,8 @@ window.Rennspiel = window.Rennspiel || {};
 .moto-stunt .ms-balken b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ff8a1a, #ffd23a); }
 .moto-stunt .ms-live { display: none; font-size: 1.05em; color: #7fe3ff; line-height: 1.2; }
 .moto-stunt .ms-live.an { display: block; }
-.hud.links .hud-meldung, .hud.rechts .hud-meldung { font-size: 1.45em !important; left: 66% !important; }
+.hud.voll .hud-meldung, .hud.links .hud-meldung, .hud.rechts .hud-meldung { top: 24% !important; font-size: 1.3em !important; }
+.hud .hud-banner { top: 37% !important; }
 .hud.links .hud-countdown, .hud.rechts .hud-countdown { top: 27% !important; }
 .moto-touch { right: var(--rand); bottom: calc(var(--rand) * 2 + var(--tb) * 1.15 + 6px); width: calc(var(--tb) * .95); height: calc(var(--tb) * .95); font-size: calc(var(--tb) * .5);
   background: rgba(255,138,26,.38); border-color: rgba(255,230,190,.9); }
