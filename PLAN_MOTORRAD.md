@@ -32,3 +32,6 @@ Zweig `motorrad` im Repo newweight/autorennen (Basis v34). Regel: NUR neue Datei
 - [ ] Abschleppwagen-Räder (nur falls per Laufzeit einfach)
 - [ ] Zweispieler: Gang/Spiegel lesbar
 - [ ] Alpen-Feuerring höher (Unterkante ≥ 1 m)
+
+# Termin
+- M3 + M4 ab Mittwoch 28.10.2026 (Sebastian, 24.10.)

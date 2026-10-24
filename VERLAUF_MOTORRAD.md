@@ -56,3 +56,4 @@
   Tests: test_moto_unfall 39, test_moto_cockpit 21, test_moto_stunts 62, test_moto OK; Browser: unfall 55/55, cockpit 33/33, ring 5/5, stunts 58/58 (Screenshot-Timeouts und ein HUD-Banner-Überlapp liefen nur zeitweise, Wiederholung grün).
 - 24.10. M2c-2 geprüft (Hauptmodell): nur neue Dateien, Node grün. Bildcheck Sonnet.
 - 24.10. Bildcheck M2c-2: Abschlepp/Krankenwagen ok; Restpunkte (optisch): Qualm wirkt als dunkler Streifen, Mechaniker in Werkstatt-Bild hinter Fahrer, Spiegel im Split zeigen Gegner klein/leer (niemand dahinter), Alpen-Ring-Flammen reichen optisch tief. Freigegeben als stand-m2c2.
+- 24.10. Spieleportal mit Motorrad (M2c-2) vom M2 aus auf dem Mini installiert (Mini per Tailscale-IP 100.104.29.100, da MagicDNS am M2 nicht auflöst). M3/M4 ab Mittwoch.
