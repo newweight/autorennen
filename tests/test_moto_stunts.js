@@ -118,18 +118,18 @@ function fliegen(T, taps, opt) {
     const sch = S.liste(strecke)[i], p = strecke.spline.punktBei(sch.s - 15);
     const v = new R.Vehicle({}); v.setzen(p.x + p.nx * (q0 || 0), p.z + p.nz * (q0 || 0), R.headingAus(p.tx, p.tz)); v.vLaengs = v0;
     const fz = S.zustand(); let index = -1; const D = W.stuntDaten(strecke), ring = D.ringe.find((r) => r.nr === i), reihe = D.reihen.find((r) => r.nr === i);
-    let prev = null, res = null, minAb = Infinity, flog = false, drin = false;
+    let prev = null, res = null, minAb = Infinity, flog = false, drin = false, yRing = null, yMax = -Infinity, yStart = null;
     for (let s = 0; s < 1200; s++) {
       if (!fz.aktiv && fz.fluege === 0) v.vLaengs = v0;
       const r = S.fahrzeugSchritt(fz, v, strecke, { gas: 0, bremse: 0, lenkung: 0 }, dt, index); index = r.index;
-      if (fz.aktiv) flog = true;
+      if (fz.aktiv) { flog = true; if (yStart === null) yStart = v.y; yMax = Math.max(yMax, v.y); }
       if (ring && fz.aktiv) { const dx = v.x - ring.x, dz = v.z - ring.z, d = dx * ring.tx + dz * ring.tz, q = dx * ring.nx + dz * ring.nz;
-        if (prev) { const h = St.ringDurchflug(prev.d, d, prev.q, q, prev.y, v.y, ring.y, cfg); if (h) res = h; } prev = { d, q, y: v.y }; }
+        if (prev) { const h = St.ringDurchflug(prev.d, d, prev.q, q, prev.y, v.y, ring.y, cfg); if (h) res = h; if (prev.d < 0 && d >= 0) yRing = prev.y + (v.y - prev.y) * (-prev.d / (d - prev.d)); } prev = { d, q, y: v.y }; }
       if (reihe) { const dx = v.x - reihe.x, dz = v.z - reihe.z, a = dx * reihe.tx + dz * reihe.tz, q = dx * reihe.nx + dz * reihe.nz;
         if (a >= reihe.a0 && a <= reihe.a1 && Math.abs(q) <= reihe.halb) { drin = true; if (fz.aktiv) minAb = Math.min(minAb, v.y - strecke.hoeheAn(v.x, v.z) - reihe.hoehe); } }
       if (r.ereignis === 'landung' || r.ereignis === 'landungSchraeg') break;
     }
-    return { res, minAb, flog, drin, zuLangsam: fz.zuLangsam || 0, weite: fz.letzteWeite, flugzeit: fz.letzteFlugzeit };
+    return { res, minAb, flog, drin, yRing, yMax, yStart, zuLangsam: fz.zuLangsam || 0, weite: fz.letzteWeite, flugzeit: fz.letzteFlugzeit };
   };
   const mk = (id, welt, variante) => new R.Strecke(R.trackCatalog.find((t) => t.id === id), { welt: welt || 'stunt', variante: variante || '' });
   let ringe = 0, voll = 0, treffer = 0, vorbei = 0, alle = [];
@@ -142,6 +142,25 @@ function fliegen(T, taps, opt) {
     });
   });
   pruefe('Ring auf der echten Flugbahn (alle Strecken, 22–45 m/s, mittig): nie vorbei, überwiegend Volltreffer', ringe >= 30 && vorbei === 0 && voll >= ringe * 0.8, `${ringe} Flüge: ${voll} Volltreffer, ${treffer} Treffer, ${vorbei} vorbei ${alle.slice(0, 3).join(' ')}`);
+  // Höhe des Rings gegen die berechnete Flugbahn: Ring-Mitte (ring.y − Fahrerhöhe = Höhe der Fahrzeug-Referenz) liegt bei Auslegungstempo auf der Bahn
+  {
+    let n = 0, maxDy = 0, minUnter = Infinity, maxUeber = 0, minMitte = Infinity; const zeilen = [];
+    ['wiese', 'wald', 'wueste', 'fantasie', 'dino', 'alpen', 'formel1', 'mega'].forEach((id) => {
+      ['klassisch', 'stunt', 'verrueckt'].forEach((welt) => {
+        const st = mk(id, welt), D = W.stuntDaten(st);
+        st.schanzen.forEach((e, i) => {
+          if (!e.moto || !e.moto.ring) return;
+          const ring = D.ringe.find((r) => r.nr === i), r = sim(st, i, cfg.ring.auslegung, 0); n++;
+          const dy = r.yRing - (ring.y - cfg.ring.fahrerHoehe); maxDy = Math.max(maxDy, Math.abs(dy));
+          const boden = st.hoeheAn(ring.x, ring.z); minUnter = Math.min(minUnter, ring.y - cfg.ring.radius - boden); maxUeber = Math.max(maxUeber, ring.y - boden); minMitte = Math.min(minMitte, ring.y - boden);
+          if (welt === 'stunt') zeilen.push(`${id}: Ring-Mitte ${(ring.y - boden).toFixed(2)} m über Boden, Bahn ${(r.yRing + cfg.ring.fahrerHoehe - boden).toFixed(2)} m, Scheitel ${(r.yMax + cfg.ring.fahrerHoehe - boden).toFixed(2)} m`);
+        });
+      });
+    });
+    pruefe('Feuerring-Mitte liegt auf der berechneten Flugbahn (alle Strecken/Welten, Auslegungstempo ' + cfg.ring.auslegung + ' m/s): Abweichung ≤ 0,15 m (max. ' + maxDy.toFixed(3) + ' m)', n >= 20 && maxDy <= 0.15, n + ' Ringe');
+    zeilen.forEach((z) => console.log('      ' + z));
+    pruefe('Feuerring schwebt: Unterkante nie im Boden (≥ 0,25 m darüber), Ring-Mitte 3–5,5 m über dem Boden (nicht auf Straßenhöhe)', minUnter >= 0.25 && minMitte >= 3 && maxUeber <= 5.5, 'tiefste Unterkante ' + minUnter.toFixed(2) + ' m, Mitte ' + minMitte.toFixed(2) + ' … ' + maxUeber.toFixed(2) + ' m');
+  }
   // seitlich versetzt: ±1 m noch Treffer/Volltreffer, ±4 m vorbei (Ring ist 6,4 m breit)
   const sw = mk('wiese'), iW = sw.schanzen.findIndex((e) => e.moto && e.moto.ring);
   const links = sim(sw, iW, 30, 1.0), weit = sim(sw, iW, 30, 3.9);
@@ -174,6 +193,29 @@ function fliegen(T, taps, opt) {
   pruefe('Bus-Reihe sicher (alle Strecken/Welten/Reihen, Absprungtempo 20,05 … 60 m/s): Abstand zur Oberkante ≥ 0,3 m (Mindestabstand ' + minGesamt.toFixed(2) + ' m)', nReihen >= 40 && schlecht.length === 0, `${nReihen} Flüge ${schlecht.slice(0, 3).join(' | ')}`);
   pruefe('Zu langsam (< 20 m/s an der Rampe) = Notstopp vor der Rampe: kein Auffahren, nie in der Reihe, kein Steckenbleiben im Bus', langsamN >= 20 && langsamDrin.length === 0, `${langsamN} Versuche ${langsamDrin.slice(0, 3).join(' | ')}`);
   pruefe('Bus-Reihe: Landung immer hinter der Reihe (≥ 5 m Reserve)', landeKurz.length === 0, landeKurz.slice(0, 3).join(' | '));
+  // Lage der echten Reihen: quer zur Fahrtrichtung, mittig auf der Fahrbahn, hinter der Kante, im Landebereich vor dem Aufsetzpunkt
+  {
+    let n = 0, schlecht2 = []; let minAbsKante = Infinity, minLand = Infinity, minAbFlug = Infinity;
+    ['wiese', 'wald', 'wueste', 'fantasie', 'dino', 'alpen', 'formel1', 'mega'].forEach((id) => {
+      ['klassisch', 'stunt', 'verrueckt'].forEach((welt) => {
+        const st = mk(id, welt), D = W.stuntDaten(st);
+        D.reihen.forEach((L) => {
+          n++;
+          const breite = st.breiteBei ? st.breiteBei(L.sK) : st.breite;
+          if (!(L.halb * 2 <= breite - 0.5)) schlecht2.push(`${id}/${welt} Länge ${(L.halb * 2).toFixed(2)} > Fahrbahn ${breite}`);
+          if (!(L.a0 >= 0.4)) schlecht2.push(`${id}/${welt} beginnt ${L.a0} vor/auf der Kante`);
+          minAbsKante = Math.min(minAbsKante, L.a0);
+          const r = sim(st, L.nr, cfg.reihe.minTempo || 20.05, 0); minAbFlug = Math.min(minAbFlug, r.minAb);
+          minLand = Math.min(minLand, r.weite - L.a1);
+          if (!(r.weite > L.a1 + 5)) schlecht2.push(`${id}/${welt} Aufsetzpunkt ${r.weite.toFixed(1)} nicht ≥5 m hinter der Reihe (${L.a1.toFixed(1)})`);
+          // Reihe liegt auf der Fahrlinie: Mittellinie der Fahrbahn schneidet die Reihe (q = 0 liegt in [-halb, halb]), Fahrtrichtung t ist Reihen-Tiefenrichtung
+          const sp = st.spline.punktBei(L.sK), dotT = sp.tx * L.tx + sp.tz * L.tz; if (!(dotT > 0.999)) schlecht2.push(`${id}/${welt} Tiefenrichtung weicht von der Fahrtrichtung ab (${dotT.toFixed(4)})`);
+          const dotN = sp.nx * L.nx + sp.nz * L.nz; if (!(dotN > 0.999)) schlecht2.push(`${id}/${welt} Querrichtung gedreht (Vorzeichen ${dotN.toFixed(3)})`);
+        });
+      });
+    });
+    pruefe('Bus-Reihe quer zur Fahrtrichtung (Querachse = Straßen-Normale, Vorzeichen +), mittig auf der Fahrbahn, ≥ 0,4 m hinter der Kante, Länge ≤ Fahrbahn − 0,5, Aufsetzpunkt ≥ 5 m dahinter', n >= 24 && schlecht2.length === 0, `${n} Reihen, früheste Reihe ${minAbsKante.toFixed(2)} m hinter Kante, kleinste Landereserve ${minLand.toFixed(1)} m, kleinster Abstand zur Bus-Oberkante ${minAbFlug.toFixed(2)} m ${schlecht2.slice(0, 3).join(' | ')}`);
+  }
   const L5 = St.reiheLage({ art: 'bus', n: 5 }, 14.5, cfg), L3 = St.reiheLage({ art: 'bus', n: 3 }, 14.5, cfg);
   pruefe('Reihen-Lage: 3–5 Fahrzeuge, Tiefe 2,7 m je Fahrzeug, quer (halbe Breite ≤ 7,25 m), Höhe 2,5 m', nah(L5.a1 - L5.a0, 13.5) && nah(L3.a1 - L3.a0, 8.1) && L5.halb <= 7.25 && L5.hoehe === 2.5);
   const lz = W.PLAN; let nr = []; Object.keys(lz).forEach((id) => lz[id].schanzen.forEach((e) => { if (e.moto && e.moto.reihe) nr.push(e.moto.reihe.n); }));

@@ -44,7 +44,7 @@ window.Rennspiel = window.Rennspiel || {};
     schanzeMin: 20,                                      // m/s: Mindesttempo auf eine Schanze im Motorradmodus (config.anlauf.schanzeMin; Standard Autos 14)
     ring: {
       abstand: 16, auslegung: 32,                        // Ringmitte so weit hinter der Kante; Bahn für dieses Tempo (m/s) berechnet
-      radius: 3.6, innen: 1.5, koerper: 0.4,             // Außenradius, Volltreffer-Kreis, Fahrer-Spielraum (Treffer, wenn Abstand ≤ radius − koerper)
+      radius: 3.0, innen: 1.5, koerper: 0.4,             // Außenradius, Volltreffer-Kreis, Fahrer-Spielraum (Treffer, wenn Abstand ≤ radius − koerper)
       fahrerHoehe: 0.9,                                  // Fahrermitte über dem Bodenpunkt des Motorrads
     },
     reihe: {
