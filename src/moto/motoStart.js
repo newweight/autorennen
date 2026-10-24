@@ -45,7 +45,8 @@
 
   // Texte im Menü: Auto → Motorrad (nur Anzeige; ganze Textknoten, exakt)
   const TEXTE = { 'Welches Auto fährst du?': 'Welches Motorrad fährst du?', 'Wählt eure Autos!': 'Wählt eure Motorräder!', 'Auto': 'Motorrad',
-    'Du fährst gegen die Computer-Autos': 'Du fährst gegen die Computer-Motorräder', 'Garage – Auto aufmotzen': 'Garage – Motorrad aufmotzen' };
+    'Du fährst gegen die Computer-Autos': 'Du fährst gegen die Computer-Motorräder', 'Garage – Auto aufmotzen': 'Garage – Motorrad aufmotzen',
+    '🔧 Garage – Auto aufmotzen': '🔧 Garage – Motorrad aufmotzen', '🔥 Motorrad-Rennen 🏎️': '🔥 Motorrad-Rennen 🏍️' };
   function texteErsetzen(wurzel) {
     const w = document.createTreeWalker(wurzel, NodeFilter.SHOW_TEXT, null);
     for (let n = w.nextNode(); n; n = w.nextNode()) {

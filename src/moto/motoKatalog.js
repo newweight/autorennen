@@ -23,8 +23,9 @@ window.Rennspiel = window.Rennspiel || {};
     vMax: 240 / 3.6, beschleunigung: 6.8, bremsen: 22, rueckwaertsMax: 4,
     wendigkeit: 2.5, grip: 0.9, masse: 190, laenge: 2.1, breite: 0.85,
   };
-  /** Echte Maße nur für die Optik/Vorschau (Physik nutzt fahrwerte.laenge/breite). */
-  const ABMESSUNGEN = { laenge: 2.15, breite: 0.85, hoehe: 1.6, radstand: 1.48, ueberhangVorn: 0.36, radRadius: 0.34, radBreite: 0.1, felgeZoll: 19 };
+  /** Maße nur für die Optik (Physik nutzt fahrwerte.laenge/breite). laenge = Rahmen für die Auto-Vorschau (Menü/Garage, liest abmessungen.laenge
+   *  für den Kameraabstand): die Maschine ist 2,15 m lang, aber mit Fahrer 1,8 m hoch – 3,4 m rückt die Kamera so weit zurück, dass der Helm im Bild bleibt. */
+  const ABMESSUNGEN = { laenge: 3.4, breite: 0.85, hoehe: 1.8, radstand: 1.48, ueberhangVorn: 0.36, radRadius: 0.34, radBreite: 0.1, felgeZoll: 19 };
 
   /**
    * Farbvarianten: bike = Lack der Maschine, fahrer = Kombi, helm = Helm, nr = Startnummer.
