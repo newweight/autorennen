@@ -3,15 +3,17 @@
 // Wunsch des Vaters: „Status für Motorrad defekt und dann Reparatur, und Verletzung Mensch und dann kurz Krankenstation;
 // bei manchen Unfällen Motorrad-Schaden, bei anderen Mensch.“ Kindgerecht: kein Blut, freundliche Texte.
 //
-//   R.config.motoUnfall        alle Zahlen an einer Stelle (Verteilung je Modus, Schadensstufen, Tempo-Wirkung, Haltezeiten, Szenen-Zeiten)
+//   R.config.motoUnfall        alle Zahlen an einer Stelle (Verteilung je Modus, Abzüge in Prozent, Untergrenze, Tempo-Wirkung, Pflegezeiten, Szenen-Zeiten)
+//   Zwei Zustände je Fahrer: Motorrad 0–100 % (zustand) und Fahrer-Gesundheit 0–100 % (gesundheit), nie unter 10 %, nie liegenbleiben.
 //   R.Moto.unfall              Funktionen:
 //     Verteilung   folge(modus, saat, nr, n)            deterministische Folge des n-ten Sturzes von Fahrer nr (ohne Zufallsfunktion; gleichmäßig
 //                                                       verteilt: Kronecker-Folge, Anfangswert aus Saat + Fahrer-Nr.) → { art: 'schreck'|'schaden'|'leicht'|'schwer', schwer }
-//     Zustand      zNeu(modus), sturz(u, saat, nr)       Folge anwenden (Motorrad-Zustand 100 → −25 % je Schaden, nie unter 25; Pflaster)
-//                  reparieren(u), heilen(u), abschlepp(u), krankenwagen(u)   Wirkung der Stationen / Szenen
-//                  faktoren(u)                           { vMax, beschleunigung } (Schaden: bis −30 % bei 25 %, Pflaster: −10 % Höchsttempo)
-//                  hudZustand(u)                         { prozent, farbe: 'gruen'|'gelb'|'rot', fahrer: 'ok'|'pflaster'|'verband', symbol }
-//     Szenen       szenePlan(art), szeneDauer(art), szenePhase(art, t)   Zeitplan Krankenwagen-/Abschleppwagen-Szene (Teil A am Unfallort, Teil B an der Station)
+//     Zustand      zNeu(modus), sturz(u, saat, nr)       Folge anwenden → { art, szene: 'krankenwagen'|'abschlepp'|null }
+//                  pflegeSchritt(u, was, ort, dt)        Pflege hochzählen: ort 'vorOrt' = 3 s je 10 %, 'station' = 0,5 s je 10 % (bis 100 %)
+//                  pflegeDauer(wert, ort)                Sekunden bis 100 %
+//                  faktoren(u)                           { vMax, beschleunigung } proportional zum Fehlbetrag beider Zustände
+//                  hudZustand(u)                         { prozent, farbe, gesundheit, fahrerFarbe, symbol }
+//     Szenen       szenePlan(pflege), szenePhase(pflege, t)   anfahrt → pflege (vor Ort) → abfahrt, plus Zeitlimit (Rückfall auf den Kontrollpunkt)
 //     Stationen    stationenBilden(strecke)              GENAU eine Werkstatt und GENAU eine Krankenstation je Strecke (Platzsuche der Autorennen-Werkstatt, world/garage.js)
 //                  stationBereich(w, n)                  liegt eine Streckenabfrage n auf der Fläche der Station?
 //                  fahrPose(strecke, s, q)               Welt-Pose { x, y, z, heading } bei Bogenlänge s und Querabstand q (Fahrzeug der Szene)
@@ -24,25 +26,30 @@ window.Rennspiel = window.Rennspiel || {};
   R.Moto = R.Moto || {};
   R.config = R.config || {};
 
-  /** Tuning-Tabelle der Unfälle. Hier ändern, nirgends sonst. */
+  /** Tuning-Tabelle der Unfälle. Hier ändern, nirgends sonst. Alle Prozent sind Punkte auf der 0–100-Anzeige. */
   R.config.motoUnfall = {
     standard: 'sanft',                                   // Menü-Schalter „Unfälle: aus / sanft / echt“
-    // Verteilung der Folgen je Sturz; schadenSchwer = Anteil der Motorrad-Schäden, die „schwer“ sind (Abschleppwagen bringt das Motorrad zur Werkstatt)
+    // Verteilung der Folgen je Sturz; schadenSchwer = Anteil der Motorrad-Schäden, die „schwer“ sind (Abschleppwagen kommt zum Motorrad)
     modi: {
       aus: null,                                         // nie eine Folge (wie M2)
       sanft: { schreck: 0.50, schaden: 0.30, leicht: 0.15, schwer: 0.05, schadenSchwer: 0.10 },
       echt: { schreck: 0.20, schaden: 0.40, leicht: 0.28, schwer: 0.12, schadenSchwer: 1 / 3 },
     },
-    schaden: { schritt: 25, minimum: 25, tempoMinus: 0.30, qualmUnter: 75, gelbUnter: 75, rotUnter: 50 },   // −25 % je Schaden, nie unter 25; bei 25 % −30 % Tempo/Beschleunigung; Qualm unter 75 %
-    pflaster: { tempo: 0.9 },                            // leicht verletzt: −10 % Höchsttempo
-    station: { halt: 2.0, bremse: 7.0 },                 // Durchfahren = 2 s Halt, dann repariert bzw. geheilt
+    // Zwei Zustände: Motorrad 0–100 % und Fahrer-Gesundheit 0–100 %; nie unter minimum, nie liegenbleiben
+    minimum: 10,
+    abzug: { schaden: 20, schadenSchwer: 50, leicht: 15, schwer: 50 },       // Prozentpunkte je Folge (leicht wenig, schwer viel)
+    // Tempo-Wirkung proportional zum Fehlbetrag: bei minimum % fehlen tempoMinus (Höchsttempo und Beschleunigung); der Fahrer wirkt nur aufs Höchsttempo
+    tempo: { motorrad: 0.35, fahrer: 0.15 },
+    farben: { gelbUnter: 75, rotUnter: 50 },             // HUD-Farbe der Prozentzahl (grün ab 75, gelb ab 50, sonst rot)
+    qualmUnter: 75,                                      // Qualm am Motorrad ab Zustand unter …
+    // Pflege: Sekunden je 10 % – vor Ort (Krankenwagen/Abschleppwagen kommen zum Unfallort) deutlich langsamer als an der Station
+    vorOrtSekundenJe10: 3,
+    stationSekundenJe10: 0.5,
     ki: { drossel: 2.0, faktor: 0.45 },                  // KI hält nicht an: beim Vorbeifahren an der Station 2 s lang nur 45 % Höchsttempo (Zeitverlust statt Halt)
     szene: {
-      max: 12,                                           // Zeitlimit je Szene (s): danach Rückfall auf „zurück an den Kontrollpunkt“ (v32 N1d)
+      anfahrt: 1.6, abfahrt: 0.9,                        // Fahrzeit des Helfer-Fahrzeugs heran / weg (s); dazwischen läuft die Pflege
+      reserve: 10,                                       // Zeitlimit = Plan + Pflege + reserve (s) – danach Rückfall auf „zurück an den Kontrollpunkt“ (v32 N1d)
       wartenMax: 4,                                      // so lange wartet der Start der Szene auf Stillstand/Boden
-      // [Name, Dauer] – Teil A am Unfallort, Teil B an der Station (zusammen etwa 5–6 s)
-      krank: { A: [['anfahrt', 1.1], ['hin', 0.6], ['zurueck', 0.7], ['abfahrt', 0.7]], B: [['ankunft', 0.5], ['hin', 0.7], ['zurueck', 0.5], ['abfahrt', 0.5]] },
-      abschlepp: { A: [['anfahrt', 1.6], ['beladen', 1.1], ['abfahrt', 0.8]], B: [['ankunft', 0.6], ['abladen', 1.0], ['abfahrt', 0.7]] },
       anfahrtWeg: 38, abfahrtWeg: 34, seitlich: 3.4,     // Fahrzeug der Szene: Anfahrt-/Abfahrtweg (m), Abstand zur Fahrspur des Motorrads (m)
     },
   };
@@ -76,8 +83,8 @@ window.Rennspiel = window.Rennspiel || {};
   function zNeu(modus) {
     return {
       modus: CFG().modi[modus] !== undefined ? modus : CFG().standard,
-      sturzNr: 0, zustand: 100, fahrer: 'ok',                    // fahrer: 'ok' | 'pflaster' | 'verband'
-      halt: null,                                                 // { art: 'werkstatt'|'kranken', t }
+      sturzNr: 0, zustand: 100, gesundheit: 100,                   // Motorrad / Fahrer in Prozent
+      halt: null,                                                 // { art: 'werkstatt'|'kranken', wert (Start), t }
       drossel: 0,                                                 // KI: Restzeit der Tempo-Drossel an einer Station
       szene: null,
       stat: { stuerze: 0, schreck: 0, schaden: 0, leicht: 0, schwer: 0, repariert: 0, geheilt: 0, abschlepp: 0, krankenwagen: 0 },
@@ -85,74 +92,73 @@ window.Rennspiel = window.Rennspiel || {};
   }
 
   /**
-   * Einen Sturz anwenden. Rückgabe { art, abschlepp?, zustandVorher? } – art 'keine' (Modus aus), 'schreck', 'schaden', 'leicht', 'schwer'.
-   * 'schaden': Zustand −25 % (höchstens bis 25 %); steht der Zustand schon auf 25 %, oder ist der Schaden „schwer“, kommt der Abschleppwagen (abschlepp: true).
-   * 'leicht': Pflaster (nur wenn der Fahrer noch keins/keinen Verband hat). 'schwer': der Krankenwagen holt den Fahrer (die Szene setzt am Ende den Verband).
+   * Einen Sturz anwenden. Rückgabe { art, szene? } – art 'keine' (Modus aus), 'schreck', 'schaden', 'leicht', 'schwer'.
+   * 'schaden': Motorrad −abzug.schaden (schwerer Schaden: −abzug.schadenSchwer), nie unter minimum. Schwerer Schaden oder Zustand am Minimum: szene 'abschlepp'
+   * (der Abschleppwagen repariert VOR ORT). 'leicht': Fahrer −abzug.leicht. 'schwer': Fahrer −abzug.schwer, szene 'krankenwagen' (Sanitäter versorgen VOR ORT).
    */
   function sturz(u, saat, nr, cfg) {
     const c = cfg || CFG();
     u.sturzNr++; u.stat.stuerze++;
     const e = folge(u.modus, saat, nr, u.sturzNr, c);
     if (!e) return { art: 'keine' };
-    const s = c.schaden;
     if (e.art === 'schreck') { u.stat.schreck++; return { art: 'schreck' }; }
     if (e.art === 'schaden') {
-      const vorher = u.zustand, tief = vorher <= s.minimum;
-      u.zustand = Math.max(s.minimum, vorher - s.schritt);
+      const vorher = u.zustand;
+      u.zustand = Math.max(c.minimum, vorher - (e.schwer ? c.abzug.schadenSchwer : c.abzug.schaden));
       u.stat.schaden++;
-      return { art: 'schaden', abschlepp: e.schwer || tief, zustandVorher: vorher };
+      const tief = u.zustand <= c.minimum;
+      return { art: 'schaden', schwer: e.schwer, szene: (e.schwer || tief) ? 'abschlepp' : null, zustandVorher: vorher };
     }
-    if (e.art === 'leicht') { if (u.fahrer === 'ok') u.fahrer = 'pflaster'; u.stat.leicht++; return { art: 'leicht' }; }
+    if (e.art === 'leicht') { u.gesundheit = Math.max(c.minimum, u.gesundheit - c.abzug.leicht); u.stat.leicht++; return { art: 'leicht' }; }
+    u.gesundheit = Math.max(c.minimum, u.gesundheit - c.abzug.schwer);
     u.stat.schwer++;
-    return { art: 'schwer' };
+    return { art: 'schwer', szene: 'krankenwagen' };
   }
-  /** Werkstatt (Durchfahren oder Abschleppwagen): Motorrad wieder 100 %. */
-  function reparieren(u) { if (u.zustand < 100) u.stat.repariert++; u.zustand = 100; }
-  /** Krankenstation (Durchfahren): Pflaster/Verband ab. */
-  function heilen(u) { if (u.fahrer !== 'ok') u.stat.geheilt++; u.fahrer = 'ok'; }
-  /** Der Abschleppwagen hat das Motorrad zur Werkstatt gebracht. */
-  function abschlepp(u) { u.stat.abschlepp++; reparieren(u); }
-  /** Der Krankenwagen hat den Fahrer zur Krankenstation gebracht: ab jetzt mit Verband. */
-  function krankenwagen(u) { u.stat.krankenwagen++; u.fahrer = 'verband'; }
+
+  // ---------- Pflege (Reparatur / Heilung) ----------
+  /** Sekunden je 10 % am Ort: 'vorOrt' (Szene) oder 'station'. */
+  const sekundenJe10 = (ort, cfg) => { const c = cfg || CFG(); return ort === 'vorOrt' ? c.vorOrtSekundenJe10 : c.stationSekundenJe10; };
+  /** Dauer (s), um von Prozent `wert` bis 100 % zu pflegen. */
+  function pflegeDauer(wert, ort, cfg) { return Math.max(0, (100 - wert) / 10) * sekundenJe10(ort, cfg); }
+  /** Pflegt `was` ('motorrad' | 'fahrer') um dt Sekunden hoch (zählt gleichmäßig). Rückgabe true, wenn 100 % erreicht sind. */
+  function pflegeSchritt(u, was, ort, dt, cfg) {
+    const k = was === 'motorrad' ? 'zustand' : 'gesundheit', rate = 10 / sekundenJe10(ort, cfg);
+    if (u[k] >= 100) return true;
+    u[k] = Math.min(100, u[k] + rate * dt);
+    if (u[k] >= 100 - 1e-9) { u[k] = 100; if (was === 'motorrad') u.stat.repariert++; else u.stat.geheilt++; return true; }
+    return false;
+  }
   /** Braucht der Fahrer die Werkstatt / die Krankenstation? */
   const brauchtWerkstatt = (u) => u.zustand < 100;
-  const brauchtKranken = (u) => u.fahrer !== 'ok';
+  const brauchtKranken = (u) => u.gesundheit < 100;
 
-  /** Tempo-Wirkung: Schaden bis −30 % Höchsttempo und Beschleunigung (linear von 100 % bis 25 %), Pflaster zusätzlich −10 % Höchsttempo. Verband: keine Strafe. */
+  /** Tempo-Wirkung proportional zum Fehlbetrag: Motorrad (Höchsttempo + Beschleunigung) und Fahrer (nur Höchsttempo). */
   function faktoren(u, cfg) {
-    const c = cfg || CFG(), s = c.schaden;
-    const anteil = Math.max(0, Math.min(1, (100 - u.zustand) / Math.max(1, 100 - s.minimum)));
-    const f = 1 - s.tempoMinus * anteil;
-    return { vMax: f * (u.fahrer === 'pflaster' ? c.pflaster.tempo : 1), beschleunigung: f };
+    const c = cfg || CFG(), spanne = Math.max(1, 100 - c.minimum);
+    const m = Math.max(0, Math.min(1, (100 - u.zustand) / spanne)), f = Math.max(0, Math.min(1, (100 - u.gesundheit) / spanne));
+    return { vMax: (1 - c.tempo.motorrad * m) * (1 - c.tempo.fahrer * f), beschleunigung: 1 - c.tempo.motorrad * m };
   }
 
-  /** Anzeige im Spieler-Chip: „🏍️ 75 %“ (grün ab 75, gelb ab 50, sonst rot) und Fahrer 😀 / 🩹 / 🩼. */
+  /** Anzeige im Spieler-Chip: „🏍️ 75 %“ und „😀 100 %“, je grün ab 75, gelb ab 50, sonst rot; Fahrer-Symbol 😀 / 🩹 / 🩼. */
   function hudZustand(u, cfg) {
-    const s = (cfg || CFG()).schaden, p = Math.round(u.zustand);
-    return { prozent: p, farbe: p >= s.gelbUnter ? 'gruen' : p >= s.rotUnter ? 'gelb' : 'rot', fahrer: u.fahrer, symbol: u.fahrer === 'pflaster' ? '🩹' : u.fahrer === 'verband' ? '🩼' : '😀' };
+    const c = cfg || CFG(), farbe = (p) => p >= c.farben.gelbUnter ? 'gruen' : p >= c.farben.rotUnter ? 'gelb' : 'rot';
+    const p = Math.round(u.zustand), g = Math.round(u.gesundheit);
+    return { prozent: p, farbe: farbe(p), gesundheit: g, fahrerFarbe: farbe(g), symbol: g >= 100 ? '😀' : g >= c.farben.gelbUnter ? '🩹' : '🩼' };
   }
 
-  // ---------- Szenen-Zeitplan ----------
-  function szenePlan(art, cfg) {
-    const k = (cfg || CFG()).szene[art];
-    if (!k) return null;
+  // ---------- Szenen-Zeitplan (Helfer-Fahrzeug kommt zum Unfallort, versorgt vor Ort, fährt weg) ----------
+  /** Plan: anfahrt → pflege (Dauer nach Fehlbetrag) → abfahrt; limit = Zeitlimit, danach Rückfall auf den Kontrollpunkt. */
+  function szenePlan(pflege, cfg) {
+    const k = (cfg || CFG()).szene, ph = [];
     let t = 0;
-    const teil = (liste, seg) => liste.map(([name, dauer]) => { const p = { seg, name, t0: t, dauer, t1: t + dauer }; t += dauer; return p; });
-    const A = teil(k.A, 'A'), B = teil(k.B, 'B');
-    return { phasen: A.concat(B), dauerA: A[A.length - 1].t1, dauer: t };
+    for (const [name, dauer] of [['anfahrt', k.anfahrt], ['pflege', pflege], ['abfahrt', k.abfahrt]]) { ph.push({ name, t0: t, dauer, t1: t + dauer }); t += dauer; }
+    return { phasen: ph, dauer: t, limit: t + k.reserve };
   }
-  /** Gesamtdauer der Szene (A + B). */
-  function szeneDauer(art, cfg) { const p = szenePlan(art, cfg); return p ? p.dauer : 0; }
-  /** Phase zur Szenenzeit t: { seg: 'A'|'B', name, u (0..1 in der Phase), t (Szenenzeit), tSeg, ende: boolean }. */
-  function szenePhase(art, t, cfg) {
-    const p = szenePlan(art, cfg);
-    if (!p) return null;
-    const ph = p.phasen;
+  /** Phase zur Szenenzeit t: { name, u (0..1 in der Phase), t, ende: boolean }. */
+  function szenePhase(pflege, t, cfg) {
+    const p = szenePlan(pflege, cfg), ph = p.phasen;
     for (let i = 0; i < ph.length; i++) {
-      if (t < ph[i].t1 || i === ph.length - 1) {
-        const x = ph[i], u = Math.max(0, Math.min(1, (t - x.t0) / x.dauer));
-        return { seg: x.seg, name: x.name, index: i, u, t, tSeg: t - (x.seg === 'A' ? 0 : p.dauerA), ende: t >= p.dauer };
-      }
+      if (t < ph[i].t1 || i === ph.length - 1) { const x = ph[i]; return { name: x.name, index: i, u: x.dauer > 0 ? Math.max(0, Math.min(1, (t - x.t0) / x.dauer)) : 1, t, ende: t >= p.dauer }; }
     }
     return null;
   }
@@ -177,8 +183,9 @@ window.Rennspiel = window.Rennspiel || {};
       const SW = R.Moto.stuntWelt, zonen = Array.isArray(vorher) ? vorher.slice() : [];
       if (SW && SW.stuntDaten) {
         const d = SW.stuntDaten(strecke);
-        d.ringe.forEach((r) => zonen.push({ s0: r.sK - 15, s1: r.sK + 34 }));
-        d.reihen.forEach((r) => zonen.push({ s0: r.sK - 15, s1: r.sK + r.a1 + 30 }));
+        const ra = (R.config.motoStunts && R.config.motoStunts.ring && R.config.motoStunts.ring.abstand) || 16;
+        d.ringe.forEach((r) => zonen.push({ s0: r.sK + ra - 3, s1: r.sK + ra + 3 }));       // Platzsuche rechnet noch 12 m Rand dazu
+        d.reihen.forEach((r) => zonen.push({ s0: r.sK - 8, s1: r.sK + r.a1 + 4 }));
       }
       strecke.sperrzonenExtern = zonen;
       return stationenSuchen(strecke, opt);
@@ -216,7 +223,7 @@ window.Rennspiel = window.Rennspiel || {};
   }
 
   R.Moto.unfall = {
-    hash, folge, zNeu, sturz, reparieren, heilen, abschlepp, krankenwagen, brauchtWerkstatt, brauchtKranken, faktoren, hudZustand,
-    szenePlan, szeneDauer, szenePhase, fahrPose, stationenBilden, stationBereich, stationLaengs,
+    hash, folge, zNeu, sturz, sekundenJe10, pflegeDauer, pflegeSchritt, brauchtWerkstatt, brauchtKranken, faktoren, hudZustand,
+    szenePlan, szenePhase, fahrPose, stationenBilden, stationBereich, stationLaengs,
   };
 })();

@@ -26,3 +26,4 @@
 - 24.10. M2b (Optik) + M2c (Unfall-Status Motorrad-Schaden/Verletzung/Krankenstation) beauftragt; 1 Sonnet-Agent.
 - 24.10. Zusatzwunsch an Agent: je Strecke 1 Werkstatt + 1 Krankenstation; Krankenwagen/Abschleppwagen bei schweren Unfällen.
 - 24.10. Korrektur an Agent: Versorgung vor Ort 3 s/10 %, an Station 0,5 s/10 %; Werkstatt aus Autospiel; beide Zustände in %.
+- 24.10. Korrektur 2: vor Ort 1,5 s/10 %, Station 0,5 s/10 %, ab 30 % weiterfahren (Gas), KI vor Ort ab 30 %, an Station bis 100 %.

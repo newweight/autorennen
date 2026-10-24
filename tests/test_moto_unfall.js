@@ -2,10 +2,10 @@
 // Prüft die reine Logik (src/moto/unfall.js) und die Stationen je Strecke ohne Browser:
 //   1. Verteilung der Folgen je Modus (sanft 50/30/15/5, echt 20/40/28/12) über ~1000 Stürze innerhalb ±3 Prozentpunkten, Modus „aus“ ohne Folgen
 //   2. Deterministisch (gleiche Saat/Fahrer/Nr. = gleiche Folge, kein Math.random), andere Saat/Fahrer = andere Folge
-//   3. Motorrad-Zustand: −25 % je Schaden, nie unter 25 %, bei 25 % + Schaden kommt der Abschleppwagen, Anteil schwerer Schäden je Modus
-//   4. Tempo-Wirkung (bei 25 % etwa −30 %), Pflaster −10 % Höchsttempo, Verband keine Strafe
-//   5. Reparatur → 100 %, Pflaster/Verband heilt die Krankenstation, Krankenwagen setzt den Verband, HUD-Zustand/Farbe
-//   6. Szenen-Zeitplan: Krankenwagen und Abschleppwagen je etwa 4–6 s, Phasen in der richtigen Reihenfolge, Zeitlimit größer als die Szene
+//   3. Zwei Zustände (Motorrad, Fahrer-Gesundheit): Abzüge in Prozent, nie unter 10 %, schwerer Schaden / Minimum ruft den Abschleppwagen, 'schwer' den Krankenwagen
+//   4. Tempo-Wirkung proportional zum Fehlbetrag (Motorrad bis −35 % Höchsttempo und Beschleunigung, Fahrer bis −15 % Höchsttempo)
+//   5. Pflege-Raten: vor Ort 3 s je 10 % (30 % = 9 s), Station 0,5 s je 10 % (30 % = 1,5 s), bis 100 %; HUD-Zustand/Farben
+//   6. Szenen-Zeitplan: anfahrt → pflege → abfahrt, Dauer = Pflege + Fahrzeiten, Zeitlimit (Rückfall auf Kontrollpunkt) größer als jede mögliche Szene
 //   7. Je Strecke (alle Strecken × Welten × Varianten, Mega): genau 1 Werkstatt und 1 Krankenstation, nicht am selben Fleck, beide auf befahrbarer Lage
 //      (gerade, normal breit, Zufahrt/Fläche als „strasse“/„rand“ befahrbar, nicht in Schanze/Anlauf/Ring/Bus-Reihe)
 //   8. Autorennen bleibt unberührt (ohne window.MOTORRAD ändert das Modul nichts an der Werkstatt)
@@ -49,12 +49,12 @@ pruefe('Schwere Schäden: im Modus „echt“ häufiger (≈ 1/3) als im Modus �
 {
   const u = U.zNeu('aus'); let folgen = 0, art = '';
   for (let i = 0; i < 1000; i++) { const e = U.sturz(u, 'moto|wiese|', 0); if (e.art !== 'keine') { folgen++; art = e.art; } }
-  pruefe('Modus „aus“: 1000 Stürze ohne eine einzige Folge (Zustand 100 %, Fahrer ok)', folgen === 0 && u.zustand === 100 && u.fahrer === 'ok' && u.modus === 'aus', art);
+  pruefe('Modus „aus“: 1000 Stürze ohne eine einzige Folge (beide Zustände 100 %)', folgen === 0 && u.zustand === 100 && u.gesundheit === 100 && u.modus === 'aus', art);
 }
 
 // ---------- 2. Deterministisch ----------
 {
-  const lauf = (saat, nr) => { const u = U.zNeu('echt'); const r = []; for (let i = 0; i < 60; i++) { const e = U.sturz(u, saat, nr); r.push(e.art + (e.abschlepp ? '!' : '') + u.zustand + u.fahrer); } return r.join(','); };
+  const lauf = (saat, nr) => { const u = U.zNeu('echt'); const r = []; for (let i = 0; i < 60; i++) { const e = U.sturz(u, saat, nr); r.push(e.art + (e.szene ? '!' + e.szene : '') + u.zustand + '/' + u.gesundheit); } return r.join(','); };
   pruefe('Deterministisch: gleiche Saat und Fahrer-Nr. = gleiche Folge (auch in zwei getrennten Läufen)', lauf('moto|wiese|', 1) === lauf('moto|wiese|', 1));
   pruefe('Andere Fahrer-Nr. oder andere Saat = andere Folge', lauf('moto|wiese|', 1) !== lauf('moto|wiese|', 2) && lauf('moto|wiese|', 1) !== lauf('moto|wald|', 1));
   const a = []; for (let n = 1; n <= 10; n++) a.push(U.folge('sanft', 'x', 0, n).art);
@@ -62,56 +62,72 @@ pruefe('Schwere Schäden: im Modus „echt“ häufiger (≈ 1/3) als im Modus �
   pruefe('Kein Math.random im Modul', !/Math\.random/.test(require('fs').readFileSync(require('path').join(__dirname, '..', 'src/moto/unfall.js'), 'utf8')));
 }
 
-// ---------- 3. Zustand ----------
+// ---------- 3. Zwei Zustände ----------
 {
-  const u = U.zNeu('echt'); let minZ = 100, schwer = 0, schaeden = 0, abschleppUnter25 = 0, stufenOk = true;
-  for (let i = 0; i < 1000; i++) {
-    const vor = u.zustand, e = U.sturz(u, 'moto|dino|', 3);
-    if (e.art === 'schaden') { schaeden++; if (u.zustand !== Math.max(25, vor - 25)) stufenOk = false; if (e.abschlepp) { schwer++; if (vor <= 25) abschleppUnter25++; U.abschlepp(u); } }
-    minZ = Math.min(minZ, u.zustand);
-    if (u.fahrer !== 'ok') U.heilen(u);
+  const u = U.zNeu('echt'); let minZ = 100, minG = 100, schaeden = 0, schwerCount = 0, abzugOk = true, szeneOk = true;
+  for (let i = 0; i < 1500; i++) {
+    const vz = u.zustand, vg = u.gesundheit, e = U.sturz(u, 'moto|dino|', 3);
+    if (e.art === 'schaden') {
+      schaeden++;
+      if (u.zustand !== Math.max(cfg.minimum, vz - (e.schwer ? cfg.abzug.schadenSchwer : cfg.abzug.schaden)) || u.gesundheit !== vg) abzugOk = false;
+      if ((e.szene === 'abschlepp') !== (e.schwer || u.zustand <= cfg.minimum)) szeneOk = false;
+      if (e.szene) U.pflegeSchritt(u, 'motorrad', 'vorOrt', 1e6);
+    } else if (e.art === 'leicht') {
+      if (u.gesundheit !== Math.max(cfg.minimum, vg - cfg.abzug.leicht) || u.zustand !== vz || e.szene) abzugOk = false;
+    } else if (e.art === 'schwer') {
+      schwerCount++;
+      if (u.gesundheit !== Math.max(cfg.minimum, vg - cfg.abzug.schwer) || e.szene !== 'krankenwagen') szeneOk = false;
+      U.pflegeSchritt(u, 'fahrer', 'vorOrt', 1e6);
+    }
+    minZ = Math.min(minZ, u.zustand); minG = Math.min(minG, u.gesundheit);
+    if (i % 3 === 0) { U.pflegeSchritt(u, 'fahrer', 'station', 1e6); }
   }
-  pruefe('Zustand: −25 % je Schaden, nie unter 25 % und nie 0 (1000 Stürze „echt“, Minimum ' + minZ + ' %)', stufenOk && minZ >= 25 && schaeden > 300, schaeden + ' Schäden');
-  const v = U.zNeu('sanft'); v.zustand = 25;
-  let ok = true; for (let i = 0; i < 300; i++) { const e = U.sturz(v, 'moto|wiese|', 0); if (e.art === 'schaden') { ok = ok && e.abschlepp === true && v.zustand === 25; } if (v.zustand < 25) ok = false; }
-  pruefe('Bei 25 % bleibt der Zustand 25 %; ein weiterer Schaden ruft immer den Abschleppwagen (nie liegenbleiben)', ok);
-  const w = U.zNeu('sanft'); w.zustand = 100;
-  let s1 = null; for (let i = 0; i < 100 && !s1; i++) { const x = U.zNeu('echt'); const e = U.sturz(x, 'moto|wiese|', i); if (e.art === 'schaden' && !e.abschlepp) s1 = x; }
-  pruefe('Erster leichter Schaden: 100 → 75 %, noch kein Abschleppwagen', !!s1 && s1.zustand === 75);
+  pruefe(`Abzüge in Prozent wie in der Tabelle (Schaden −${cfg.abzug.schaden}/−${cfg.abzug.schadenSchwer}, leicht −${cfg.abzug.leicht}, schwer −${cfg.abzug.schwer}); Minimum Motorrad ${minZ} %, Fahrer ${minG} %`, abzugOk && schaeden > 300 && schwerCount > 80);
+  pruefe('Nie unter 10 % (beide Zustände), schwerer Schaden oder Minimum ruft den Abschleppwagen, „schwer“ den Krankenwagen', minZ >= 10 && minG >= 10 && szeneOk);
+  const v = U.zNeu('sanft'); v.zustand = 10; v.gesundheit = 10;
+  let ok = true; for (let i = 0; i < 300; i++) { const e = U.sturz(v, 'moto|wiese|', 0); if (e.art === 'schaden') ok = ok && e.szene === 'abschlepp' && v.zustand === 10; if (v.zustand < 10 || v.gesundheit < 10) ok = false; if (e.art === 'schwer') ok = ok && e.szene === 'krankenwagen'; }
+  pruefe('Bei 10 % bleibt es bei 10 %; ein weiterer Schaden ruft immer den Abschleppwagen (nie liegenbleiben)', ok);
+  const w = U.zNeu('echt'); let s1 = null; for (let i = 0; i < 200 && !s1; i++) { const x = U.zNeu('echt'); const e = U.sturz(x, 'moto|wiese|', i); if (e.art === 'schaden' && !e.szene) s1 = x; }
+  pruefe(`Erster leichter Schaden: 100 → ${100 - cfg.abzug.schaden} %, noch kein Abschleppwagen`, !!s1 && s1.zustand === 100 - cfg.abzug.schaden && void w === undefined);
 }
 
 // ---------- 4. Tempo-Wirkung ----------
 {
-  const f = (z, fahrer) => { const u = U.zNeu('sanft'); u.zustand = z; u.fahrer = fahrer || 'ok'; return U.faktoren(u); };
-  pruefe('Tempo: 100 % = ×1, 75 % = ×0,90, 50 % = ×0,80, 25 % = ×0,70 (etwa −30 %), Beschleunigung gleich', nah(f(100).vMax, 1) && nah(f(75).vMax, 0.9, 1e-9) && nah(f(50).vMax, 0.8, 1e-9) && nah(f(25).vMax, 0.7, 1e-9) && nah(f(25).beschleunigung, 0.7, 1e-9), [100, 75, 50, 25].map((z) => f(z).vMax.toFixed(2)).join(' '));
-  pruefe('Pflaster: Höchsttempo −10 % (Beschleunigung unverändert), Verband: keine Strafe', nah(f(100, 'pflaster').vMax, 0.9) && nah(f(100, 'pflaster').beschleunigung, 1) && nah(f(100, 'verband').vMax, 1));
-  pruefe('Schaden 25 % + Pflaster: ×0,63', nah(f(25, 'pflaster').vMax, 0.63, 1e-9));
+  const f = (z, g) => { const u = U.zNeu('sanft'); u.zustand = z; u.gesundheit = g === undefined ? 100 : g; return U.faktoren(u); };
+  const tm = cfg.tempo.motorrad, tf = cfg.tempo.fahrer;
+  pruefe(`Tempo Motorrad proportional: 100 % = ×1, 55 % = ×${(1 - tm / 2).toFixed(3)}, 10 % = ×${(1 - tm).toFixed(2)} (≈ −${Math.round(tm * 100)} %), Beschleunigung gleich`,
+    nah(f(100).vMax, 1) && nah(f(55).vMax, 1 - tm / 2, 1e-9) && nah(f(10).vMax, 1 - tm, 1e-9) && nah(f(10).beschleunigung, 1 - tm, 1e-9), [100, 75, 55, 10].map((z) => f(z).vMax.toFixed(3)).join(' '));
+  pruefe(`Tempo Fahrer proportional: Gesundheit 10 % = Höchsttempo ×${(1 - tf).toFixed(2)}, Beschleunigung unverändert`, nah(f(100, 10).vMax, 1 - tf, 1e-9) && nah(f(100, 10).beschleunigung, 1) && nah(f(100, 55).vMax, 1 - tf / 2, 1e-9));
+  pruefe('Beide kaputt (10 %/10 %) multipliziert, Reparatur/Heilung gibt volles Tempo zurück', nah(f(10, 10).vMax, (1 - tm) * (1 - tf), 1e-9) && nah(f(100, 100).vMax, 1));
 }
 
-// ---------- 5. Reparatur, Heilung, Krankenwagen, HUD ----------
+// ---------- 5. Pflege-Raten, HUD ----------
 {
-  const u = U.zNeu('echt'); u.zustand = 50; u.fahrer = 'pflaster';
-  U.reparieren(u);
-  pruefe('Reparatur (Werkstatt) setzt 100 % (Pflaster bleibt, das heilt nur die Krankenstation)', u.zustand === 100 && u.fahrer === 'pflaster' && !U.brauchtWerkstatt(u) && U.brauchtKranken(u));
-  U.heilen(u);
-  pruefe('Krankenstation heilt das Pflaster (Fahrer wieder ok)', u.fahrer === 'ok' && !U.brauchtKranken(u));
-  U.krankenwagen(u);
-  pruefe('Krankenwagen: danach Verband (🩼), keine weitere Strafe; Krankenstation nimmt ihn ab', u.fahrer === 'verband' && nah(U.faktoren(u).vMax, 1) && U.hudZustand(u).symbol === '🩼' && (U.heilen(u), u.fahrer === 'ok'));
-  const v = U.zNeu('sanft'); v.zustand = 50; U.abschlepp(v);
-  pruefe('Abschleppwagen bringt das Motorrad zur Werkstatt: repariert, 100 %', v.zustand === 100 && v.stat.abschlepp === 1);
-  const h = (z, f) => { const x = U.zNeu('sanft'); x.zustand = z; x.fahrer = f || 'ok'; return U.hudZustand(x); };
-  pruefe('HUD: 100/75 % grün, 50 % gelb, 25 % rot; Fahrer 😀 / 🩹 / 🩼', h(100).farbe === 'gruen' && h(75).farbe === 'gruen' && h(50).farbe === 'gelb' && h(25).farbe === 'rot' && h(100).symbol === '😀' && h(100, 'pflaster').symbol === '🩹' && h(100, 'verband').symbol === '🩼');
+  const zeit = (was, ort, start) => { const u = U.zNeu('echt'); if (was === 'motorrad') u.zustand = start; else u.gesundheit = start; let t = 0; const dt = 1 / 60; while (!U.pflegeSchritt(u, was, ort, dt) && t < 200) t += dt; return { t, u }; };
+  pruefe('Konfig: vorOrtSekundenJe10 = 3, stationSekundenJe10 = 0,5', cfg.vorOrtSekundenJe10 === 3 && cfg.stationSekundenJe10 === 0.5);
+  const a = zeit('fahrer', 'vorOrt', 70), b = zeit('motorrad', 'vorOrt', 70), c = zeit('fahrer', 'station', 70), d = zeit('motorrad', 'station', 70);
+  pruefe(`Vor Ort 30 % = 9 s (gemessen ${a.t.toFixed(2)} s Fahrer, ${b.t.toFixed(2)} s Motorrad), Station 30 % = 1,5 s (${c.t.toFixed(2)} / ${d.t.toFixed(2)} s)`,
+    nah(a.t, 9, 0.05) && nah(b.t, 9, 0.05) && nah(c.t, 1.5, 0.05) && nah(d.t, 1.5, 0.05) && nah(U.pflegeDauer(70, 'vorOrt'), 9) && nah(U.pflegeDauer(70, 'station'), 1.5));
+  pruefe('Pflege bis 100 % (nicht darüber), Statistik zählt, Rest „schon 100 %“ ist sofort fertig', a.u.gesundheit === 100 && b.u.zustand === 100 && b.u.stat.repariert === 1 && a.u.stat.geheilt === 1 && U.pflegeSchritt(U.zNeu('echt'), 'fahrer', 'station', 0.1) === true);
+  const u = U.zNeu('echt'); u.zustand = 50; U.pflegeSchritt(u, 'motorrad', 'station', 0.5); // 0,5 s = 10 %
+  pruefe('Zählt gleichmäßig hoch: 50 % + 0,5 s Station = 60 %; Reparatur lässt die Gesundheit in Ruhe', nah(u.zustand, 60, 1e-9) && u.gesundheit === 100 && U.brauchtWerkstatt(u) && !U.brauchtKranken(u));
+  const h = (z, g) => { const x = U.zNeu('sanft'); x.zustand = z; x.gesundheit = g === undefined ? 100 : g; return U.hudZustand(x); };
+  pruefe('HUD: 100/75 % grün, 60 % gelb, 30 % rot; Fahrer 😀 (100) / 🩹 / 🩼 (< 75), Prozent gerundet',
+    h(100).farbe === 'gruen' && h(75).farbe === 'gruen' && h(60).farbe === 'gelb' && h(30).farbe === 'rot' && h(100).symbol === '😀' && h(100, 85).symbol === '🩹' && h(100, 40).symbol === '🩼' && h(100, 40).fahrerFarbe === 'rot' && h(54.6).prozent === 55);
 }
 
 // ---------- 6. Szenen ----------
-for (const art of ['krank', 'abschlepp']) {
-  const d = U.szeneDauer(art), pl = U.szenePlan(art);
-  pruefe(`Szene ${art}: Gesamtdauer ${d.toFixed(1)} s (etwa 4–6 s, Teil A ${pl.dauerA.toFixed(1)} s am Unfallort, Teil B an der Station)`, d >= 4 && d <= 6.5);
-  pruefe(`Szene ${art}: Zeitlimit ${cfg.szene.max} s ist deutlich länger als die Szene (Rückfall auf Kontrollpunkt nur bei Hängern)`, cfg.szene.max >= d * 1.8);
-  const ph = []; for (let t = 0; t <= d + 0.5; t += 0.05) { const p = U.szenePhase(art, t); if (!ph.length || ph[ph.length - 1] !== p.seg + ':' + p.name) ph.push(p.seg + ':' + p.name); }
-  const soll = art === 'krank' ? 'A:anfahrt,A:hin,A:zurueck,A:abfahrt,B:ankunft,B:hin,B:zurueck,B:abfahrt' : 'A:anfahrt,A:beladen,A:abfahrt,B:ankunft,B:abladen,B:abfahrt';
-  pruefe(`Szene ${art}: Phasen ${ph.join(' → ')}`, ph.join(',') === soll);
-  pruefe(`Szene ${art}: Ende erkannt (ende nach ${d.toFixed(1)} s)`, !U.szenePhase(art, d - 0.01).ende && U.szenePhase(art, d + 0.01).ende && U.szenePhase(art, 0).u === 0);
+{
+  const k = cfg.szene;
+  for (const [name, start] of [['Krankenwagen', 50], ['Abschleppwagen', 10]]) {
+    const pflege = U.pflegeDauer(start, 'vorOrt'), pl = U.szenePlan(pflege);
+    pruefe(`Szene ${name} (${start} % → 100 %): Pflege ${pflege.toFixed(1)} s, Gesamt ${pl.dauer.toFixed(1)} s = Anfahrt + Pflege + Abfahrt`, nah(pl.dauer, k.anfahrt + pflege + k.abfahrt, 1e-9));
+    const ph = []; for (let t = 0; t <= pl.dauer + 0.5; t += 0.05) { const p = U.szenePhase(pflege, t); if (!ph.length || ph[ph.length - 1] !== p.name) ph.push(p.name); }
+    pruefe(`Szene ${name}: Phasen ${ph.join(' → ')}`, ph.join(',') === 'anfahrt,pflege,abfahrt');
+    pruefe(`Szene ${name}: Ende erkannt, Zeitlimit ${pl.limit.toFixed(1)} s > Szene (Rückfall nur bei Hängern)`, !U.szenePhase(pflege, pl.dauer - 0.01).ende && U.szenePhase(pflege, pl.dauer + 0.01).ende && U.szenePhase(pflege, 0).u === 0 && pl.limit >= pl.dauer + 5);
+  }
+  const lang = U.szenePlan(U.pflegeDauer(cfg.minimum, 'vorOrt'));
+  pruefe(`Längste Szene (von ${cfg.minimum} % bis 100 %): ${lang.dauer.toFixed(1)} s, Zeitlimit ${lang.limit.toFixed(1)} s`, lang.dauer < 40 && lang.limit > lang.dauer);
 }
 
 // ---------- 7. Stationen je Strecke ----------
@@ -146,17 +162,18 @@ function strecke(daten, welt, variante, menge) {
           if (Math.abs(p.kruemmungMax) > 0.0022 * 8.5) befahrbar = false;
         }
         if (!befahrbar) nichtBefahrbar.push(name);
-        // nicht in Schanze/Anlauf, Ring, Bus-Reihe, Zonen
-        let stunt = false;
-        const stellen = R.Anlauf.stellen(st).map((z) => z.s), daten2 = R.Moto.stuntWelt.stuntDaten(st);
+        // nicht in Schanze/Anlauf, Ring, Bus-Reihe: Fläche samt Zufahrt-Keil darf die Bereiche nicht überlappen
+        let stunt = '';
+        const stellen = R.Anlauf.stellen(st), daten2 = R.Moto.stuntWelt.stuntDaten(st), ra = R.config.motoStunts.ring.abstand;
         for (const p of [P, K]) {
-          const lo = p.s - p.laenge / 2 - p.zufahrt, hi = p.s + p.laenge / 2 + p.ausfahrt;
-          stellen.forEach((s) => { if (Math.abs(sp.differenzS(s, p.s)) < p.laenge / 2 + 40) stunt = true; });
-          daten2.ringe.forEach((r) => { const ds = sp.differenzS(r.sK + 16, p.s); if (ds > -(p.laenge / 2 + p.zufahrt) - 10 && ds < p.laenge / 2 + p.ausfahrt + 10) stunt = true; });
-          daten2.reihen.forEach((r) => { const ds = sp.differenzS(r.sK + r.a1, p.s); if (ds > -(p.laenge / 2 + p.zufahrt) - 10 && ds < p.laenge / 2 + p.ausfahrt + 10 + (r.a1 - r.a0)) stunt = true; });
-          void lo; void hi;
+          const von = -(p.laenge / 2 + p.zufahrt), bis = p.laenge / 2 + p.ausfahrt;   // Längsbereich relativ zu p.s
+          const trifft = (s0, s1) => { const a0 = sp.differenzS(s0, p.s), a1 = a0 + (s1 - s0); return a1 > von && a0 < bis; };
+          stellen.forEach((z) => { if (z.art === 'schanze' || z.art === 'looping') { if (trifft(z.s - 5, z.s + 20) || (Math.abs(sp.differenzS(z.s, p.s)) < p.laenge / 2 + 6)) stunt += ' Schanze@' + Math.round(z.s); } });
+          daten2.ringe.forEach((r) => { if (trifft(r.sK + ra - 4, r.sK + ra + 4)) stunt += ' Ring@' + Math.round(r.sK + ra); });
+          daten2.reihen.forEach((r) => { if (trifft(r.sK - 4, r.sK + r.a1 + 4)) stunt += ' Reihe@' + Math.round(r.sK); });
+          if (stunt) stunt += ' (Station s=' + Math.round(p.s) + ')';
         }
-        if (stunt) inStunt.push(name);
+        if (stunt) inStunt.push(name + stunt);
         if (b.werkstatt.platz !== null && b.kranken.platz !== null && abstand >= L * 0.1 && befahrbar && !stunt) ok++;
         if (!letzte) { tab.push(name + ': Werkstatt s=' + Math.round(P.s) + ' (' + (P.seite > 0 ? 'rechts' : 'links') + '), Kranken s=' + Math.round(K.s) + ' (' + (K.seite > 0 ? 'rechts' : 'links') + '), ' + Math.round(abstand) + ' m auseinander, L ' + Math.round(L)); letzte = name; }
       }
