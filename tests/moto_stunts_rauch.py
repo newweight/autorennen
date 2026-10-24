@@ -153,7 +153,7 @@ JS_HELFER = '''() => {
     hudSzene(szen) {
       const sp = Rennspiel.spiel; sp.pausiert = true;
       (sp.huds || []).forEach((hd) => { if (!hd) return;
-        hd.eCountdown.className = 'hud-countdown puls' + (szen === 'start' ? ' an' : ''); hd.eCountdown.textContent = szen === 'start' ? '3' : '';
+        hd.eCountdown.className = 'hud-countdown' + (szen === 'start' ? ' an' : ''); hd.eCountdown.style.animation = 'none'; hd.eCountdown.textContent = szen === 'start' ? '3' : '';   // Standbild ohne Puls-Animation (die startet mit Maßstab 1,7 und Deckkraft 0)
         hd.eBanner.className = 'hud-banner'; hd.meldung('x', 1);
         if (szen === 'fahrt') { hd.banner('Letzte Runde!', 0, '', 'Spieler'); hd.meldung('Bus-Sprung! +1.200 (3 Busse) ×2', 60000); } });
       const sz = sp.stunt;

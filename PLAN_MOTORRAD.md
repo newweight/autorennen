@@ -12,4 +12,7 @@ Zweig `motorrad` im Repo newweight/autorennen (Basis v34). Regel: NUR neue Datei
 - [x] Wheelie-/Stoppie-Zonen (markierte Abschnitte, Taste)
 - [x] Stuntpunkte + Combo im HUD, Modus „Stuntrennen“ (Platz + Punkte)
 - [x] KI macht einfache Stunts
-- [ ] Prüfung + Tag m2
+- [x] Prüfung + Sicherung stand-m2
+
+# M2b Feinschliff (offen)
+- [ ] Busse erkennbar (Fenster, Räder) · Touch-Trick-Knopf beschriften · Menü-Karte links angeschnitten · Alpen-Ring tief
