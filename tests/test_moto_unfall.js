@@ -4,7 +4,7 @@
 //   2. Deterministisch (gleiche Saat/Fahrer/Nr. = gleiche Folge, kein Math.random), andere Saat/Fahrer = andere Folge
 //   3. Zwei Zustände (Motorrad, Fahrer-Gesundheit): Abzüge in Prozent, nie unter 10 %, schwerer Schaden / Minimum ruft den Abschleppwagen, 'schwer' den Krankenwagen
 //   4. Tempo-Wirkung proportional zum Fehlbetrag (Motorrad bis −35 % Höchsttempo und Beschleunigung, Fahrer bis −15 % Höchsttempo)
-//   5. Pflege-Raten: vor Ort 3 s je 10 % (30 % = 9 s), Station 0,5 s je 10 % (30 % = 1,5 s), bis 100 %; HUD-Zustand/Farben
+//   5. Pflege-Raten: vor Ort 1,5 s je 10 % (30 % = 4,5 s), Station 0,5 s je 10 % (30 % = 1,5 s), bis 100 %; Losfahren ab 30 % (darfWeiter); HUD-Zustand/Farben
 //   6. Szenen-Zeitplan: anfahrt → pflege → abfahrt, Dauer = Pflege + Fahrzeiten, Zeitlimit (Rückfall auf Kontrollpunkt) größer als jede mögliche Szene
 //   7. Je Strecke (alle Strecken × Welten × Varianten, Mega): genau 1 Werkstatt und 1 Krankenstation, nicht am selben Fleck, beide auf befahrbarer Lage
 //      (gerade, normal breit, Zufahrt/Fläche als „strasse“/„rand“ befahrbar, nicht in Schanze/Anlauf/Ring/Bus-Reihe)
@@ -104,16 +104,29 @@ pruefe('Schwere Schäden: im Modus „echt“ häufiger (≈ 1/3) als im Modus �
 // ---------- 5. Pflege-Raten, HUD ----------
 {
   const zeit = (was, ort, start) => { const u = U.zNeu('echt'); if (was === 'motorrad') u.zustand = start; else u.gesundheit = start; let t = 0; const dt = 1 / 60; while (!U.pflegeSchritt(u, was, ort, dt) && t < 200) t += dt; return { t, u }; };
-  pruefe('Konfig: vorOrtSekundenJe10 = 3, stationSekundenJe10 = 0,5', cfg.vorOrtSekundenJe10 === 3 && cfg.stationSekundenJe10 === 0.5);
+  pruefe('Konfig: vorOrtSekundenJe10 = 1,5, stationSekundenJe10 = 0,5, weiterfahrenAb = 30', cfg.vorOrtSekundenJe10 === 1.5 && cfg.stationSekundenJe10 === 0.5 && cfg.weiterfahrenAb === 30);
   const a = zeit('fahrer', 'vorOrt', 70), b = zeit('motorrad', 'vorOrt', 70), c = zeit('fahrer', 'station', 70), d = zeit('motorrad', 'station', 70);
-  pruefe(`Vor Ort 30 % = 9 s (gemessen ${a.t.toFixed(2)} s Fahrer, ${b.t.toFixed(2)} s Motorrad), Station 30 % = 1,5 s (${c.t.toFixed(2)} / ${d.t.toFixed(2)} s)`,
-    nah(a.t, 9, 0.05) && nah(b.t, 9, 0.05) && nah(c.t, 1.5, 0.05) && nah(d.t, 1.5, 0.05) && nah(U.pflegeDauer(70, 'vorOrt'), 9) && nah(U.pflegeDauer(70, 'station'), 1.5));
+  pruefe(`Vor Ort 30 % = 4,5 s (gemessen ${a.t.toFixed(2)} s Fahrer, ${b.t.toFixed(2)} s Motorrad), Station 30 % = 1,5 s (${c.t.toFixed(2)} / ${d.t.toFixed(2)} s)`,
+    nah(a.t, 4.5, 0.05) && nah(b.t, 4.5, 0.05) && nah(c.t, 1.5, 0.05) && nah(d.t, 1.5, 0.05) && nah(U.pflegeDauer(70, 'vorOrt'), 4.5) && nah(U.pflegeDauer(70, 'station'), 1.5));
   pruefe('Pflege bis 100 % (nicht darüber), Statistik zählt, Rest „schon 100 %“ ist sofort fertig', a.u.gesundheit === 100 && b.u.zustand === 100 && b.u.stat.repariert === 1 && a.u.stat.geheilt === 1 && U.pflegeSchritt(U.zNeu('echt'), 'fahrer', 'station', 0.1) === true);
   const u = U.zNeu('echt'); u.zustand = 50; U.pflegeSchritt(u, 'motorrad', 'station', 0.5); // 0,5 s = 10 %
   pruefe('Zählt gleichmäßig hoch: 50 % + 0,5 s Station = 60 %; Reparatur lässt die Gesundheit in Ruhe', nah(u.zustand, 60, 1e-9) && u.gesundheit === 100 && U.brauchtWerkstatt(u) && !U.brauchtKranken(u));
   const h = (z, g) => { const x = U.zNeu('sanft'); x.zustand = z; x.gesundheit = g === undefined ? 100 : g; return U.hudZustand(x); };
   pruefe('HUD: 100/75 % grün, 60 % gelb, 30 % rot; Fahrer 😀 (100) / 🩹 / 🩼 (< 75), Prozent gerundet',
     h(100).farbe === 'gruen' && h(75).farbe === 'gruen' && h(60).farbe === 'gelb' && h(30).farbe === 'rot' && h(100).symbol === '😀' && h(100, 85).symbol === '🩹' && h(100, 40).symbol === '🩼' && h(100, 40).fahrerFarbe === 'rot' && h(54.6).prozent === 55);
+}
+
+// ---------- 5b. Losfahren ab 30 % ----------
+{
+  const w = (z, g) => { const u = U.zNeu('echt'); u.zustand = z; u.gesundheit = g; return U.darfWeiter(u); };
+  pruefe('Losfahren: beide ≥ 30 % = erlaubt (Gas beendet die Pflege), ein Wert unter 30 % = gesperrt („Noch kurz warten …“)',
+    w(100, 100) && w(30, 30) && w(30, 100) && w(100, 30) && !w(29.9, 100) && !w(100, 10) && !w(10, 10) && !w(29, 29));
+  // Ablauf Krankenwagen: Gesundheit 10 % → nach 20/6,67 s … ab 30 % erlaubt (20 Punkte = 3 s vor Ort)
+  const u = U.zNeu('echt'); u.gesundheit = 10; let t = 0; const dt = 1 / 60; while (!U.darfWeiter(u) && t < 60) { U.pflegeSchritt(u, 'fahrer', 'vorOrt', dt); t += dt; }
+  pruefe(`Krankenwagen von 10 % → ab 30 % erlaubt nach ${t.toFixed(2)} s (20 % × 1,5 s je 10 %); die Pflege liefe bis 100 % weiter (${U.pflegeDauer(u.gesundheit, 'vorOrt').toFixed(1)} s Rest)`, nah(t, 3, 0.05) && !U.pflegeSchritt(u, 'fahrer', 'vorOrt', 0.1));
+  // Nach einem Sturz über 30 %: sofort weiter
+  let sofort = false; for (let i = 0; i < 400 && !sofort; i++) { const x = U.zNeu('echt'); const e = U.sturz(x, 'moto|wiese|', i); if (e.szene && U.darfWeiter(x)) sofort = true; }
+  pruefe('Bleibt ein Wert nach dem Sturz ≥ 30 % (einmal Schaden/schwer aus 100 %), darf man sofort weiter', sofort);
 }
 
 // ---------- 6. Szenen ----------
@@ -127,7 +140,7 @@ pruefe('Schwere Schäden: im Modus „echt“ häufiger (≈ 1/3) als im Modus �
     pruefe(`Szene ${name}: Ende erkannt, Zeitlimit ${pl.limit.toFixed(1)} s > Szene (Rückfall nur bei Hängern)`, !U.szenePhase(pflege, pl.dauer - 0.01).ende && U.szenePhase(pflege, pl.dauer + 0.01).ende && U.szenePhase(pflege, 0).u === 0 && pl.limit >= pl.dauer + 5);
   }
   const lang = U.szenePlan(U.pflegeDauer(cfg.minimum, 'vorOrt'));
-  pruefe(`Längste Szene (von ${cfg.minimum} % bis 100 %): ${lang.dauer.toFixed(1)} s, Zeitlimit ${lang.limit.toFixed(1)} s`, lang.dauer < 40 && lang.limit > lang.dauer);
+  pruefe(`Längste Szene (von ${cfg.minimum} % bis 100 %): ${lang.dauer.toFixed(1)} s, Zeitlimit ${lang.limit.toFixed(1)} s`, lang.dauer < 25 && lang.limit > lang.dauer);
 }
 
 // ---------- 7. Stationen je Strecke ----------

@@ -9,7 +9,8 @@
 //     Verteilung   folge(modus, saat, nr, n)            deterministische Folge des n-ten Sturzes von Fahrer nr (ohne Zufallsfunktion; gleichmäßig
 //                                                       verteilt: Kronecker-Folge, Anfangswert aus Saat + Fahrer-Nr.) → { art: 'schreck'|'schaden'|'leicht'|'schwer', schwer }
 //     Zustand      zNeu(modus), sturz(u, saat, nr)       Folge anwenden → { art, szene: 'krankenwagen'|'abschlepp'|null }
-//                  pflegeSchritt(u, was, ort, dt)        Pflege hochzählen: ort 'vorOrt' = 3 s je 10 %, 'station' = 0,5 s je 10 % (bis 100 %)
+//                  pflegeSchritt(u, was, ort, dt)        Pflege hochzählen: ort 'vorOrt' = 1,5 s je 10 %, 'station' = 0,5 s je 10 % (bis 100 %)
+//                  darfWeiter(u)                         beide Zustände ≥ 30 %: Gas beendet die Pflege und man fährt los (sonst „Noch kurz warten …“)
 //                  pflegeDauer(wert, ort)                Sekunden bis 100 %
 //                  faktoren(u)                           { vMax, beschleunigung } proportional zum Fehlbetrag beider Zustände
 //                  hudZustand(u)                         { prozent, farbe, gesundheit, fahrerFarbe, symbol }
@@ -42,8 +43,9 @@ window.Rennspiel = window.Rennspiel || {};
     tempo: { motorrad: 0.35, fahrer: 0.15 },
     farben: { gelbUnter: 75, rotUnter: 50 },             // HUD-Farbe der Prozentzahl (grün ab 75, gelb ab 50, sonst rot)
     qualmUnter: 75,                                      // Qualm am Motorrad ab Zustand unter …
-    // Pflege: Sekunden je 10 % – vor Ort (Krankenwagen/Abschleppwagen kommen zum Unfallort) deutlich langsamer als an der Station
-    vorOrtSekundenJe10: 3,
+    // Pflege: Sekunden je 10 % – vor Ort (Krankenwagen/Abschleppwagen kommen zum Unfallort) langsamer als an der Station; sie läuft bis 100 %, man darf aber ab weiterfahrenAb los
+    vorOrtSekundenJe10: 1.5,
+    weiterfahrenAb: 30,                                  // ab so viel % bei Fahrer UND Motorrad beendet Gas geben die Pflege (vor Ort und an der Station); darunter gesperrt
     stationSekundenJe10: 0.5,
     ki: { drossel: 2.0, faktor: 0.45 },                  // KI hält nicht an: beim Vorbeifahren an der Station 2 s lang nur 45 % Höchsttempo (Zeitverlust statt Halt)
     szene: {
@@ -96,10 +98,10 @@ window.Rennspiel = window.Rennspiel || {};
    * 'schaden': Motorrad −abzug.schaden (schwerer Schaden: −abzug.schadenSchwer), nie unter minimum. Schwerer Schaden oder Zustand am Minimum: szene 'abschlepp'
    * (der Abschleppwagen repariert VOR ORT). 'leicht': Fahrer −abzug.leicht. 'schwer': Fahrer −abzug.schwer, szene 'krankenwagen' (Sanitäter versorgen VOR ORT).
    */
-  function sturz(u, saat, nr, cfg) {
+  function sturz(u, saat, nr, cfg, ueber) {
     const c = cfg || CFG();
     u.sturzNr++; u.stat.stuerze++;
-    const e = folge(u.modus, saat, nr, u.sturzNr, c);
+    const e = ueber || folge(u.modus, saat, nr, u.sturzNr, c);          // ueber = { art, schwer }: Folge vorgeben (Browser-Tests)
     if (!e) return { art: 'keine' };
     if (e.art === 'schreck') { u.stat.schreck++; return { art: 'schreck' }; }
     if (e.art === 'schaden') {
@@ -128,6 +130,8 @@ window.Rennspiel = window.Rennspiel || {};
     if (u[k] >= 100 - 1e-9) { u[k] = 100; if (was === 'motorrad') u.stat.repariert++; else u.stat.geheilt++; return true; }
     return false;
   }
+  /** Darf der Fahrer losfahren (Gas beendet die Pflege)? Beide Zustände mindestens weiterfahrenAb %. Darunter: „Noch kurz warten …“. */
+  const darfWeiter = (u, cfg) => { const a = (cfg || CFG()).weiterfahrenAb; return u.zustand >= a && u.gesundheit >= a; };
   /** Braucht der Fahrer die Werkstatt / die Krankenstation? */
   const brauchtWerkstatt = (u) => u.zustand < 100;
   const brauchtKranken = (u) => u.gesundheit < 100;
@@ -223,7 +227,7 @@ window.Rennspiel = window.Rennspiel || {};
   }
 
   R.Moto.unfall = {
-    hash, folge, zNeu, sturz, sekundenJe10, pflegeDauer, pflegeSchritt, brauchtWerkstatt, brauchtKranken, faktoren, hudZustand,
+    hash, folge, zNeu, sturz, sekundenJe10, pflegeDauer, pflegeSchritt, darfWeiter, brauchtWerkstatt, brauchtKranken, faktoren, hudZustand,
     szenePlan, szenePhase, fahrPose, stationenBilden, stationBereich, stationLaengs,
   };
 })();
