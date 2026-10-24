@@ -16,3 +16,9 @@ Zweig `motorrad` im Repo newweight/autorennen (Basis v34). Regel: NUR neue Datei
 
 # M2b Feinschliff (offen)
 - [ ] Busse erkennbar (Fenster, Räder) · Touch-Trick-Knopf beschriften · Menü-Karte links angeschnitten · Alpen-Ring tief
+
+# M2c Unfall-Status (beauftragt 24.10.) – zusammen mit M2b, 1 Sonnet-Agent, nur Moto-/neue Dateien
+- [ ] Sturz-Folgen deterministisch verteilt: Motorrad-Schaden ODER Fahrer verletzt (leicht/selten schwer)
+- [ ] Motorrad-Zustand % im HUD, Qualm, weniger Tempo; Reparatur in der Werkstatt an der Strecke
+- [ ] Fahrer leicht verletzt: Pflaster, etwas langsamer, Sanitäter-Station heilt; schwer: kurz Krankenstation (~3 s, Einblendung), danach Verband
+- [ ] Menü-Schalter „Unfälle: aus / sanft / echt“ (Standard sanft); KI gleich behandelt; kindgerecht, kein Blut
