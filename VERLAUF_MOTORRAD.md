@@ -25,3 +25,4 @@
 - 24.10. M2-Nachbesserung geprüft (Hauptmodell): nur neue Dateien; test_moto_stunts 62/0, test_moto 119/0, test_autos 333/0, test_physik 60/0, test_schanze 76/0. Bildprüfung 2 (frischer Sonnet-Agent): die 6 Mängel behoben, verbleibend nur Optik → M2b: Busse als Platten statt erkennbarer Busse, Salto-Bild verdeckt, Touch-Trick-Knopf unbeschriftet, Menü-Karte links angeschnitten, Alpen-Ring tief. M2 freigegeben (stand-m2), ins Spieleportal (www/motorrad).
 - 24.10. M2b (Optik) + M2c (Unfall-Status Motorrad-Schaden/Verletzung/Krankenstation) beauftragt; 1 Sonnet-Agent.
 - 24.10. Zusatzwunsch an Agent: je Strecke 1 Werkstatt + 1 Krankenstation; Krankenwagen/Abschleppwagen bei schweren Unfällen.
+- 24.10. Korrektur an Agent: Versorgung vor Ort 3 s/10 %, an Station 0,5 s/10 %; Werkstatt aus Autospiel; beide Zustände in %.

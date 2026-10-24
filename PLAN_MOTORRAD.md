@@ -23,3 +23,4 @@ Zweig `motorrad` im Repo newweight/autorennen (Basis v34). Regel: NUR neue Datei
 - [ ] Fahrer leicht verletzt: Pflaster, etwas langsamer, Sanitäter-Station heilt; schwer: kurz Krankenstation (~3 s, Einblendung), danach Verband
 - [ ] Menü-Schalter „Unfälle: aus / sanft / echt“ (Standard sanft); KI gleich behandelt; kindgerecht, kein Blut
 - [ ] Zusatz 24.10.: jede Strecke genau 1 Werkstatt + 1 Krankenstation; schwerer Unfall zwischendurch → Krankenwagen holt Fahrer zur Krankenstation bzw. Abschleppwagen bringt Motorrad zur Werkstatt
+- [ ] Korrektur 24.10.: Werkstatt aus dem Autospiel nutzen; Motorrad-Zustand + Fahrer-Gesundheit in %; schwerer Unfall → Krankenwagen/Abschleppwagen versorgen VOR ORT (3 s je 10 %); an Station 0,5 s je 10 %
