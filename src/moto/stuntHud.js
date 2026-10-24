@@ -28,18 +28,44 @@ window.Rennspiel = window.Rennspiel || {};
 .moto-stunt .ms-balken b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ff8a1a, #ffd23a); }
 .moto-stunt .ms-live { display: none; font-size: 1.05em; color: #7fe3ff; line-height: 1.2; }
 .moto-stunt .ms-live.an { display: block; }
-.hud.voll .hud-meldung, .hud.links .hud-meldung, .hud.rechts .hud-meldung { top: 24% !important; font-size: 1.3em !important; }
-.hud .hud-banner { top: 35% !important; }
-.hud.links .hud-banner, .hud.rechts .hud-banner { top: 35% !important; }
-.hud.links .hud-meldung, .hud.rechts .hud-meldung { top: 29% !important; font-size: 1.15em !important; }
-.hud.links .hud-hinweis, .hud.rechts .hud-hinweis { left: 68% !important; font-size: 1.5em !important; }
+/* Platz im Bild (M2c: der Spieler-Chip hat eine Zeile mehr – 🏍️/😀 Prozent –, darum liegen Zähler, Meldung und Banner etwas tiefer) */
+.hud .hud-countdown { top: 27% !important; }
 .hud.links .hud-countdown, .hud.rechts .hud-countdown { top: 27% !important; }
-.moto-touch { right: var(--rand); bottom: calc(var(--rand) * 2 + var(--tb) * 1.15 + 6px); width: calc(var(--tb) * .95); height: calc(var(--tb) * .95); font-size: calc(var(--tb) * .5);
-  background: rgba(255,138,26,.38); border-color: rgba(255,230,190,.9); }
+.hud.voll .hud-meldung { top: 29% !important; font-size: 1.3em !important; }
+.hud.links .hud-meldung, .hud.rechts .hud-meldung { top: 34% !important; font-size: 1.15em !important; }
+.hud .hud-banner, .hud.links .hud-banner, .hud.rechts .hud-banner { top: 41% !important; }
+@media (max-height: 520px) { .hud.links .hud-meldung, .hud.rechts .hud-meldung { top: 36% !important; } .hud .hud-banner, .hud.links .hud-banner, .hud.rechts .hud-banner { top: 42% !important; font-size: 3em !important; } }   /* niedrig (844×390): Chip + Meldung + Banner + Minikarte passen übereinander */
+.hud.links .hud-hinweis, .hud.rechts .hud-hinweis { left: 68% !important; font-size: 1.5em !important; }
+/* Touch (nur Motorradmodus): Trick-Knopf 🌀 „Trick“ über der Bremse (rechts unten; die Minikarte liegt im Touch-Rennen rechts oben und wird so nie berührt),
+   ausgegrauter ⭐-Knopf mit Beschriftung „Item“ (im Motorradmodus meist nichts zu holen) */
+.moto-touch { right: calc(var(--rand) * 2 + var(--tb) * 1.15 + var(--tb) * .025); bottom: calc(var(--rand) + var(--tb) + 8px); width: calc(var(--tb) * .95); height: calc(var(--tb) * .95);
+  flex-direction: column; gap: 0; font-size: calc(var(--tb) * .46); background: rgba(255,138,26,.38); border-color: rgba(255,230,190,.9); }
+.moto-touch small { display: block; font: 900 calc(var(--tb) * .2)/1 Arial, sans-serif; letter-spacing: .02em; margin-top: calc(var(--tb) * .02); }
 .moto-touch.an { background: rgba(255,138,26,.8); }
+#touch .t-item { flex-direction: column; font-size: calc(var(--tb) * .3); }
+#touch .t-item::after { content: 'Item'; display: block; font: 900 calc(var(--tb) * .16)/1 Arial, sans-serif; margin-top: 2px; }
+#touch .t-item:not(.hat) { opacity: .42; filter: grayscale(1); border-style: dashed; }
+#touch .t-item:not(.hat)::after { content: 'kein Item'; }
 .ergebnis .moto-erg td.punkte, .ergebnis .moto-erg th.punkte { text-align: right; }
 .ergebnis .moto-erg tr.gesamt-spitze td { font-weight: 900; }
 `;
+  // Menü (nur Motorradmodus): Die Modus-Reihe hat hier 5 Karten (4 + Stuntrennen). Mit fester Breite 10,6 em je Karte (nowrap, mittig) lief sie bei 844 / 1024 / 1280 px links
+  // und rechts über den Bildrand (die erste Karte war angeschnitten). Jetzt teilen sich die Karten die Breite: höchstens 10,6 em, sonst ein Fünftel der Zeile.
+  const MENUE_STIL = `
+.reihe.modus-reihe { gap: .6em; width: 100%; justify-content: center; }
+.reihe.modus-reihe .karte.gross { width: min(10.6em, calc((100vw - 6vw - 4 * .6em - 1.6em) / 5)); min-width: 0; box-sizing: border-box; flex: 0 1 auto; padding: .8em .45em; }
+@media (max-width: 1100px) { .reihe.modus-reihe .karte.gross .emoji { font-size: 2.4em; } .reihe.modus-reihe .karten-sub { font-size: .7em; } }
+@media (max-height: 520px) { .reihe.modus-reihe .karte.gross { padding: .3em .25em; } .reihe.modus-reihe .karte.gross .emoji { font-size: 1.2em; line-height: 1.05; } .reihe.modus-reihe .karten-name { font-size: .8em; }
+  .reihe.modus-reihe .karten-sub { font-size: .54em; line-height: 1.12; margin-top: .1em; } .reihe.modus-reihe .modus-pillen { margin-top: .2em; } .reihe.modus-reihe .pille, .reihe.modus-reihe .rund { font-size: .62em; padding: .15em .4em; margin-top: .15em; } }
+`;
+  let menueStilDa = false;
+  function menueStilEinbauen() {
+    if (menueStilDa || typeof document === 'undefined' || !document.head) return;
+    const st = document.createElement('style');
+    st.textContent = MENUE_STIL;
+    document.head.appendChild(st);
+    menueStilDa = true;
+  }
   const MELDUNG_STANDARD = 'linear-gradient(90deg, rgba(255,90,170,.9), rgba(150,110,255,.9))';
   const MELDUNG_FARBE = {
     ring: 'linear-gradient(90deg, rgba(255,59,0,.95), rgba(255,154,0,.95))', voll: 'linear-gradient(90deg, rgba(255,45,111,.95), rgba(255,176,0,.95))',
@@ -140,5 +166,5 @@ window.Rennspiel = window.Rennspiel || {};
       `<div class="knopf blau" data-a="menue">🏠 Hauptmenü <kbd>Esc</kbd></div></div>`;
   }
 
-  R.Moto.stuntHud = { anlegen, ereignis, frame, ergebnisHtml, stilEinbauen, zahl, STIL };
+  R.Moto.stuntHud = { anlegen, ereignis, frame, ergebnisHtml, stilEinbauen, menueStilEinbauen, zahl, STIL };
 })();

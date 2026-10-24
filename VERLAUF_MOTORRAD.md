@@ -28,3 +28,8 @@
 - 24.10. Korrektur an Agent: Versorgung vor Ort 3 s/10 %, an Station 0,5 s/10 %; Werkstatt aus Autospiel; beide Zustände in %.
 - 24.10. Korrektur 2: vor Ort 1,5 s/10 %, Station 0,5 s/10 %, ab 30 % weiterfahren (Gas), KI vor Ort ab 30 %, an Station bis 100 %.
 - 24.10. Zusatz an Agent: Motorrad-Cockpit + 2 Spiegel links/rechts.
+- 24.10. M2b + M2c + M2d (Cockpit/Spiegel) fertig (Sonnet-Agent), nur neue Dateien + Motorrad.html (Script-Zeilen) + ein paar Moto-Dateien erweitert; nicht committet.
+  M2b: Busse (stuntWelt.js reiheBauen: Schulbus gelb, Linienbusse, Fensterband, Räder, Scheiben, 1 Mesh), Touch-Knopf „Trick“ + „kein Item“ (stuntHud.js), Menü-Karten 5 in einer Reihe ohne Beschnitt (nur Motorradmodus). Alpen-Ring bleibt tief (Verlegeversuch scheiterte).
+  M2c: src/moto/{unfall,unfallWelt,unfallStart}.js, Config R.config.motoUnfall; Werkstatt aus dem Autospiel (world/garage.js) + Krankenstation, je Strecke eine; Krankenwagen/Abschleppwagen vor Ort 1,5 s je 10 %, Station 0,5 s je 10 %, weiter ab 30 %; Menü „Unfälle aus/sanft/echt“.
+  M2d: src/moto/cockpitMoto.js (Config R.config.motoCockpit): Cockpit-Ansicht mit Lenker-Bild (Griffe, Kotflügel, Instrument), Kamera kippt 50 % der Schräglage mit und folgt dem Helm, zwei Rückspiegel (links hinten-links, rechts hinten-rechts; halbe Auflösung, abwechselnd, Zweispieler mit Sparwerten), Auto-Cockpit nie, im Solo-Purzelbaum eigenes Motorrad ausgeblendet. Umhüllt: FahrzeugKamera.update, Spiel.zeichnen, rueckspiegel.sichtbar/zeichnen/vorwaermen/zuruecksetzen/entsorgen, cockpit.fuerHud.
+  Tests: test_moto_cockpit.js 19/19 (neu), test_moto_unfall 39/39, test_moto_stunts 62/62, test_moto OK, test_autos/test_physik/test_schanze OK; Browser siehe Abschlussbericht. Bilder tests/out/moto/.

@@ -297,13 +297,13 @@
 .hud-links .moto-zustand { display: block; margin-top: .2em; white-space: nowrap; font-weight: 900; font-size: .95em; line-height: 1.2; pointer-events: none; }
 .moto-zustand span { margin-right: .5em; }
 .moto-zustand .gruen { color: #7dffa0; } .moto-zustand .gelb { color: #ffe14a; } .moto-zustand .rot { color: #ff7a6a; }
-.hud .moto-mitte { position: absolute; left: 50%; top: 36%; transform: translateX(-50%); box-sizing: border-box; max-width: 92%; text-align: center; white-space: pre-line;
+.hud .moto-mitte { position: absolute; left: 50%; top: 38%; transform: translateX(-50%); box-sizing: border-box; max-width: 92%; text-align: center; white-space: pre-line;
   font-weight: 900; line-height: 1.25; color: #fff; padding: .25em .8em; border-radius: 1em; border: .08em solid #fff; pointer-events: none; display: none;
   text-shadow: 0 .06em .12em rgba(0,0,0,.5); background: linear-gradient(90deg, rgba(31,111,209,.92), rgba(70,150,235,.92)); }
 .hud .moto-mitte.krank { background: linear-gradient(90deg, rgba(31,157,85,.92), rgba(70,200,120,.92)); }
 .hud .moto-mitte .hinweis { display: block; font-size: .8em; opacity: .95; }
-.hud.links .moto-mitte, .hud.rechts .moto-mitte { top: 41%; }
-@media (max-height: 520px) { .hud .moto-mitte, .hud.links .moto-mitte, .hud.rechts .moto-mitte { top: 37%; max-width: 86%; } }       /* niedriger Bildschirm: über die Minikarte (unten links) */
+.hud.links .moto-mitte, .hud.rechts .moto-mitte { top: 42%; }
+@media (max-height: 520px) { .hud .moto-mitte, .hud.links .moto-mitte, .hud.rechts .moto-mitte { top: 42%; max-width: 86%; } }       /* niedriger Bildschirm: über die Minikarte (unten links) */
 `;
   let stilDa = false;
   function stilEinbauen() {

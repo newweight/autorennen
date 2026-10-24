@@ -301,24 +301,54 @@ window.Rennspiel = window.Rennspiel || {};
   }
   const strecke0 = (r) => r.boden;
 
+  // Busse: gelber Schulbus (schwarze Zierstreifen, rote Warnlichter), Linienbusse rot / blau / weiß / grün (weißer Zierstreifen).
+  // Fensterband aus einzelnen Scheiben mit Pfosten, vier Räder je Seite mit Nabe, Front- und Heckscheibe an den Stirnseiten, Dach mit Lüfter.
+  // Alles in EINEM Mesh (Vertexfarben) – Lage und Höhe (Oberkante) wie zuvor, nur Zierrat; Flugbahn-Tests bleiben unberührt.
   const BUSFARBEN = [0xf2c200, 0xd8362b, 0x2f6fd6, 0xf4f4f4, 0x2fa84f];
-  /** Bus-Reihe: n Gelenkbusse quer zur Fahrtrichtung, nebeneinander (1 Mesh). */
+  /** Bus-Reihe: n Busse quer zur Fahrtrichtung, nebeneinander (1 Mesh). */
   function reiheBauen(L, strecke, gruppe) {
     const cfg = R.config.motoStunts.reihe, s = sammler(), ry = headingY(L.tx, L.tz);
-    const box = new THREE.BoxGeometry(1, 1, 1), laenge = L.halb * 2, tiefe = cfg.tiefeJe - 0.4;
+    const box = new THREE.BoxGeometry(1, 1, 1), laenge = L.halb * 2, tiefe = cfg.tiefeJe - 0.4, h = L.hoehe;
+    const GLAS = 0x16222e, REIFEN = 0x151518, NABE = 0xb8bcc4;
     for (let i = 0; i < L.n; i++) {
       const a = L.a0 + (i + 0.5) * cfg.tiefeJe, cx = L.x + L.tx * a, cz = L.z + L.tz * a, g0 = strecke.hoeheAn(cx, cz);
-      const farbe = BUSFARBEN[(i + (L.nr || 0)) % BUSFARBEN.length], h = L.hoehe;
+      const farbe = BUSFARBEN[(i + (L.nr || 0)) % BUSFARBEN.length], schul = farbe === 0xf2c200;
+      const dir = (i + (L.nr || 0)) % 2 ? -1 : 1;                                            // Fahrtrichtung des Busses (Front bei +q·dir): abwechselnd
       const teil = (px, py, pz, sx, sy, sz, hex) => s.add(box, mat(cx + L.nx * px + L.tx * pz, g0 + py, cz + L.nz * px + L.tz * pz, ry, sx, sy, sz), hex);
-      teil(0, 0.2 + (h - 0.2) / 2, 0, laenge, h - 0.2, tiefe, farbe);                   // Karosserie
-      teil(0, h - 0.05, 0, laenge - 0.2, 0.12, tiefe - 0.2, 0xdedede);                  // Dach
+      const zierfarbe = schul ? 0x1b1b1f : 0xffffff, hd = tiefe / 2;
+      // Rumpf, Dach, Unterboden
+      teil(0, 0.5 + (h - 0.7) / 2, 0, laenge, h - 0.7, tiefe, farbe);                      // Karosserie (ab 0,5 m über dem Boden)
+      teil(0, 0.38, 0, laenge - 0.5, 0.3, tiefe - 0.3, 0x1b1b1f);                          // Unterboden
+      teil(0, h - 0.1, 0, laenge - 0.1, 0.2, tiefe - 0.1, schul ? 0xf2c200 : 0xdedede);   // Dach
+      teil(-dir * 1.5, h - 0.04, 0, 1.6, 0.1, tiefe - 1.0, 0xc9ccd2);                    // Lüfter-/Klimakasten (bündig mit dem Dach: die Oberkante bleibt h)
+      teil(dir * 2.6, h - 0.04, 0, 1.0, 0.1, tiefe - 1.2, 0xc9ccd2);
+      // Fensterband (einzelne Scheiben + Pfosten) und Zierstreifen auf beiden Längsseiten
+      const q0 = -dir * (laenge / 2 - 0.9), q1 = dir * (laenge / 2 - 2.3), n = Math.max(4, Math.round(Math.abs(q1 - q0) / 1.2));
       [-1, 1].forEach((sg) => {
-        const fz = sg * (tiefe / 2 + 0.01);
-        teil(0, 1.45, fz, laenge - 1.2, 0.7, 0.04, 0x16222e);                           // Fensterband (zur Anfahrt und zur Gegenseite)
-        teil(0, 0.8, fz, laenge - 0.6, 0.12, 0.04, 0xffffff);                           // Zierstreifen
+        const fz = sg * (hd + 0.015);
+        for (let k = 0; k < n; k++) { const q = q0 + (q1 - q0) * (k + 0.5) / n; teil(q, 1.72, fz, Math.abs(q1 - q0) / n - 0.22, 0.78, 0.03, GLAS); }
+        teil(dir * (laenge / 2 - 1.15), 1.2, fz, 0.9, 1.4, 0.03, 0x24343f);                // Tür (dunkel) vorn
+        teil(0, 0.95, fz, laenge - 0.4, 0.12, 0.03, zierfarbe);                             // Zierstreifen unter den Fenstern
+        if (schul) teil(0, 1.2, fz, laenge - 0.4, 0.08, 0.03, zierfarbe);                   // Schulbus: zweiter schwarzer Streifen
+        // vier Räder je Seite (zwei Achsen: vorn und hinten) mit Nabe
+        [laenge / 2 - 2.5, laenge / 2 - 5.6, -(laenge / 2 - 2.8), -(laenge / 2 - 5.9)].forEach((q) => {
+          teil(q, 0.5, sg * (hd + 0.0), 1.0, 1.0, 0.34, REIFEN);
+          teil(q, 0.5, sg * (hd + 0.18), 0.42, 0.42, 0.06, NABE);
+        });
       });
-      teil(0, 0.12, 0, laenge - 0.4, 0.3, tiefe - 0.2, 0x1b1b1f);                       // Unterboden/Räder (dunkel)
-      teil(0, 0.2 + (h - 0.2) / 2, 0, 0.12, h - 0.2, tiefe + 0.02, 0x2b2b30);           // Gelenk in der Mitte
+      // Stirnseiten: Front (Windschutzscheibe, Scheinwerfer, Zielschild) bei +q·dir, Heck (Heckscheibe, Rücklichter) bei −q·dir
+      const f = dir * (laenge / 2 + 0.015), hk = -dir * (laenge / 2 + 0.015);
+      teil(f, 1.65, 0, 0.03, 1.0, tiefe - 0.35, GLAS);                                       // Windschutzscheibe
+      teil(f, 2.38, 0, 0.03, 0.22, tiefe - 0.9, schul ? 0xffe14a : 0xff9a2a);                // Zielschild
+      [-1, 1].forEach((sg) => {
+        teil(f, 0.85, sg * (hd - 0.45), 0.03, 0.22, 0.4, 0xfff4c0);                          // Scheinwerfer
+        teil(hk, 0.85, sg * (hd - 0.45), 0.03, 0.2, 0.34, 0xd8201a);                         // Rücklichter
+        if (schul) teil(f, h - 0.4, sg * (hd - 0.5), 0.03, 0.2, 0.34, 0xd8201a);             // Schulbus: rote Warnlichter oben
+      });
+      teil(f, 0.45, 0, 0.1, 0.22, tiefe - 0.2, 0x2b2b30);                                    // Stoßstange vorn
+      teil(hk, 1.7, 0, 0.03, 0.7, tiefe - 0.6, GLAS);                                        // Heckscheibe
+      teil(hk, 0.45, 0, 0.1, 0.22, tiefe - 0.2, 0x2b2b30);                                   // Stoßstange hinten
+      if (!schul) teil(0, 0.6, hd + 0.015, laenge - 0.4, 0.1, 0.03, farbe === 0xf4f4f4 ? 0x2f6fd6 : 0xffffff);
     }
     box.dispose();
     const m = new THREE.Mesh(s.geo(), new THREE.MeshLambertMaterial({ vertexColors: true }));

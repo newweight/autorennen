@@ -215,6 +215,7 @@
   }
 
   // ---------- Menü: Modus-Karte „Stuntrennen“ ----------
+  if (H && H.menueStilEinbauen) H.menueStilEinbauen();       // fünf Karten in einer Reihe: nichts mehr am Rand abgeschnitten (nur Motorradmodus)
   if (R.Menue) {
     const M = R.Menue.prototype;
     const htmlModus = M.htmlModus;
@@ -250,8 +251,8 @@
     if (H) H.stilEinbauen();
     const k = document.createElement('div');
     k.className = 't-knopf klein moto-touch';
-    k.textContent = '🌀';
-    k.title = 'Trick (in der Luft), Wheelie in der Wheelie-Zone';
+    k.innerHTML = '<span>🌀</span><small>Trick</small>';
+    k.title = 'Trick: in der Luft tippen = Drehung, zweimal = Salto; in der Wheelie-Zone halten = Wheelie';
     wurzel.appendChild(k);
     const code = () => CFG().taste[0];
     const runter = (e) => {
