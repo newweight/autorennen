@@ -25,3 +25,10 @@ Zweig `motorrad` im Repo newweight/autorennen (Basis v34). Regel: NUR neue Datei
 - [x] Zusatz 24.10.: jede Strecke genau 1 Werkstatt + 1 Krankenstation; schwerer Unfall zwischendurch → Krankenwagen holt Fahrer zur Krankenstation bzw. Abschleppwagen bringt Motorrad zur Werkstatt
 - [x] Korrektur 24.10.: Werkstatt aus dem Autospiel nutzen; Motorrad-Zustand + Fahrer-Gesundheit in %; schwerer Unfall → Krankenwagen/Abschleppwagen versorgen VOR ORT (1,5 s je 10 %); an Station 0,5 s je 10 %; ab 30 % (beide Werte) darf man mit Gas weiterfahren
 - [x] Zusatz 24.10.: Motorrad-Cockpit (Lenker, Tacho, Schräglage gedämpft) + zwei Rückspiegel links/rechts statt einem oben
+
+# M2c-2 Kleinkram (beauftragt 24.10.)
+- [ ] Qualm weich/rund, verdeckt nichts, bei Versorgung schwach
+- [ ] Helfer/Fahrer/Fahrzeug feste Plätze ohne Überlappung
+- [ ] Abschleppwagen-Räder (nur falls per Laufzeit einfach)
+- [ ] Zweispieler: Gang/Spiegel lesbar
+- [ ] Alpen-Feuerring höher (Unterkante ≥ 1 m)
