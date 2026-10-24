@@ -27,3 +27,4 @@
 - 24.10. Zusatzwunsch an Agent: je Strecke 1 Werkstatt + 1 Krankenstation; Krankenwagen/Abschleppwagen bei schweren Unfällen.
 - 24.10. Korrektur an Agent: Versorgung vor Ort 3 s/10 %, an Station 0,5 s/10 %; Werkstatt aus Autospiel; beide Zustände in %.
 - 24.10. Korrektur 2: vor Ort 1,5 s/10 %, Station 0,5 s/10 %, ab 30 % weiterfahren (Gas), KI vor Ort ab 30 %, an Station bis 100 %.
+- 24.10. Zusatz an Agent: Motorrad-Cockpit + 2 Spiegel links/rechts.
