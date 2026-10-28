@@ -1,264 +1,14 @@
 [
  {
-  "fall": "moto_schoen_regen",
-  "calls": 265,
-  "ms": 8.5,
-  "zaehler": {
-   "add": 0,
-   "norm": 56,
-   "tropfen": 17,
-   "ringe": 1,
-   "funken": 0,
-   "puff": 0,
-   "brand": 0
-  },
-  "fehler": [
-   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation",
-   "console:THREE.Texture: Property .encoding has been replaced by .colorSpace."
-  ]
- },
- {
-  "fall": "moto_schoen_regen_cockpit",
-  "calls": 248,
-  "ms": 4.9,
-  "zaehler": {
-   "add": 0,
-   "norm": 58,
-   "tropfen": 28,
-   "ringe": 1,
-   "funken": 0,
-   "puff": 0,
-   "brand": 0
-  },
-  "fehler": [
-   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation",
-   "console:THREE.Texture: Property .encoding has been replaced by .colorSpace."
-  ]
- },
- {
-  "fall": "moto_schoen_tempo",
-  "calls": 296,
-  "ms": 4.5,
-  "zaehler": {
-   "add": 0,
-   "norm": 0,
-   "tropfen": 0,
-   "ringe": 1,
-   "funken": 0,
-   "puff": 0,
-   "brand": 0
-  },
-  "fehler": [
-   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation",
-   "console:THREE.Texture: Property .encoding has been replaced by .colorSpace."
-  ]
- },
- {
-  "fall": "moto_schoen_funken",
-  "calls": 171,
-  "ms": 5.1,
-  "zaehler": {
-   "add": 7,
-   "norm": 0,
-   "tropfen": 0,
-   "ringe": 1,
-   "funken": 2,
-   "puff": 0,
-   "brand": 0
-  },
-  "fehler": [
-   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation",
-   "console:THREE.Texture: Property .encoding has been replaced by .colorSpace."
-  ]
- },
- {
-  "fall": "moto_schoen_puff",
-  "calls": 135,
-  "ms": 6.1,
-  "zaehler": {
-   "add": 19,
-   "norm": 48,
-   "tropfen": 0,
-   "ringe": 1,
-   "funken": 0,
-   "puff": 1,
-   "brand": 0
-  },
-  "fehler": [
-   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation",
-   "console:THREE.Texture: Property .encoding has been replaced by .colorSpace."
-  ]
- },
- {
-  "fall": "moto_schoen_feuer",
-  "calls": 188,
-  "ms": 3.2,
-  "zaehler": {
-   "add": 38,
-   "norm": 51,
-   "tropfen": 0,
-   "ringe": 1,
-   "funken": 0,
-   "puff": 0,
-   "brand": 0
-  },
-  "fehler": [
-   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation",
-   "console:THREE.Texture: Property .encoding has been replaced by .colorSpace."
-  ]
- },
- {
-  "fall": "moto_ultra_regen",
-  "calls": 265,
-  "ms": 5,
-  "zaehler": {
-   "add": 0,
-   "norm": 90,
-   "tropfen": 17,
-   "ringe": 1,
-   "funken": 0,
-   "puff": 0,
-   "brand": 0
-  },
-  "fehler": [
-   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation",
-   "console:THREE.Texture: Property .encoding has been replaced by .colorSpace."
-  ]
- },
- {
-  "fall": "moto_ultra_regen_cockpit",
-  "calls": 248,
-  "ms": 5.8,
-  "zaehler": {
-   "add": 0,
-   "norm": 89,
-   "tropfen": 26,
-   "ringe": 1,
-   "funken": 0,
-   "puff": 0,
-   "brand": 0
-  },
-  "fehler": [
-   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation",
-   "console:THREE.Texture: Property .encoding has been replaced by .colorSpace."
-  ]
- },
- {
-  "fall": "moto_ultra_tempo",
-  "calls": 297,
-  "ms": 7,
-  "zaehler": {
-   "add": 0,
-   "norm": 0,
-   "tropfen": 0,
-   "ringe": 1,
-   "funken": 0,
-   "puff": 0,
-   "brand": 0
-  },
-  "fehler": [
-   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation",
-   "console:THREE.Texture: Property .encoding has been replaced by .colorSpace."
-  ]
- },
- {
-  "fall": "moto_ultra_funken",
-  "calls": 171,
-  "ms": 6.8,
-  "zaehler": {
-   "add": 9,
-   "norm": 0,
-   "tropfen": 0,
-   "ringe": 1,
-   "funken": 2,
-   "puff": 0,
-   "brand": 0
-  },
-  "fehler": [
-   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation",
-   "console:THREE.Texture: Property .encoding has been replaced by .colorSpace."
-  ]
- },
- {
-  "fall": "moto_ultra_puff",
-  "calls": 135,
-  "ms": 6.1,
-  "zaehler": {
-   "add": 32,
-   "norm": 79,
-   "tropfen": 0,
-   "ringe": 1,
-   "funken": 0,
-   "puff": 1,
-   "brand": 0
-  },
-  "fehler": [
-   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation",
-   "console:THREE.Texture: Property .encoding has been replaced by .colorSpace."
-  ]
- },
- {
-  "fall": "moto_ultra_feuer",
-  "calls": 189,
-  "ms": 4.4,
-  "zaehler": {
-   "add": 59,
-   "norm": 84,
-   "tropfen": 0,
-   "ringe": 1,
-   "funken": 0,
-   "puff": 0,
-   "brand": 0
-  },
-  "fehler": [
-   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation",
-   "console:THREE.Texture: Property .encoding has been replaced by .colorSpace."
-  ]
- },
- {
-  "fall": "auto_schoen_feuer",
-  "calls": 78,
-  "ms": 3,
-  "zaehler": {
-   "add": 4,
-   "norm": 13,
-   "tropfen": 0,
-   "ringe": 0,
-   "funken": 0,
-   "puff": 0,
-   "brand": 1
-  },
-  "fehler": [
-   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation"
-  ]
- },
- {
-  "fall": "auto_ultra_feuer",
-  "calls": 78,
-  "ms": 4.6,
-  "zaehler": {
-   "add": 5,
-   "norm": 19,
-   "tropfen": 0,
-   "ringe": 0,
-   "funken": 0,
-   "puff": 0,
-   "brand": 1
-  },
-  "fehler": [
-   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation"
-  ]
- },
- {
   "fall": "auto_schoen_funken",
   "calls": 43,
-  "ms": 3.1,
+  "ms": 2.9,
   "zaehler": {
-   "add": 13,
+   "add": 14,
    "norm": 0,
    "tropfen": 0,
    "ringe": 0,
-   "funken": 2,
+   "funken": 4,
    "puff": 0,
    "brand": 0
   },
@@ -268,25 +18,25 @@
   "dbg": [
    [
     [
-     -106.3,
+     -102.6,
      0.5,
-     -108.8,
+     -109,
      0.16,
-     0.59
+     0.61
     ],
     [
-     -105.8,
+     -103.2,
      0.4,
-     -109,
+     -109.8,
      0.24,
      0.07
     ],
     [
-     -105.7,
-     0.5,
-     -107.7,
-     0.17,
-     0.71
+     -102.9,
+     0.9,
+     -109.1,
+     0.16,
+     0.59
     ]
    ],
    [
@@ -303,14 +53,14 @@
  },
  {
   "fall": "auto_ultra_funken",
-  "calls": 43,
-  "ms": 3.9,
+  "calls": 44,
+  "ms": 5.1,
   "zaehler": {
-   "add": 21,
-   "norm": 0,
+   "add": 6,
+   "norm": 12,
    "tropfen": 0,
    "ringe": 0,
-   "funken": 2,
+   "funken": 4,
    "puff": 0,
    "brand": 0
   },
@@ -320,25 +70,25 @@
   "dbg": [
    [
     [
-     -106.3,
-     0.5,
-     -108.8,
-     0.16,
-     0.59
-    ],
-    [
-     -105.8,
+     -103.2,
      0.4,
-     -109,
+     -109.8,
      0.24,
      0.07
     ],
     [
-     -105.7,
+     -105.4,
+     0.4,
+     -110,
+     0.24,
+     0.07
+    ],
+    [
+     -103.6,
      0.5,
-     -107.7,
-     0.17,
-     0.71
+     -110.2,
+     0.31,
+     0.2
     ]
    ],
    [
@@ -350,6 +100,498 @@
     -100.8,
     1.7,
     -106
+   ]
+  ]
+ },
+ {
+  "fall": "moto_schoen_regen",
+  "calls": 265,
+  "ms": 8.1,
+  "zaehler": {
+   "add": 0,
+   "norm": 56,
+   "tropfen": 17,
+   "ringe": 1,
+   "funken": 0,
+   "puff": 0,
+   "brand": 0
+  },
+  "fehler": [
+   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation"
+  ],
+  "dbg": [
+   [],
+   [
+    -125.5,
+    0,
+    -33
+   ],
+   [
+    -125.4,
+    2.6,
+    -27
+   ]
+  ]
+ },
+ {
+  "fall": "moto_schoen_regen_cockpit",
+  "calls": 248,
+  "ms": 7.2,
+  "zaehler": {
+   "add": 0,
+   "norm": 58,
+   "tropfen": 28,
+   "ringe": 1,
+   "funken": 0,
+   "puff": 0,
+   "brand": 0
+  },
+  "fehler": [
+   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation"
+  ],
+  "dbg": [
+   [],
+   [
+    -125.5,
+    0,
+    -33
+   ],
+   [
+    -125.6,
+    1.7,
+    -33.4
+   ]
+  ]
+ },
+ {
+  "fall": "moto_schoen_tempo",
+  "calls": 296,
+  "ms": 5.9,
+  "zaehler": {
+   "add": 0,
+   "norm": 0,
+   "tropfen": 0,
+   "ringe": 1,
+   "funken": 0,
+   "puff": 0,
+   "brand": 0
+  },
+  "fehler": [
+   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation"
+  ],
+  "dbg": [
+   [],
+   [
+    -125,
+    -0.0,
+    8.4
+   ],
+   [
+    -125,
+    2.6,
+    14.9
+   ]
+  ]
+ },
+ {
+  "fall": "moto_schoen_funken",
+  "calls": 113,
+  "ms": 8.1,
+  "zaehler": {
+   "add": 6,
+   "norm": 8,
+   "tropfen": 0,
+   "ringe": 1,
+   "funken": 4,
+   "puff": 0,
+   "brand": 0
+  },
+  "fehler": [
+   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation"
+  ],
+  "dbg": [
+   [
+    [
+     -102.7,
+     0.4,
+     -109.8,
+     0.24,
+     0.07
+    ],
+    [
+     -105.2,
+     0.4,
+     -109.8,
+     0.24,
+     0.07
+    ],
+    [
+     -103,
+     0.5,
+     -109.9,
+     0.31,
+     0.2
+    ]
+   ],
+   [
+    -104,
+    0.1,
+    -110.1
+   ],
+   [
+    -100.6,
+    1.7,
+    -106.4
+   ]
+  ]
+ },
+ {
+  "fall": "moto_schoen_puff",
+  "calls": 135,
+  "ms": 5.4,
+  "zaehler": {
+   "add": 19,
+   "norm": 48,
+   "tropfen": 0,
+   "ringe": 1,
+   "funken": 0,
+   "puff": 1,
+   "brand": 0
+  },
+  "fehler": [
+   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation"
+  ],
+  "dbg": [
+   [
+    [
+     -126,
+     0.8,
+     16.4,
+     0.18,
+     0.53
+    ],
+    [
+     -125,
+     1.2,
+     15.7,
+     0.19,
+     0.6
+    ],
+    [
+     -124.6,
+     0.7,
+     17.1,
+     0.18,
+     0.55
+    ]
+   ],
+   [
+    -125,
+    -0.0,
+    18.7
+   ],
+   [
+    -121,
+    2.2,
+    24.5
+   ]
+  ]
+ },
+ {
+  "fall": "moto_schoen_feuer",
+  "calls": 188,
+  "ms": 6.1,
+  "zaehler": {
+   "add": 38,
+   "norm": 51,
+   "tropfen": 0,
+   "ringe": 1,
+   "funken": 0,
+   "puff": 0,
+   "brand": 0
+  },
+  "fehler": [
+   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation"
+  ],
+  "dbg": [
+   [
+    [
+     -0.5,
+     2.4,
+     -266,
+     0.19,
+     0.03
+    ],
+    [
+     1.5,
+     8,
+     -266,
+     0.17,
+     0.01
+    ],
+    [
+     -0.6,
+     8.7,
+     -266,
+     0.19,
+     0.03
+    ]
+   ],
+   [
+    -0.0,
+    0,
+    -254
+   ],
+   [
+    -3,
+    4.6,
+    -257
+   ]
+  ]
+ },
+ {
+  "fall": "moto_ultra_regen",
+  "calls": 265,
+  "ms": 6.6,
+  "zaehler": {
+   "add": 0,
+   "norm": 90,
+   "tropfen": 17,
+   "ringe": 1,
+   "funken": 0,
+   "puff": 0,
+   "brand": 0
+  },
+  "fehler": [
+   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation"
+  ],
+  "dbg": [
+   [],
+   [
+    -125.5,
+    0,
+    -33
+   ],
+   [
+    -125.4,
+    2.6,
+    -27
+   ]
+  ]
+ },
+ {
+  "fall": "moto_ultra_regen_cockpit",
+  "calls": 248,
+  "ms": 4.2,
+  "zaehler": {
+   "add": 0,
+   "norm": 89,
+   "tropfen": 26,
+   "ringe": 1,
+   "funken": 0,
+   "puff": 0,
+   "brand": 0
+  },
+  "fehler": [
+   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation"
+  ],
+  "dbg": [
+   [],
+   [
+    -125.5,
+    0,
+    -33
+   ],
+   [
+    -125.6,
+    1.7,
+    -33.4
+   ]
+  ]
+ },
+ {
+  "fall": "moto_ultra_tempo",
+  "calls": 297,
+  "ms": 7.5,
+  "zaehler": {
+   "add": 0,
+   "norm": 0,
+   "tropfen": 0,
+   "ringe": 1,
+   "funken": 0,
+   "puff": 0,
+   "brand": 0
+  },
+  "fehler": [
+   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation"
+  ],
+  "dbg": [
+   [],
+   [
+    -125,
+    -0.0,
+    8.4
+   ],
+   [
+    -125,
+    2.6,
+    14.9
+   ]
+  ]
+ },
+ {
+  "fall": "moto_ultra_funken",
+  "calls": 113,
+  "ms": 4.5,
+  "zaehler": {
+   "add": 6,
+   "norm": 12,
+   "tropfen": 0,
+   "ringe": 1,
+   "funken": 4,
+   "puff": 0,
+   "brand": 0
+  },
+  "fehler": [
+   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation"
+  ],
+  "dbg": [
+   [
+    [
+     -102.7,
+     0.4,
+     -109.8,
+     0.24,
+     0.07
+    ],
+    [
+     -104.9,
+     0.4,
+     -110,
+     0.24,
+     0.07
+    ],
+    [
+     -103,
+     0.5,
+     -110.2,
+     0.31,
+     0.2
+    ]
+   ],
+   [
+    -104,
+    0.1,
+    -110.1
+   ],
+   [
+    -100.6,
+    1.7,
+    -106.4
+   ]
+  ]
+ },
+ {
+  "fall": "moto_ultra_puff",
+  "calls": 135,
+  "ms": 7.4,
+  "zaehler": {
+   "add": 32,
+   "norm": 79,
+   "tropfen": 0,
+   "ringe": 1,
+   "funken": 0,
+   "puff": 1,
+   "brand": 0
+  },
+  "fehler": [
+   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation"
+  ],
+  "dbg": [
+   [
+    [
+     -126,
+     0.8,
+     16.4,
+     0.18,
+     0.53
+    ],
+    [
+     -125,
+     1.2,
+     15.7,
+     0.19,
+     0.6
+    ],
+    [
+     -124.6,
+     0.7,
+     17.1,
+     0.18,
+     0.55
+    ]
+   ],
+   [
+    -125,
+    -0.0,
+    18.7
+   ],
+   [
+    -121,
+    2.2,
+    24.5
+   ]
+  ]
+ },
+ {
+  "fall": "moto_ultra_feuer",
+  "calls": 189,
+  "ms": 3.6,
+  "zaehler": {
+   "add": 59,
+   "norm": 84,
+   "tropfen": 0,
+   "ringe": 1,
+   "funken": 0,
+   "puff": 0,
+   "brand": 0
+  },
+  "fehler": [
+   "console:Scripts \"build/three.js\" and \"build/three.min.js\" are deprecated with r150+, and will be removed with r160. Please use ES Modules or alternatives: https://threejs.org/docs/index.html#manual/en/introduction/Installation"
+  ],
+  "dbg": [
+   [
+    [
+     2.6,
+     4.2,
+     -265.3,
+     0.09,
+     0.03
+    ],
+    [
+     2.2,
+     7.3,
+     -266,
+     0.16,
+     0.01
+    ],
+    [
+     0.6,
+     8.8,
+     -266,
+     0.16,
+     0
+    ]
+   ],
+   [
+    -0.0,
+    0,
+    -254
+   ],
+   [
+    -3,
+    4.6,
+    -257
    ]
   ]
  }
