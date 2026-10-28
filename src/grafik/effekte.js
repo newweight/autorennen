@@ -102,7 +102,7 @@
     const S = st.add, f = st.P.funken; n = Math.round(n * f);
     for (let k = 0; k < n; k++) {
       const a = (rnd() - 0.5) * 2.6, c = Math.cos(a), s = Math.sin(a), v = zw(2.5, 4 + klemme(tempo, 0, 30) * 0.28);
-      emit(S, x + zw(-0.25, 0.25), y + zw(0, 0.3), z + zw(-0.25, 0.25), (-rx * c + rz * s) * v, zw(0.8, 3.6), (-rz * c - rx * s) * v, zw(0.3, 0.75), 0.26, 0.08, FUNKE0, FUNKE1, 1, 9.8, 0.4);
+      emit(st.norm, x + zw(-0.25, 0.25), y + zw(0, 0.3), z + zw(-0.25, 0.25), (-rx * c + rz * s) * v, zw(0.8, 3.6), (-rz * c - rx * s) * v, zw(0.3, 0.75), 0.24, 0.1, [1, 0.88, 0.35], [1, 0.4, 0.05], 1, 9.8, 0.4);
       if (k % 3 === 0) emit(S, x, y + 0.15, z, (-rx * c + rz * s) * v * 0.3, 0.4, (-rz * c - rx * s) * v * 0.3, 0.2, 0.5, 0.2, HOF, FUNKE1, 0.4, 0, 2);
     }
     emit(S, x, y + 0.2, z, 0, 0.2, 0, 0.14, 0.5, 0.9, [1, 0.85, 0.5], HOF, 0.3, 0, 0);
