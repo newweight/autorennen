@@ -10,7 +10,8 @@
 //     mo-Werte je Tick), Ergebnis mit Stuntpunkten – und parallel ein unveränderter Auto-Raum (kein `mo`/`mu`)
 //  F) Client-Schattenzustand (src/moto/motoOnline.js im Node-Kontext mit Stubs): zustand.mo/ich.mu → spiel.stunt / spiel.unfall, Ereignisse, Eingabe-Bit k
 //  G) Alter Client ↔ neuer Server: eingabe ohne k, raumErstellen ohne moto → Autoraum (gemischt im selben Server wie Motorrad-Räume)
-// Am Ende werden Server und Verbindungen geschlossen (kein Hängen).
+//  H) Ergebnis (Stuntpunkte je Zeile, stuntrennen), Szene vor Ort (Abschleppwagen/Krankenwagen) und Station (Halt) kommen im Zustand an und der Client spiegelt sie
+// Am Ende werden Server und Verbindungen geschlossen; der Prozess beendet sich von selbst (kein process.exit im Erfolgsfall – ein hängender Timer/Socket fiele auf: Wächter 8 s).
 'use strict';
 const http = require('http');
 const path = require('path');
@@ -20,6 +21,8 @@ const { starten } = require('../server/server');
 const { Simulation, kontextLaden, laden, ladenMoto, einstellungenPruefen, MODULE } = require('../server/simulation');
 
 let fehler = 0, ok = 0;
+// Wächter: nie hängen – nach 5 Minuten Abbruch mit FEHL (Prozess wird sicher beendet)
+setTimeout(() => { console.log('FEHL Wächter: Test hängt (> 300 s) – Abbruch'); process.exit(3); }, 300000).unref();
 function pruefe(name, gut, info) { console.log((gut ? 'OK   ' : 'FEHL ') + name + (info !== undefined ? '  (' + info + ')' : '')); if (gut) ok++; else fehler++; }
 const warte = (ms) => new Promise(r => setTimeout(r, ms));
 const R = laden();
@@ -120,6 +123,7 @@ function autopilot(C, st, v, idx) {
     c.schliessen();
     // Marken-Datei (ohne Neustart): Schalter per Datei
     const marke = path.join(__dirname, '_motorrad_test.an');
+    fs.rmSync(marke, { force: true });
     const viaDatei = await starten({ port: 0, host: '127.0.0.1', leise: true, motorradMarke: marke });
     const x0 = await hole(viaDatei.port, '/Motorrad.html');
     fs.writeFileSync(marke, '');
@@ -185,8 +189,20 @@ function autopilot(C, st, v, idx) {
       mo[0][1] === sim.moto.punkte(0), mo.map(a => a[1]).join('/'));
     const quad = new Simulation({ moto: true, einstellungen: { streckeId: 'wiese', gegner: 1, runden: 2, unfall: 'echt', kollisionen: false }, spieler: [{ fahrer: 'Jonas', auto: 'quad' }], seed: 11 });
     const quadEv = [];
-    for (let n = 0; n < 60 * 40; n++) { quad.eingabeSetzen(0, { gas: 1, bremse: 0, lenkung: 0 }); quad.schritt(); for (const ev of quad.abholen()) quadEv.push(ev); }
-    pruefe('C Quad kippt nie: 40 s geradeaus gegen die Bande → kein Sturz-/Unfall-Ereignis für das Quad', !quadEv.some(x => (x.art === 'sturz' || x.art === 'unfall') && x.nr === 0), quadEv.filter(x => x.nr === 0).map(x => x.art).join(',') || 'keine');
+    for (let n = 0; n < 60 * 40; n++) { quad.eingabeSetzen(0, { gas: 1, bremse: 0, lenkung: 0.3 }); quad.schritt(); for (const ev of quad.abholen()) quadEv.push(ev); }
+    pruefe('C Quad kippt nie: 40 s Vollgas mit leichter Lenkung gegen die Bande → kein Sturz-/Unfall-Ereignis für das Quad', !quadEv.some(x => (x.art === 'sturz' || x.art === 'unfall') && x.nr === 0), quadEv.filter(x => x.nr === 0).map(x => x.art).join(',') || 'keine');
+    // Kontrolle: dieselbe Eingabe mit einem Motorrad, das kippen darf, stürzt – sonst sagt „Quad kippt nie“ nichts
+    const sb = new Simulation({ moto: true, einstellungen: { streckeId: 'wiese', gegner: 1, runden: 2, unfall: 'echt', kollisionen: false }, spieler: [{ fahrer: 'Jonas', auto: 'superbike' }], seed: 11 });
+    const sbEv = [];
+    for (let n = 0; n < 60 * 40; n++) { sb.eingabeSetzen(0, { gas: 1, bremse: 0, lenkung: 0.3 }); sb.schritt(); for (const ev of sb.abholen()) sbEv.push(ev); }
+    pruefe('C Kontrolle zum Quad-Test: das Superbike stürzt mit derselben Eingabe (Sturz-Ereignis) – der Quad-Test beweist also etwas', sbEv.some(x => x.art === 'sturz' && x.nr === 0), sbEv.filter(x => x.nr === 0 && (x.art === 'sturz' || x.art === 'unfall')).map(x => x.art + (x.folge ? ':' + x.folge : '')).join(',') || 'kein Sturz');
+    const ergC = sim.ergebnis(), moC = sim.zustand().mo;
+    pruefe('C Ergebnis (Motorrad-Raum): je Zeile `stunt` = Stuntpunkte des Teilnehmers, Feld `stuntrennen`; Auto-Simulation ohne beides', ergC.zeilen.length === 3 && ergC.zeilen.every(z => z.stunt === moC[z.nr][1]) && ergC.stuntrennen === false &&
+      ergC.zeilen.some(z => z.stunt > 0) && !('stuntrennen' in new Simulation({ einstellungen: { streckeId: 'wiese', gegner: 1 }, spieler: [{ fahrer: 'Jonas', auto: 'porsche-911' }], seed: 4 }).ergebnis()) &&
+      !('stunt' in new Simulation({ einstellungen: { streckeId: 'wiese', gegner: 1 }, spieler: [{ fahrer: 'Jonas', auto: 'porsche-911' }], seed: 4 }).ergebnis().zeilen[0]), ergC.zeilen.map(z => z.stunt).join('/'));
+    const sr = new Simulation({ moto: true, einstellungen: { streckeId: 'wiese', gegner: 1, stuntrennen: true }, spieler: [{ fahrer: 'Jonas', auto: 'roller' }], seed: 6 });
+    pruefe('C Ergebnis Stuntrennen: stuntrennen = true; Einstellungen geprüft (Stuntrennen nur ein echtes true, Unfälle Standard sanft)', sr.ergebnis().stuntrennen === true && sr.einstellungen.unfall === 'sanft' &&
+      new Simulation({ moto: true, einstellungen: { streckeId: 'wiese', gegner: 1, stuntrennen: 'ja', unfall: 'quatsch' }, spieler: [{ fahrer: 'Jonas', auto: 'roller' }], seed: 6 }).einstellungen.stuntrennen === false);
     const tiefe = (sim.sim.fahrzeuge.length);
     const kein = new Simulation({ moto: true, einstellungen: { streckeId: 'wiese', gegner: 1, unfall: 'aus' }, spieler: [{ fahrer: 'Jonas', auto: 'chopper' }], seed: 3 });
     pruefe('C Unfälle aus: ich.mu = null (Vorhersage rechnet ohne Unfall-Faktoren)', kein.ich(0).mu === null || kein.ich(0).mu === undefined, tiefe + ' Fahrzeuge');
@@ -256,8 +272,9 @@ function autopilot(C, st, v, idx) {
     vH.abgleich(z.ich, null, undefined, z.k);
     CM.Netz.fahrzeugSchreiben(pvH, z.ich.v);
     const a = autopilot(CM, stM, pvH, hostM.idx); hostM.idx = a.idx;
-    if (hostM.fort > 500 && !hostM.crashFertig && !(hostM.crashRest > 0)) { hostM.crashRest = 50; hostM.crashFertig = true; }       // Sturz erzwingen: schräg in die Bande
-    if (hostM.crashRest > 0) { a.s = { gas: 1, bremse: 0, lenkung: 0.7 }; hostM.crashRest--; }
+    // Sturz erzwingen: ab 300 m Vollgas mit leichter Lenkung in die Bande, bis der Server den Sturz meldet (danach wieder Autopilot)
+    if (!hostM.sturzGesehen) hostM.sturzGesehen = hostM.ereignisse.some(x => x.art === 'sturz' && x.nr === 0);
+    if (hostM.fort > 300 && !hostM.sturzGesehen) a.s = { gas: 1, bremse: 0, lenkung: 0.3 };
     const k = CM.Netz.eingabeKodieren(a.s);
     const luft = !!(z.mo && (z.mo[0][6] & 128));
     if (luft && !hostM.imFlug) hostM.trickRest = 2;
@@ -273,13 +290,16 @@ function autopilot(C, st, v, idx) {
   gastM.n = 0;
   gastM.beiZustand = (z) => { if (!z.ich) return; for (let i = 0; i < 3; i++) { gastM.n++; gastM.senden({ t: 'eingabe', n: gastM.n, g: 255, b: 0, l: 0 }); } };      // Gas voll, keine Lenkung → Bande
   const gastGasK = CM.Netz.eingabeKodieren({ gas: 1, bremse: 0, lenkung: 0 });
-  gastM.beiZustand = (z) => { if (!z.ich) return; for (let i = 0; i < 3; i++) { gastM.n++; gastM.senden({ t: 'eingabe', n: gastM.n, g: gastGasK.g, b: 0, l: 0 }); } };
+  const gastQuadK = CM.Netz.eingabeKodieren({ gas: 1, bremse: 0, lenkung: 0.3 });      // Vollgas + leichte Lenkung: ein Superbike stürzt damit (siehe C), das Quad nie
+  gastM.beiZustand = (z) => { if (!z.ich) return; for (let i = 0; i < 3; i++) { gastM.n++; gastM.senden({ t: 'eingabe', n: gastM.n, g: gastQuadK.g, b: 0, l: gastQuadK.l }); } };
   autoH.n = 0; autoH.fort = 0;
   autoH.beiZustand = (z) => { if (!z.ich) return; autoH.fort = z.a[0][12]; for (let i = 0; i < 3; i++) { autoH.n++; autoH.senden({ t: 'eingabe', n: autoH.n, g: gastGasK.g, b: 0, l: 0 }); } };
   alt.beiZustand = (z) => { if (!z.ich) return; for (let i = 0; i < 3; i++) { alt.n = (alt.n || 0) + 1; alt.senden({ t: 'eingabe', n: alt.n, g: gastGasK.g, b: 0, l: 0 }); } };
   const ergH = hostM.auf('ergebnis', null, 120000);
   hostM.senden({ t: 'geladen' }); gastM.senden({ t: 'geladen' }); autoH.senden({ t: 'geladen' }); alt.senden({ t: 'geladen' });
-  await warte(40000 / 6);                           // ≈ 40 s Spielzeit (Zeitraffer ×6)
+  // ≈ 40 s Spielzeit (Zeitraffer ×6), mindestens bis der Host gestürzt ist und die Unfall-Folge gemeldet wurde (höchstens ≈ 120 s)
+  for (let t0 = Date.now(); Date.now() - t0 < 120000 / 6 && !(Date.now() - t0 > 40000 / 6 && hostM.sturzGesehen && hostM.ereignisse.some(x => x.art === 'unfall' && x.nr === 0)); ) await warte(250);
+  const spielzeitE = hostM.letzterZustand ? hostM.letzterZustand.k / 60 : 0;
 
   const evH = hostM.ereignisse, evG = gastM.ereignisse;
   const sig = (l, art) => l.filter(x => x.art === art).map(x => JSON.stringify(x));
@@ -293,11 +313,15 @@ function autopilot(C, st, v, idx) {
     for (const [k, z] of hostM.zByK) { const g = gastM.zByK.get(k); if (g) { n++; if (JSON.stringify(g.mo) !== JSON.stringify(z.mo)) gleichAlle = false; } }
     return n > 100 && gleichAlle;
   })(), 'verglichen: ' + [...hostM.zByK.keys()].filter(k => gastM.zByK.has(k)).length);
-  pruefe('E Sturz: Quad-Spieler (Gast) fährt gegen die Bande → Quad stürzt NIE (kein sturz/unfall für nr 1) – Server entschärft wie der Browser',
-    !sturzH.some(x => x.nr === 1) && !unfH.some(x => x.nr === 1) && gastM.letzterZustand.a[1][12] >= 0, 'sturz ' + sturzH.map(x => x.nr).join(','));
+  pruefe('E Sturz: Quad-Spieler (Gast) fährt mit Vollgas in die Bande → Quad stürzt NIE (kein sturz/unfall für nr 1) – Server entschärft wie der Browser; Gast ist dabei vorangekommen',
+    !sturzH.some(x => x.nr === 1) && !unfH.some(x => x.nr === 1) && !sturzG.some(x => x.nr === 1) && gastM.letzterZustand.a[1][12] > 50, 'sturz ' + sturzH.map(x => x.nr).join(',') + ', Quad-Fortschritt ' + gastM.letzterZustand.a[1][12]);
   const fahrerSturz = sturzH.length > 0 || sturzG.length > 0;
+  pruefe('E Sturz des Superbike-Fahrers (Host, Vollgas in die Bande) kommt bei BEIDEN Clients an: Sturz-Ereignis nr 0 und Unfall-Ereignis mit Folge, Zustand/Gesundheit in %, in zustand.mo steigt der Sturzzähler',
+    sturzH.some(x => x.nr === 0) && sturzG.some(x => x.nr === 0) && unfH.some(x => x.nr === 0 && ['schreck', 'schaden', 'leicht', 'schwer'].includes(x.folge) && x.z <= 100 && x.gs <= 100) &&
+    unfG.some(x => x.nr === 0) && hostM.letzterZustand.mo[0][0] >= 1 && gastM.letzterZustand.mo[0][0] === hostM.letzterZustand.mo[0][0],
+    sturzH.map(x => 'Sturz nr' + x.nr + '#' + x.n).join(' ') + ' | ' + unfH.map(x => x.folge + (x.szene ? '+' + x.szene : '') + ' ' + x.z + '/' + x.gs).join(' ') + ' | Sturzzähler ' + hostM.letzterZustand.mo[0][0]);
   pruefe('E Stunt-Ereignisse kommen bei beiden Clients identisch an (Name, Punkte, Fahrer)', stuH.length >= 1 && JSON.stringify(stuH) === JSON.stringify(stuG), stuH.length + ' Stunts: ' + evH.filter(x => x.art === 'stunt').map(x => x.nr + ':' + x.st + ':' + x.p).join(' '));
-  pruefe('E Sturz/Unfall-Ereignisse kommen bei beiden Clients identisch an (falls ein Sturz passiert ist)', JSON.stringify(sturzH) === JSON.stringify(sturzG) && JSON.stringify(unfH) === JSON.stringify(unfG), `${sturzH.length} Stürze, ${unfH.length} Unfälle` + (fahrerSturz ? '' : ' (kein Sturz in 40 s – siehe C)'));
+  pruefe('E Sturz/Unfall-Ereignisse kommen bei beiden Clients identisch an (falls ein Sturz passiert ist)', JSON.stringify(sturzH) === JSON.stringify(sturzG) && JSON.stringify(unfH) === JSON.stringify(unfG), `${sturzH.length} Stürze, ${unfH.length} Unfälle` + (fahrerSturz ? '' : ' (kein Sturz)'));
   const punkteH = moH ? moH.map(a => a[1]) : [];
   pruefe('E Stuntpunkte im Zustand = Summe der Stunt-Ereignisse je Teilnehmer', evH.filter(x => x.art === 'stunt').every(x => x.g <= punkteH[x.nr]) && punkteH.some(p => p > 0), punkteH.join('/'));
   pruefe('E Vorhersage des Motorrad-Clients gegen den echten Server (Motorrad, 40 s): keine harten Korrekturen, größte Abweichung < 3 m', vH.stat.hart === 0 && vH.stat.maxFehler < 3 && vH.stat.abgleiche > 100,
@@ -326,6 +350,7 @@ function autopilot(C, st, v, idx) {
       window.Rennspiel.Menue = class { taste() { return false; } };
       window.Rennspiel.Moto.onlineOrig = { htmlOnlineKarte() { return ''; }, onlineOeffnen() {}, verfuegbar: () => true };
       window.MOTORRAD_SERVER = 'mac-mini.tailnet.ts.net:10000';
+      window.Rennspiel.__fenster = window;      // Tests: Zugriff auf das „window“ des Kontexts (fetch/localStorage/location ersetzen)
     `);
     const CF = kontextLaden(MOTO_CLIENT.concat(['tests/_stub_moto_online.js', 'src/moto/motoOnline.js']), { MOTORRAD: true });
     fs.rmSync(stub, { force: true });
@@ -374,9 +399,32 @@ function autopilot(C, st, v, idx) {
     pruefe('F abbau räumt auf (kein Schatten-Zustand, keine Stationen mehr)', spiel.stunt === null && spiel.unfall === null && spiel.motoStationen === null && ui._mo === null);
     // Bestenliste: Prüfung der Meldung
     const B = CF.Moto.bestenliste;
-    const gut = B.eintragPruefen({ name: 'Jonas', punkte: 1250.7, platz: 1, strecke: 'wiese', zeit: 123.456, modus: 'online', raum: 'ABCD' });
-    pruefe('F Bestenliste: Eintrag geprüft (spiel motorrad, ganze Punkte, Zeit gerundet); Müll (leerer Name, 0 Punkte, Freitext-Länge) verworfen',
-      gut && gut.spiel === 'motorrad' && gut.art === 'stunt' && gut.punkte === 1250 && gut.zeit === 123.46 && !B.eintragPruefen({ name: '', punkte: 5 }) && !B.eintragPruefen({ name: 'x', punkte: 0 }) && !B.eintragPruefen({ name: 'x'.repeat(41), punkte: 5 }) && !B.eintragPruefen(null));
+    const gut = B.eintragPruefen({ name: 'Jonas', punkte: 1250.7, platz: 1, strecke: 'wiese', zeit: 123.456, modus: 'stuntrennen-online', raum: 'ABCD' });
+    const gut2 = B.eintragPruefen({ name: 'Emmy', punkte: 5, modus: 'quatsch' });
+    pruefe('F Bestenliste: Eintrag geprüft (spiel motorrad, Modus stunt-online/stuntrennen-online, ganze Punkte, Zeit gerundet); Müll (leerer Name, 0 Punkte, Freitext-Länge, unbekannter Modus → stunt-online) verworfen bzw. bereinigt',
+      gut && gut.spiel === 'motorrad' && gut.modus === 'stuntrennen-online' && gut.punkte === 1250 && gut.zeit === 123.46 && gut2 && gut2.modus === 'stunt-online' && !B.eintragPruefen({ name: '', punkte: 5 }) && !B.eintragPruefen({ name: 'x', punkte: 0 }) && !B.eintragPruefen({ name: 'x'.repeat(41), punkte: 5 }) && !B.eintragPruefen(null));
+    // Meldung an das Portal: Body genau {spiel, modus, name, punkte}; 4xx = verwerfen, 5xx/Netzfehler = vormerken, 2xx = ok
+    const log = []; let antwort = { ok: true, status: 200 };
+    const FW = CF.__fenster;
+    FW.fetch = (url, o) => { log.push({ url, o }); return antwort instanceof Error ? Promise.reject(antwort) : Promise.resolve(antwort); };
+    FW.localStorage = { _m: {}, getItem(k) { return this._m[k] === undefined ? null : this._m[k]; }, setItem(k, v) { this._m[k] = String(v); } };
+    FW.MOTORRAD_PORTAL = 'http://portal.test:10002/';
+    const eintrag = { name: 'Jonas', punkte: 1250, platz: 2, strecke: 'wiese', zeit: 100, modus: 'stunt-online', raum: 'ABCD' };
+    const okR = await B.melden(eintrag);
+    const body = log[0] && JSON.parse(log[0].o.body);
+    pruefe('F Bestenliste → Portal: POST http://portal.test:10002/api/bestenliste mit genau {spiel, modus, name, punkte}, Erfolg → nichts vorgemerkt', okR === true && log[0].url === 'http://portal.test:10002/api/bestenliste' && log[0].o.method === 'POST' &&
+      JSON.stringify(Object.keys(body).sort()) === JSON.stringify(['modus', 'name', 'punkte', 'spiel']) && body.spiel === 'motorrad' && body.modus === 'stunt-online' && body.punkte === 1250 && B.warteschlange().length === 0, JSON.stringify(body));
+    antwort = { ok: false, status: 400 }; await B.melden(eintrag);
+    pruefe('F Bestenliste: Portal lehnt ab (400, „motorrad“ dort noch nicht eingetragen) → verworfen, nicht ewig wiederholt', B.warteschlange().length === 0);
+    antwort = { ok: false, status: 503 }; await B.melden(eintrag);
+    const n503 = B.warteschlange().length; antwort = new Error('offline'); await B.melden(eintrag);
+    pruefe('F Bestenliste: Portal-Fehler 503 / nicht erreichbar → vorgemerkt (2), danach nachgeholt', n503 === 1 && B.warteschlange().length === 2);
+    antwort = { ok: true, status: 200 }; log.length = 0; B.nachholen(); await warte(50);
+    pruefe('F Bestenliste: Nachholen sendet beide vorgemerkten Einträge, Warteschlange leer', log.length === 2 && B.warteschlange().length === 0, log.length + ' gesendet');
+    // Einladungslink: eigene Herkunft → die Seite selbst (auch im Portal unter /motorrad/), öffentliche Spielserver-Adresse → deren /Motorrad.html
+    FW.location = { origin: 'http://100.104.29.100:10002', pathname: '/motorrad/', hostname: '100.104.29.100', port: '10002', protocol: 'http:', host: '100.104.29.100:10002' };
+    pruefe('F Einladungslink: Portal → http://…:10002/motorrad/?raum=ABCD · Spielserver-Funnel → https://…:10000/Motorrad.html?raum=ABCD',
+      O.einladung('http://100.104.29.100:10002/', 'ABCD') === 'http://100.104.29.100:10002/motorrad/?raum=ABCD' && O.einladung('https://mini.ts.net:10000/', 'ABCD') === 'https://mini.ts.net:10000/Motorrad.html?raum=ABCD');
   }
 
   await srv.schliessen();
