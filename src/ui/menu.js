@@ -778,6 +778,11 @@
       links += pillenL('tageszeit', '🌗', 'Tageszeit', [{ k: 'tag', text: '☀️ Tag' }, { k: 'daemmerung', text: '🌇 Dämmerung' }, { k: 'nacht', text: '🌙 Nacht' }],
         e.tageszeit || 'tag', 'Dämmerung: tiefe Sonne, Licht an – Nacht: Mond, Sterne, Scheinwerfer und Laternen')
         .replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele');
+      if (window.MOTORRAD === true) {      // Z1: Motorrad – eigene Zeile „Zufällige Strecke“ (Autorennen: in der Schaden-Zeile rechts)
+        links += pillenL('zufall', '🎲', 'Zufällige Strecke', [{ k: 'aus', text: 'Aus' }, { k: 'an', text: 'An' }], e.zufall === false ? 'aus' : 'an',
+          'An: Münzen und Hindernisse liegen in jedem Rennen und in jeder Runde an anderer Stelle – Aus: immer gleich wie früher')
+          .replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele');
+      }
       // 15.10. (v25): EINE Zeile „Verkehr“ (links unten) mit Gruppen: 👻 Geisterfahrer, 🚑 Krankenwagen, 🛻 Abschleppwagen – je Aus/An (v28 W1: Kranken-/Abschleppwagen einzeln), Standard aus.
       // Tastatur: drei Fokus-Zeilen ('geister', 'krankenwagen', 'abschleppwagen'), die Zeile zeigt per Unterstreichung, welche Gruppe gemeint ist. Nicht im Modus „Letzter fliegt raus“.
       if (e.spielart !== 'elimination') {
@@ -806,8 +811,19 @@
           : pillenL('jahreszeit', '🍂', 'Jahreszeit', this.jahreszeitListe(), e.jahreszeit) +
             pillenL('wetter', '🌦️', 'Wetter', this.wetterListe(), e.wetter)) +
         wind +
-        pillenL('schaden', '💥', 'Schaden', [{ k: 'aus', text: 'Aus' }, { k: 'an', text: 'An' }], e.schaden ? 'an' : 'aus',
-          'Treffer kosten Energie, bei 0 % kommt der Abschleppwagen und repariert (ab 30 % darfst du losfahren)') +
+        // Z1: in derselben Zeile „Zufällige Strecke“ (🎲 Münzen und Hindernisse liegen in jedem Rennen und jeder Runde anders; Standard An) – eigene Fokus-Zeile 'zufall'.
+        // Motorrad: die Schaden-Zeile wird dort zur Zeile „Unfälle“ (moto/unfallStart.js ersetzt ihren Inhalt) → Schaden bleibt unverändert, „Zufällige Strecke“ steht links als eigene Zeile
+        (window.MOTORRAD === true ? pillenL('schaden', '💥', 'Schaden', [{ k: 'aus', text: 'Aus' }, { k: 'an', text: 'An' }], e.schaden ? 'an' : 'aus',
+          'Treffer kosten Energie, bei 0 % kommt der Abschleppwagen und repariert (ab 30 % darfst du losfahren)') : (() => {
+          const gf = z[this.fokus], imSZ = gf === 'schaden' || gf === 'zufall';
+          const u = (zeile) => (gf === zeile ? 'text-decoration:underline;text-decoration-thickness:.12em;text-underline-offset:.2em;' : '');
+          const pille = (zeile, k, text, an) => `<span class="pille${an ? ' aktiv' : ''}" data-a="wert:${zeile}:${k}">${text}</span>`;
+          return `<div class="zeile viele${imSZ ? ' fokus' : ''}" ${fz(imSZ ? gf : 'schaden')} title="Schaden: Treffer kosten Energie, bei 0 % kommt der Abschleppwagen und repariert (ab 30 % darfst du losfahren). Zufällige Strecke: Münzen und Hindernisse liegen in jedem Rennen und in jeder Runde an anderer Stelle – Aus: immer gleich wie früher">` +
+            `<div class="z-label"><span style="${u('schaden')}" data-a="fokus:${z.indexOf('schaden')}">💥 Schaden</span></div><div class="z-wert">` +
+            pille('schaden', 'aus', 'Aus', !e.schaden) + pille('schaden', 'an', 'An', !!e.schaden) +
+            `<span class="z-label" style="${u('zufall')}margin:0 0 0 .7em;font-size:.95em" data-a="fokus:${z.indexOf('zufall')}">🎲 Zufällige Strecke</span>` +
+            pille('zufall', 'aus', 'Aus', e.zufall === false) + pille('zufall', 'an', 'An', e.zufall !== false) + `</div></div>`;
+        })().replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele')) +
         // Runde 5: Tempo-Klasse (Spieler und Computer gleich)
         pillenL('tempo', '🏎️', 'Tempo', [{ k: 'normal', text: 'Normal' }, { k: 'schnell', text: 'Schnell (220–270 km/h)' }],
           e.tempoKlasse === 'schnell' ? 'schnell' : 'normal', 'Normal ≈ 155–190 km/h, leichter zu fahren – Schnell = volle Leistung') +
@@ -842,11 +858,7 @@
               pille('rempeln', 'sanft', 'Sanft', e.rempeln !== 'echt') + pille('rempeln', 'echt', 'Echt', e.rempeln === 'echt') +
               `<span class="z-label" style="${u('rennautos')}margin:0 0 0 .7em;font-size:.95em" data-a="fokus:${z.indexOf('rennautos')}">🏎 Nur Rennautos</span>` +
               pille('rennautos', 'aus', 'Aus', !rnAn) + pille('rennautos', 'an', 'An', rnAn) + `</div></div>`;
-          })()).replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele') +
-        // Z1: Zufällige Strecke – Münzen und Hindernisse liegen in jedem Rennen und in jeder Runde anders (Standard An)
-        pillenL('zufall', '🎲', 'Zufällige Strecke', [{ k: 'aus', text: 'Aus' }, { k: 'an', text: 'An' }], e.zufall === false ? 'aus' : 'an',
-          'An: Münzen und Hindernisse liegen in jedem Rennen und in jeder Runde an anderer Stelle – Aus: immer gleich wie früher')
-          .replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele');
+          })()).replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele');
       const tonAn = !R.Audio || R.Audio.an;
       const aktionen = `<div class="m-aktionen"><div class="start-knopf${fk('start')}" data-a="start">🏁 LOS GEHT'S!</div>` +
         `<div class="knopf klein ton" data-a="ton">${tonAn ? '🔊 Ton an' : '🔇 Ton aus'} <kbd>M</kbd></div>` +
