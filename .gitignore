@@ -4,3 +4,4 @@ tests/out/
 __pycache__/
 *.app/
 .DS_Store
+tests/bilder_m5/rundum_*/

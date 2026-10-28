@@ -37,15 +37,15 @@ window.Rennspiel = window.Rennspiel || {};
 @media (max-height: 520px) { .hud.links .hud-meldung, .hud.rechts .hud-meldung { top: 36% !important; } .hud .hud-banner, .hud.links .hud-banner, .hud.rechts .hud-banner { top: 42% !important; font-size: 3em !important; } }   /* niedrig (844×390): Chip + Meldung + Banner + Minikarte passen übereinander */
 .hud.links .hud-hinweis, .hud.rechts .hud-hinweis { left: 68% !important; font-size: 1.5em !important; }
 /* Touch (nur Motorradmodus): Trick-Knopf 🌀 „Trick“ über der Bremse (rechts unten; die Minikarte liegt im Touch-Rennen rechts oben und wird so nie berührt),
-   ausgegrauter ⭐-Knopf mit Beschriftung „Item“ (im Motorradmodus meist nichts zu holen) */
+   ausgegrauter ⭐-Knopf mit Beschriftung „Extra“ (im Motorradmodus meist nichts zu holen) */
 .moto-touch { right: calc(var(--rand) * 2 + var(--tb) * 1.15 + var(--tb) * .025); bottom: calc(var(--rand) + var(--tb) + 8px); width: calc(var(--tb) * .95); height: calc(var(--tb) * .95);
   flex-direction: column; gap: 0; font-size: calc(var(--tb) * .46); background: rgba(255,138,26,.38); border-color: rgba(255,230,190,.9); }
 .moto-touch small { display: block; font: 900 calc(var(--tb) * .2)/1 Arial, sans-serif; letter-spacing: .02em; margin-top: calc(var(--tb) * .02); }
 .moto-touch.an { background: rgba(255,138,26,.8); }
 #touch .t-item { flex-direction: column; font-size: calc(var(--tb) * .3); }
-#touch .t-item::after { content: 'Item'; display: block; font: 900 calc(var(--tb) * .16)/1 Arial, sans-serif; margin-top: 2px; }
+#touch .t-item::after { content: 'Extra'; display: block; font: 900 calc(var(--tb) * .16)/1 Arial, sans-serif; margin-top: 2px; }
 #touch .t-item:not(.hat) { opacity: .42; filter: grayscale(1); border-style: dashed; }
-#touch .t-item:not(.hat)::after { content: 'kein Item'; }
+#touch .t-item:not(.hat)::after { content: 'kein Extra'; }
 .ergebnis .moto-erg td.punkte, .ergebnis .moto-erg th.punkte { text-align: right; }
 .ergebnis .moto-erg tr.gesamt-spitze td { font-weight: 900; }
 `;

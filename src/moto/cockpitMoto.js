@@ -34,6 +34,17 @@ window.Rennspiel = window.Rennspiel || {};
     aus: false,                       // true = Autorennen-Spiegel (ein Spiegel oben Mitte), kein Lenker (nur für Vergleichsmessungen)
     rollAnteil: 0.5,                  // die Kamera kippt so viel der Schräglage des Motorrads mit (0,5 = halb so stark)
     rollWeichheit: 10,                // 1/s (τ 0,1 s): zusätzliche eigene Glättung der Kamera-Kippung, on top der Feder in schraeglage.js
+    // Gasgriff + Bremshebel (nur Anzeige, keine Physik): Werte aus der letzten Steuerung des Fahrzeugs (gas/bremse 0..1), weich nachgeführt
+    gasBremse: {
+      an: true,                       // false = Lenker wie bisher (Griff/Hebel starr)
+      rollMax: 0.75,                  // rad: so weit rollt der Gasgriff bei Vollgas (Handgelenk nach hinten)
+      handRoll: 0.85,                 // Anteil davon, den der Handschuh mitkippt
+      handVersatz: 22,                // Lenker-Einheiten: Handschuh wandert bei Vollgas so weit zum Fahrer (nach unten)
+      hebelMax: 0.55,                 // rad: Bremshebel bei voller Bremse zum Griff gezogen
+      daumenMax: 0.5,                 // rad: Quad: Daumenhebel bei Vollgas gedrückt
+      weichHoch: 16, weichRunter: 9,  // 1/s: Nachführung bei steigendem / fallendem Wert (Gas ~0,06 s, Zurückschnellen ~0,11 s)
+      verfolger: { an: true, rollMax: 0.9, hebelMax: 0.5 },   // dezente Marke am Motorradmodell (Verfolger-/Weit-Ansicht), nur eigene Fahrer
+    },
     kameraVor: 0.42,                  // m vor der Motorradmitte: so sitzt die Cockpit-Kamera VOR dem Helmschirm (0,40 m) – sonst schneidet der Schirm in Schräglage als dunkles Band durchs Bild
     lenker: {
       seitenverh: 3.4,                // Breite : Höhe des Lenker-Bildes
@@ -176,7 +187,7 @@ window.Rennspiel = window.Rennspiel || {};
     return { T, n, plan: taktPlan(n, T), proBild: n / T };
   }
 
-  const rein = { taktFuer, rechtecke, spiegelRichtung, spiegelPosition, taktPlan, faellig, rollWinkel, leanFuerKamera, rtGroesse };
+  const rein = { nachfuehren, taktFuer, rechtecke, spiegelRichtung, spiegelPosition, taktPlan, faellig, rollWinkel, leanFuerKamera, rtGroesse };
   R.Moto.cockpit = Object.assign(R.Moto.cockpit || {}, rein);
 
   // ============================================================ ab hier Browser (DOM + three.js)
@@ -223,9 +234,45 @@ window.Rennspiel = window.Rennspiel || {};
 
   // Beim Sturz-Purzelbaum überschlägt sich das Motorrad um den Fahrer-Helm; die Cockpit-Kamera sitzt im Helm und sähe es von innen durchs Bild fliegen.
   // Allein am Bildschirm (Solo) blenden wir das eigene Motorrad für diese gut eine Sekunde aus (zu zweit sieht der Mitspieler es, dort bleibt es sichtbar).
+  // Verfolger-/Weit-Ansicht: am Motorradmodell dezent Gasgriff-Marke (rollt) und Bremshebel (wird gezogen) am rechten Griff, nur eigene Fahrer (2 Draw-Calls je Fahrer).
+  // Eigene Objekte im Fahrer-Teil des Modells, folgen der rechten Hand (und damit der Lenkung); das Modell selbst bleibt unverändert.
+  function modellMarke(f, jetzt) {
+    const GB = CFG().gasBremse, V = GB && GB.verfolger;
+    if (!GB || !GB.an || !V || !V.an || !f.istSpieler || !f.vehicle || !f.mesh || !f.mesh.userData || !f.mesh.userData.moto) return;
+    const u = f.mesh.userData, inh = u.inhalt;
+    if (!inh) return;
+    let m = f._gbm;
+    if (m === undefined) {
+      const hand = inh.children.find((c) => c.name === 'handschuh' && c.position.x > 0);
+      if (!hand) { f._gbm = null; return; }
+      const quad = !!(f.auto && (f.auto.typ === 'quad' || f.auto.id === 'quad'));
+      const gruppe = new THREE.Group(); gruppe.name = 'gasBremse';
+      const kappe = new THREE.Group(); gruppe.add(kappe);                                    // Gasgriff-Marke: Ring + heller Klotz, dreht um die Griffachse (x)
+      const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.02, 8), new THREE.MeshBasicMaterial({ color: 0x23262d })); ring.rotation.z = Math.PI / 2; kappe.add(ring);
+      const klotz = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.022, 0.022), new THREE.MeshBasicMaterial({ color: 0xffa31a })); klotz.position.set(0, 0.038, 0); kappe.add(klotz);
+      kappe.position.set(0.075, 0, 0);
+      const gelenk = new THREE.Group(); gelenk.position.set(-0.03, 0.02, -0.045); gruppe.add(gelenk);   // Bremshebel: Gelenk innen vor dem Griff, Hebel zeigt nach außen, dreht um die Hochachse
+      const hebel = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.016, 0.016), new THREE.MeshBasicMaterial({ color: 0xf2f4f8 })); hebel.position.set(0.065, 0, 0); gelenk.add(hebel);
+      kappe.visible = !quad;                                                                  // Quad: Daumengas, kein rollender Griff (Hebel-Marke dort = Daumenhebel)
+      inh.add(gruppe);
+      m = f._gbm = { hand, gruppe, kappe, gelenk, quad };
+    }
+    if (!m) return;
+    const g = glaettenGasBremse(m, f.vehicle, jetzt);
+    m.gruppe.position.copy(m.hand.position);
+    m.gruppe.quaternion.copy(u.lenkGruppe ? u.lenkGruppe.quaternion : m.gruppe.quaternion);
+    m.kappe.rotation.x = g.gas * V.rollMax;                                                   // oben nach hinten (zum Fahrer, +z)
+    m.gelenk.rotation.y = 0.5 - g.brems * V.hebelMax * (m.quad ? 0.6 : 1) - (m.quad ? g.gas * 0.3 : 0);
+    m.gruppe.visible = true;
+  }
+
   const spielZeichnen = R.Spiel.prototype.zeichnen;
   R.Spiel.prototype.zeichnen = function () {
     let f = null;
+    try {
+      const jetzt = performance.now();
+      if (this.fahrzeuge && this.zustand !== 'menue') this.fahrzeuge.forEach((fz) => { if (fz.istSpieler) modellMarke(fz, jetzt); });
+    } catch (e) { console.error('Motorrad-Cockpit (Gasgriff-Modell):', e); }
     try {
       const k = this.kameras && this.kameras.length === 1 ? this.kameras[0] : null;
       if (k && !CFG().aus && k.modus === 'cockpit' && this.zustand !== 'menue' && k.ziel) {
@@ -431,24 +478,77 @@ window.Rennspiel = window.Rennspiel || {};
       g.strokeStyle = '#16181c'; g.lineWidth = 10; g.beginPath(); g.moveTo(178, 200); g.lineTo(((p.stiel && p.stiel[seite < 0 ? 0 : 1]) || (p.zwei ? CFG().lenker.spiegelXZwei : CFG().lenker.spiegelX)) * LW, 48); g.stroke();
       // Hebel, Griff, Arm und Handschuh sitzen 44 Einheiten weiter innen: der Arm läuft dann zum Bildrand hin weich aus (siehe unten)
       g.save(); g.translate(44, 0);
-      // Hebel (Kupplung / Bremse): vorn am Griff, nach innen gebogen, Kugelende
+      // Rechte Seite (seite > 0, Anzeige): Gasgriff rollt, Bremshebel wird gezogen, bzw. beim Quad Daumengas. Links (Kupplung) bleibt alles starr.
+      const GB = CFG().gasBremse, aktiv = seite > 0 && GB && GB.an, gas = aktiv ? klemme(p.gas || 0, 0, 1) : 0, brems = aktiv ? klemme(p.brems || 0, 0, 1) : 0, quad = !!p.quad;
+      const roll = quad ? 0 : gas * GB.rollMax, hebelW = aktiv ? brems * GB.hebelMax : 0;
+      // Hebel (Kupplung / Bremse): vorn am Griff, nach innen gebogen, Kugelende; Bremshebel dreht sich um sein Gelenk (112, 212) zum Griff hin
+      g.save(); g.translate(112, 212); g.rotate(hebelW); g.translate(-112, -212);
       g.strokeStyle = '#d4d8df'; g.lineWidth = 9; g.beginPath(); g.moveTo(112, 212); g.bezierCurveTo(140, 184, 184, 168, 244, 166); g.stroke();
       g.fillStyle = '#eef1f5'; g.beginPath(); g.arc(246, 166, 8, 0, TAU); g.fill();
-      // Griff (schwarzes Gummi mit Rillen)
+      g.restore();
+      // Griff (schwarzes Gummi mit Rillen); der Gasgriff (rechts) rollt: drei Längsstreifen wandern über den Zylinder, Endkappe mit Marke läuft mit
       g.strokeStyle = '#121316'; g.lineWidth = 56; g.beginPath(); g.moveTo(108, 220); g.lineTo(30, 262); g.stroke();
       g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 4;
       for (let t = 0.12; t < 0.95; t += 0.13) { const x = 108 - 78 * t, y = 220 + 42 * t; g.beginPath(); g.moveTo(x - 6, y - 24); g.lineTo(x + 6, y + 24); g.stroke(); }
+      if (aktiv && !quad) {
+        const nx = 0.474, ny = 0.880, ax = -78, ay = 42;                          // Querrichtung (zum Fahrer hin = nach unten) und Achse des Griffs
+        g.save(); g.lineCap = 'butt';
+        for (let k = 0; k < 3; k++) {
+          const ph = -0.9 + k * 0.9 + roll, off = 23 * Math.sin(ph), sicht = Math.cos(ph);
+          if (sicht < 0.15) continue;
+          g.strokeStyle = k === 1 ? 'rgba(255,170,40,' + (0.55 * sicht).toFixed(2) + ')' : 'rgba(255,255,255,' + (0.34 * sicht).toFixed(2) + ')'; g.lineWidth = k === 1 ? 7 : 4;
+          g.beginPath(); g.moveTo(104 + nx * off, 218 + ny * off); g.lineTo(104 + ax * 0.9 + nx * off, 218 + ay * 0.9 + ny * off); g.stroke();
+        }
+        g.restore();
+        g.fillStyle = '#2b3037'; g.beginPath(); g.ellipse(30, 262, 17, 28, 0.5, 0, TAU); g.fill();                                          // Endkappe
+        g.fillStyle = '#ffb347'; g.beginPath(); g.arc(30 + nx * 20 * Math.sin(-0.6 + roll), 262 + ny * 20 * Math.sin(-0.6 + roll), 4.5, 0, TAU); g.fill();   // Marke rollt mit
+      }
       // Arm/Ärmel (zum unteren Rand hin) und Handschuh
       g.strokeStyle = dunkler(p.fahrer, 0.2); g.lineWidth = 78; g.beginPath(); g.moveTo(58, 248); g.lineTo(-24, 316); g.stroke();
       g.strokeStyle = heller(p.helm, 0); g.lineWidth = 12; g.beginPath(); g.moveTo(34, 236); g.lineTo(-14, 272); g.stroke();       // Bündchen
+      // Hand: beim Gas rollt das Handgelenk nach hinten (Handschuh kippt und rückt zum Fahrer), Finger liegen am Bremshebel
+      g.save();
+      if (aktiv) { g.translate(0.474 * GB.handVersatz * (roll / GB.rollMax || 0), 0.88 * GB.handVersatz * (roll / GB.rollMax || 0)); g.translate(74, 240); g.rotate(roll * GB.handRoll); g.translate(-74, -240); }
       const hg = g.createRadialGradient(70, 230, 6, 74, 244, 76);
       hg.addColorStop(0, heller(p.fahrer, 0.28)); hg.addColorStop(1, dunkler(p.fahrer, 0.28));
       g.fillStyle = hg; g.strokeStyle = dunkler(p.fahrer, 0.5); g.lineWidth = 4;
       g.beginPath(); g.ellipse(74, 240, 66, 44, 0.42, 0, TAU); g.fill(); g.stroke();
       g.strokeStyle = dunkler(p.fahrer, 0.45); g.lineWidth = 3;
-      for (let f = -1; f <= 1; f++) { g.beginPath(); g.moveTo(40 + f * 14 + 10, 216 + f * 12); g.lineTo(76 + f * 14, 246 + f * 12 + 6); g.stroke(); }   // Finger
+      if (!aktiv) for (let f = -1; f <= 1; f++) { g.beginPath(); g.moveTo(40 + f * 14 + 10, 216 + f * 12); g.lineTo(76 + f * 14, 246 + f * 12 + 6); g.stroke(); }   // Finger
       g.fillStyle = heller(p.fahrer, 0.12); g.strokeStyle = dunkler(p.fahrer, 0.5); g.lineWidth = 3;
-      g.beginPath(); g.ellipse(116, 214, 26, 15, -0.5, 0, TAU); g.fill(); g.stroke();                                                 // Daumen
+      if (!(aktiv && quad)) { g.beginPath(); g.ellipse(116, 214, 26, 15, -0.5, 0, TAU); g.fill(); g.stroke(); }                                          // Daumen (Quad: liegt auf dem Daumenhebel)
+      g.restore();
+      if (aktiv && quad) {
+        // Daumengas: orangener Hebel unter dem Daumen (nach innen vom Handschuh), der Daumen drückt ihn bei Gas nach unten
+        const da = gas * GB.daumenMax;
+        g.save(); g.translate(168, 226); g.rotate(da);
+        g.strokeStyle = '#2b2e34'; g.lineWidth = 20; g.beginPath(); g.moveTo(0, 0); g.lineTo(62, -6); g.stroke();
+        g.strokeStyle = '#ff7a2e'; g.lineWidth = 11; g.beginPath(); g.moveTo(4, 0); g.lineTo(60, -6); g.stroke();
+        g.fillStyle = heller(p.fahrer, 0.12); g.strokeStyle = dunkler(p.fahrer, 0.5); g.lineWidth = 3;
+        g.beginPath(); g.ellipse(34, -9, 28, 15, -0.15, 0, TAU); g.fill(); g.stroke();                                            // Daumen auf dem Hebel
+        g.restore();
+      }
+      if (aktiv && !quad) {
+        // Gasgriff-Ring (Hülse am inneren Griffende, auf dem Handschuh sichtbar): die orange Marke wandert beim Gasgeben über den Ring = Griff rollt
+        const rx = 150, ry = 224, ang = -1.25 + roll * 1.9, co = Math.cos(ang), si = Math.sin(ang);
+        g.save(); g.translate(rx, ry); g.rotate(0.51);
+        g.fillStyle = '#1a1c20'; g.strokeStyle = '#6a707a'; g.lineWidth = 4; g.beginPath(); g.ellipse(0, 0, 13, 31, 0, 0, TAU); g.fill(); g.stroke();
+        g.fillStyle = '#ffb347'; g.beginPath(); g.ellipse(co * 4, si * 24, 6, 5, 0, 0, TAU); g.fill();
+        g.restore();
+      }
+      if (aktiv) {
+        // zwei Finger (Zeige-, Mittelfinger) am Bremshebel: liegen auf dem Hebel und gehen mit ihm zum Griff; Punkte auf dem Hebel (Bezier) um das Gelenk gedreht
+        const bez = (t) => { const u = 1 - t; return [u * u * u * 112 + 3 * u * u * t * 140 + 3 * u * t * t * 184 + t * t * t * 244, u * u * u * 212 + 3 * u * u * t * 184 + 3 * u * t * t * 168 + t * t * t * 166]; };
+        const rot = (q) => { const dx = q[0] - 112, dy = q[1] - 212, c = Math.cos(hebelW), sn = Math.sin(hebelW); return [112 + dx * c - dy * sn, 212 + dx * sn + dy * c]; };
+        const wurzel = [[88, 226], [96, 232]];
+        g.save(); g.lineCap = 'round';
+        [0.46, 0.64].forEach((t, k) => {
+          const e = rot(bez(t)), w0 = wurzel[k];
+          g.strokeStyle = dunkler(p.fahrer, 0.5); g.lineWidth = 17; g.beginPath(); g.moveTo(w0[0], w0[1]); g.lineTo(e[0], e[1]); g.stroke();
+          g.strokeStyle = heller(p.fahrer, 0.06); g.lineWidth = 12; g.beginPath(); g.moveTo(w0[0], w0[1]); g.lineTo(e[0], e[1]); g.stroke();
+        });
+        g.restore();
+      }
       g.restore();
       g.restore();
     }
@@ -485,6 +585,22 @@ window.Rennspiel = window.Rennspiel || {};
     g.fillStyle = '#7fc4ff'; g.font = '700 ' + (zwei ? 22 : 15) + 'px ' + SCHRIFT; g.fillText('km/h', px, py + (zwei ? 62 : 36));
     g.fillStyle = '#ffb347'; g.font = '800 ' + (zwei ? 20 : 16) + 'px ' + SCHRIFT; if (!zwei) g.fillText(p.gang, px, py - 40);                                      // zu zweit ohne Gang: km/h reicht, die Ziffer wäre nur ~10 px groß
     g.strokeStyle = 'rgba(255,255,255,.14)'; g.lineWidth = 3; g.beginPath(); g.arc(px, py, pr - 12, Math.PI * 1.1, Math.PI * 1.55); g.stroke();   // Glanz
+  }
+
+  /** Weiche Nachführung eines Anzeigewerts (0..1) zum Ziel: hoch schnell, runter etwas langsamer (Feder-Gefühl). Rein. */
+  function nachfuehren(alt, ziel, dt, hoch, runter) {
+    const k = ziel > alt ? hoch : runter;
+    return alt + (ziel - alt) * (1 - Math.exp(-k * Math.max(0, dt)));
+  }
+  /** Gas/Bremse des Fahrzeugs (letzte Steuerung nach Fahrhilfe) → geglättete Anzeigewerte; Zustand am Objekt `o`. */
+  function glaettenGasBremse(o, v, jetzt) {
+    const GB = CFG().gasBremse || {}, st = v && v.letzteSteuerung ? v.letzteSteuerung : null;
+    const dt = Math.min(0.1, o._gbT ? (jetzt - o._gbT) / 1000 : 0.1); o._gbT = jetzt;
+    const gz = st ? klemme(st.gas || 0, 0, 1) : 0, bz = st ? klemme(st.bremse || 0, 0, 1) : 0;
+    o._gas = nachfuehren(o._gas || 0, gz, dt, GB.weichHoch || 16, GB.weichRunter || 9);
+    o._brems = nachfuehren(o._brems || 0, bz, dt, GB.weichHoch || 16, GB.weichRunter || 9);
+    if (o._gas < 0.004) o._gas = 0; if (o._brems < 0.004) o._brems = 0;
+    return { gas: o._gas, brems: o._brems };
   }
 
   const styl = (e, k) => Object.assign(e.style, k);
@@ -556,16 +672,17 @@ window.Rennspiel = window.Rennspiel || {};
       if (jetzt - this.letzteZeichnung < 1000 / (R.config.cockpit.zeichenrate || 30) - 1) return;
       this.letzteZeichnung = jetzt;
       const v = hud.f.vehicle, auto = hud.f.auto, gt = R.cockpit.getriebe(auto, v.vLaengs, v.daten && v.daten.vMax);
+      const gb = glaettenGasBremse(this, v, jetzt);
       this.rpm += (gt.rpm - this.rpm) * (1 - Math.exp(-14 * Math.max(dt, 0.016)));
       const anteil = klemme((this.rpm - gt.leerlauf) / Math.max(1, gt.begr - gt.leerlauf), 0, 1);
       const kmh = Math.abs(Math.round(v.vLaengs * 3.6)), steer = Math.round(klemme(v.lenkung || 0, -1, 1) * 20) / 20;
       const gang = Math.abs(v.vLaengs) < 0.3 ? 'N' : (gt.gang < 0 ? 'R' : 'GANG ' + gt.gang);
-      const key = kmh + '|' + Math.round(anteil * 22) + '|' + gang + '|' + steer + '|' + cw + (split ? 'z' : '') + (rs.stiel ? '|' + Math.round(rs.stiel[0] * 100) : '');
+      const key = kmh + '|' + Math.round(anteil * 22) + '|' + Math.round(gb.gas * 24) + 'g' + Math.round(gb.brems * 24) + '|' + gang + '|' + steer + '|' + cw + (split ? 'z' : '') + (rs.stiel ? '|' + Math.round(rs.stiel[0] * 100) : '');
       if (key === this.schluessel) return;
       this.schluessel = key;
       const o = (auto && auto.optionen) || {};
       lenkerZeichnen(this.g, cw, ch, LH, { steer, kmh, anteil, gang, bike: auto ? auto.farbe : 0xff6a10, fahrer: auto && auto.farbe2 !== undefined ? auto.farbe2 : 0x1d4ed8,
-        helm: o.helm !== undefined ? o.helm : 0xf4f4f4, nr: o.nummer !== undefined ? o.nummer : 1, zwei: split, stiel: rs.stiel });
+        helm: o.helm !== undefined ? o.helm : 0xf4f4f4, nr: o.nummer !== undefined ? o.nummer : 1, zwei: split, stiel: rs.stiel, gas: gb.gas, brems: gb.brems, quad: !!(auto && (auto.typ === 'quad' || auto.id === 'quad')) });
     }
 
     _aus() {

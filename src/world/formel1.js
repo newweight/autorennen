@@ -144,7 +144,7 @@
   }
 
   // ------------------------------------------------------------------ Textur der Werbebanden (Canvas, nur Browser)
-  const TEXTE = ['TURBO!', 'VOLLGAS!', 'SPEED', 'JONAS', 'GAS GEBEN!', 'RENNEN', 'SCHNELL!', 'ZIELFLAGGE'];
+  const TEXTE = ['TURBO!', 'VOLLGAS!', 'TEMPO', 'JONAS', 'GAS GEBEN!', 'RENNEN', 'SCHNELL!', 'ZIELFLAGGE'];
   function bandenTextur() {
     if (typeof document === 'undefined') return null;
     const c = document.createElement('canvas'); c.width = 1024; c.height = 1024;

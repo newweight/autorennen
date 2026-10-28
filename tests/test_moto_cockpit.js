@@ -156,6 +156,15 @@ pruefe('Kamera-Kippung = 50 % der Schräglage, Vorzeichen bleibt (links +)', nah
   const motorraeder = (R.carCatalog || []).filter((a) => a.sonderbau === 'motorrad');
   pruefe('Kein Auto-Cockpit (VW/Porsche) für Motorräder: config.cockpit.stile kennt keine Crossmaschine', !Object.keys(st).some((k) => /cross|moto/i.test(k)) && motorraeder.every((a) => !st[a.id]), `${motorraeder.length} Motorräder`); }
 
+// ---------- 8. Gasgriff / Bremshebel (M5, nur Anzeige) ----------
+{ const GB = cfg.gasBremse;
+  pruefe('Konfig gasBremse vorhanden (rollMax, hebelMax, daumenMax, Weichheit, Verfolger)', !!GB && GB.an === true && GB.rollMax > 0.3 && GB.hebelMax > 0.2 && GB.daumenMax > 0.2 && GB.weichHoch > 0 && GB.weichRunter > 0 && !!GB.verfolger);
+  let w = 0; const dt = 1 / 60; for (let i = 0; i < 12; i++) w = C.nachfuehren(w, 1, dt, GB.weichHoch, GB.weichRunter);
+  pruefe('Gas-Nachführung: stufenlos, monoton, nach 0,2 s über 90 %, kein Überschwingen', w > 0.9 && w <= 1);
+  let a = 1; for (let i = 0; i < 12; i++) a = C.nachfuehren(a, 0, dt, GB.weichHoch, GB.weichRunter);
+  pruefe('Zurückschnellen etwas langsamer als Anziehen', a > 1 - w && a < 0.5, a.toFixed(2));
+  pruefe('Nachführung ohne Zeit = keine Änderung, ohne NaN', C.nachfuehren(0.4, 1, 0, 10, 10) === 0.4); }
+
 // ---------- Startkamera ----------
 pruefe('Config: Startansicht im Motorradmodus = Cockpit (startCockpit), Autorennen-Reihenfolge der Kamera-Modi unverändert (verfolger, cockpit, weit)', cfg.startCockpit === true && R.config.kamera.modi.join() === 'verfolger,cockpit,weit');
 console.log(`\n${anzahl - fehler}/${anzahl} Prüfungen bestanden`);

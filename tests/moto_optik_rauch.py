@@ -4,7 +4,7 @@ Aufruf: python3 tests/moto_optik_rauch.py
 Prüft und fotografiert (Bilder nach tests/out/moto/):
   - Busse: Bus-Reihe als erkennbare Busse (Schulbus gelb, Linienbusse rot/blau/weiß/grün, Fensterband, Räder, Front-/Heckscheibe, Dach), ein Mesh (1 Draw-Call),
     Lage/Höhe wie zuvor (Oberkante = Reihenhöhe), moto_busse.png (Überflug, Kamera schräg hinten) und moto_busse_nah.png (schräg von vorn)
-  - Touch (844×390, 667×375, 932×430, 1024×768, 1280×800): Trick-Knopf beschriftet „Trick“, ⭐-Knopf ausgegraut + „kein Item“, Trick-Knopf berührt weder Minikarte noch
+  - Touch (844×390, 667×375, 932×430, 1024×768, 1280×800): Trick-Knopf beschriftet „Trick“, ⭐-Knopf ausgegraut + „kein Extra“, Trick-Knopf berührt weder Minikarte noch
     Gas/Bremse/Tacho/Zeiten/Spieler-Chip (getBoundingClientRect); moto_touch_knoepfe.png
   - Menü: fünf Modus-Karten liegen vollständig im Inhaltsbereich (nichts angeschnitten) bei 844×390, 1024×768, 1280×800, 1920×1080; moto_menue_modus.png
   - Autorennen.html: Menü unverändert (nur notiert, ob dort Karten angeschnitten sind), 0 JS-Fehler, lädt keine Moto-Datei"""
@@ -100,9 +100,9 @@ try:
             kollidiert = [k for k in ['mini', 'gas', 'brems', 'tacho', 'zeiten', 'chip', 'platz', 'reset', 'kam', 'pause', 'links', 'rechts', 'item'] if r[k] and r[k]['d'] != 'none' and ueber(t, r[k])]
             pruefe(f'Touch {w}×{h}: Trick-Knopf beschriftet („{t["txt"] if t else None}“), berührt nichts (Minikarte, Gas, Bremse, Tacho, Zeiten, Chip, Platz …)', ok_text and not kollidiert, f"{t} x {kollidiert}" if kollidiert else f"Knopf {t['l']},{t['t']}–{t['r']},{t['b']}; Minikarte {r['mini']['l']},{r['mini']['t']}–{r['mini']['r']},{r['mini']['b']}")
             it = r['item']
-            pruefe(f'Touch {w}×{h}: ausgegrauter ⭐-Knopf ist beschriftet („{it["txt"]}“, Deckkraft {it["op"]})', it and 'Item' in page.evaluate("() => getComputedStyle(document.querySelector('.t-item'), '::after').content") and float(it['op']) < 0.6, it)
+            pruefe(f'Touch {w}×{h}: ausgegrauter ⭐-Knopf ist beschriftet („{it["txt"]}“, Deckkraft {it["op"]})', it and 'Extra' in page.evaluate("() => getComputedStyle(document.querySelector('.t-item'), '::after').content") and float(it['op']) < 0.6, it)
             if (w, h) == (844, 390):
-                page.wait_for_timeout(300); bild(page, 'moto_touch_knoepfe.png', '(844×390: Trick-Knopf über der Bremse, Minikarte rechts oben, ⭐ „kein Item“)')
+                page.wait_for_timeout(300); bild(page, 'moto_touch_knoepfe.png', '(844×390: Trick-Knopf über der Bremse, Minikarte rechts oben, ⭐ „kein Extra“)')
             ctx.close()
 
         # ---------------- Menü ----------------

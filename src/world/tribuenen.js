@@ -434,7 +434,7 @@
       g.fillStyle = c2; g.fillRect(x, y, 256, 14); g.fillRect(x, y + 114, 256, 14);
       schrift(t, x + 8, y + 14, 240, 100, sc, 'rgba(0,0,0,0.55)');
     };
-    tafel(0, 'TURBO!', '#ffd93b', '#d33b2f', '#d33b2f'); tafel(1, 'SPEED', '#1e88e5', '#ffffff', '#ffffff');
+    tafel(0, 'TURBO!', '#ffd93b', '#d33b2f', '#d33b2f'); tafel(1, 'TEMPO', '#1e88e5', '#ffffff', '#ffffff');
     tafel(2, 'JONAS', '#43a047', '#ffee58', '#ffffff'); tafel(3, 'GAS GEBEN!', '#e53935', '#ffffff', '#fff6dd');
     const tex = new THREE.CanvasTexture(cv);
     if (THREE.SRGBColorSpace !== undefined && 'colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
