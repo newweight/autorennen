@@ -48,6 +48,8 @@
       // 17.10. (v29, F3): Modus „Nur Rennautos“ (alle Gegner fahren den Formel-Renner in eigener Farbe): null = Standard der Strecke
       // (an bei der Formel-1-Strecke, sonst aus) | true | false; autoVorFormel = Autowahl vor dem Vorschlag „Formel-Renner“ (Wiederherstellen beim Streckenwechsel)
       nurRennautos: null, autoVorFormel: null,
+      // Z1: Zufällige Strecke (Münzen/Hindernisse jede Runde und jedes Rennen neu), Standard AN, abschaltbar (track/zufall.js)
+      zufall: !(c.zufall && c.zufall.standardAn === false),
     };
   }
 
@@ -99,6 +101,7 @@
       upgradesZaehlen: r.upgradesZaehlen !== false,      // W3-G
       nurRennautos: typeof r.nurRennautos === 'boolean' ? r.nurRennautos : null,      // v29 F3
       autoVorFormel: Array.isArray(r.autoVorFormel) && r.autoVorFormel.length === 2 && r.autoVorFormel.every(x => autoOk(x, null)) ? r.autoVorFormel.slice() : null,
+      zufall: typeof r.zufall === 'boolean' ? r.zufall : std.zufall,      // Z1: alte Speicherstände ohne das Feld → Standard (an)
     };
   }
 
@@ -339,7 +342,9 @@
       const e = this.einstellungen || {};
       const welt = R.Strecke.weltName ? R.Strecke.weltName(daten, e.welt) : (daten.weltStandard || undefined);
       const variante = e.variante && daten.varianten && daten.varianten[e.variante] ? e.variante : '';   // Runde 6: ungültig → Normal
-      const strecke = new R.Strecke(daten, { welt, variante, hindernisMenge: e.hindernisMenge });
+      // Z1: Zufällige Strecke – Seed nur im Rennen (streckeAufbauen/online setzt _zufallSeed; Menühintergrund: keiner), wird hier verbraucht
+      const zufallOpt = R.ZufallSpiel ? R.ZufallSpiel.opt(this, daten) : undefined;
+      const strecke = new R.Strecke(daten, zufallOpt ? { welt, variante, hindernisMenge: e.hindernisMenge, zufall: zufallOpt } : { welt, variante, hindernisMenge: e.hindernisMenge });
       this.strecke = strecke;
       strecke.tempoKlasse = e.tempoKlasse || this.tempoKlasse;   // 14.10. (v20): Kurvenschilder (world/schilder.js) beschriften je Tempo-Klasse
       // Runde 4: Wetter/Jahreszeit/Wind (Standard Sommer/klar/0 = wie bisher)
@@ -369,7 +374,8 @@
       if (R.Kollisionen.pflanzenSammeln) R.Kollisionen.pflanzenSammeln(strecke, deko);
       this.szene.add(R.themes.statischVorbereiten(deko));
       // Hindernisse (Öl, Sand, Baustelle, Ast) – eigene Gruppe, die Pylonen ändern sich im Rennen
-      this.szene.add(R.themes.statischVorbereiten(strecke.hindernisseBauen(), 1));
+      this.hindernisGruppe = R.themes.statischVorbereiten(strecke.hindernisseBauen(), 1);
+      this.szene.add(this.hindernisGruppe);
       // Fantasie: rollende Bälle und Wasserfontänen (bewegen sich → nicht statisch)
       // Runde 4: auch Strecken/Welten, die NUR Strohballen haben (strecke.strohballen ist nach Welt gefiltert)
       this.dynamik = null;
@@ -483,6 +489,7 @@
         elimination: elim ? { zuschauerSekunden: CE.zuschauerSekunden === undefined ? 6 : CE.zuschauerSekunden } : null,   // W3-F
         upgradesZaehlen: e.upgradesZaehlen !== false,      // W3-G
         nochmal: !!(opt && opt.nochmal),      // v30 (G1): „Nochmal“ von der Ergebnistafel → Schaden-Rest nicht übernehmen (alle starten bei 100 %)
+        zufall: e.zufall !== false,      // Z1: Zufällige Strecke (Standard an)
       });
       for (let i = 0; i < (zwei ? 2 : 1); i++) this.kameraHinzufuegen(this.fahrzeuge[i]);
       const split = zwei;
@@ -723,6 +730,8 @@
         tempoKlasse: R.config.tempoKlasseStandard || 'normal',
       }, optionen);
       this.tempoKlasse = opt.tempoKlasse;      // Runde 5: fahrzeugHinzufuegen rechnet die Klasse in die Fahrwerte ein
+      // Z1: Zufällige Strecke – Rennseed nur beim Rennstart (hier Zufall erlaubt, danach rechnet alles aus dem Seed): offline würfeln, sonst opt.zufallSeed
+      if (R.ZufallSpiel) R.ZufallSpiel.seedWaehlen(this, opt);
       const strecke = this.streckeSzeneBauen(trackId);
       // Namen: Spieler = gewählte Fahrer, Computer = nicht gewählte Fahrer (Schumacher, Senna, ...)
       const spielerNamen = (opt.fahrer || R.config.fahrerStandard).slice(0, opt.spieler);

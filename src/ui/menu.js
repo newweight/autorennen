@@ -130,6 +130,7 @@
       else z.push('jahreszeit', 'wetter', 'wind', 'schaden');
       z.push( 'tempo', 'polizei', 'rempeln');   // Runde 5: Tempo-Klasse, 5b: Polizei, 6: Rempeln
       if (this.e.spielart !== 'elimination') z.push('geister', 'krankenwagen', 'abschleppwagen', 'tiere', 'rennautos');      // 15.10. (v25): Geisterfahrer + Verkehr (v28 W1: Krankenwagen und Abschleppwagen je einzeln; stehen links unten; hinten angehängt, damit die Fokus-Nummern der bisherigen Zeilen gleich bleiben)
+      z.push('zufall');      // Z1: Zufällige Strecke An/Aus (hinten angehängt: Fokus-Nummern der bisherigen Zeilen bleiben gleich)
       z.push('start');
       return z;
     }
@@ -411,7 +412,7 @@
         if (dx) e.polizei = dx > 0;
       } else if (zeile === 'geister') {
         if (dx) e.geisterfahrer = dx > 0;
-      } else if (zeile === 'krankenwagen' || zeile === 'abschleppwagen' || zeile === 'tiere' || zeile === 'rennautos') {      // v28 (W1): je Fahrzeugart An/Aus (← aus, → an); W10: Tiere
+      } else if (zeile === 'krankenwagen' || zeile === 'abschleppwagen' || zeile === 'tiere' || zeile === 'rennautos' || zeile === 'zufall') {      // v28 (W1): je Fahrzeugart An/Aus (← aus, → an); W10: Tiere
         if (dx) this.wertSetzen(zeile, dx > 0 ? 'an' : 'aus');
       } else if (zeile === 'tageszeit') {      // Runde 6 (W2-D): Tag → Dämmerung → Nacht
         const l = Object.keys(R.config.tageszeit || { tag: 1 }), i = l.indexOf(e.tageszeit || 'tag');
@@ -434,6 +435,7 @@
       else if (zeile === 'polizei') e.polizei = k === 'an';
       else if (zeile === 'geister') e.geisterfahrer = k === 'an';
       else if (zeile === 'tiere') e.tiere = k === 'an';      // v28 (W10): Tiere queren die Straße
+      else if (zeile === 'zufall') e.zufall = k === 'an';      // Z1: Zufällige Strecke (Münzen/Hindernisse jede Runde und jedes Rennen neu)
       else if (zeile === 'rennautos') e.nurRennautos = k === 'an';      // v29 (F3): Modus „Nur Rennautos“
       else if (zeile === 'krankenwagen' || zeile === 'abschleppwagen') {      // v28 (W1)
         e[zeile] = k === 'an';
@@ -840,7 +842,11 @@
               pille('rempeln', 'sanft', 'Sanft', e.rempeln !== 'echt') + pille('rempeln', 'echt', 'Echt', e.rempeln === 'echt') +
               `<span class="z-label" style="${u('rennautos')}margin:0 0 0 .7em;font-size:.95em" data-a="fokus:${z.indexOf('rennautos')}">🏎 Nur Rennautos</span>` +
               pille('rennautos', 'aus', 'Aus', !rnAn) + pille('rennautos', 'an', 'An', rnAn) + `</div></div>`;
-          })()).replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele');
+          })()).replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele') +
+        // Z1: Zufällige Strecke – Münzen und Hindernisse liegen in jedem Rennen und in jeder Runde anders (Standard An)
+        pillenL('zufall', '🎲', 'Zufällige Strecke', [{ k: 'aus', text: 'Aus' }, { k: 'an', text: 'An' }], e.zufall === false ? 'aus' : 'an',
+          'An: Münzen und Hindernisse liegen in jedem Rennen und in jeder Runde an anderer Stelle – Aus: immer gleich wie früher')
+          .replace('<div class="zeile viele', '<div style="padding-top:.1em;padding-bottom:.1em" class="zeile viele');
       const tonAn = !R.Audio || R.Audio.an;
       const aktionen = `<div class="m-aktionen"><div class="start-knopf${fk('start')}" data-a="start">🏁 LOS GEHT'S!</div>` +
         `<div class="knopf klein ton" data-a="ton">${tonAn ? '🔊 Ton an' : '🔇 Ton aus'} <kbd>M</kbd></div>` +

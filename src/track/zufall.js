@@ -355,6 +355,28 @@
   }
 
   /**
+   * Taktgeber (Offline-Spiel und Server, jeden Physik-Schritt): liefert das nächste Ereignis { runde, n, v } oder null.
+   * fort = Gesamtfortschritt (m, Runde × Länge + Bogenlänge) aller Fahrzeuge auf der Strecke (auch Polizei/Verkehr: kein Aufpoppen vor irgendeinem).
+   * n = 0: das führende Fahrzeug hat eine neue Runde begonnen; n ≥ 1: Nachzügler (wartende Objekte, die inzwischen frei sind), höchstens alle nachholSekunden.
+   */
+  function takt(strecke, fort, dt, maxRunde) {
+    const zs = strecke.zufall;
+    if (!zs || !fort || !fort.length) return null;
+    const L = strecke.spline.laenge, v = [];
+    let max = -Infinity;
+    for (const f of fort) { if (f > max) max = f; v.push(Math.round(((f % L) + L) % L)); }
+    let fr = Math.floor(max / L) + 1;
+    if (maxRunde > 0 && fr > maxRunde) fr = maxRunde;      // Führender im Ziel (Fortschritt = Runden × Länge): keine Neuverteilung mehr
+    if (fr > zs.runde) { zs.nachUhr = 0; return { runde: fr, n: 0, v }; }
+    zs.nachUhr = (zs.nachUhr || 0) + dt;
+    if (zs.nachUhr >= wert(cfg().nachholSekunden, 1)) {
+      zs.nachUhr = 0;
+      if (wartend(strecke) > 0 && kandidaten(strecke, v) > 0) return { runde: zs.runde, n: zs.n + 1, v };
+    }
+    return null;
+  }
+
+  /**
    * Lage der Wildtier-/Strohballen-/Dino-Stellen in die Dynamik übernehmen (nach jeder Neuverteilung und einmal nach dem Bau der Dynamik).
    * Rollende/laufende Objekte tragen ihr eigenes s und laufen weiter; nur neue starten an der neuen Stelle.
    */
@@ -387,5 +409,5 @@
     if (strecke.zufall) strecke.zufall.extern = (liste || []).filter((z) => z && typeof z.s0 === 'number' && typeof z.s1 === 'number');
   }
 
-  R.Zufall = { hash32, folge, seedRunde, start, ereignis, kandidaten, wartend, dynamikSetzen, externSetzen, verteilen };
+  R.Zufall = { hash32, folge, seedRunde, start, ereignis, takt, kandidaten, wartend, dynamikSetzen, externSetzen, verteilen };
 })();
