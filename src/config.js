@@ -213,6 +213,13 @@ Rennspiel.config = {
     brand:     { name: 'Brennendes Auto', schraeg: 0.28, blinkTakt: 0.5, dreieckAbstand: 12, gefahr: 1.0,
                  flammen: 3, rauchTeilchen: 70, rauchHoehe: 11 },
   },
+  // Z1: Zufällige Strecke (Einstellung zufall, Standard AN): Münzen und Hindernisse liegen in jedem Rennen (Rennseed) und in jeder Runde (Neuverteilung,
+  // sobald das führende Fahrzeug eine neue Runde beginnt) anders (track/zufall.js). Fenster um jedes Fahrzeug: rueck m hinter, vor m vor dem Fahrzeug –
+  // Objekte darin werden NICHT verschoben (kein Aufpoppen), sondern bei einer späteren Gelegenheit (Nachzügler-Ereignis, höchstens alle nachholSekunden s).
+  zufall: {
+    standardAn: true,
+    rueck: 60, vor: 300, durchgaenge: 12, nachholSekunden: 1,
+  },
   // 12.10. Hindernis-Menge (Einstellung hindernisMenge): 'normal' = Katalog unverändert (bitgleich wie bisher),
   // 'viele' / 'sehrViele' = Gesamtzahl max(Katalog × faktor, Streckenlänge / meterPro); Wracks gedeckelt (wrackMax), Rest billige Arten,
   // deterministisch erzeugt (trackBuilder.js, fester Seed je Strecke + Menge + Variante). Nur Welten mit Hindernis-Schichten.

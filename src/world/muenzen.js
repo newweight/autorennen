@@ -25,10 +25,13 @@
   function C() { return (R.config.garage && R.config.garage.muenzen) || {}; }
   function wert(x, std) { return x === undefined ? std : x; }
 
-  /** Münz-Positionen [{ s, q, reihe }] für eine Strecke (rein, deterministisch). */
-  function platzieren(strecke) {
+  /**
+   * Z1: Sperrbereiche der Strecke für Münzen (Start/Ziel, Loopings, Schanzen-Flugstrecke, Überführung, Gabelung, Kreuzung) – der Zonen-Teil von
+   * platzieren(), unverändert herausgelöst, damit die Zufalls-Neuverteilung dieselben Regeln benutzt.
+   * @returns {{ frei: (s:number)=>boolean, gerade: (s0:number, s1:number)=>boolean, halb:number, L:number, sp:object, c:object }}
+   */
+  function zonenVon(strecke) {
     const c = C(), sp = strecke.spline, L = sp.laenge;
-    const nMin = wert(c.anzahlMin, 20), nMax = wert(c.anzahlMax, 40), reihe = wert(c.reihe, 5), ra = wert(c.reiheAbstand, 6);
     const kAb = wert(c.kurveAb, 0.008), startFrei = wert(c.startFrei, 70), zielFrei = wert(c.zielFrei, 25), schFrei = wert(c.schanzeFrei, 110);
     const halb = (strecke.breite || 12) / 2;
     // gesperrte Bereiche [s0, s1] (in Fahrtrichtung, ohne Umbruch: s1 kann > L sein)
@@ -59,6 +62,16 @@
       for (let s = s0; s <= s1 + 0.01; s += 3) if (Math.abs(sp.punktBei(s).kruemmung || 0) > kAb) return false;
       return true;
     };
+    return { frei, gerade, halb, L, sp, c, startFrei, zielFrei };
+  }
+
+  /** Münz-Positionen [{ s, q, reihe }] für eine Strecke (rein, deterministisch). */
+  function platzieren(strecke) {
+    const c = C(), sp = strecke.spline, L = sp.laenge;
+    const nMin = wert(c.anzahlMin, 20), nMax = wert(c.anzahlMax, 40), reihe = wert(c.reihe, 5), ra = wert(c.reiheAbstand, 6);
+    const startFrei = wert(c.startFrei, 70), zielFrei = wert(c.zielFrei, 25);
+    const halb = (strecke.breite || 12) / 2;
+    const { frei, gerade } = zonenVon(strecke);
     const versatz = [0, -0.4, 0.4];      // Anteil der halben Breite (Seite wechselt je Reihe)
     const ziel = Math.max(nMin, Math.min(nMax, wert(c.zielAnzahl, 30))), maxReihen = wert(c.maxReihen, 4);
     const lang = (reihe - 1) * ra;
@@ -124,18 +137,127 @@
   class Muenzen {
     /** @param {Strecke} strecke */
     constructor(strecke) {
-      const c = C(), sp = strecke.spline, h = wert(c.hoehe, 0.95);
+      const c = C();
       this.strecke = strecke;
       this.radius = wert(c.radius, 1.9);
-      this.liste = hindernisFrei(strecke, platzieren(strecke)).map((m, k) => {
-        const p = sp.punktBei(m.s), x = p.x + p.nx * m.q, z = p.z + p.nz * m.q;
-        // W4-I: Höhe aus dem eigenen s (Höhenmodell 'gelaende': identisch mit hoeheAn(x, z))
-        const y = typeof strecke.hoeheBeiS === 'function' ? strecke.hoeheBeiS(m.s, m.q) + h : typeof strecke.hoeheAn === 'function' ? strecke.hoeheAn(x, z) + h : (p.y || 0) + h;
-        return { k, s: m.s, q: m.q, x, y, z, reihe: m.reihe, da: true, weg: 0 };
-      });
+      this.liste = hindernisFrei(strecke, platzieren(strecke)).map((m, k) => this._muenze(strecke, m, k));
       this.gesammelt = [];       // je Fahrzeug-Index: Anzahl in diesem Rennen
       this.zeit = 0;
+      // Z1 (Zufall): Lage für Runde 1 aus dem Rennseed (nur wenn die Strecke mit optionen.zufall gebaut wurde; sonst bleibt es bei der festen Lage)
+      this._gruppen = null;
+      if (strecke.zufall && R.Zufall) { strecke.zufall.muenzen = this; this._zufallStart(strecke.zufall); }
     }
+
+    /** Münze k aus { s, q, reihe }: Weltposition und Zustand. */
+    _muenze(strecke, m, k) {
+      const c = C(), sp = strecke.spline, h = wert(c.hoehe, 0.95);
+      const p = sp.punktBei(m.s), x = p.x + p.nx * m.q, z = p.z + p.nz * m.q;
+      // W4-I: Höhe aus dem eigenen s (Höhenmodell 'gelaende': identisch mit hoeheAn(x, z))
+      const y = typeof strecke.hoeheBeiS === 'function' ? strecke.hoeheBeiS(m.s, m.q) + h : typeof strecke.hoeheAn === 'function' ? strecke.hoeheAn(x, z) + h : (p.y || 0) + h;
+      return { k, s: m.s, q: m.q, x, y, z, reihe: m.reihe, da: true, weg: 0 };
+    }
+
+    // ------------------------------------------------------------------ Z1: Zufalls-Lage (Runde 1 aus dem Rennseed, danach je Neuverteilung)
+    // Münzgruppen = Reihen (reihe ≥ 0: aufeinanderfolgende Münzen derselben Reihe) und Einzelmünzen. Die Anzahl der Münzen bleibt gleich; jede Gruppe
+    // wandert als Ganzes an eine neue Stelle (gleiche Sperrregeln wie platzieren: Start/Ziel, Looping, Schanzen-Flug, Überführung, Gabelung, Kreuzung;
+    // Reihen nur auf geraden Stücken; nie in einem Hindernis; Abstand zu anderen Gruppen; nie im Fenster eines Fahrzeugs). Eingesammelte Münzen kommen
+    // an der neuen Stelle wieder (da = true). Gruppen mit einem Fahrzeug in der Nähe bleiben (ausstehend) und wandern bei der nächsten Gelegenheit.
+    _zufallStart(zs) {
+      const gr = [];
+      let aktuell = null;
+      this.liste.forEach((m, i) => {
+        if (m.reihe >= 0 && aktuell && aktuell.reihe === m.reihe) aktuell.idx.push(i);
+        else { aktuell = { reihe: m.reihe, idx: [i], ausstehend: false, c: 0, h: 0 }; gr.push(aktuell); if (m.reihe < 0) aktuell = null; }
+      });
+      this._gruppen = gr;
+      this._zone = zonenVon(this.strecke);
+      this._zufallSpannen();
+      const Z = R.Zufall;
+      this.zufallPlan({ n: 0, imFenster: () => false });
+      this.zufallVerteilen({ strecke: this.strecke, rng: Z.folge(Z.hash32(zs.seed, 1, 0, 22)), n: 0, imFenster: () => false });
+    }
+
+    /** Mitte c und halbe Länge h (inkl. Münzradius) je Gruppe aus den aktuellen Münzen. */
+    _zufallSpannen() {
+      for (const g of this._gruppen) {
+        let a = Infinity, b = -Infinity;
+        for (const i of g.idx) { const s = this.liste[i].s; if (s < a) a = s; if (s > b) b = s; }
+        g.c = (a + b) / 2; g.h = (b - a) / 2 + 2.5; g.lang = b - a;
+      }
+    }
+
+    /** Wer wandert in diesem Ereignis (n = 0: alle ohne Fahrzeug in der Nähe, n ≥ 1: die wartenden, die frei sind)? → Zonen der Bleibenden { c, h } */
+    zufallPlan(ctx) {
+      if (!this._gruppen) return [];
+      const mover = [], bleiben = [];
+      for (const g of this._gruppen) {
+        const kand = ctx.n === 0 ? true : g.ausstehend;
+        if (kand && !ctx.imFenster(g.c, g.h)) { mover.push(g); g.ausstehend = false; }
+        else { bleiben.push(g); if (kand) g.ausstehend = true; }
+      }
+      this._plan = { mover, bleiben };
+      return bleiben.map((g) => ({ c: g.c, h: g.h + 1.5 }));
+    }
+
+    /** Die in zufallPlan bestimmten Gruppen neu legen. → Anzahl bewegter Münzgruppen */
+    zufallVerteilen(ctx) {
+      if (!this._gruppen) return 0;
+      if (!this._plan) this.zufallPlan({ n: ctx.n, imFenster: ctx.imFenster });
+      const plan = this._plan; this._plan = null;
+      const strecke = this.strecke, sp = strecke.spline, zone = this._zone || (this._zone = zonenVon(strecke)), rng = ctx.rng;
+      const c = C(), ra = wert(c.reiheAbstand, 6), halb = zone.halb, L = zone.L;
+      const hs = (strecke.hindernisse || []).filter((h) => h.typ !== 'krater' && h.laenge && h.halbbreite !== undefined && h.seitenabstand !== undefined);
+      const rr = 0.6;
+      const drin = (s, q) => hs.some((h) => Math.abs(sp.differenzS(s, h.s)) < h.laenge / 2 + rr && Math.abs(q - h.seitenabstand) < h.halbbreite + rr);
+      const spannen = plan.bleiben.map((g) => ({ c: g.c, h: g.h }));
+      const mover = plan.mover.slice();
+      for (let i = mover.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = mover[i]; mover[i] = mover[j]; mover[j] = t; }
+      const von = zone.startFrei, bis = L - zone.zielFrei, nutz = bis - von, m = Math.max(1, mover.length), GAP = 18;
+      const versatz = [0, -0.4, 0.4];
+      let bewegt = 0;
+      mover.forEach((g, i) => {
+        const a = von + nutz * i / m, b = von + nutz * (i + 1) / m, reihe = g.idx.length > 1;
+        const lang = reihe ? (g.idx.length - 1) * ra : 0, h = lang / 2 + 2.5;
+        let gefunden = null;
+        for (let t = 0; t < 100 && !gefunden; t++) {
+          const s = Math.round((t < 50 ? a + rng() * (b - a) : von + rng() * nutz) * 2) / 2;
+          if (s + lang > bis) continue;
+          let ok = zone.frei(s) && zone.frei(s + lang);
+          for (let d = 3; ok && d < lang; d += 3) if (!zone.frei(s + d)) ok = false;
+          if (!ok) continue;
+          if (reihe && !zone.gerade(s, s + lang)) continue;
+          const cm = s + lang / 2;
+          if (ctx.imFenster(cm, h + 2)) continue;
+          if (spannen.some((x) => Math.abs(sp.differenzS(cm, x.c)) < h + x.h + GAP)) continue;
+          const q = reihe ? versatz[Math.floor(rng() * versatz.length)] * halb : (rng() * 2 - 1) * 0.55 * halb;
+          let frei = true;
+          for (let j = 0; j < g.idx.length && frei; j++) if (drin(s + j * ra, q)) frei = false;
+          if (!frei) continue;
+          gefunden = { s, q, cm };
+        }
+        if (!gefunden) {            // nichts gefunden: Gruppe bleibt, wo sie ist (die Anzahl ändert sich nie)
+          spannen.push({ c: g.c, h: g.h });
+          return;
+        }
+        spannen.push({ c: gefunden.cm, h });
+        g.idx.forEach((idx, j) => {
+          const alt = this.liste[idx];
+          Object.assign(alt, this._muenze(strecke, { s: sp.wrapS(gefunden.s + (reihe ? j * ra : 0)), q: gefunden.q, reihe: alt.reihe }, alt.k));
+        });
+        bewegt++;
+      });
+      this._zufallSpannen();
+      return bewegt;
+    }
+
+    /** Wie viele wartende Gruppen sind mit den Fahrzeugen (imFenster) jetzt frei? */
+    zufallKandidaten(imFenster) {
+      if (!this._gruppen) return 0;
+      let k = 0;
+      for (const g of this._gruppen) if (g.ausstehend && !imFenster(g.c, g.h)) k++;
+      return k;
+    }
+    zufallWartend() { return this._gruppen ? this._gruppen.reduce((x, g) => x + (g.ausstehend ? 1 : 0), 0) : 0; }
 
     get anzahl() { return this.liste.length; }
     /** Noch liegende Münzen. */

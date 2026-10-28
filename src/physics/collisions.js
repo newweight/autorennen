@@ -860,38 +860,47 @@
     const liste = strecke.wracks || [];
     if (!liste.length || (strecke.aktiveSchichten && strecke.aktiveSchichten.wracks === false)) return 0;
     if (!strecke.hindernisse) strecke.hindernisse = [];
-    const C = (R.config && R.config.hindernisse) || {}, sp = strecke.spline;
-    const katalog = R.carCatalog || [];
     let n = 0;
-    liste.forEach((e) => {
-      const typ = e.brennt ? 'brand' : 'wrack', c = C[typ] || C.wrack || {};
-      const auto = katalog.find(a => a.id === e.autoId) || null;
-      const fw = (auto && auto.fahrwerte) || {};
-      const L = fw.laenge || 4.6, B = fw.breite || 1.85;
-      const q = e.seitenabstand || 0, seite = q >= 0 ? 1 : -1;
-      const s = sp.wrapS(e.s), p = sp.punktBei(s);
-      const x = p.x + p.nx * q, z = p.z + p.nz * q;
-      const schraeg = c.schraeg !== undefined ? c.schraeg : 0.28;
-      // Bug zeigt schräg zum eigenen Fahrbahnrand (rechts: heading kleiner = nach rechts gedreht)
-      const heading = Math.atan2(-p.tx, -p.tz) - seite * schraeg;
-      const rx = -Math.sin(heading), rz = -Math.cos(heading);
-      const halb = Math.max(0, L / 2 - B / 2);
-      const laengs = (L / 2) * Math.cos(schraeg) + (B / 2) * Math.sin(schraeg);   // Ausdehnung längs der Strecke
-      const quer = (L / 2) * Math.sin(schraeg) + (B / 2) * Math.cos(schraeg);     // Ausdehnung quer
-      const h = {
-        nr: strecke.hindernisse.length, typ, gefahr: c.gefahr !== undefined ? c.gefahr : 1.0,
-        s, s0: sp.wrapS(s - laengs - 1), s1: sp.wrapS(s + laengs + 1), laenge: 2 * laengs + 2,
-        seitenabstand: q, halbbreite: quer + 0.3, seite,
-        x, z, radius: L / 2 + 1, heading, autoId: auto ? auto.id : e.autoId, laengeAuto: L, breiteAuto: B,
-        dreieckS: sp.wrapS(s - (c.dreieckAbstand || 9)),
-        segmente: [{ ax: x + rx * halb, az: z + rz * halb, bx: x - rx * halb, bz: z - rz * halb, art: typ, dicke: B / 2 }],
-      };
+    liste.forEach((e, i) => {
+      const h = wrackBauen(strecke, e, strecke.hindernisse.length);
+      h.quelle = i;           // Z1 (Zufall): Index in strecke.wracks – die Neuverteilung ersetzt das Hindernis an seinem Platz
       strecke.hindernisse.push(h);
       n++;
     });
     return n;
   }
 
-  R.Kollisionen = { bande, autoAuto, kapsel, hindernisse, wracksEinbauen,
+  /**
+   * Z1: ein Wrack-Hindernis aus dem Eintrag { s, seitenabstand, brennt, autoId } berechnen (der Körper von wracksEinbauen, unverändert herausgelöst,
+   * damit die Zufalls-Neuverteilung ein einzelnes Wrack an neuer Stelle neu berechnen kann). nr = Index in strecke.hindernisse.
+   */
+  function wrackBauen(strecke, e, nr) {
+    const C = (R.config && R.config.hindernisse) || {}, sp = strecke.spline;
+    const katalog = R.carCatalog || [];
+    const typ = e.brennt ? 'brand' : 'wrack', c = C[typ] || C.wrack || {};
+    const auto = katalog.find(a => a.id === e.autoId) || null;
+    const fw = (auto && auto.fahrwerte) || {};
+    const L = fw.laenge || 4.6, B = fw.breite || 1.85;
+    const q = e.seitenabstand || 0, seite = q >= 0 ? 1 : -1;
+    const s = sp.wrapS(e.s), p = sp.punktBei(s);
+    const x = p.x + p.nx * q, z = p.z + p.nz * q;
+    const schraeg = c.schraeg !== undefined ? c.schraeg : 0.28;
+    // Bug zeigt schräg zum eigenen Fahrbahnrand (rechts: heading kleiner = nach rechts gedreht)
+    const heading = Math.atan2(-p.tx, -p.tz) - seite * schraeg;
+    const rx = -Math.sin(heading), rz = -Math.cos(heading);
+    const halb = Math.max(0, L / 2 - B / 2);
+    const laengs = (L / 2) * Math.cos(schraeg) + (B / 2) * Math.sin(schraeg);   // Ausdehnung längs der Strecke
+    const quer = (L / 2) * Math.sin(schraeg) + (B / 2) * Math.cos(schraeg);     // Ausdehnung quer
+    return {
+      nr, typ, gefahr: c.gefahr !== undefined ? c.gefahr : 1.0,
+      s, s0: sp.wrapS(s - laengs - 1), s1: sp.wrapS(s + laengs + 1), laenge: 2 * laengs + 2,
+      seitenabstand: q, halbbreite: quer + 0.3, seite,
+      x, z, radius: L / 2 + 1, heading, autoId: auto ? auto.id : e.autoId, laengeAuto: L, breiteAuto: B,
+      dreieckS: sp.wrapS(s - (c.dreieckAbstand || 9)),
+      segmente: [{ ax: x + rx * halb, az: z + rz * halb, bx: x - rx * halb, bz: z - rz * halb, art: typ, dicke: B / 2 }],
+    };
+  }
+
+  R.Kollisionen = { bande, autoAuto, kapsel, hindernisse, wracksEinbauen, wrackBauen,
     obbAbstand, eindringung, loopingAbstand, pflanzenSammeln, pflanzen };   // Runde 6; v28c: eindringung (nur Anzeige)
 })();
