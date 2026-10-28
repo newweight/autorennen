@@ -547,5 +547,5 @@ html .hud.moto-mitte-an .hud-meldung { top: var(--moto-meldung-top, 30%) !import
   }
 
   /** Für Tests und die Fehlersuche. */
-  R.Moto.unfallStart = { unfallSchritt, sturzFolge, szeneStart, modusLesen, modusSchreiben, bild, hudFrame, STATION };
+  R.Moto.unfallStart = { unfallSchritt, sturzFolge, szeneStart, modusLesen, modusSchreiben, bild, hudFrame, STATION, unfallNeu };      // M4: unfallNeu auch für den Server (kopflose Simulation) und die Online-Anzeige
 })();

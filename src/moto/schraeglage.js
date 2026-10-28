@@ -136,7 +136,8 @@ window.Rennspiel = window.Rennspiel || {};
     let n = 0;
     const loese = (i) => {
       const f = liste[i];
-      if (!f || f.ausgeschieden || !f.mesh || !f.mesh.userData || !f.mesh.userData.lage) return;
+      if (!f || f.ausgeschieden) return;
+      if ((!f.mesh || !f.mesh.userData || !f.mesh.userData.lage) && !f.motoKopflos) return;     // M4: der Server rechnet ohne Mesh (f.motoKopflos) – dort zählt der Sturz trotzdem
       const z = f.motoZ || (f.motoZ = zustand());
       if (purzelStart(z)) n++;
     };

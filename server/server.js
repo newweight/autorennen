@@ -21,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
-const { laden, Simulation, einstellungenPruefen } = require('./simulation');
+const { laden, ladenMoto, Simulation, einstellungenPruefen } = require('./simulation');
 const RadApi = require('./radApi');                 // Radwelt R3c-D: Speicher-API (/api/rad/…, nur 127.0.0.1), eigene Datei
 const Brett = require('./brettspiele');            // Brettspiele (4 gewinnt, Schach): eigener WebSocket-Pfad /ws-brett, eigene Datei
 const RadRaum = require('./radRaum');              // Radwelt R4-F: „Zusammen fahren“, eigener WebSocket-Pfad /ws-rad, eigene Datei
@@ -38,6 +38,9 @@ const MIME = {
 
 const R = laden();
 const RAUM_NACHRICHTEN = new Set(['wahl', 'bereit', 'einstellungen', 'start', 'geladen', 'eingabe', 'zurLobby']);
+// M4 (Motorrad online): Schalter. AUS (Standard) = der Server verhält sich bitgleich wie vorher (kein Motorrad.html, `moto`-Wünsche werden abgelehnt).
+// AN mit `--motorrad` (oder MOTORRAD_ONLINE=1) oder mit der leeren Datei <Spielordner>/motorrad.an (ohne Neustart wirksam, z. B. `touch motorrad.an`).
+const MOTORRAD_MARKE = path.join(WURZEL, 'motorrad.an');
 const N = R.Netz;
 const DT = R.config.physik.schritt;
 
@@ -140,7 +143,7 @@ function statusLesen(ordner, jetzt) {
 
 // ------------------------------------------------------------------ statische Dateien
 /** URL-Pfad → Datei im Spielordner oder null (verboten/unbekannt). radOrdner: Ordner der Radwelt-Kopie für /rad/… (Standard <Spielordner>/rad). */
-function dateiFuer(urlPfad, radOrdner) {
+function dateiFuer(urlPfad, radOrdner, motorrad) {
   let p;
   try { p = decodeURIComponent(urlPfad.split('?')[0].split('#')[0]); } catch (e) { return null; }
   if (p.includes('\0') || p.includes('\\')) return null;
@@ -157,13 +160,14 @@ function dateiFuer(urlPfad, radOrdner) {
     const vollR = path.resolve(basis, ...rest);
     return vollR.startsWith(basis + path.sep) ? vollR : null;
   }
-  if (!(teile.length === 1 && (teile[0] === 'Autorennen.html' || teile[0] === 'Radwelt.html')) && !ERLAUBT.includes(teile[0])) return null;
+  // M4: Motorrad.html nur mit eingeschaltetem Motorrad-Schalter (dateiFuer(…, …, true)); Standard unverändert
+  if (!(teile.length === 1 && (teile[0] === 'Autorennen.html' || teile[0] === 'Radwelt.html' || (motorrad === true && teile[0] === 'Motorrad.html'))) && !ERLAUBT.includes(teile[0])) return null;
   const voll = path.resolve(WURZEL, ...teile);
   if (!voll.startsWith(WURZEL + path.sep)) return null;
   return voll;
 }
 
-function httpAntwort(req, res, radOrdner) {
+function httpAntwort(req, res, radOrdner, motorrad) {
   const ende = (code, text) => { res.writeHead(code, { 'Content-Type': 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff' }); res.end(req.method === 'HEAD' ? undefined : text); };
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.setHeader('Allow', 'GET, HEAD'); return ende(405, 'Nicht erlaubt'); }
   if (/^\/spiele(\/(vier-gewinnt|schach))?(\?.*)?$/.test(req.url || '')) {      // ohne Schrägstrich → relative Links würden brechen
@@ -174,7 +178,7 @@ function httpAntwort(req, res, radOrdner) {
     res.writeHead(301, { Location: '/rad/Radwelt.html' + (req.url.match(/\?.*$/) || [''])[0] }); return res.end();
   }
   const radBasis = path.resolve(radOrdner || RAD_ORDNER);
-  const datei = dateiFuer(req.url || '/', radBasis);
+  const datei = dateiFuer(req.url || '/', radBasis, motorrad === true);
   if (!datei) return ende(404, 'Nicht gefunden');
   // R6: in rad/ zusätzlich den echten Pfad prüfen (kein Link aus dem Ordner heraus)
   if (datei.startsWith(radBasis + path.sep)) {
@@ -204,7 +208,16 @@ function httpAntwort(req, res, radOrdner) {
  */
 function starten(opt) {
   // tempo: Zeitraffer NUR für Tests (tests/test_netz.js), 1 = Echtzeit
-  opt = Object.assign({ port: 8444, host: '0.0.0.0', leise: false, ladenMaxMs: 20000, tempo: 1, oeffentlich: '', steuerung: '', statistik: 0, eingabeAlt: false, rad: '' }, opt);
+  opt = Object.assign({ port: 8444, host: '0.0.0.0', leise: false, ladenMaxMs: 20000, tempo: 1, oeffentlich: '', steuerung: '', statistik: 0, eingabeAlt: false, rad: '', motorrad: false, motorradMarke: MOTORRAD_MARKE }, opt);
+  // M4: Motorrad-Schalter (Option oder Marken-Datei); die Datei wird höchstens alle 2 s geprüft
+  let motorradPruef = { t: 0, an: false };
+  const motorradAn = () => {
+    if (opt.motorrad === true) return true;
+    const jetzt = Date.now();
+    if (jetzt - motorradPruef.t > 2000) { let an = false; try { an = fs.statSync(opt.motorradMarke).isFile(); } catch (e) { /* keine Marke = aus */ } motorradPruef = { t: jetzt, an }; }
+    return motorradPruef.an;
+  };
+  if (motorradAn()) { try { ladenMoto(); } catch (e) { console.error('Motorrad-Kontext konnte nicht geladen werden:', e && e.stack); } }     // vorab laden (≈ 0,3 s), nicht erst beim ersten Raum
   const radOrdner = path.resolve(typeof opt.rad === 'string' && opt.rad ? opt.rad : RAD_ORDNER);      // R6: Radwelt-Kopie für /rad/ (Tests: eigener Ordner)
   // öffentliche Adresse (Tailscale Funnel), damit Link/QR in der Lobby auch stimmen, wenn der Host das Spiel über
   // http://localhost:8444 geöffnet hat. Nur https-Adressen ohne Pfad-Tricks.
@@ -246,6 +259,9 @@ function starten(opt) {
   }
   const fahrerNamen = R.config.fahrer.map(f => f.name);
   const autoIds = R.carCatalog.waehlbare().map(a => a.id);
+  /** M4: wählbare Fahrzeuge je Raumart (Autos wie bisher; Motorrad-Räume: Katalog des Motorrad-Kontexts inkl. M3-Typen). */
+  let motoIdsListe = null;
+  const idsFuer = (raum) => (raum && raum.art === 'moto' ? (motoIdsListe || (motoIdsListe = ladenMoto().carCatalog.waehlbare().map(a => a.id))) : autoIds);
   const hilfen = Object.keys(R.config.fahrhilfen);
   let verbindungen = 0;
   const MAX_PRO_IP = 8, MAX_RAEUME_PRO_IP = 5, TEUER_MS = 3000, BEITRITT_FENSTER_MS = 10000, BEITRITT_FEHLER = 5;   // v27 F4
@@ -253,7 +269,7 @@ function starten(opt) {
 
   const radApi = RadApi.erzeugen({ daten: opt.daten });      // Radwelt-Ablage: --daten bzw. RADWELT_DATEN, Standard ~/Documents/Radwelt-Projekt/Daten
   if (radApi.aufgeraeumt) console.log('Radwelt-Ablage: ' + radApi.aufgeraeumt + ' Waisen-/Temp-Datei(en) aufgeräumt');
-  const srv = http.createServer((req, res) => { if (!radApi.behandeln(req, res)) httpAntwort(req, res, radOrdner); });
+  const srv = http.createServer((req, res) => { if (!radApi.behandeln(req, res)) httpAntwort(req, res, radOrdner, motorradAn()); });
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false, clientTracking: true });
   srv.on('upgrade', (req, socket, kopf) => {
     let pfad = '';
@@ -334,7 +350,7 @@ function starten(opt) {
     let sim;
     try {
       sim = new Simulation({ einstellungen: raum.einstellungen, spieler: spieler.map(c => ({ fahrer: c.fahrer, auto: c.auto, hilfe: c.hilfe })),
-        seed: crypto.randomInt(1, 2 ** 31) });
+        seed: crypto.randomInt(1, 2 ** 31), moto: raum.art === 'moto' });
     } catch (e) {
       console.error('Simulation konnte nicht gebaut werden:', e && e.stack);
       for (const c of spieler) fehler(c.ws, 'intern', 'Rennen konnte nicht gestartet werden');
@@ -416,7 +432,7 @@ function starten(opt) {
     const raum = c.raum;
     switch (m.t) {
       case 'hallo':
-        senden(c.ws, { t: 'hallo', v: N.VERSION, id: c.id });
+        senden(c.ws, motorradAn() ? { t: 'hallo', v: N.VERSION, id: c.id, moto: true } : { t: 'hallo', v: N.VERSION, id: c.id });     // M4: `moto: true` nur mit eingeschaltetem Schalter
         return;
       case 'ping':
         senden(c.ws, { t: 'pong', z: typeof m.z === 'number' ? m.z : 0, k: raum && raum.sim ? raum.sim.tick : 0 });
@@ -431,16 +447,19 @@ function starten(opt) {
         if (raum) verlassen(c, 'neuer Raum');
         if (raeume.size >= 30) return fehler(c.ws, 'voll', 'Zu viele Räume – später nochmal');
         if (c.ws.ipKey) { let n = 0; for (const r of raeume.values()) if (r.host && r.host.ws && r.host.ws.ipKey === c.ws.ipKey) n++; if (n >= MAX_RAEUME_PRO_IP) return fehler(c.ws, 'voll', 'Zu viele Räume von dieser Adresse'); }   // v27 F4 (H2)
+        // M4: Motorrad-Raum nur auf ausdrücklichen Wunsch (`moto: true`) und nur mit eingeschaltetem Schalter; alte Clients senden es nie → Autoraum wie bisher
+        if (m.moto === true && !motorradAn()) return fehler(c.ws, 'keinMotorrad', 'Motorrad online ist auf diesem Server nicht eingeschaltet');
         const code = zufallsCode(new Set(raeume.keys()));
-        const neu = { code, host: c, spieler: [c], zustand: 'lobby', einstellungen: einstellungenPruefen(m.einstellungen || {}, 1), sim: null };
+        const art = m.moto === true ? 'moto' : 'auto';
+        const neu = { code, host: c, spieler: [c], zustand: 'lobby', art, einstellungen: einstellungenPruefen(m.einstellungen || {}, 1, art === 'moto'), sim: null };
         raeume.set(code, neu);
         c.raum = neu; c.bereit = true;
         c.fahrer = fahrerNamen.includes(m.fahrer) ? m.fahrer : fahrerNamen[0];
-        c.auto = autoIds.includes(m.auto) ? m.auto : autoIds[0];
+        c.auto = idsFuer(neu).includes(m.auto) ? m.auto : idsFuer(neu)[0];
         c.hilfe = hilfen.includes(m.hilfe) ? m.hilfe : R.config.fahrhilfeStandard;
         senden(c.ws, { t: 'raum', code, du: c.id, host: true });
         lobbySenden(neu);
-        log('Raum ' + code + ' erstellt, offen: ' + raeume.size);
+        log('Raum ' + code + (art === 'moto' ? ' (Motorrad)' : '') + ' erstellt, offen: ' + raeume.size);
         return;
       }
       case 'raumBeitreten': {
@@ -452,17 +471,19 @@ function starten(opt) {
         const ziel = code && raeume.get(code);
         if (!ziel) { c.beitrittFehler.push(jetztB); return fehler(c.ws, 'unbekannt', 'Diesen Raum gibt es nicht'); }
         if (ziel === raum) return lobbySenden(ziel);
+        // M4: Autos und Motorräder fahren nie im selben Raum – wer mit der falschen Art kommt, bekommt einen freundlichen Hinweis (kein Fehlversuch-Zähler)
+        if ((ziel.art === 'moto') !== (m.moto === true)) return fehler(c.ws, 'falscheArt', ziel.art === 'moto' ? 'Das ist ein Motorrad-Raum – bitte im Motorrad-Spiel beitreten' : 'Das ist ein Auto-Raum – bitte im Autorennen beitreten');
         if (ziel.spieler.length >= N.MAX_SPIELER) return fehler(c.ws, 'voll', 'Der Raum ist voll (6 Spieler)');
         if (ziel.zustand === 'laden' || ziel.zustand === 'rennen') return fehler(c.ws, 'laeuft', 'Dort läuft gerade ein Rennen – gleich nochmal versuchen');
         if (raum) verlassen(c, 'Raumwechsel');
         c.fahrer = freierFahrer(ziel, m.fahrer);
-        c.auto = autoIds.includes(m.auto) ? m.auto : autoIds[0];
+        c.auto = idsFuer(ziel).includes(m.auto) ? m.auto : idsFuer(ziel)[0];
         c.hilfe = hilfen.includes(m.hilfe) ? m.hilfe : R.config.fahrhilfeStandard;
         c.bereit = false;
         ziel.spieler.push(c);
         c.raum = ziel;
         // Kollisionen-Schalter (Stufe 2) und KI-Zahl an die neue Spielerzahl anpassen
-        ziel.einstellungen = einstellungenPruefen(ziel.einstellungen, ziel.spieler.length);
+        ziel.einstellungen = einstellungenPruefen(ziel.einstellungen, ziel.spieler.length, ziel.art === 'moto');
         senden(c.ws, { t: 'raum', code: ziel.code, du: c.id, host: false });
         lobbySenden(ziel);
         log('Raum ' + ziel.code + ': Spieler dazu, jetzt ' + ziel.spieler.length);
@@ -483,7 +504,7 @@ function starten(opt) {
           if (raum.spieler.some(d => d !== c && d.fahrer === m.fahrer)) { fehler(c.ws, 'fahrerVergeben', 'Diesen Fahrer hat schon jemand'); return lobbySenden(raum); }
           c.fahrer = m.fahrer;
         }
-        if (m.auto !== undefined) { if (!autoIds.includes(m.auto)) return fehler(c.ws, 'ungueltig', 'Unbekanntes Auto'); c.auto = m.auto; }
+        if (m.auto !== undefined) { if (!idsFuer(raum).includes(m.auto)) return fehler(c.ws, 'ungueltig', raum.art === 'moto' ? 'Unbekanntes Motorrad' : 'Unbekanntes Auto'); c.auto = m.auto; }
         if (m.hilfe !== undefined) { if (!hilfen.includes(m.hilfe)) return fehler(c.ws, 'ungueltig', 'Unbekannte Fahrhilfe'); c.hilfe = m.hilfe; }
         lobbySenden(raum);
         return;
@@ -496,7 +517,7 @@ function starten(opt) {
       case 'einstellungen':
         if (c !== raum.host) return fehler(c.ws, 'nurHost', 'Nur der Host darf das ändern');
         if (raum.zustand !== 'lobby' && raum.zustand !== 'ergebnis') return;
-        raum.einstellungen = einstellungenPruefen(Object.assign({}, raum.einstellungen, m.einstellungen || {}), raum.spieler.length);
+        raum.einstellungen = einstellungenPruefen(Object.assign({}, raum.einstellungen, m.einstellungen || {}), raum.spieler.length, raum.art === 'moto');
         lobbySenden(raum);
         return;
       case 'start':
@@ -519,7 +540,7 @@ function starten(opt) {
         const n = m.n;
         if (!Number.isInteger(n) || n <= c.letzteN || n > c.letzteN + 100000) return;
         c.letzteN = n;
-        const e = { n, s: N.eingabeDekodieren(m), i: m.i === 1, r: m.r === 1, f: m.f === 1, d: m.d === 1 };   // d: v24 Dach-Geste
+        const e = { n, s: N.eingabeDekodieren(m), i: m.i === 1, r: m.r === 1, f: m.f === 1, d: m.d === 1, k: m.k === 1 };   // d: v24 Dach-Geste · k: M4 Trick-Taste (nur Motorrad-Räume)
         c.eingaben.push(e);
         if (c.eingaben.length > 45) {        // > 3/4 s gepuffert (Paketstau, sehr langsames Gerät): Älteste verwerfen, Tasten-Flanken behalten
           c.erw = null;                      // v23: neu ausrichten (eingabeTick)
@@ -528,6 +549,7 @@ function starten(opt) {
           if (weg.some(x => x.r)) c.eingaben[0].r = true;
           if (weg.some(x => x.f)) c.eingaben[0].f = true;
           if (weg.some(x => x.d)) c.eingaben[0].d = true;
+          if (weg.some(x => x.k)) c.eingaben[0].k = true;
         }
         return;
       }
@@ -598,7 +620,9 @@ function starten(opt) {
   }
 
   // --- Eingaben je Tick ---
-  const flankenAnwenden = (sim, c, e) => { if (e.r) sim.reset(c.simNr); if (e.i) sim.item(c.simNr); if (e.f) sim.freikaufen(c.simNr); if (e.d) sim.dachGeste(c.simNr); };
+  const flankenAnwenden = (sim, c, e) => { if (e.r) sim.reset(c.simNr); if (e.i) sim.item(c.simNr); if (e.f) sim.freikaufen(c.simNr); if (e.d) sim.dachGeste(c.simNr); if (e.k) c.trickTipp = true; };
+  /** M4: Trick-Taste dieses Ticks (nur Motorrad-Räume): gehalten ODER in einer verworfenen/ausgelassenen Eingabe angetippt (Tipp geht nicht verloren). */
+  const trickAnwenden = (sim, c, e) => { if (sim.moto) { sim.trickSetzen(c.simNr, e.k === true || c.trickTipp === true); c.trickTipp = false; } };
 
   /**
    * v23 (Online-Ruckeln): Eingabe nach INDEX statt „eine Eingabe je Tick aus der Warteschlange“.
@@ -645,14 +669,14 @@ function starten(opt) {
     const e = q.length && q[0].n === c.erw ? q.shift() : null;
     if (e) {
       sim.eingabeSetzen(c.simNr, e.s); c.letzteEingabe = jetzt; c.warLeer = false;
-      flankenAnwenden(sim, c, e);
+      flankenAnwenden(sim, c, e); trickAnwenden(sim, c, e);
     } else {
       c.statLeer = (c.statLeer || 0) + 1;
       if (!c.warLeer) c.leerFenster++;                           // gezählt wird jede neue Lücke, nicht jeder leere Tick (ein langer Aussetzer ist EIN Ereignis)
       c.warLeer = true;
       // Tab im Hintergrund: nach 0,7 s ohne Eingabe rollt das Auto ohne Gas (v22b: 0,3 s – ein Netz-Aussetzer von 0,3 s riss dann Lenkung und Gas weg:
       // Auto in der Kurve geradeaus, Abweichung 3–4 m = harte Korrektur). Neue Browser schicken im Hintergrund selbst neutrale Eingaben.
-      if (jetzt - c.letzteEingabe > 700) sim.eingabeSetzen(c.simNr, { gas: 0, bremse: 0, lenkung: 0 });
+      if (jetzt - c.letzteEingabe > 700) { sim.eingabeSetzen(c.simNr, { gas: 0, bremse: 0, lenkung: 0 }); if (sim.moto) sim.trickSetzen(c.simNr, false); }
     }
     c.ack = c.erw;                                             // dieser Tick deckt die Eingabe `erw` ab (echt oder gehalten)
     c.erw++;
@@ -695,7 +719,7 @@ function starten(opt) {
     if (!e) c.statLeer = (c.statLeer || 0) + 1;       // Statistik: dieser Tick lief ohne frische Eingabe
     if (e) {
       sim.eingabeSetzen(c.simNr, e.s); c.ack = e.n; c.letzteEingabe = jetzt;
-      flankenAnwenden(sim, c, e);
+      flankenAnwenden(sim, c, e); trickAnwenden(sim, c, e);
     } else if (jetzt - c.letzteEingabe > 300) sim.eingabeSetzen(c.simNr, { gas: 0, bremse: 0, lenkung: 0 });   // Tab im Hintergrund
   }
 
@@ -787,7 +811,8 @@ if (require.main === module) {
   const rad = arg('rad') || '';                   // R6: Ordner der Radwelt-Kopie für /rad/ (Standard <Spielordner>/rad)
   const statistik = Math.max(0, +(arg('statistik') || process.env.STATISTIK || 0)) || 0;   // v23: Sekunden zwischen den Tick-Statistik-Zeilen (0 = aus)
   const eingabeAlt = process.argv.includes('--eingabe-alt');       // nur Vergleich/Test: v22b-Verhalten der Eingabe-Warteschlange
-  starten({ port, host, oeffentlich, steuerung, statistik, eingabeAlt, daten, rad }).then((s) => {
+  const motorrad = process.argv.includes('--motorrad') || process.env.MOTORRAD_ONLINE === '1';     // M4: Motorrad online einschalten (sonst nur per Datei motorrad.an)
+  starten({ port, host, oeffentlich, steuerung, statistik, eingabeAlt, daten, rad, motorrad }).then((s) => {
     const netz = [];
     for (const liste of Object.values(require('os').networkInterfaces())) {
       for (const a of liste || []) if (a.family === 'IPv4' && !a.internal) netz.push(a.address);
@@ -799,6 +824,7 @@ if (require.main === module) {
     console.log('   Übers Internet:        sudo /opt/homebrew/bin/tailscale funnel --https=' + s.port + ' ' + s.port + '   (siehe server/README.md)');
     if (steuerung) console.log('   Internet-Schalter:     an (Ordner ' + steuerung + ')');
     if (oeffentlich) console.log('   Öffentliche Adresse:   ' + oeffentlich + '   (Link/QR in der Lobby)');
+    if (motorrad) console.log('   Motorrad online:       an (' + 'Motorrad.html unter /Motorrad.html)');
     console.log('   Beenden: Ctrl+C (oder Fenster schließen)');
     console.log('');
   }).catch((e) => {

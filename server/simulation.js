@@ -16,6 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const MotoSim = require('./motoSim');     // M4: Motorrad-Zusatz der Simulation (nur in Motorrad-Räumen benutzt)
 
 const WURZEL = path.join(__dirname, '..');
 // Reihenfolge wie in Autorennen.html (ohne Ton, Eingabe, Autos-Grafik, Kameras, HUD, Menü)
@@ -67,9 +68,8 @@ function kontextLaden(dateien, extra) {
   return sandbox.Rennspiel;
 }
 
-function laden() {
-  if (R) return R;
-  R = kontextLaden(MODULE);
+/** Geister-Modus (Stufe 1) und Verkehrs-Kollisionen: Hüllen um Kollisionen.autoAuto/loopingAbstand (gilt für jeden geladenen Kontext). */
+function kollisionsHuelle(R) {
   // Geister-Modus (Stufe 1): Auto↔Auto aus, solange die laufende Simulation keine Kollisionen will
   const K = R.Kollisionen, autoAuto = K.autoAuto, loopingAbstand = K.loopingAbstand;
   // v25 (15.10., Verkehr): auch im Geister-Modus stoßen Teilnehmer mit Verkehrswagen (Geisterfahrer, Krankenwagen, Abschleppwagen), nie untereinander
@@ -82,8 +82,34 @@ function laden() {
   return R;
 }
 
-/** Einstellungen des Raums prüfen (nur erlaubte Werte; unbekannt → Standard). */
-function einstellungenPruefen(roh, spielerAnzahl) {
+function laden() {
+  if (R) return R;
+  R = kontextLaden(MODULE);
+  return kollisionsHuelle(R);
+}
+
+// ---------------------------------------------------------------- M4: Motorrad-Kontext (nur für Motorrad-Räume, Schalter `moto`)
+// Zweiter, getrennter vm-Kontext: dieselben Module wie oben, dazu der Motorrad-Modus (window.MOTORRAD === true) wie in Motorrad.html – Motorrad-Katalog (inkl.
+// M3-Typen), angepasste Strecken (Schanzen/Zonen), Schräglage/Sturz, Stunts, Unfälle. Der Autorennen-Kontext (laden) bleibt unberührt: Auto-Räume laufen bitgleich wie vorher.
+// Reihenfolge wie Motorrad.html: Katalog/Typen/Logik VOR main.js, die Verdrahtungs-Umhüllungen (Spiel.physikSchritt …) danach.
+const MOTO_VOR = ['src/world/garage.js', 'src/moto/motoKatalog.js', 'src/moto/motoTypen.js', 'src/moto/schraeglage.js', 'src/moto/stunts.js', 'src/moto/stuntWelt.js', 'src/moto/unfall.js'];
+const MOTO_NACH = ['server/motoHaken.js', 'src/moto/stuntStart.js', 'src/moto/unfallWelt.js', 'src/moto/unfallStart.js'];
+const MOTO_UNFALL = ['aus', 'sanft', 'echt'];       // erlaubte Werte der Raum-Einstellung `unfall` (Standard sanft)
+let RM = null;
+function ladenMoto() {
+  if (RM) return RM;
+  const bisMega = MODULE.indexOf('src/track/megastrecke.js');
+  const liste = MODULE.slice(0, bisMega + 1).concat(MOTO_VOR, ['src/main.js'], MOTO_NACH);
+  RM = kontextLaden(liste, { MOTORRAD: true });
+  return kollisionsHuelle(RM);
+}
+
+/**
+ * Einstellungen des Raums prüfen (nur erlaubte Werte; unbekannt → Standard).
+ * moto (M4, Standard false = bitgleich wie vorher): Motorrad-Raum – zusätzliche Felder `moto: true`, `unfall` ('aus'|'sanft'|'echt'), `stuntrennen` (bool);
+ * Polizei, Verkehr (Geisterfahrer/Krankenwagen/Abschleppwagen) und „Nur Rennautos“ gibt es für Motorräder nicht und sind immer aus.
+ */
+function einstellungenPruefen(roh, spielerAnzahl, moto) {
   const R = laden(), c = R.config, r = roh || {}, N = R.Netz;
   const zahl = (v, lo, hi, d) => (Number.isFinite(+v) && v !== null && v !== '' ? Math.max(lo, Math.min(hi, Math.round(+v))) : d);
   const daten = R.trackCatalog.find(t => t.id === r.streckeId) || R.trackCatalog[0];
@@ -96,7 +122,7 @@ function einstellungenPruefen(roh, spielerAnzahl) {
   const altVerkehr = r.verkehr === 'wenig' || r.verkehr === 'viel';       // v28 (W1): alter Client → beide an
   const krankenwagen = typeof r.krankenwagen === 'boolean' ? r.krankenwagen : altVerkehr;
   const abschleppwagen = typeof r.abschleppwagen === 'boolean' ? r.abschleppwagen : altVerkehr;
-  return {
+  const erg = {
     streckeId: daten.id, welt, variante, jahreszeit: jz, wetter,
     windStaerke: r.windStaerke === 'zufall' ? 'zufall' : zahl(r.windStaerke, 0, 5, 0),
     runden: zahl(r.runden, c.rennen.rundenMin, c.rennen.rundenMax, c.rennen.rundenStandard),
@@ -122,6 +148,11 @@ function einstellungenPruefen(roh, spielerAnzahl) {
     hindernisMenge: c.hindernisMenge && c.hindernisMenge.stufen && typeof r.hindernisMenge === 'string' &&
       Object.prototype.hasOwnProperty.call(c.hindernisMenge.stufen, r.hindernisMenge) ? r.hindernisMenge : ((c.hindernisMenge && c.hindernisMenge.standard) || 'normal'),
   };
+  if (moto === true) {
+    Object.assign(erg, { polizei: false, geisterfahrer: false, krankenwagen: false, abschleppwagen: false, verkehr: 'aus', nurRennautos: false,
+      moto: true, unfall: MOTO_UNFALL.includes(r.unfall) ? r.unfall : 'sanft', stuntrennen: r.stuntrennen === true });
+  }
+  return erg;
 }
 
 class Simulation {
@@ -129,10 +160,12 @@ class Simulation {
    * @param {object} opt { einstellungen (roh), spieler: [{ fahrer, auto, hilfe }] in Startreihenfolge, seed }
    */
   constructor(opt) {
-    const R = laden(), c = R.config;
+    const moto = opt.moto === true;                  // M4: Motorrad-Raum → eigener Kontext (Motorrad-Katalog, Stunts, Unfälle); Standard (fehlt/false) = Autorennen wie bisher
+    const R = moto ? ladenMoto() : laden(), c = R.config;
     this.R = R;
+    this.moto = null;
     const spieler = opt.spieler || [];
-    const e = einstellungenPruefen(opt.einstellungen, spieler.length);
+    const e = einstellungenPruefen(opt.einstellungen, spieler.length, moto);
     this.einstellungen = e;
     this.kollisionen = e.kollisionen;
     this.tick = 0;
@@ -265,10 +298,15 @@ class Simulation {
     sim._zurAnlauf = function (i) { const ok = zurAnlauf.call(this, i); if (ok && this.fahrzeuge[i]) this.fahrzeuge[i].netReset++; return ok; };
     this.fertig = false;
     this.nachZielZeit = 0;
+    // M4: Motorrad-Zusatz (Stunts, Sturz, Unfälle, Stationen) – nur in Motorrad-Räumen; Autorennen-Räume laufen ohne diese Zeile
+    if (moto) this.moto = MotoSim.einbauen(this, R, e);
   }
 
   /** Steuerung für Spieler nr setzen (bereits dekodiert: { gas, bremse, lenkung }). */
   eingabeSetzen(nr, s) { const z = this.eingaben[nr]; if (z) { z.gas = s.gas; z.bremse = s.bremse; z.lenkung = s.lenkung; } }
+
+  /** M4 (nur Motorrad-Räume): Trick-Taste von Spieler nr in diesem Schritt gehalten? (Eingabe-Bit k; tippen = kurz halten.) */
+  trickSetzen(nr, an) { if (this.moto) this.moto.trick[nr] = !!an; }
 
   /** v22 (additiv, Protokoll-Version bleibt 4): vom Browser gemeldetes Münzen-Guthaben von Spieler nr (für das Freikaufen bei der Polizei). */
   kontoSetzen(nr, k) { if (this.sim.netzKonto && nr >= 0 && nr < this.sim.netzKonto.length) this.sim.netzKonto[nr] = k; }
@@ -304,6 +342,7 @@ class Simulation {
     aktuell = this;
     try {
       this.sim.physikSchritt(dt);
+      if (this.moto) this.moto.nachSchritt(dt);       // M4: Sturz-Purzelbaum weiterzählen, Quad entschärfen, Stunt-/Sturz-/Unfall-Ereignisse
     } finally { aktuell = null; }
     this.tick++;
     const r = this.sim.rennen;
@@ -363,6 +402,8 @@ class Simulation {
     const dz = [];
     for (let i = 0; i < this.nT; i++) { const dl = sim.fahrzeuge[i].dachL; if (dl) dz.push([i, dl.ziel, rd(dl.rest, 2)]); }
     if (dz.length) z.dz = dz;
+    // M4 (nur Motorrad-Räume, additiv): mo[i] = Motorrad-Zustand von Teilnehmer i (Sturz, Stunts, Unfall, Pose) – Format in server/PROTOKOLL.md
+    if (this.moto) z.mo = this.moto.zustand();
     // v4 (14.10.): Polizei. po[k] = Streifenwagen k im Format von `a` (x, z, y, richtung, tempo, lenkung, flags, nicken, neigung, 0, 0, 0, 0, resetZaehler),
     // ps = [[Teilnehmer-Nr, Rest der Anhaltung in s]] (nur wer gerade angehalten ist), pz = Ziel (Teilnehmer-Nr oder −1) je Streifenwagen
     const po = sim.polizei;
@@ -417,6 +458,8 @@ class Simulation {
     if (sz) erg.sz = sz;
     // v24 (15.10., additiv): Dach des eigenen Autos [ziel, Klappzeit-Rest (ungerundet), nass 0/1, Strafuhr s, Gesundheit %] – die Vorhersage sperrt damit das Gas beim Klappen
     if (dl) erg.dz = [dl.ziel, dl.rest, dl.nass ? 1 : 0, dl.uhr, dl.gesund];
+    // M4 (nur Motorrad-Räume, additiv): mu = [Motorrad %, Fahrer %, Haltebremse 0/1] des eigenen Fahrers (ungerundet) – die Vorhersage rechnet Tempo-Wirkung und Haltebremse wie der Server
+    if (this.moto) { const mu = this.moto.ich(i); if (mu) erg.mu = mu; }
     // v4: Rest der Polizei-Anhaltung (ungerundet: die Vorhersage zählt ihn im selben Takt herunter und ersetzt die Eingabe durch Bremsen)
     if (sim.polizei) { const rest = sim.polizei.logik.rest(i); if (rest > 0) erg.ps = rest; }
     return erg;
@@ -463,6 +506,7 @@ class Simulation {
       einstellungen: Object.assign({}, e, { jahreszeit: this.wetterInfo.jahreszeit, wetter: this.wetterInfo.wetter,
         windStaerke: this.wetterInfo.windStaerke, windRichtung: this.wetterInfo.windRichtung }),
       wetterSeed: this.wetterInfo.seed,
+      stationen: this.moto ? this.moto.stationenInfo() : undefined,        // M4: Bogenlänge der Werkstatt/Krankenstation (Gegenprobe im Browser)
       teilnehmer: this.teilnehmerInfo,
       countdown: this.sim.rennen.countdownDauer,
     };
@@ -477,9 +521,11 @@ class Simulation {
         platz: i + 1, nr: t.nr, name: t.name, mensch: !!this.teilnehmerInfo[t.nr].mensch || !!this.teilnehmerInfo[t.nr].weg,
         weg: !!this.teilnehmerInfo[t.nr].weg, autoId: this.teilnehmerInfo[t.nr].autoId,
         zeit: t.imZiel ? t.zielZeit : null, beste: t.bestzeit, runden: t.runde,
+        ...(this.moto ? { stunt: this.moto.punkte(t.nr) } : {}),       // M4: Stuntpunkte je Teilnehmer (nur Motorrad-Räume)
       })),
+      ...(this.moto ? { stuntrennen: this.einstellungen.stuntrennen === true } : {}),
     };
   }
 }
 
-module.exports = { laden, kontextLaden, Simulation, einstellungenPruefen, MODULE };
+module.exports = { laden, ladenMoto, kontextLaden, Simulation, einstellungenPruefen, MODULE, MOTO_UNFALL };
