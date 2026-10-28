@@ -214,7 +214,8 @@ function starten(opt) {
   const motorradAn = () => {
     if (opt.motorrad === true) return true;
     const jetzt = Date.now();
-    if (jetzt - motorradPruef.t > 2000) { let an = false; try { an = fs.statSync(opt.motorradMarke).isFile(); } catch (e) { /* keine Marke = aus */ } motorradPruef = { t: jetzt, an }; }
+    if (jetzt - motorradPruef.t > 2000) { let an = false; try { an = fs.statSync(opt.motorradMarke).isFile(); } catch (e) { /* keine Marke = aus */ } if (an && !motorradPruef.an) setImmediate(() => { try { ladenMoto(); } catch (e) { /* Fehler meldet raumErstellen */ } });   // Review 28.10.: beim Einschalten vorladen, nicht erst im ersten Raum (sonst Ruckler in laufenden Autorennen)
+      motorradPruef = { t: jetzt, an }; }
     return motorradPruef.an;
   };
   if (motorradAn()) { try { ladenMoto(); } catch (e) { console.error('Motorrad-Kontext konnte nicht geladen werden:', e && e.stack); } }     // vorab laden (≈ 0,3 s), nicht erst beim ersten Raum
@@ -363,7 +364,7 @@ function starten(opt) {
     raum.letzteZeit = null;
     const info = sim.startInfo();
     spieler.forEach((c, i) => {
-      c.simNr = i; c.geladen = false; c.eingaben = []; c.ack = -1; c.letzteN = -1; c.letzteEingabe = Date.now();
+      c.simNr = i; c.geladen = false; c.eingaben = []; c.ack = -1; c.letzteN = -1; c.trickTipp = false; c.letzteEingabe = Date.now();
       c.minQ = Infinity; c.qTicks = 0; c.verworfen = 0;
       c.ziel = 2; c.erw = null; c.fensterT = 0; c.leerFenster = 0; c.tiefeMin = Infinity; c.ruhe = 0; c.halten = 0; c.haltenT = 0; c.auslassen = false; c.spaetTicks = 0; c.spaetMax = 0;   // v23 eingabeTick
       senden(c.ws, Object.assign({ t: 'start', du: i }, info));
@@ -451,6 +452,7 @@ function starten(opt) {
         if (c.ws.ipKey) { let n = 0; for (const r of raeume.values()) if (r.host && r.host.ws && r.host.ws.ipKey === c.ws.ipKey) n++; if (n >= MAX_RAEUME_PRO_IP) return fehler(c.ws, 'voll', 'Zu viele Räume von dieser Adresse'); }   // v27 F4 (H2)
         const code = zufallsCode(new Set(raeume.keys()));
         const art = m.moto === true ? 'moto' : 'auto';
+        if (art === 'moto') { try { idsFuer({ art }); } catch (e) { console.error('Motorrad-Kontext:', e && e.stack); return fehler(c.ws, 'keinMotorrad', 'Motorrad-Teil des Servers konnte nicht geladen werden'); } }   // Review 28.10.: vor raeume.set, sonst Geisterraum
         const neu = { code, host: c, spieler: [c], zustand: 'lobby', art, einstellungen: einstellungenPruefen(m.einstellungen || {}, 1, art === 'moto'), sim: null };
         raeume.set(code, neu);
         c.raum = neu; c.bereit = true;
