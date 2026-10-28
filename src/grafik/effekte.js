@@ -53,7 +53,7 @@
         'void main(){ vec2 d = gl_PointCoord - 0.5; float r = length(d) * 2.0; if (r > 1.0) discard;\n' +
         ' float f = uKern > 0.5 ? exp(-r * r * 3.2) : smoothstep(1.0, 0.15, r);\n' +
         ' vec3 c = uKern > 0.5 ? vC + vec3(0.3, 0.24, 0.12) * exp(-r * r * 14.0) : vC;\n' +
-        ' gl_FragColor = vec4(c, vA * f);\n#include <colorspace_fragment>\n}',
+        ' gl_FragColor = vec4(c, vA * f);\n if (uKern > 0.5) {\n#include <colorspace_fragment>\n }\n}',
       transparent: true, depthWrite: false, fog: false, blending: additiv ? THREE.AdditiveBlending : THREE.NormalBlending,
     });
     S.obj = new THREE.Points(geo, mat);
@@ -103,9 +103,9 @@
     for (let k = 0; k < n; k++) {
       const a = (rnd() - 0.5) * 2.6, c = Math.cos(a), s = Math.sin(a), v = zw(2.5, 4 + klemme(tempo, 0, 30) * 0.28);
       emit(S, x + zw(-0.25, 0.25), y + zw(0, 0.3), z + zw(-0.25, 0.25), (-rx * c + rz * s) * v, zw(0.8, 3.6), (-rz * c - rx * s) * v, zw(0.3, 0.75), 0.26, 0.08, FUNKE0, FUNKE1, 1, 9.8, 0.4);
-      if (k % 3 === 0) emit(S, x, y + 0.15, z, (-rx * c + rz * s) * v * 0.3, 0.4, (-rz * c - rx * s) * v * 0.3, 0.22, 0.85, 0.3, HOF, FUNKE1, 0.7, 0, 2);
+      if (k % 3 === 0) emit(S, x, y + 0.15, z, (-rx * c + rz * s) * v * 0.3, 0.4, (-rz * c - rx * s) * v * 0.3, 0.2, 0.5, 0.2, HOF, FUNKE1, 0.4, 0, 2);
     }
-    emit(S, x, y + 0.2, z, 0, 0.2, 0, 0.16, 0.9, 1.5, [1, 0.85, 0.5], HOF, 0.5, 0, 0);
+    emit(S, x, y + 0.2, z, 0, 0.2, 0, 0.14, 0.5, 0.9, [1, 0.85, 0.5], HOF, 0.3, 0, 0);
   }
   function puff(st, x, y, z, gross) {
     st.zahl.puff++;
@@ -113,7 +113,7 @@
     const n = Math.round(30 * f * m);
     for (let k = 0; k < n; k++) {   // bunte Konfetti-Funken (normale Mischung: bleiben auch vor hellem Himmel farbig)
       const th = rnd() * 6.2832, ph = Math.acos(zw(-0.2, 1)), v = zw(2.5, 6.5) * m, c = bunt();
-      emit(N, x, y + 0.5, z, Math.sin(ph) * Math.cos(th) * v, Math.cos(ph) * v + 1.5, Math.sin(ph) * Math.sin(th) * v, zw(0.8, 1.4), 0.5, 0.2, c, c, 0.95, 4.5, 1.6);
+      emit(N, x, y + 0.5, z, Math.sin(ph) * Math.cos(th) * v, Math.cos(ph) * v + 1.5, Math.sin(ph) * Math.sin(th) * v, zw(0.9, 1.5), 0.85, 0.35, c, c, 1, 4, 1.4);
       if (k % 2 === 0) emit(S, x, y + 0.5, z, Math.sin(ph) * Math.cos(th) * v, Math.cos(ph) * v + 1.5, Math.sin(ph) * Math.sin(th) * v, zw(0.5, 0.9), 0.3, 0.06, [c[0] * 0.8, c[1] * 0.8, c[2] * 0.8], c, 0.8, 4.5, 1.6);
     }
     emit(S, x, y + 0.7, z, 0, 0.3, 0, 0.25, 2.2 * m, 4.2 * m, [1, 0.8, 0.45], [1, 0.45, 0.25], 0.4, 0, 0);
@@ -289,8 +289,8 @@
     const g = sp.motoFxGruppe, pts = g && g.children && g.children[0]; if (!pts || !pts.isPoints || !pts.userData) return;
     const m = pts.material;
     st.moto = { pts, m, size: m.size, toneMapped: m.toneMapped };
-    m.size = 0.5; m.toneMapped = false; m.needsUpdate = true;
-    const hof = new THREE.Points(pts.geometry, new THREE.PointsMaterial({ size: 1.5, vertexColors: true, map: m.map, transparent: true, depthWrite: false, opacity: 0.32, blending: THREE.AdditiveBlending, toneMapped: false, alphaTest: 0.01 }));
+    m.size = 0.4; m.toneMapped = false; m.needsUpdate = true;
+    const hof = new THREE.Points(pts.geometry, new THREE.PointsMaterial({ size: 1.0, vertexColors: true, map: m.map, transparent: true, depthWrite: false, opacity: 0.2, blending: THREE.AdditiveBlending, toneMapped: false, alphaTest: 0.01 }));
     hof.frustumCulled = false; hof.renderOrder = 7; hof.name = 'g4Hof'; g.add(hof); st.moto.hof = hof;
   }
   function motoFunkenAus(st) {

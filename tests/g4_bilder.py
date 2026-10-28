@@ -57,7 +57,7 @@ try:
                         pg.evaluate(FRAME, 4)
                     elif fall == 'puff':
                         pg.evaluate("() => { Rennspiel.Grafik.Effekte.ausloesen(Rennspiel.spiel, 'puff', 0, 1.2); }")
-                        pg.evaluate(FRAME, 14)
+                        pg.evaluate(FRAME, 9)
                     elif fall == 'feuer':
                         if moto:
                             pg.evaluate("""() => { const s = Rennspiel.spiel, G = Rennspiel.Grafik, st = s._g4; const o = st.ringe[0]; const p = new THREE.Vector3(); o.getWorldPosition(p);
