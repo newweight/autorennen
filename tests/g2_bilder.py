@@ -48,7 +48,7 @@ try:
                 k.position.set(p.x + Math.sin(h + a) * dist, p.y + hh, p.z + Math.cos(h + a) * dist); k.lookAt(p.x, p.y + 0.5, p.z); k.updateMatrixWorld(true); }
               for (let i = 0; i < 6; i++) s.zeichnen();
               const r = s.renderer, gl = r.getContext(); s.zeichnen(); const png = r.domElement.toDataURL('image/png'); const c = r.info.render.calls, tr = r.info.render.triangles;
-              gl.finish(); const w0 = Date.now(), n = 6; for (let i = 0; i < n; i++) { s.zeichnen(); gl.finish(); } const ms = (Date.now() - w0) / n;
+              gl.finish(); const mm = []; for (let b = 0; b < 5; b++) { const w0 = performance.__echt ? 0 : Date.now(), n = 10; for (let i = 0; i < n; i++) { s.zeichnen(); gl.finish(); } mm.push((Date.now() - w0) / n); } mm.sort((a, b) => a - b); const ms = mm[2];
               return [png, c, tr, ms, r.info.memory.geometries, r.info.memory.textures]; }""", [ansicht, moto])
             name = f'{spiel}_{strecke}_{stufe}_{tz}_{wetter}_{ansicht}'
             open(os.path.join(out, name + '.png'), 'wb').write(base64.b64decode(d[0].split(',')[1]))
