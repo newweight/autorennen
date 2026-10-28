@@ -144,6 +144,9 @@ function einstellungenPruefen(roh, spielerAnzahl, moto) {
     // v29 (F3, additiv): Modus „Nur Rennautos“ – alle Computer-Gegner fahren den Formel-Renner, jeder in eigener Farbe (Autowahl macht der Server,
     // teilnehmerInfo.optionen.farbe); nur ein echtes true schaltet ein (alter Client sendet es nicht → wie bisher). Menschen behalten ihre Wahl.
     nurRennautos: r.nurRennautos === true,
+    // Z1 (additiv): Zufällige Strecke – Münzen/Hindernisse jede Runde neu (track/zufall.js); nur ein echtes true schaltet ein (ein alter Browser sendet das Feld nicht
+    // und kennt das Ereignis `zufall` nicht → bekommt die feste Strecke); der neue Browser sendet `zufall` (Standard true) in raumErstellen/einstellungen
+    zufall: r.zufall === true,
     // 12.10. Hindernis-Menge: nur 'normal' | 'viele' | 'sehrViele' (unbekannt, Zahl, null … → 'normal'); alle Browser bauen dieselbe Strecke
     hindernisMenge: c.hindernisMenge && c.hindernisMenge.stufen && typeof r.hindernisMenge === 'string' &&
       Object.prototype.hasOwnProperty.call(c.hindernisMenge.stufen, r.hindernisMenge) ? r.hindernisMenge : ((c.hindernisMenge && c.hindernisMenge.standard) || 'normal'),
@@ -172,7 +175,10 @@ class Simulation {
     const seed = (opt.seed >>> 0) || 1;
     const daten = R.trackCatalog.find(t => t.id === e.streckeId) || R.trackCatalog[0];
     const welt = R.Strecke.weltName ? R.Strecke.weltName(daten, e.welt) : (daten.weltStandard || undefined);
-    const strecke = new R.Strecke(daten, { welt, variante: e.variante, hindernisMenge: e.hindernisMenge });
+    // Z1: Rennseed der Zufalls-Strecke aus dem Raum-Seed (Ganzzahl-Hash, bitgleich im Browser); null = feste Strecke wie bisher
+    this.zufallSeed = e.zufall === true && R.Zufall ? R.Zufall.hash32(seed, 0x5a31, 1, 7) : null;
+    const strecke = new R.Strecke(daten, this.zufallSeed === null ? { welt, variante: e.variante, hindernisMenge: e.hindernisMenge }
+      : { welt, variante: e.variante, hindernisMenge: e.hindernisMenge, zufall: { seed: this.zufallSeed } });
     // Wetter auflösen (Zufall nur hier, mit Seed) → konkrete Werte gehen an alle Browser (gleiche Umwelt-Physik)
     const wa = R.Wetter.aufloesen({ jahreszeit: e.jahreszeit, wetter: e.wetter, wind: { staerke: e.windStaerke, richtung: 'zufall' },
       thema: daten.thema, seed });
@@ -343,6 +349,7 @@ class Simulation {
     try {
       this.sim.physikSchritt(dt);
       if (this.moto) this.moto.nachSchritt(dt);       // M4: Sturz-Purzelbaum weiterzählen, Quad entschärfen, Stunt-/Sturz-/Unfall-Ereignisse
+      this.zufallSchritt(dt);                         // Z1: Zufällige Strecke – Rundenwechsel des Führenden / Nachzügler → Neuverteilung + Ereignis `zufall`
     } finally { aktuell = null; }
     this.tick++;
     const r = this.sim.rennen;
@@ -351,6 +358,23 @@ class Simulation {
       this.nachZielZeit += dt;
       if (this.nachZielZeit > 60) this.fertig = true;
     }
+  }
+
+  /**
+   * Z1: Taktgeber der Zufalls-Strecke (nur wenn `einstellungen.zufall`). Das Ereignis { runde, n, v } wird hier angewendet und als `zufall`-Ereignis an alle
+   * Browser geschickt; sie rechnen daraus bitgleich dieselbe Lage (track/zufall.js, ganzzahlig). v = Bogenlängen aller Fahrzeuge in ganzen m.
+   */
+  zufallSchritt(dt) {
+    const st = this.sim.strecke;
+    if (!st.zufall || !this.sim.rennen.gasErlaubt) return;
+    const R = this.R, sim = this.sim;
+    const ev = R.Zufall.takt(st, R.Zufall.fortschritte(sim), dt, sim.rennen.runden);
+    if (!ev) return;
+    R.Zufall.externAus(st, sim);
+    R.Zufall.ereignis(st, ev);
+    for (const f of sim.fahrzeuge) for (const d of [f.driver, f.autopilot, f.polizeiFahrer]) if (d && typeof d.hindernisseSetzen === 'function') d.hindernisseSetzen(st.hindernisse);
+    if (sim.dynamik) R.Zufall.dynamikSetzen(st, sim.dynamik);
+    this.ereignisse.push({ an: null, art: 'zufall', runde: ev.runde, n: ev.n, v: ev.v });
   }
 
   /** Spieler nr ist weg: sein Auto fährt als Computer weiter (zählt nicht mehr als Mensch für das Rennende). */
@@ -506,6 +530,7 @@ class Simulation {
       einstellungen: Object.assign({}, e, { jahreszeit: this.wetterInfo.jahreszeit, wetter: this.wetterInfo.wetter,
         windStaerke: this.wetterInfo.windStaerke, windRichtung: this.wetterInfo.windRichtung }),
       wetterSeed: this.wetterInfo.seed,
+      zufallSeed: this.zufallSeed === null ? undefined : this.zufallSeed,       // Z1 (additiv): Rennseed der Zufalls-Strecke (fehlt = feste Strecke)
       stationen: this.moto ? this.moto.stationenInfo() : undefined,        // M4: Bogenlänge der Werkstatt/Krankenstation (Gegenprobe im Browser)
       teilnehmer: this.teilnehmerInfo,
       countdown: this.sim.rennen.countdownDauer,

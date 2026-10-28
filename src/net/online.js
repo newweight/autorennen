@@ -234,6 +234,7 @@
           gegner: e.gegner, schwierigkeit: e.schwierigkeit, tempoKlasse: e.tempoKlasse, jahreszeit: e.jahreszeit, wetter: e.wetter,
           tageszeit: e.tageszeit, kollisionen: e.kollisionen !== false, hindernisMenge: e.hindernisMenge, polizei: e.polizei === true,
           geisterfahrer: e.geisterfahrer === true, krankenwagen: e.krankenwagen === true, abschleppwagen: e.abschleppwagen === true, tiere: e.tiere !== false,      // v28 (W10): Tiere queren die Straße (Standard an)
+          zufall: e.zufall !== false,      // Z1 (additiv): Zufällige Strecke – Münzen/Hindernisse jede Runde neu (Standard an; alter Server ignoriert das Feld)
           nurRennautos: R.carCatalog.nurRennautos(e, R.trackCatalog.find(t => t.id === e.streckeId)),      // v29 (F3): alle Computer-Gegner fahren den Formel-Renner (bei der Formel-1-Strecke Standard an)
           verkehr: e.krankenwagen === true || e.abschleppwagen === true ? 'wenig' : 'aus' } }, this.meineWahl());      // v25: Verkehr (additiv); v28 W1: Krankenwagen/Abschleppwagen je einzeln, `verkehr` nur noch abgeleitet für alte Server   // Stufe 2: zuletzt gewählt (Standard Geister)
         if (MO()) MO().nachrichtAnpassen(msg, e);          // M4: moto:true, Unfälle, Stuntrennen
@@ -481,7 +482,7 @@
         z.push('strecke', 'welt');
         if (this.variantenListe().length) z.push('variante');
         z.push('hindernisMenge');      // 12.10.: Viele / Sehr viele Hindernisse (nur wirksam in Welten mit Hindernissen)
-        z.push('runden', 'gegner', 'schwierigkeit', 'tempoKlasse', 'jahreszeit', 'wetter', 'tageszeit', 'kollisionen', 'polizei');
+        z.push('runden', 'gegner', 'schwierigkeit', 'tempoKlasse', 'jahreszeit', 'wetter', 'tageszeit', 'kollisionen', 'polizei', 'zufall');      // Z1: zufall hinten (Fokus-Nummern bleiben)
       }
       return MO() ? MO().zeilen(this, z) : z;          // M4: Polizei weg, dafür Unfälle + Stuntrennen
     }
@@ -556,6 +557,7 @@
       if (zeile === 'abschleppwagen') return { wert: R.Verkehr.ausEinstellung(e).abschleppwagen ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '🛻 An' }] };
       if (zeile === 'tiere') return { wert: e.tiere === true ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '🐄 An' }] };      // v28 (W10)
       if (zeile === 'rennautos') return { wert: e.nurRennautos === true ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '🏎 An' }] };      // v29 (F3)
+      if (zeile === 'zufall') return { wert: e.zufall === true ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '🎲 An' }] };      // Z1
       if (zeile === 'tageszeit') return { wert: e.tageszeit, liste: [{ k: 'tag', text: '☀️ Tag' }, { k: 'daemmerung', text: '🌇 Dämmerung' }, { k: 'nacht', text: '🌙 Nacht' }] };
       return { wert: null, liste: [] };
     }
@@ -614,6 +616,12 @@
         e.nurRennautos = k === 'an';
         const lok = this.basis || this.spiel.einstellungen;
         lok.nurRennautos = e.nurRennautos;
+        if (!this.basis) this.spiel.einstellungenSpeichern();
+      }
+      else if (zeile === 'zufall') {      // Z1: Zufällige Strecke
+        e.zufall = k === 'an';
+        const lok = this.basis || this.spiel.einstellungen;
+        lok.zufall = e.zufall;
         if (!this.basis) this.spiel.einstellungenSpeichern();
       }
       else if (zeile === 'tiere') {      // v28 (W10): Tiere queren die Straße
@@ -723,7 +731,7 @@
           (this.variantenListe().length ? zeile('variante', '📏 Variante') : '') +
           zeile('hindernisMenge', this.hindernisMengeAktiv() ? '🚧 Hindernisse' : '🚧 Hindernisse <small>(erst ab Welt „Hindernisse“)</small>') + zeile('runden', '🔁 Runden') +
           zeile('gegner', '🤖 Computer-Gegner') + zeile('schwierigkeit', '🎚️ Computer-Stärke') + zeile('tempoKlasse', '🏎️ Tempo') +
-          zeile('jahreszeit', '🍂 Jahreszeit') + zeile('wetter', '🌦️ Wetter') + zeile('tageszeit', '🌗 Tageszeit') + zeile('polizei', '🚨 Polizei') + verkehrZeile() + rennautosZeile() +
+          zeile('jahreszeit', '🍂 Jahreszeit') + zeile('wetter', '🌦️ Wetter') + zeile('tageszeit', '🌗 Tageszeit') + zeile('polizei', '🚨 Polizei') + verkehrZeile() + rennautosZeile() + zeile('zufall', '🎲 Zufällige Strecke') +
           `<div class="on-fest">💥 Schaden: aus (online) · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister: Autos fahren durcheinander durch'}</div>`;
       } else if (MO() && MO().lobbyGast) {
         rechts = MO().lobbyGast(this, e, daten);
@@ -735,7 +743,7 @@
           `🗺️ ${esc(daten.name)} · ${wi.emoji || '🌍'} ${esc(wi.name || e.welt || '')}${e.variante ? ' · 📏 XL' : ''}<br>` +
           `🔁 ${e.runden} Runden · 🤖 ${e.gegner} Computer (${esc(S.name || e.schwierigkeit)})<br>` +
           (e.hindernisMenge && e.hindernisMenge !== 'normal' && this.hindernisMengeAktiv() ? `🚧 Hindernisse: ${esc(((c.hindernisMenge.stufen[e.hindernisMenge]) || {}).name || e.hindernisMenge)}<br>` : '') +
-          `🏎️ ${e.tempoKlasse === 'schnell' ? 'Schnell' : 'Normal'} · ${J ? J.emoji + ' ' + J.name : '🎲'} · ${W ? (W.emoji || '☀️') + ' ' + W.name : '🎲'} · ${T[e.tageszeit] || ''}${e.polizei ? ' · 🚨 Polizei' : ''}${e.nurRennautos ? ' · 🏎 Nur Rennautos' : ''}${e.geisterfahrer ? ' · 👻 Geisterfahrer' : ''}${R.Verkehr.ausEinstellung(e).krankenwagen ? ' · 🚑 Krankenwagen' : ''}${R.Verkehr.ausEinstellung(e).abschleppwagen ? ' · 🛻 Abschleppwagen' : ''}${e.tiere === true ? ' · 🐄 Tiere' : ''}<br>` +
+          `🏎️ ${e.tempoKlasse === 'schnell' ? 'Schnell' : 'Normal'} · ${J ? J.emoji + ' ' + J.name : '🎲'} · ${W ? (W.emoji || '☀️') + ' ' + W.name : '🎲'} · ${T[e.tageszeit] || ''}${e.polizei ? ' · 🚨 Polizei' : ''}${e.nurRennautos ? ' · 🏎 Nur Rennautos' : ''}${e.geisterfahrer ? ' · 👻 Geisterfahrer' : ''}${R.Verkehr.ausEinstellung(e).krankenwagen ? ' · 🚑 Krankenwagen' : ''}${R.Verkehr.ausEinstellung(e).abschleppwagen ? ' · 🛻 Abschleppwagen' : ''}${e.tiere === true ? ' · 🐄 Tiere' : ''}${e.zufall === true ? ' · 🎲 Zufällige Strecke' : ''}<br>` +
           `💥 Schaden: aus (online) · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister'}</div>`;
       }
       return `<div class="on-lobby">` +
@@ -791,6 +799,8 @@
       spiel.szeneAbbauen();
       spiel.pausiert = false;
       spiel.tempoKlasse = e.tempoKlasse;
+      // Z1: Zufällige Strecke – Seed vom Server (start.zufallSeed); fehlt er (alter Server/aus), bleibt die Strecke fest wie bisher
+      if (R.ZufallSpiel) R.ZufallSpiel.seedWaehlen(spiel, { zufall: e.zufall === true && Number.isFinite(m.zufallSeed), zufallSeed: m.zufallSeed });
       const strecke = spiel.streckeSzeneBauen(e.streckeId);
       const katalog = R.carCatalog.waehlbare();
       const plaetze = strecke.startpositionen(m.teilnehmer.length);
@@ -1063,6 +1073,7 @@
       else if (m.art === 'freikauf') {         // v22 (additiv, Protokoll-Version bleibt 4): Server hat den Stopp gegen Münzen beendet → Garage-Konto abbuchen
         try { const nm = r.teilnehmer[this.du].name; if (R.Garage && nm) R.Garage.abbuchen(nm, m.kosten); } catch (err) { /* egal */ }
       }
+      else if (m.art === 'zufall') { try { if (R.ZufallSpiel) R.ZufallSpiel.anwenden(spiel, { runde: m.runde, n: m.n, v: m.v }); } catch (err) { console.error('Zufall (online):', err); } }      // Z1: Neuverteilung wie der Server (gleiche Eingaben → gleiche Lage)
       else if (m.art === 'meldung') { if (hud) hud.meldung(m.text, String(m.text).indexOf('\n') >= 0 ? 3200 : 1500); }
       else if (m.art === 'runde' && t) {
         t.runde = m.runde;

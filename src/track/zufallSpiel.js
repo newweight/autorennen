@@ -60,6 +60,7 @@
   ZS.anwenden = function (spiel, ev) {
     const st = spiel.strecke;
     if (!st || !st.zufall || !ev) return null;
+    R.Zufall.externAus(st, spiel);
     const erg = R.Zufall.ereignis(st, ev);
     if (!erg) return null;
     // Computerfahrer (KI, Autopilot, Polizei) kennen die neue Hindernis-Liste
@@ -73,17 +74,6 @@
     return erg;
   };
 
-  /** Gesamtfortschritt aller Fahrzeuge auf der Strecke (Teilnehmer: Runde × Länge + s; Polizei/Verkehr/Tiere nur ihr s). */
-  function fortschritte(spiel) {
-    const tn = spiel.rennen ? spiel.rennen.teilnehmer : [], fort = [];
-    for (let i = 0; i < spiel.fahrzeuge.length; i++) {
-      const f = spiel.fahrzeuge[i];
-      if (tn[i] && !f.polizei && !f.verkehr) fort.push(tn[i].fortschritt);
-      else if (f.nah && typeof f.nah.s === 'number') fort.push(f.nah.s);
-    }
-    return fort;
-  }
-
   // ---------- Verdrahtung ----------
   const streckeAufbauen = P.streckeAufbauen;
   P.streckeAufbauen = function () {
@@ -91,14 +81,7 @@
     try {
       const st = this.strecke;
       if (st && st.zufall) {
-        // Werkstatt (Schaden an oder Kulisse): die Fläche samt Zu-/Ausfahrt bleibt bei jeder Neuverteilung frei
-        const w = this.werkstatt, teile = w ? (w.teile || [w]) : [];
-        const zonen = [];
-        for (const t of teile) {
-          const p = t && t.platz;
-          if (p && typeof p.s === 'number') zonen.push({ s0: p.s - p.laenge / 2 - (p.zufahrt || 18), s1: p.s + p.laenge / 2 + (p.ausfahrt || 10), zugabe: 10 });
-        }
-        R.Zufall.externSetzen(st, zonen);
+        R.Zufall.externAus(st, this);                 // Werkstatt (Schaden an / Kulisse): Fläche samt Zu-/Ausfahrt bleibt frei (Motorrad-Stationen: unfallStart.js, siehe anwenden)
         if (this.dynamik) R.Zufall.dynamikSetzen(st, this.dynamik);
       }
     } catch (e) { console.error('Zufall (Aufbau):', e); }
@@ -112,7 +95,7 @@
     const st = this.strecke;
     if (!st || !st.zufall || !this.rennen || !this.rennen.gasErlaubt) return r;
     try {
-      const ev = R.Zufall.takt(st, fortschritte(this), dt, this.rennen.runden);
+      const ev = R.Zufall.takt(st, R.Zufall.fortschritte(this), dt, this.rennen.runden);
       if (ev) ZS.anwenden(this, ev);
     } catch (e) { console.error('Zufall (Takt):', e); }
     return r;

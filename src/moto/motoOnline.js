@@ -238,7 +238,7 @@
       zeile('hindernisMenge', ui.hindernisMengeAktiv() ? '🚧 Hindernisse' : '🚧 Hindernisse <small>(erst ab Welt „Hindernisse“)</small>') + zeile('runden', '🔁 Runden') +
       zeile('gegner', '🤖 Computer-Gegner') + zeile('schwierigkeit', '🎚️ Computer-Stärke') + zeile('tempoKlasse', '🏎️ Tempo') +
       zeile('jahreszeit', '🍂 Jahreszeit') + zeile('wetter', '🌦️ Wetter') + zeile('tageszeit', '🌗 Tageszeit') +
-      zeile('unfall', '🤕 Unfälle') + zeile('stuntrennen', '⭐ Stuntrennen') +
+      zeile('unfall', '🤕 Unfälle') + zeile('stuntrennen', '⭐ Stuntrennen') + zeile('zufall', '🎲 Zufällige Strecke') +
       `<div class="on-fest">${e.kollisionen ? '💥 Rempeln an' : '👻 Geister: Motorräder fahren durcheinander durch'} · kein Chat</div>`;
   }
   function lobbyGast(ui, e, daten) {
@@ -249,7 +249,7 @@
       `🗺️ ${esc(daten.name)} · ${wi.emoji || '🌍'} ${esc(wi.name || e.welt || '')}${e.variante ? ' · 📏 XL' : ''}<br>` +
       `🔁 ${e.runden} Runden · 🤖 ${e.gegner} Computer (${esc(S.name || e.schwierigkeit)})<br>` +
       `🏎️ ${e.tempoKlasse === 'schnell' ? 'Schnell' : 'Normal'} · ${J ? J.emoji + ' ' + J.name : '🎲'} · ${Wt ? (Wt.emoji || '☀️') + ' ' + Wt.name : '🎲'} · ${T[e.tageszeit] || ''}<br>` +
-      `🤕 Unfälle: ${un}${e.stuntrennen ? ' · ⭐ Stuntrennen' : ''} · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister'}</div>`;
+      `🤕 Unfälle: ${un}${e.stuntrennen ? ' · ⭐ Stuntrennen' : ''}${e.zufall === true ? ' · 🎲 Zufällige Strecke' : ''} · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister'}</div>`;
   }
 
   /** Nach dem Aufbau des Online-Rennens (online.js rennenAufbauen): Schattenzustand, Stationen, HUD, Trick-Taste. */

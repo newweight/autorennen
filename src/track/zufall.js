@@ -232,31 +232,40 @@
     // Platzieren: je Durchgang eine neue gemischte Reihenfolge (Fisher-Yates mit dem Ereignis-Zufall) und ein Abschnitt je Objekt (gleichmäßig über die
     // Runde); findet ein Objekt keine Stelle (dichte Strecke), kommt ein neuer Durchgang – bis alle liegen oder der beste Durchgang übrig bleibt.
     // Ein Objekt ohne Platz behält seine alte (gültige) Lage – die Menge ändert sich nie.
-    const von = HM.startFrei, bis = L - HM.zielFrei, laenge = bis - von, m = Math.max(1, bewegen.length);
-    const basisLen = belegt.length;
+    const von = HM.startFrei, bis = L - HM.zielFrei, laenge = bis - von;
     const maxV = wert(HM.maxVersuche, 40), maxG = wert(HM.maxVersucheGlobal, maxV), maxDurchgang = wert(C.durchgaenge, 12);
+    // Runden (ring): Objekte ohne Platz bleiben an ihrer alten Lage und sperren sie für die übrigen – dann werden die übrigen neu gelegt (nie ein Objekt über einem
+    // „hängengebliebenen“); höchstens 6 Runden (jede fixiert mindestens ein weiteres Objekt).
     let beste = null;
-    for (let dg = 0; dg < maxDurchgang; dg++) {
+    for (let ring = 0; ring < 6; ring++) {
+      const basisLen = belegt.length, m = Math.max(1, bewegen.length);
+      beste = null;
+      for (let dg = 0; dg < maxDurchgang; dg++) {
+        belegt.length = basisLen;
+        for (let i = bewegen.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = bewegen[i]; bewegen[i] = bewegen[j]; bewegen[j] = t; }
+        const plan = [], stuck = [];
+        bewegen.forEach((o, i) => {
+          const a = von + laenge * i / m, b = von + laenge * (i + 1) / m;
+          let s = null, zwang = 0;
+          for (let t = 0; t < maxV + maxG && s === null; t++) {
+            const kand = Math.round((t < maxV ? a + rng() * (b - a) : von + rng() * laenge) * 2) / 2;   // auf 0,5 m
+            const p = passt(o, kand);
+            if (p) { s = kand; zwang = p.seite; }
+          }
+          if (s === null) { punkt(o, o.s); stuck.push(o); return; }       // alte Lage bleibt (und sperrt Platz für die übrigen)
+          punkt(o, s);
+          const vz = rng() < 0.5 ? -1 : 1;
+          const seite = (o.art === 'oel' || o.art === 'sand') ? (zwang ? rund(zwang * (0.15 + rng() * 0.5)) : rund((rng() * 2 - 1) * 0.65)) : vz;
+          plan.push({ o, s, seite });
+        });
+        if (!beste || stuck.length < beste.fehl) beste = { plan, fehl: stuck.length, stuck };
+        if (!stuck.length) break;
+      }
+      if (!beste.fehl) break;
       belegt.length = basisLen;
-      for (let i = bewegen.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = bewegen[i]; bewegen[i] = bewegen[j]; bewegen[j] = t; }
-      const plan = [];
-      let fehl = 0;
-      bewegen.forEach((o, i) => {
-        const a = von + laenge * i / m, b = von + laenge * (i + 1) / m;
-        let s = null, zwang = 0;
-        for (let t = 0; t < maxV + maxG && s === null; t++) {
-          const kand = Math.round((t < maxV ? a + rng() * (b - a) : von + rng() * laenge) * 2) / 2;   // auf 0,5 m
-          const p = passt(o, kand);
-          if (p) { s = kand; zwang = p.seite; }
-        }
-        if (s === null) { punkt(o, o.s); fehl++; return; }       // alte Lage bleibt (und sperrt Platz für die übrigen)
-        punkt(o, s);
-        const vz = rng() < 0.5 ? -1 : 1;
-        const seite = (o.art === 'oel' || o.art === 'sand') ? (zwang ? rund(zwang * (0.15 + rng() * 0.5)) : rund((rng() * 2 - 1) * 0.65)) : vz;
-        plan.push({ o, s, seite });
-      });
-      if (!beste || fehl < beste.fehl) beste = { plan, fehl };
-      if (fehl === 0) break;
+      for (const o of beste.stuck) { punkt(o, o.s); bewegen.splice(bewegen.indexOf(o), 1); }      // dauerhaft fest (für diese Neuverteilung)
+      if (!bewegen.length) { beste = { plan: [], fehl: beste.stuck.length, stuck: beste.stuck }; break; }
+      zs.fehlGesamt = (zs.fehlGesamt || 0) + beste.stuck.length;
     }
     const bewegt = [];
     beste.plan.forEach((p) => { p.o.s = p.s; p.o.seite = p.seite; bewegt.push(p.o.id); });
@@ -355,6 +364,42 @@
   }
 
   /**
+   * Gesamtfortschritt (m) aller Fahrzeuge auf der Strecke für takt(): Teilnehmer = Runde × Länge + s (spiel.rennen.teilnehmer[i].fortschritt),
+   * Polizei/Verkehr/Tiere (Einträge hinter den Teilnehmern) nur ihr s (f.nah.s). Browser (offline) und Server rufen es mit ihrem Spiel-Objekt.
+   */
+  function fortschritte(spiel) {
+    const tn = spiel.rennen ? spiel.rennen.teilnehmer : [], fort = [];
+    for (let i = 0; i < spiel.fahrzeuge.length; i++) {
+      const f = spiel.fahrzeuge[i];
+      if (tn[i] && !f.polizei && !f.verkehr) fort.push(tn[i].fortschritt);
+      else if (f.nah && typeof f.nah.s === 'number') fort.push(f.nah.s);
+    }
+    return fort;
+  }
+
+  /**
+   * Werkstatt / Krankenstation (spiel.werkstatt, spiel.motoStationen) als externe Sperrzonen melden: Fläche samt Zu- und Ausfahrt bleibt bei jeder
+   * Neuverteilung frei. Vor jedem Ereignis aufrufen (Browser und Server gleich: gleiche Strecke → gleiche Plätze).
+   */
+  function externAus(strecke, spiel) {
+    const zs = strecke.zufall;
+    if (!zs) return;
+    const plaetze = [], w = spiel.werkstatt, ms = spiel.motoStationen;
+    if (w) (w.teile || [w]).forEach((t) => { if (t && t.platz) plaetze.push(t.platz); });
+    if (ms) [ms.werkstatt, ms.kranken].forEach((t) => { if (t && t.platz) plaetze.push(t.platz); });
+    const gesehen = {}, zonen = [];
+    for (const p of plaetze) {
+      if (typeof p.s !== 'number') continue;
+      const key = Math.round(p.s);
+      if (gesehen[key]) continue;
+      gesehen[key] = true;
+      const len = wert(p.laenge, 35);
+      zonen.push({ s0: p.s - len / 2 - wert(p.zufahrt, 18), s1: p.s + len / 2 + wert(p.ausfahrt, 10), zugabe: 10 });
+    }
+    externSetzen(strecke, zonen);
+  }
+
+  /**
    * Taktgeber (Offline-Spiel und Server, jeden Physik-Schritt): liefert das nächste Ereignis { runde, n, v } oder null.
    * fort = Gesamtfortschritt (m, Runde × Länge + Bogenlänge) aller Fahrzeuge auf der Strecke (auch Polizei/Verkehr: kein Aufpoppen vor irgendeinem).
    * n = 0: das führende Fahrzeug hat eine neue Runde begonnen; n ≥ 1: Nachzügler (wartende Objekte, die inzwischen frei sind), höchstens alle nachholSekunden.
@@ -409,5 +454,5 @@
     if (strecke.zufall) strecke.zufall.extern = (liste || []).filter((z) => z && typeof z.s0 === 'number' && typeof z.s1 === 'number');
   }
 
-  R.Zufall = { hash32, folge, seedRunde, start, ereignis, takt, kandidaten, wartend, dynamikSetzen, externSetzen, verteilen };
+  R.Zufall = { hash32, folge, seedRunde, start, ereignis, takt, fortschritte, externAus, kandidaten, wartend, dynamikSetzen, externSetzen, verteilen };
 })();
