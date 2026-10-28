@@ -245,7 +245,10 @@
     const ultra = stufe === 'ultra';
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.ACESFilmicToneMapping;
-    r.toneMappingExposure = 1.2;       // ACES drückt die Mitteltöne – Welt dafür etwas heller
+    // ACES drückt die Mitteltöne und Schatten: Welt etwas heller (Tag 1,2), nachts nach Himmelshelligkeit bis 2,4 (sonst schwarze Straße)
+    const bg = sp.szene.background && sp.szene.background.isColor ? sp.szene.background : null;
+    const lum = bg ? 0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b : 0.55;
+    r.toneMappingExposure = 1.2 + 1.2 * Math.max(0, Math.min(1, (0.5 - lum) / 0.5));
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
     st.richtung = s.position.clone().normalize();
