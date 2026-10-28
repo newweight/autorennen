@@ -20,8 +20,9 @@
 //
 // Determinismus: Ein Ereignis ist nur { runde, n, v } (v = Bogenlänge aller Fahrzeuge in ganzen Metern). Server und Browser rechnen daraus
 // bitgleich dieselbe Lage (nur Ganzzahl-Zufall: hash32 + mulberry32; kein Math.random, keine Zeit). Online entscheidet der Server, wann ein Ereignis
-// stattfindet (Spiel.physikSchritt → _zufallSchritt) und schickt { runde, n, v } als `ereignis` art 'zufall'; der Browser wendet es mit derselben Funktion an.
-// Rechenteil ohne Three.js (Node-Tests: tests/test_zufall.js); die Grafik (Hindernis-Gruppe neu bauen) macht main.js.
+// stattfindet (Simulation.zufallSchritt → R.Zufall.takt) und schickt { runde, n, v } als `ereignis` art 'zufall'; der Browser wendet es mit derselben Funktion an.
+// Offline gibt R.Zufall.takt dasselbe Ereignis (track/zufallSpiel.js, Umhüllung von Spiel.physikSchritt).
+// Rechenteil ohne Three.js (Node-Tests: tests/test_zufall.js); die Grafik (Hindernis-Gruppe neu bauen) macht track/zufallSpiel.js.
 // ============================================================
 (function () {
   const R = window.Rennspiel;
@@ -156,6 +157,17 @@
     // Meteoriten (Katalog meteoriten [{ s }]: feste Einschlagstellen samt Vorlauf) und Motorrad-Zonen (Wheelie/Stoppie) bleiben frei
     ((katalogVon(st)).meteoriten || []).forEach((e) => punkt(e.s, 60, 40));
     ((katalogVon(st)).motoZonen || []).forEach((e) => zone(e.s0, e.s1, 15, 15));
+    // Motorrad: Feuerring (hinter der Schanzen-Kante) und Bus-Reihen (auf der Fahrbahn) bleiben samt Rand frei (Lage aus moto/stuntWelt.js; nur im Motorrad-Kontext)
+    const SW = R.Moto && R.Moto.stuntWelt;
+    if (SW && typeof SW.stuntDaten === 'function' && (st.schanzen || []).some((e) => e.moto)) {
+      const hatte = !!st._motoDaten;
+      try {
+        const d = SW.stuntDaten(st), ra = (R.config.motoStunts && R.config.motoStunts.ring && R.config.motoStunts.ring.abstand) || 16;
+        d.ringe.forEach((r) => zone(r.sK + ra - 3, r.sK + ra + 3, 12, 12));
+        d.reihen.forEach((r) => zone(r.sK - 8, r.sK + r.a1 + 4, 12, 12));
+      } catch (err) { /* ohne Stunt-Daten: die Schanzen-Zonen schützen den Bereich ohnehin */ }
+      if (!hatte) delete st._motoDaten;      // nicht zu früh zwischenspeichern (stuntWelt rechnet beim ersten echten Aufruf selbst)
+    }
     // Formel 1: Boxengasse
     const bx = katalogVon(st).boxen;
     if (bx && typeof bx.s0 === 'number' && typeof bx.s1 === 'number') zone(Math.min(bx.s0, bx.s1), Math.max(bx.s0, bx.s1), 25, 25);

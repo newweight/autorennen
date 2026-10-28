@@ -194,6 +194,25 @@ Browser: Zeile erscheint nur bei `recht:true`; Einschalten verlangt einen zweite
 
 ---
 
+# Zufällige Strecke (Z1, 28.10.2026) – additiv, Protokoll-Version bleibt 4
+
+Münzen und Hindernisse (Öl, Sand, Baustelle, Ast, Lava, Wracks, Strohballen-/Dino-/Tier-Stellen) liegen in jedem Rennen anders und werden in jeder Runde neu verteilt – Autorennen UND Motorrad.
+Online entscheidet der **Server**, wann; Server und Browser rechnen aus denselben ganzen Zahlen **bitgleich** dieselbe Lage (`src/track/zufall.js`: nur Ganzzahl-Hash + mulberry32, kein `Math.random`, keine Zeit).
+
+**Browser → Server (neu):** `raumErstellen.einstellungen.zufall` und `einstellungen.zufall` (bool, Standard im neuen Browser `true`, Lobby-Zeile „🎲 Zufällige Strecke“). Nur ein echtes `true` schaltet ein –
+ein alter Browser sendet das Feld nicht, bekommt die feste Strecke und nie ein `zufall`-Ereignis (alter Client ↔ neuer Server geht weiter; neuer Client ↔ alter Server: Feld wird ignoriert, feste Strecke).
+
+**Server → Browser (neu):**
+- `lobby.einstellungen.zufall` / `start.einstellungen.zufall` (bool); `start.zufallSeed` (Ganzzahl, 32 Bit; fehlt = feste Strecke): Rennseed = `hash32(Raum-Seed, 0x5a31, 1, 7)`. Der Browser baut `new R.Strecke(daten, { …, zufall: { seed } })` → Lage für Runde 1.
+- `ereignis {art:'zufall', k, runde, n, v}` (an alle, `an:null`): `runde` (1-basiert, die Runde des Führenden), `n` (0 = Rundenwechsel des Führenden; ≥ 1 = Nachzügler, höchstens 1× je Sekunde, nur wenn wartende Objekte inzwischen frei sind),
+  `v` = Bogenlänge **aller** Fahrzeuge auf der Strecke (Teilnehmer, Streifenwagen, Verkehr) in **ganzen Metern**. Der Browser ruft `R.Zufall.ereignis(strecke, { runde, n, v })` (über `R.ZufallSpiel.anwenden`: danach KI-Hindernisliste,
+  Dynamik-Stellen, Hindernis-Grafik). Seed der Runde = `hash32(rennSeed, runde, n, …)`.
+- Fenster: Objekte von 60 m hinter bis 300 m vor irgendeinem Fahrzeug werden NICHT verschoben (kein Aufpoppen, nichts in Autos); sie behalten ihre Lage bis zu einem Nachzügler-Ereignis. Neue Lagen liegen nie in einem Fenster.
+- Reihenfolge: Ereignisse sind geordnet (WebSocket); ein verpasstes Ereignis würde den Client von der Server-Lage abweichen lassen (die Ereignisse tragen deshalb `runde`/`n`; der Client rechnet stets aus dem eigenen Stand).
+- Motorrad-Räume: gleiche Nachricht; Werkstatt und Krankenstation (`start.stationen`) sind feste Sperrzonen (`R.Zufall.externAus`), Stunt-Elemente (Feuerring, Busse, Zonen) ebenso.
+
+Tests: `node tests/test_zufall.js` (Engine, Server ↔ Client bitgleich nach jedem Rundenwechsel, Auto und Motorrad, alter Client), `python3 tests/zufall_browser.py` (je Spiel 2 Runden im Browser).
+
 # Motorrad online (M4, 28.10.2026) – additiv, Protokoll-Version bleibt 4
 
 Motorrad-Räume laufen auf **demselben Spielserver und demselben `/ws`** wie die Autorennen-Räume – aber hinter einem Schalter und in **eigenen, getrennten Räumen**.

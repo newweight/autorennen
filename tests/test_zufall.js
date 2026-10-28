@@ -255,6 +255,37 @@ function onlineTest(titel, moto) {
 }
 onlineTest('F Autorennen online', false);
 onlineTest('F Motorrad online', true);
+
+// ---------------------------------------------------------------- G) Motorrad: feste Stunt-Elemente (Schanzen, Feuerring, Bus-Reihen, Wheelie-/Stoppie-Zonen) bleiben frei
+{
+  const CM = kontextLaden(MODULE.slice(0, MODULE.indexOf('src/track/megastrecke.js') + 1)
+    .concat(['src/world/garage.js', 'src/moto/motoKatalog.js', 'src/moto/motoTypen.js', 'src/moto/schraeglage.js', 'src/moto/stunts.js', 'src/moto/stuntWelt.js', 'src/moto/unfall.js', 'src/main.js']), { MOTORRAD: true });
+  const SW = CM.Moto.stuntWelt, ZM = CM.Zufall;
+  let stunts = 0, verletzt = 0, geprueft = 0, strecken = 0;
+  for (const id of ['wiese', 'wald', 'dino', 'wueste', 'alpen']) {
+    const daten = CM.trackCatalog.find(t => t.id === id);
+    const welt = daten.welten && daten.welten.hindernisse ? 'hindernisse' : undefined;
+    const st = new CM.Strecke(daten, { welt, zufall: { seed: 808 } }), zs = st.zufall, sp = st.spline, L = sp.laenge;
+    if (!zs.objekte.length) continue;
+    strecken++;
+    const d = SW.stuntDaten(st), ra = CM.config.motoStunts.ring.abstand;
+    const zonen = [];      // [Mitte, halbe Länge] der festen Stunt-Elemente samt Rand
+    d.ringe.forEach(r => zonen.push([r.sK + ra, 3 + 12]));
+    d.reihen.forEach(r => zonen.push([(r.sK - 8 + r.sK + r.a1 + 4) / 2, (r.a1 + 12) / 2 + 12]));
+    d.zonen.forEach(z => zonen.push([(z.s0 + sp.wrapS(z.s1 - z.s0) / 2), sp.wrapS(z.s1 - z.s0) / 2]));
+    (st.schanzen || []).forEach(e => zonen.push([e.s + (e.laenge || 10) / 2, (e.laenge || 10) / 2 + 5]));
+    stunts += zonen.length;
+    for (let r = 2; r <= 6; r++) {
+      const erg = ZM.ereignis(st, { runde: r, n: 0, v: fahrzeuge(L, r + 300, 2) });
+      for (const idx of erg.bewegt) {
+        const o = zs.objekte[idx], c = o.s + (o.ext[1] - o.ext[0]) / 2, h = (o.ext[0] + o.ext[1]) / 2;
+        geprueft++;
+        if (zonen.some(([zc, zh]) => Math.abs(sp.differenzS(c, zc)) < h + zh)) verletzt++;
+      }
+    }
+  }
+  pruefe('G Motorrad: neu gelegte Hindernisse nie in Schanze, Feuerring, Bus-Reihe oder Wheelie-/Stoppie-Zone (' + strecken + ' Strecken, ' + stunts + ' Elemente, ' + geprueft + ' Objekte)', verletzt === 0 && strecken >= 3 && stunts > 0, String(verletzt));
+}
 {
   const e0 = einstellungenPruefen({}, 1), e1 = einstellungenPruefen({ zufall: true }, 1), e2 = einstellungenPruefen({ zufall: 'ja' }, 1), e3 = einstellungenPruefen({ zufall: 1 }, 1);
   pruefe('F Einstellungen additiv: nur ein echtes true schaltet ein (alter Client sendet nichts → aus)', e0.zufall === false && e1.zufall === true && e2.zufall === false && e3.zufall === false);
