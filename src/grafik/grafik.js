@@ -287,7 +287,7 @@
     const st = this._g1;
     if (st && st.aktiv) {
       sonneNachfuehren(this, false);
-      if (G.haken && G.haken.bild) G.haken.bild(this);
+      if (G.haken && G.haken.bild) { try { G.haken.bild(this); } catch (e) { if (!st.g2Fehler) { st.g2Fehler = 1; try { console.warn('Grafik G2 Bild:', e); } catch (e2) { /* egal */ } } } }
       if (++st.zaehler % 45 === 0) sweep(this, G.stufe);                      // neu entstandene Fahrzeuge (Verkehr, Polizei …) nachziehen
       const glows = st.glows;
       for (let i = 0; i < glows.length; i++) { const s = glows[i]; if (!s.userData.ring) { const f = s.userData.fahrzeug; s.visible = !!(f && f.visible && f.userData.lichtAn); } }

@@ -16,6 +16,7 @@
 (function () {
   const R = window.Rennspiel, G = R && R.Grafik;
   if (!G || typeof THREE === 'undefined') return;
+  const MOTO = window.MOTORRAD === true;
 
   const PARAM = {
     schoen: { gras: 7000, blumen: 500, klingen: 6, tannSeg: 8, tannLagen: 5, laubBlobs: 5, staub: 70, oktaven: 4, zirren: false, bump: false },
