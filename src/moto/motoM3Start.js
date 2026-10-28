@@ -8,7 +8,7 @@
 //   Spiel.physikSchritt       umhüllt: Quad entschärfen (kein Überschlag), Schlamm/Wasser (Tempo-Faktor), Kisten, Auspuffknall, Funken, Spritzer
 //   R.dach.frame              umhüllt (außen): Quad ohne Schräglage/Salto + Wackeln, Partikel und Park-Animation je Bild
 //   Spiel.fahrzeugHinzufuegen umhüllt: Garage-Stil (Helm, Kombi, Nummer) des Spielers ins Modell; R.Garage.fahrzeugWerte liefert den Stil mit
-//   Garage-Bildschirm         umhüllt: Zeilen Helm/Kombi/Nummer (Maus/Touch und Tasten H, K, N/M), Texte Auto → Motorrad, Vorschau mit Stil
+//   Garage-Bildschirm         umhüllt: Zeilen Helm/Kombi/Nummer (Maus/Touch und Tasten J, K, N/B – H = Debug-Anzeige und M = Ton sind im Spiel belegt), Texte Auto → Motorrad, Vorschau mit Stil
 //   Menü                      Modus-Karte „Stunt-Park“ (sechste Karte), Streckenschritt zeigt dort nur den Park, Gegner-/Runden-Zeilen ausgeblendet
 // ============================================================
 (function () {
@@ -176,6 +176,9 @@
 .m3-zeile .g-farbe i { width: 1.7em; height: 1.7em; }
 .m3-zeile .g-wert { display: flex; align-items: center; gap: .5em; }
 .m3-hinweis { font-size: .62em; opacity: .8; margin: .2em 0 0 .3em; }
+.g-werkstatt.m3-stil { font-size: .8em; }
+.g-werkstatt.m3-stil .g-zeile { padding-top: .15em; padding-bottom: .15em; }
+.g-werkstatt.m3-stil .buehne-rahmen { max-height: 16em; }
 .reihe.modus-reihe .karte.gross { width: min(10.6em, calc((100vw - 6vw - 5 * .6em - 1.6em) / 6)); }
 body.moto-park .hud-runde, body.moto-park .hud-platz { display: none !important; }
 `;
@@ -193,7 +196,7 @@ body.moto-park .hud-runde, body.moto-park .hud-platz { display: none !important;
       `<div class="g-zeile m3-zeile"><div class="g-label">🧥 Kombi</div><div class="g-farben">${reihe('kombi', kombi)}</div></div>` +
       `<div class="g-zeile m3-zeile"><div class="g-label">🔢 Nummer</div><div class="g-wert"><span class="rund" data-m3="nr:-1">−</span><span class="zahl">${nr}</span><span class="rund" data-m3="nr:1">+</span>` +
       `<span class="g-text klein">gratis, wird gespeichert</span></div></div>` +
-      `<div class="m3-hinweis">Tasten: <kbd>H</kbd> Helm · <kbd>K</kbd> Kombi · <kbd>N</kbd> / <kbd>M</kbd> Nummer + / −</div>`;
+      `<div class="m3-hinweis">Tasten: <kbd>J</kbd> Helm · <kbd>K</kbd> Kombi · <kbd>N</kbd> / <kbd>B</kbd> Nummer + / −</div>`;
   }
   function stilAendern(b, art, wert) {
     const a = b.autoDaten ? b.autoDaten() : null;
@@ -224,7 +227,7 @@ body.moto-park .hud-runde, body.moto-park .hud-platz { display: none !important;
         }
         if (this.sichtbar && this.phase === 'werkstatt') {
           const rechts = this.wurzel.querySelector('.g-rechts');
-          if (rechts) { const msg = rechts.querySelector('.g-nachricht'), div = document.createElement('div'); div.innerHTML = stilZeilen(this); while (div.firstChild) rechts.insertBefore(div.firstChild, msg || null); }
+          if (rechts) { const msg = rechts.querySelector('.g-nachricht'), div = document.createElement('div'); div.innerHTML = stilZeilen(this); while (div.firstChild) rechts.insertBefore(div.firstChild, msg || null); const wk = rechts.closest('.g-werkstatt'); if (wk) wk.classList.add('m3-stil'); }
         }
         G3.texteErsetzen(this.wurzel);
       } catch (e) { console.error('Motorrad M3 (Garage):', e); }
@@ -236,10 +239,10 @@ body.moto-park .hud-runde, body.moto-park .hud-platz { display: none !important;
         const a = this.autoDaten ? this.autoDaten() : null;
         if (a && a.sonderbau === 'motorrad') {
           const st = G3.stilHolen(this.fahrer, a.id), o = a.optionen || {};
-          if (code === 'KeyH') { stilAendern(this, 'helm', G3.naechsteFarbe(st.helm !== null ? st.helm : o.helm, 1)); this.zeichnen(); return true; }
+          if (code === 'KeyJ') { stilAendern(this, 'helm', G3.naechsteFarbe(st.helm !== null ? st.helm : o.helm, 1)); this.zeichnen(); return true; }
           if (code === 'KeyK') { stilAendern(this, 'kombi', G3.naechsteFarbe(st.kombi !== null ? st.kombi : a.farbe2, 1)); this.zeichnen(); return true; }
           if (code === 'KeyN') { stilAendern(this, 'nr', 1); this.zeichnen(); return true; }
-          if (code === 'KeyM') { stilAendern(this, 'nr', -1); this.zeichnen(); return true; }
+          if (code === 'KeyB') { stilAendern(this, 'nr', -1); this.zeichnen(); return true; }
         }
       }
       return taste.apply(this, arguments);
@@ -293,12 +296,17 @@ body.moto-park .hud-runde, body.moto-park .hud-platz { display: none !important;
       return `<div class="reihe strecken"><div class="karte strecke t-wiese gewaehlt"><div class="strecken-bild" style="background:linear-gradient(180deg,#8fc8ff 0%,#8fc8ff 35%,#7ed957 35%,#3a8f2f 100%)"><div class="strasse"></div></div>` +
         `<div class="karten-name">🎪 Stunt-Park</div><div class="karten-sub">Feste Strecke ohne Gegner und ohne Ende: Schanzen, Feuerring, Steilwand, Schlamm, Wasser, Kisten und Busse.</div></div></div>`;
     };
+    const zeilen = M.zeilen;      // Prüfung M3: im Park gibt es keine Gegner/Runden → diese Zeilen auch nicht mehr per Enter/Pfeil anwählbar (sonst unsichtbarer Fokus)
+    if (zeilen) M.zeilen = function () {
+      const z = zeilen.apply(this, arguments);
+      return this.e && this.e.stuntpark ? z.filter((k) => k !== 'runden' && k !== 'gegner' && k !== 'schwierigkeit') : z;
+    };
     const zeichnen = M.zeichnen;
     M.zeichnen = function () {
       const r = zeichnen.apply(this, arguments);
       try {
         stilCss();
-        if (this.e && this.e.stuntpark) this.wurzel.querySelectorAll('[data-a^="stepper:runden:"], [data-a^="stepper:gegner:"]').forEach((el) => { const zl = el.closest('.zeile'); if (zl) zl.style.display = 'none'; });
+        if (this.e && this.e.stuntpark) this.wurzel.querySelectorAll('[data-a^="stepper:runden:"], [data-a^="stepper:gegner:"], [data-a^="wert:schwierigkeit:"], [data-a^="fokus:"][data-a$=":schwierigkeit"]').forEach((el) => { const zl = el.closest('.zeile'); if (zl) zl.style.display = 'none'; });
       } catch (err) { /* nur Optik */ }
       return r;
     };
