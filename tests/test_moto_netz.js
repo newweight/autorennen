@@ -355,6 +355,23 @@ function autopilot(C, st, v, idx) {
     fs.rmSync(stub, { force: true });
     const O = CF.Moto.online;
     pruefe('F motoOnline.js lädt im Node-Kontext (Menü-Hook, Server-Adresse, Bestenliste bereit)', !!O && CF.Moto.onlineAn === true && O.serverUrl === 'ws://mac-mini.tailnet.ts.net:10000/ws' && CF.NetzVerbindung.url() === O.serverUrl && !!CF.Moto.bestenliste);
+    // Server-Adresse: Portal (Seite auf Port 10002, nichts gesetzt) → Spielserver am selben Rechner, Port 10000, Protokoll der Seite; gesetzt → gesetzt; Unsinn → ignoriert; Spielserver-Seite → gleiche Adresse (null)
+    const adresse = (loc, server) => {
+      const st = path.join(__dirname, '_stub_moto_online2.js');
+      fs.writeFileSync(st, `window.Rennspiel.THREE = window.THREE; document.head = { appendChild() {} }; window.location = ${JSON.stringify(loc)}; window.Rennspiel.Online = { verfuegbar: () => true, Bildschirm: class { zeichnen() { return 1; } } };
+        window.Rennspiel.NetzVerbindung = class { static url() { return 'ORIGINAL'; } }; window.Rennspiel.Menue = class { taste() { return false; } };
+        window.Rennspiel.Moto.onlineOrig = { htmlOnlineKarte() { return ''; }, onlineOeffnen() {}, verfuegbar: () => true }; ${server === undefined ? '' : 'window.MOTORRAD_SERVER = ' + JSON.stringify(server) + ';'}`);
+      try { const C2 = kontextLaden(MOTO_CLIENT.concat(['tests/_stub_moto_online2.js', 'src/moto/motoOnline.js']), { MOTORRAD: true }); return { url: C2.Moto.online.serverUrl, aktiv: C2.NetzVerbindung.url() }; }
+      finally { fs.rmSync(st, { force: true }); }
+    };
+    const a1 = adresse({ protocol: 'https:', host: 'mini.ts.net:10002', hostname: 'mini.ts.net', port: '10002', origin: 'https://mini.ts.net:10002', pathname: '/motorrad/' });
+    const a2 = adresse({ protocol: 'http:', host: '100.104.29.100:10002', hostname: '100.104.29.100', port: '10002', origin: 'http://100.104.29.100:10002', pathname: '/motorrad/' });
+    const a3 = adresse({ protocol: 'https:', host: 'mini.ts.net:10000', hostname: 'mini.ts.net', port: '10000', origin: 'https://mini.ts.net:10000', pathname: '/Motorrad.html' });
+    const a4 = adresse({ protocol: 'http:', host: 'x:10002', hostname: 'x', port: '10002', origin: 'http://x:10002', pathname: '/' }, 'wss://spiel.example.ts.net:10000');
+    const a5 = adresse({ protocol: 'http:', host: 'x:10002', hostname: 'x', port: '10002', origin: 'http://x:10002', pathname: '/' }, 'evil.example/pfad?x=1');
+    pruefe('F Server-Adresse: Portal (Port 10002) https → wss://host:10000/ws, http → ws://IP:10000/ws; Spielserver-Seite → unverändert (gleiche Herkunft); MOTORRAD_SERVER gilt; Unsinn → ignoriert (nie aus der Adresszeile)',
+      a1.url === 'wss://mini.ts.net:10000/ws' && a2.url === 'ws://100.104.29.100:10000/ws' && a3.url === null && a3.aktiv === 'ORIGINAL' && a4.url === 'wss://spiel.example.ts.net:10000/ws' && a5.url === null && a5.aktiv === 'ORIGINAL',
+      [a1.url, a2.url, a3.url, a4.url, a5.url].join(' | '));
     const sim = new Simulation({ moto: true, einstellungen: { streckeId: 'wiese', gegner: 1, runden: 2, unfall: 'echt', kollisionen: false }, spieler: [{ fahrer: 'Jonas', auto: 'superbike' }], seed: 21 });
     const info = sim.startInfo();
     // Fake-Spiel: Strecke + Fahrzeuge aus dem Client-Kontext (ohne Meshes), Szene = leere THREE.Group
