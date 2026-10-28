@@ -15,6 +15,8 @@
 //   strecke.daten = Katalogeintrag, aber nur mit den Listen aktiver Schichten (dynamik.js liest baelle/
 //   wasserstrahlen von hier); strecke.katalog = unveränderter Katalogeintrag.
 //   strecke.hindernisse / loopings / wracks / strohballen / schanzen / boostFelder / schilde: leer, wenn aus.
+//   Z1: optionen.zufall = { seed } → Lage der Hindernisse/Wracks/Strohballen/Dinos aus dem Rennseed (src/track/zufall.js), strecke.zufall = Zustand
+//   (ohne die Option bleibt alles bitgleich wie im Katalog; spätere Neuverteilungen: R.Zufall.ereignis).
 //   strecke.breiteBei(s): Fahrbahnbreite an s (Spuren: 1 Spur 5 m, 3 Spuren 15 m, Übergang 40 m);
 //   Straße, Randsteine, Mittellinien, Bande (grenzeBei), Untergrund und Checkpoints nutzen sie.
 //   Enge Stellen (1 Spur): Leitplanke direkt hinter dem Randstreifen (_leitplankenBauen).
@@ -488,6 +490,11 @@
       this.dinos = kopie(sicht.dinos);              // Runde 5b: [{ s, von, intervall, tempo, art }] (world/dynamik.js)
       // Runde 5: Klebe-Seitenstreifen (Fantasie): [{ s0, s1, seite: -1 | 1 | 0 (beide) }] → Untergrund 'kleber' auf dem Rand
       this.kleber = (sicht.kleber || []).map(e => ({ s0: this.spline.wrapS(e.s0), s1: this.spline.wrapS(e.s1), seite: e.seite || 0 }));
+      // Z1 (Zufall, src/track/zufall.js): Lage der Hindernisse/Wracks/Strohballen/Dinos aus dem Rennseed – NUR mit optionen.zufall = { seed }.
+      // Ohne diese Option (Tests, „Zufällige Strecke: aus“, alte Clients) bleibt alles bitgleich wie im Katalog.
+      this.zufall = null;
+      this.zufallVersion = 0;
+      if (opt.zufall && R.Zufall) R.Zufall.start(this, opt.zufall, sicht);
       this.checkpoints = this._checkpointsBerechnen(daten.checkpointAbstand || 120);
       this.idealLinie = this._idealLinieBerechnen();
       // Runde 5: feste Säulen für die Bande (collisions.js): Startbogen-Masten + Looping-Beine
