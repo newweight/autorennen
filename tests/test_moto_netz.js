@@ -295,7 +295,6 @@ function autopilot(C, st, v, idx) {
   autoH.n = 0; autoH.fort = 0;
   autoH.beiZustand = (z) => { if (!z.ich) return; autoH.fort = z.a[0][12]; for (let i = 0; i < 3; i++) { autoH.n++; autoH.senden({ t: 'eingabe', n: autoH.n, g: gastGasK.g, b: 0, l: 0 }); } };
   alt.beiZustand = (z) => { if (!z.ich) return; for (let i = 0; i < 3; i++) { alt.n = (alt.n || 0) + 1; alt.senden({ t: 'eingabe', n: alt.n, g: gastGasK.g, b: 0, l: 0 }); } };
-  const ergH = hostM.auf('ergebnis', null, 120000);
   hostM.senden({ t: 'geladen' }); gastM.senden({ t: 'geladen' }); autoH.senden({ t: 'geladen' }); alt.senden({ t: 'geladen' });
   // ≈ 40 s Spielzeit (Zeitraffer ×6), mindestens bis der Host gestürzt ist und die Unfall-Folge gemeldet wurde (höchstens ≈ 120 s)
   for (let t0 = Date.now(); Date.now() - t0 < 120000 / 6 && !(Date.now() - t0 > 40000 / 6 && hostM.sturzGesehen && hostM.ereignisse.some(x => x.art === 'unfall' && x.nr === 0)); ) await warte(250);
@@ -397,6 +396,65 @@ function autopilot(C, st, v, idx) {
       'Szene gesehen: ' + pruef.szeneGesehen + ', Station gesehen: ' + pruef.haltGesehen);
     O.abbau(ui);
     pruefe('F abbau räumt auf (kein Schatten-Zustand, keine Stationen mehr)', spiel.stunt === null && spiel.unfall === null && spiel.motoStationen === null && ui._mo === null);
+    // ---------- H) Szene vor Ort (Abschleppwagen / Krankenwagen) und Station (Halt): Server rechnet, der Client spiegelt ----------
+    {
+      const sim2 = new Simulation({ moto: true, einstellungen: { streckeId: 'wiese', gegner: 1, runden: 2, unfall: 'echt', kollisionen: false }, spieler: [{ fahrer: 'Jonas', auto: 'superbike' }], seed: 31 });
+      const info2 = sim2.startInfo(), { st: st2 } = clientStrecke(CF, info2.einstellungen);
+      const fz2 = info2.teilnehmer.map((t) => ({ auto: CF.carCatalog.waehlbare().find(a => a.id === t.autoId), vehicle: { x: 0, z: 0 }, istSpieler: t.mensch, spielerNr: t.mensch ? 0 : -1, mesh: null }));
+      const spiel2 = { fahrzeuge: fz2, strecke: st2, szene: new CF.THREE.Group(), huds: [], input: { spielTasten: new Set(), istGedrueckt: () => false }, einstellungen: {}, einstellungenSpeichern() {}, zustand: 'online' };
+      const ui2 = { spiel: spiel2, vorhersage: { vp: { _motoU: null } }, phase: 'rennen', raumCode: 'ABCD', ergEl: null };
+      O.aufbau(ui2, { einstellungen: Object.assign({}, info2.einstellungen, { unfall: 'echt', stuntrennen: false }), teilnehmer: info2.teilnehmer, du: 0 });
+      const M2 = sim2.R.Moto, srvU = sim2.sim.unfall.fz[0], cu = spiel2.unfall.fz[0];
+      const feed = () => { const z = sim2.zustand(); z.ich = sim2.ich(0); O.zustand(ui2, z); return z; };
+      const lauf = (n, f) => { for (let t = 0; t < n; t++) { sim2.eingabeSetzen(0, { gas: 0.4, bremse: 0, lenkung: 0 }); sim2.schritt(); for (const e of sim2.abholen()) if (e.art === 'stunt' || e.art === 'sturz') O.ereignis(ui2, e); if (t % 3 === 0) { const z = feed(); if (f && f(z) === true) return true; } } return false; };
+      lauf(60 * 6);                                               // erst losfahren (Countdown vorbei)
+      // 1) Abschleppwagen: Motorrad stark beschädigt → Szene vor Ort
+            M2.unfallStart.sturzFolge(sim2.sim, 0, { art: 'schaden', schwer: true });
+      const sehen = { abschlepp: false, lauf: false, helfer: false, pflege: false, frei: false, ende: false, zustandsprung: false };
+      lauf(60 * 40, (z) => {
+        const sz = cu.szene, f = z.mo[0][6];
+        if (sz && sz.art === 'abschlepp') { sehen.abschlepp = true; if (sz.phase === 'lauf') { sehen.lauf = true; if (sz.plan && srvU.szene && Math.abs(sz.sB - srvU.szene.sB) < 0.01 && Math.abs(sz.qH - srvU.szene.qH) < 0.01) sehen.helfer = true; if (cu.zustand > 20) sehen.pflege = true; } if (sz.frei) sehen.frei = true; }
+        if (sehen.lauf && !cu.szene) { sehen.ende = true; return true; }
+        if (!!(f & 8) !== !!cu.szene && !(sz && sz.phase === 'warten' && !(f & 8))) { /* Flag und Spiegel laufen gleich */ }
+      });
+      pruefe('H Abschleppwagen vor Ort: Szene (Flag 8) kommt im Zustand an, der Client spiegelt Ort/Plan der Szene (Helfer-Mesh gibt es im Node-Kontext nicht, das prüft der Browser-Test), pflegt Motorrad-% hoch und beendet die Szene (Zustand 100 %)',
+        sehen.abschlepp && sehen.lauf && sehen.helfer && sehen.pflege && sehen.ende && Math.abs(cu.zustand - srvU.zustand) < 1e-9 && cu.zustand >= 99, JSON.stringify(sehen) + ' Motorrad ' + cu.zustand.toFixed(1) + ' %');
+      // 2) Krankenwagen: Fahrer schwer verletzt
+      M2.unfallStart.sturzFolge(sim2.sim, 0, { art: 'schwer' });
+      const s2 = { kranken: false, lauf: false, helfer: false, ende: false };
+      lauf(60 * 60, (z) => {
+        const sz = cu.szene;
+        if (sz && sz.art === 'krankenwagen') { s2.kranken = true; if (sz.phase === 'lauf') { s2.lauf = true; if (sz.plan && srvU.szene && Math.abs(sz.sB - srvU.szene.sB) < 0.01 && Math.abs(sz.qH - srvU.szene.qH) < 0.01) s2.helfer = true; } }
+        if (s2.lauf && !cu.szene) { s2.ende = true; return true; }
+      });
+      pruefe('H Krankenwagen vor Ort: Szene kommt an, Ort/Plan gespiegelt, Fahrer-% steigt bis 100 %, Szene endet', s2.kranken && s2.lauf && s2.helfer && s2.ende && cu.gesundheit >= 99 && Math.abs(cu.gesundheit - srvU.gesundheit) < 1e-9, JSON.stringify(s2) + ' Fahrer ' + cu.gesundheit.toFixed(1) + ' %');
+      // 3) Station: Motorrad angeschlagen, mit Tempo 8 m/s vor die Werkstatt gesetzt → Halt, Pflege, weiter (Flags 2/4)
+      const werk = sim2.moto.stationen.werkstatt, P = werk.platz, strecke = sim2.sim.strecke, U2 = M2.unfall;
+      srvU.zustand = 45;
+      const p = U2.fahrPose(strecke, P.s - P.laenge / 2 - 14, P.seite * (P.qA + P.qB) / 2), v = sim2.sim.fahrzeuge[0].vehicle;
+      v.setzen(p.x, p.z, p.heading); v.y = p.y; v.vLaengs = 8;
+      const s3 = { halt: false, steht: false, flagSync: true, ende: false, werkstatt: false };
+      lauf(60 * 40, (z) => {
+        const fl = z.mo[0][6];
+        if (fl & 2) { s3.halt = true; if (fl & 4) s3.steht = true; if (!(fl & 256)) s3.werkstatt = true; if (!cu.halt) s3.flagSync = false; }
+        if (s3.halt && !(fl & 2) && !cu.halt) { s3.ende = true; return true; }
+      });
+      pruefe('H Werkstatt (Station): Halt kommt als Flag 2/4 an, der Client zeigt u.halt (Werkstatt), Motorrad-% steigt, danach fährt es weiter (Halt aus)', s3.halt && s3.steht && s3.werkstatt && s3.flagSync && s3.ende && cu.zustand > 45 && Math.abs(cu.zustand - srvU.zustand) < 1e-9, JSON.stringify(s3) + ' Motorrad ' + cu.zustand.toFixed(1) + ' %');
+      // 4) Krankenstation
+      const kran = sim2.moto.stationen.kranken, PK = kran.platz;
+      srvU.gesundheit = 40;
+      const pk = U2.fahrPose(strecke, PK.s - PK.laenge / 2 - 14, PK.seite * (PK.qA + PK.qB) / 2);
+      v.setzen(pk.x, pk.z, pk.heading); v.y = pk.y; v.vLaengs = 8;
+      const s4 = { halt: false, steht: false, kranken: false, ende: false };
+      lauf(60 * 40, (z) => {
+        const fl = z.mo[0][6];
+        if (fl & 2) { s4.halt = true; if (fl & 4) s4.steht = true; if (fl & 256) s4.kranken = true; }
+        if (s4.halt && !(fl & 2) && !cu.halt) { s4.ende = true; return true; }
+      });
+      pruefe('H Krankenstation (Station): Halt mit Flag 256, Fahrer-% steigt, danach weiter', s4.halt && s4.steht && s4.kranken && s4.ende && cu.gesundheit > 40 && Math.abs(cu.gesundheit - srvU.gesundheit) < 1e-9, JSON.stringify(s4) + ' Fahrer ' + cu.gesundheit.toFixed(1) + ' %');
+      O.abbau(ui2);
+    }
+
     // Bestenliste: Prüfung der Meldung
     const B = CF.Moto.bestenliste;
     const gut = B.eintragPruefen({ name: 'Jonas', punkte: 1250.7, platz: 1, strecke: 'wiese', zeit: 123.456, modus: 'stuntrennen-online', raum: 'ABCD' });
@@ -430,5 +488,7 @@ function autopilot(C, st, v, idx) {
   await srv.schliessen();
   console.log(`\n${ok} OK, ${fehler} FEHL`);
   console.log(fehler ? 'FEHLER' : 'ALLE MOTORRAD-NETZ-TESTS OK');
-  process.exit(fehler ? 1 : 0);
+  if (fehler) process.exit(1);
+  // Erfolg: KEIN process.exit – der Prozess muss von selbst enden (nichts Offenes: Server zu, Sockets zu, keine Timer). Sonst nach 8 s Abbruch mit Fehlercode.
+  setTimeout(() => { console.log('FEHL Prozess beendet sich nicht von selbst (offene Sockets/Timer): ' + (process.getActiveResourcesInfo ? process.getActiveResourcesInfo() : []).join(',')); process.exit(4); }, 8000).unref();
 })().catch((e) => { console.error(e); process.exit(1); });
