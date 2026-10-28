@@ -405,5 +405,5 @@ window.Rennspiel = window.Rennspiel || {};
   R.sonderbauten = R.sonderbauten || {};
   R.sonderbauten.motorrad = function (autoDaten, opt) { return bauen(autoDaten, opt); };
 
-  R.Moto.modell = { verfuegbar: true, bauen, statistik, PIVOT_Y, PV, PH, AX, RAKE, GRIFF, LENK_FAKTOR, RAD_V, RAD_H };
+  R.Moto.modell = { verfuegbar: true, bauen, statistik, PIVOT_Y, PV, PH, AX, RAKE, GRIFF, LENK_FAKTOR, RAD_V, RAD_H, werkzeug: { sammler, tube, box, ellipsoid, V, gelenk, spanne, stabGeo, memo, lambert, vertexMat, basic, schattenMat, nummerMat, fahrerGeo, reifenGeo, felgeGeo, F, lum, SCHULTER, SCHULTER_Y, SCHULTER_Z } };   // M3: Bausteine für motoTypen.js (nur zusätzlich, nichts geändert)
 })();
