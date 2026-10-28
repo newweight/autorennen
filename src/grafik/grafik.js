@@ -202,6 +202,7 @@
 
   function zurueck(sp) {
     const st = sp._g1; if (!st) return;
+    if (G.haken) { try { G.haken.aus(sp); } catch (e) { /* G2 nur Optik */ } }      // G2 (umgebung.js) zuerst abbauen
     sp.szene.traverse((o) => {
       if (!o.isMesh) return;
       const e = st.orig.get(o);
@@ -265,6 +266,7 @@
     st.aktiv = true;
     sweep(sp, stufe);
     sonneNachfuehren(sp, true);
+    if (G.haken) { try { G.haken.an(sp, stufe); } catch (e) { try { console.warn('Grafik G2:', e); } catch (e2) { /* egal */ } } }   // G2: Himmel, Gras, Bäume, Asphalt, Staub
   }
 
   const _t = new THREE.Vector3();
@@ -285,6 +287,7 @@
     const st = this._g1;
     if (st && st.aktiv) {
       sonneNachfuehren(this, false);
+      if (G.haken && G.haken.bild) G.haken.bild(this);
       if (++st.zaehler % 45 === 0) sweep(this, G.stufe);                      // neu entstandene Fahrzeuge (Verkehr, Polizei …) nachziehen
       const glows = st.glows;
       for (let i = 0; i < glows.length; i++) { const s = glows[i]; if (!s.userData.ring) { const f = s.userData.fahrzeug; s.visible = !!(f && f.visible && f.userData.lichtAn); } }
