@@ -19,6 +19,9 @@
 
 <!-- Bibliothek (lokal, offline) -->
 <script>window.MOTORRAD = true;</script>
+<!-- Motorrad M4 (online): Soll Motorrad.html NICHT vom Spielserver kommen (z. B. im Portal, Port 10002), hier die Adresse des Spielservers eintragen,
+     z. B. window.MOTORRAD_SERVER = 'mac-mini.tailnet.ts.net';  oder 'wss://mac-mini.tailnet.ts.net'  (leer = gleiche Adresse wie diese Seite).
+     window.MOTORRAD_PORTAL = Basis-Adresse des Portals für die Stunt-Bestenliste (leer = gleiche Adresse); window.MOTORRAD_ONLINE = false schaltet Online ab. -->
 <!-- Fehler sichtbar machen (iPhone ohne Konsole), muss zuerst laden -->
 <script src="src/moto/fehlerAnzeige.js"></script>
 <script src="vendor/three.min.js"></script>
@@ -102,5 +105,7 @@
 <script src="src/moto/unfallStart.js"></script>
 <script src="src/moto/cockpitMoto.js"></script>
 <script src="src/moto/motoM3Start.js"></script>
+<!-- Motorrad M4: online über den Spielserver (Motorrad-Räume, Stunt/Unfall im Protokoll, Bestenliste) – ganz zuletzt -->
+<script src="src/moto/motoOnline.js"></script>
 </body>
 </html>

@@ -26,6 +26,8 @@
     if (parent) parent.appendChild(e);
     return e;
   }
+  /** M4: Motorrad-Modus (Motorrad.html setzt window.MOTORRAD, src/moto/motoOnline.js stellt R.Moto.online bereit). Im Autorennen immer null → alles wie bisher. */
+  const MO = () => (window.MOTORRAD === true && R.Moto && R.Moto.online ? R.Moto.online : null);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const HEX = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0');
   /**
@@ -201,6 +203,7 @@
       const v = new R.NetzVerbindung();
       v.bei('raum', (m) => { this.istHost = !!m.host; this.ichId = m.du; this.raumCode = m.code; });
       v.bei('hallo', (m) => { if (m.v >= 3) v.senden({ t: 'schalterFrage' }); });          // Protokoll 3: Internet-Schalter (alter Server → keine Abfrage)
+      if (MO()) MO().verbindung(this, v);          // M4: merkt sich, ob der Server Motorrad-Räume kann (hallo.moto)
       v.bei('schalter', (m) => this.schalterEmpfangen(m));
       v.bei('lobby', (m) => this.lobbyEmpfangen(m));
       v.bei('fehler', (m) => this.fehlerEmpfangen(m));
@@ -225,13 +228,16 @@
       this.ansicht = 'verbinden'; this.hinweis = ''; this.zeichnen();
       try {
         const v = await this.verbindung();
+        if (MO() && !(await MO().serverKannMotorrad(this))) { this.ansicht = 'start'; this.hinweis = 'Dieser Server kann noch kein Motorrad online 😕'; this.zeichnen(); return; }
         const e = this.spiel.einstellungen;
-        v.senden(Object.assign({ t: 'raumErstellen', einstellungen: { streckeId: e.streckeId, welt: e.welt, variante: e.variante, runden: e.runden,
+        const msg = Object.assign({ t: 'raumErstellen', einstellungen: { streckeId: e.streckeId, welt: e.welt, variante: e.variante, runden: e.runden,
           gegner: e.gegner, schwierigkeit: e.schwierigkeit, tempoKlasse: e.tempoKlasse, jahreszeit: e.jahreszeit, wetter: e.wetter,
           tageszeit: e.tageszeit, kollisionen: e.kollisionen !== false, hindernisMenge: e.hindernisMenge, polizei: e.polizei === true,
           geisterfahrer: e.geisterfahrer === true, krankenwagen: e.krankenwagen === true, abschleppwagen: e.abschleppwagen === true, tiere: e.tiere !== false,      // v28 (W10): Tiere queren die Straße (Standard an)
           nurRennautos: R.carCatalog.nurRennautos(e, R.trackCatalog.find(t => t.id === e.streckeId)),      // v29 (F3): alle Computer-Gegner fahren den Formel-Renner (bei der Formel-1-Strecke Standard an)
-          verkehr: e.krankenwagen === true || e.abschleppwagen === true ? 'wenig' : 'aus' } }, this.meineWahl()));      // v25: Verkehr (additiv); v28 W1: Krankenwagen/Abschleppwagen je einzeln, `verkehr` nur noch abgeleitet für alte Server   // Stufe 2: zuletzt gewählt (Standard Geister)
+          verkehr: e.krankenwagen === true || e.abschleppwagen === true ? 'wenig' : 'aus' } }, this.meineWahl());      // v25: Verkehr (additiv); v28 W1: Krankenwagen/Abschleppwagen je einzeln, `verkehr` nur noch abgeleitet für alte Server   // Stufe 2: zuletzt gewählt (Standard Geister)
+        if (MO()) MO().nachrichtAnpassen(msg, e);          // M4: moto:true, Unfälle, Stuntrennen
+        v.senden(msg);
       } catch (err) { this.ansicht = 'start'; this.hinweis = 'Keine Verbindung zum Server 😕'; this.zeichnen(); }
     }
 
@@ -241,7 +247,10 @@
       this.ansicht = 'verbinden'; this.hinweis = ''; this.zeichnen();
       try {
         const v = await this.verbindung();
-        v.senden(Object.assign({ t: 'raumBeitreten', code }, this.meineWahl()));
+        if (MO() && !(await MO().serverKannMotorrad(this))) { this.ansicht = 'code'; this.hinweis = 'Dieser Server kann noch kein Motorrad online 😕'; this.zeichnen(); return; }
+        const msg = Object.assign({ t: 'raumBeitreten', code }, this.meineWahl());
+        if (MO()) MO().nachrichtAnpassen(msg, this.spiel.einstellungen);          // M4: moto:true (Motorrad-Räume getrennt von Auto-Räumen)
+        v.senden(msg);
       } catch (err) { this.ansicht = 'code'; this.hinweis = 'Keine Verbindung zum Server 😕'; this.zeichnen(); }
     }
 
@@ -275,7 +284,7 @@
       if (m.grund === 'keinRaum' && !this.lobby && !this.phase) return;   // Nachzügler einer Eingabe nach „Raum zu“: Hinweis des Hosts nicht überschreiben
       if (this.phase === 'rennen') { const hd = this.spiel.huds[0]; if (hd) hd.meldung(m.text || 'Fehler', 1800); return; }
       this.hinweis = m.text || 'Fehler';
-      if (this.ansicht === 'verbinden') this.ansicht = this.lobby ? 'lobby' : (m.grund === 'unbekannt' || m.grund === 'voll' || m.grund === 'laeuft' ? 'code' : 'start');
+      if (this.ansicht === 'verbinden') this.ansicht = this.lobby ? 'lobby' : (m.grund === 'unbekannt' || m.grund === 'voll' || m.grund === 'laeuft' || m.grund === 'falscheArt' ? 'code' : 'start');
       this.zeichnen();
     }
 
@@ -474,7 +483,7 @@
         z.push('hindernisMenge');      // 12.10.: Viele / Sehr viele Hindernisse (nur wirksam in Welten mit Hindernissen)
         z.push('runden', 'gegner', 'schwierigkeit', 'tempoKlasse', 'jahreszeit', 'wetter', 'tageszeit', 'kollisionen', 'polizei');
       }
-      return z;
+      return MO() ? MO().zeilen(this, z) : z;          // M4: Polizei weg, dafür Unfälle + Stuntrennen
     }
     streckeDaten() {
       const id = this.lobby ? this.lobby.einstellungen.streckeId : this.spiel.einstellungen.streckeId;
@@ -493,6 +502,7 @@
     /** Werte einer Zeile: [{ k, text, aus, tod }] und der aktuelle Wert. */
     werte(zeile) {
       const c = R.config, L = this.lobby, e = L ? L.einstellungen : {}, ich = this.ichLobby() || {};
+      if (MO()) { const w = MO().werte(this, zeile, e); if (w) return w; }          // M4: Zeilen Unfälle / Stuntrennen
       if (zeile === 'fahrer') {
         const belegt = new Set(L ? L.spieler.filter(s => s.id !== L.du).map(s => s.fahrer) : []);
         return { wert: ich.fahrer, liste: c.fahrer.map(f => ({ k: f.name, text: f.emoji, titel: f.name, aus: belegt.has(f.name), emoji: true })) };
@@ -561,6 +571,7 @@
     }
     wertSetzen(zeile, k) {
       if (!this.verb || !this.lobby) return;
+      if (MO() && this.istHost && MO().wertSetzen(this, zeile, k)) return;          // M4: Stuntrennen (bool) / Unfälle
       if (zeile === 'fahrer' || zeile === 'auto' || zeile === 'hilfe') { this.verb.senden({ t: 'wahl', [zeile]: k }); return; }
       if (!this.istHost) return;
       const e = {};
@@ -672,7 +683,7 @@
 
     htmlLobby(hw) {
       const L = this.lobby, e = L.einstellungen, c = R.config;
-      const link = einladungsBasis(L.oeffentlich) + '?raum=' + L.code;
+      const link = einladungsBasis(L.oeffentlich) + (MO() ? 'Motorrad.html' : '') + '?raum=' + L.code;          // M4: Motorrad-Gäste öffnen Motorrad.html
       let qr = '';
       try { qr = R.QR ? R.QR.svg(link, { modul: 3, rand: 2 }) : ''; } catch (err) { qr = ''; }
       const autoName = (id) => { const a = R.carCatalog.waehlbare().find(x => x.id === id); return a ? a.name : id; };
@@ -705,13 +716,17 @@
       const meine = zeile('fahrer', '🧑 Fahrer') + zeile('auto', '🚗 Auto') + zeile('hilfe', '🛟 Fahrhilfe');
       let rechts;
       const daten = this.streckeDaten();
-      if (this.istHost) {
+      if (this.istHost && MO() && MO().lobbyHost) {
+        rechts = MO().lobbyHost(this, zeile, e);          // M4: ohne Polizei/Verkehr/Rennautos, mit Unfällen + Stuntrennen
+      } else if (this.istHost) {
         rechts = `<h3>⚙️ Rennen (du bist der Host)</h3>` + zeile('strecke', '🗺️ Strecke') + zeile('welt', '🌍 Welt') +
           (this.variantenListe().length ? zeile('variante', '📏 Variante') : '') +
           zeile('hindernisMenge', this.hindernisMengeAktiv() ? '🚧 Hindernisse' : '🚧 Hindernisse <small>(erst ab Welt „Hindernisse“)</small>') + zeile('runden', '🔁 Runden') +
           zeile('gegner', '🤖 Computer-Gegner') + zeile('schwierigkeit', '🎚️ Computer-Stärke') + zeile('tempoKlasse', '🏎️ Tempo') +
           zeile('jahreszeit', '🍂 Jahreszeit') + zeile('wetter', '🌦️ Wetter') + zeile('tageszeit', '🌗 Tageszeit') + zeile('polizei', '🚨 Polizei') + verkehrZeile() + rennautosZeile() +
           `<div class="on-fest">💥 Schaden: aus (online) · ${e.kollisionen ? '💥 Rempeln an' : '👻 Geister: Autos fahren durcheinander durch'}</div>`;
+      } else if (MO() && MO().lobbyGast) {
+        rechts = MO().lobbyGast(this, e, daten);
       } else {
         const wi = (R.weltInfo || {})[e.welt || daten.weltStandard] || {};
         const S = c.schwierigkeiten[e.schwierigkeit] || {};
@@ -874,6 +889,7 @@
       if (spiel.tunnelLichter) spiel._tunnelLichterVorkompilieren();
       spiel.groesse();
       try { if (spiel._vorwaermen) spiel._vorwaermen(); } catch (e) { }
+      if (MO()) { try { MO().aufbau(this, m); } catch (err) { console.error('Motorrad online (Aufbau):', err); } }          // M4: Stunt-/Unfall-Anzeige, Stationen, Trick-Taste
       if (this.verb) {
         // v22 (additiv, Protokoll-Version bleibt 4): Münzen-Guthaben des eigenen Fahrers (Garage-Konto) melden – der Server braucht es nur zum Freikaufen bei der Polizei
         let k = 0;
@@ -904,6 +920,7 @@
 
     rennenAbbauen() {
       const spiel = this.spiel;
+      if (MO()) { try { MO().abbau(this); } catch (err) { console.error('Motorrad online (Abbau):', err); } }          // M4
       this.phase = null;
       this._wachpostenAus();
       spiel.online = null;
@@ -988,6 +1005,7 @@
         if (ich.zp) t.zielPlatz = ich.zp;
         if (this.vorhersage.hart) { this.vorhersage.anzeigen(v); spiel._vorherAngleichen(f); this.vorhersage.hart = false; }
       }
+      if (MO()) { try { MO().zustand(this, z); } catch (err) { console.error('Motorrad online (Zustand):', err); } }          // M4: zustand.mo / ich.mu
       // v24 (15.10., additiv): Dach der anderen Cabrios (zustand.dz = [[Nr, ziel, Rest]]) – dach.js klappt das Mesh passend; das eigene Dach kommt aus ich.dz (Vorhersage)
       if (z.dz) {
         for (const e of z.dz) {
@@ -1040,6 +1058,7 @@
       if (this.phase !== 'rennen') return;
       const spiel = this.spiel, r = spiel.rennen, hud = spiel.huds[0];
       const t = r.teilnehmer[m.nr];
+      if (MO()) { try { MO().ereignis(this, m); } catch (err) { console.error('Motorrad online (Ereignis):', err); } }          // M4: stunt / sturz / unfall
       if (m.art === 'start') this._start(m.k);
       else if (m.art === 'freikauf') {         // v22 (additiv, Protokoll-Version bleibt 4): Server hat den Stopp gegen Münzen beendet → Garage-Konto abbuchen
         try { const nm = r.teilnehmer[this.du].name; if (R.Garage && nm) R.Garage.abbuchen(nm, m.kosten); } catch (err) { /* egal */ }
@@ -1084,6 +1103,7 @@
       this.ergEl.style.display = (R.Feuerwerk && R.Feuerwerk.tafelWartezeit && R.Feuerwerk.tafelWartezeit(this.spiel) > 0) ? 'none' : '';
       this._ergWarten = this.ergEl.style.display === 'none';
       this.statistik.korrekturen = this.vorhersage ? Object.assign({}, this.vorhersage.stat) : null;
+      if (MO()) { try { MO().ergebnis(this, m); } catch (err) { console.error('Motorrad online (Ergebnis):', err); } }          // M4: Stuntpunkte-Spalte, Bestenliste
     }
 
     /** v29 F5: Ergebnistafel nachträglich zeigen, sobald das Feuerwerk den Auftakt hinter sich hat (je Bild von main.js). */
@@ -1135,6 +1155,7 @@
           if (this.resetFlag) msg.r = 1;
           if (this.freikaufFlag) msg.f = 1;
           if (this.dachFlag) msg.d = 1;                      // v24: Dach-Geste (↑+↓ im Stand) – der Server entscheidet, die Vorhersage rechnet mit
+          if (MO() && !this.dialog) MO().eingabe(this, msg);          // M4: Trick-Taste (Bit k)
           const dachGeste = this.dachFlag;
           this.itemFlag = this.resetFlag = this.freikaufFlag = this.dachFlag = false;
           this.verb.senden(msg);

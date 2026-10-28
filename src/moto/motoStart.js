@@ -6,8 +6,10 @@
 //                            Autowahl auf eine Crossmaschine, falls die gespeicherte/Standard-Autowahl ein Auto war)
 //   Menue.zeigen             umhüllt: ungültige Autowahl (Standard 'troc-cabrio'/'multivan') auf Crossmaschinen setzen
 //   Menue.zeichnen           umhüllt: Zeilen „Schaden“ und „Verkehr“ ausblenden (gelten im Motorradmodus nicht), Menütexte Auto → Motorrad
-//   Menue.htmlOnlineKarte    ersetzt: Online-Karte ausblenden (Server kennt die Motorräder erst ab M4); onlineOeffnen/modusKarte('online') ohne Wirkung
+//   Menue.htmlOnlineKarte    ersetzt: Online-Karte ausblenden; onlineOeffnen/modusKarte('online') ohne Wirkung
 //   R.Online.verfuegbar      ersetzt: immer false
+//   (M4: die Originale liegen in R.Moto.onlineOrig; src/moto/motoOnline.js – zuletzt geladen – stellt sie wieder her, wenn Motorrad online möglich ist.
+//    Fehlt motoOnline.js oder ist window.MOTORRAD_ONLINE === false, bleibt alles wie in M3: nur offline.)
 //   Spiel.physikSchritt, R.dach.frame   umhüllt in schraeglage.js (Schräglage, Sturz-Purzelbaum)
 // Zweispieler-Split am selben Rechner bleibt unverändert.
 // ============================================================
@@ -68,11 +70,13 @@
     return r;
   };
 
+  R.Moto = R.Moto || {};
+  R.Moto.onlineOrig = { htmlOnlineKarte: M.htmlOnlineKarte, onlineOeffnen: M.onlineOeffnen, verfuegbar: R.Online ? R.Online.verfuegbar : null };      // M4: für motoOnline.js
   M.htmlOnlineKarte = function () { return ''; };
-  M.onlineOeffnen = function () { /* Online gibt es für Motorräder erst in M4 */ };
+  M.onlineOeffnen = function () { /* Online: erst mit motoOnline.js (M4) */ };
   const modusKarte = M.modusKarte;
   M.modusKarte = function (k) {
-    if (k === 'online') {            // Pfeiltasten laufen über die unsichtbare 5. Karte weiter: auf die gegenüberliegende Seite springen
+    if (k === 'online' && !R.Moto.onlineAn) {            // Pfeiltasten laufen über die unsichtbare 5. Karte weiter: auf die gegenüberliegende Seite springen
       const e = this.e || {};
       return modusKarte.call(this, (e.spielart || 'rennen') === 'rennen' && e.modus !== 'zwei' ? 'elimination' : 'solo');
     }

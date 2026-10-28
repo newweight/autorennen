@@ -443,12 +443,12 @@ function starten(opt) {
         return schalterUmschalten(c, m.an);
       case 'raumErstellen': {
         if (Date.now() - (c.erstelltAm || 0) < TEUER_MS) return fehler(c.ws, 'zu_schnell', 'Bitte einen Moment warten');   // v27 F4 (M2/H1)
+        // M4 (vor allen Nebenwirkungen: weder Zeitsperre noch Raumwechsel): Motorrad-Raum nur auf ausdrücklichen Wunsch (`moto: true`) und nur mit eingeschaltetem Schalter; alte Clients senden es nie → Autoraum wie bisher
+        if (m.moto === true && !motorradAn()) return fehler(c.ws, 'keinMotorrad', 'Motorrad online ist auf diesem Server nicht eingeschaltet');
         c.erstelltAm = Date.now();
         if (raum) verlassen(c, 'neuer Raum');
         if (raeume.size >= 30) return fehler(c.ws, 'voll', 'Zu viele Räume – später nochmal');
         if (c.ws.ipKey) { let n = 0; for (const r of raeume.values()) if (r.host && r.host.ws && r.host.ws.ipKey === c.ws.ipKey) n++; if (n >= MAX_RAEUME_PRO_IP) return fehler(c.ws, 'voll', 'Zu viele Räume von dieser Adresse'); }   // v27 F4 (H2)
-        // M4: Motorrad-Raum nur auf ausdrücklichen Wunsch (`moto: true`) und nur mit eingeschaltetem Schalter; alte Clients senden es nie → Autoraum wie bisher
-        if (m.moto === true && !motorradAn()) return fehler(c.ws, 'keinMotorrad', 'Motorrad online ist auf diesem Server nicht eingeschaltet');
         const code = zufallsCode(new Set(raeume.keys()));
         const art = m.moto === true ? 'moto' : 'auto';
         const neu = { code, host: c, spieler: [c], zustand: 'lobby', art, einstellungen: einstellungenPruefen(m.einstellungen || {}, 1, art === 'moto'), sim: null };
