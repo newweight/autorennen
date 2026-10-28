@@ -35,9 +35,9 @@ try:
                     autos = ['crossmaschine', 'crossmaschine-rot'] if moto else ['porsche-911', 'multivan']
                     strecke = 'wiese'; park = moto and fall == 'feuer'
                     wetter = 'regen' if fall.startswith('regen') else 'sonne'
-                    pg.evaluate("""([a, st, w, park]) => { window.__t = 1000; performance.now = () => window.__t; Rennspiel.spiel.uhr.letzte = window.__t;
-                      Rennspiel.spiel.rennenStarten({ modus: 'solo', streckeId: st, autoIds: a, runden: 1, gegner: park ? 0 : 3, schwierigkeit: 'mittel', fahrhilfe: ['wenig', 'wenig'], tageszeit: 'tag', wetter: w, stuntpark: park });
-                      window.requestAnimationFrame = () => 0; }""", [autos, strecke, wetter, park])
+                    pg.evaluate("""([a, st, w, park, fw]) => { window.__feuerWelt = fw; window.__t = 1000; performance.now = () => window.__t; Rennspiel.spiel.uhr.letzte = window.__t;
+                      Rennspiel.spiel.rennenStarten({ modus: 'solo', streckeId: st, autoIds: a, runden: 1, gegner: park ? 0 : 3, schwierigkeit: 'mittel', fahrhilfe: ['wenig', 'wenig'], tageszeit: 'tag', wetter: w, stuntpark: park, welt: (!park && window.__feuerWelt) ? 'hindernisse' : '' });
+                      window.requestAnimationFrame = () => 0; }""", [autos, strecke, wetter, park, (fall == 'feuer' and not moto)])
                     pg.wait_for_timeout(700)
                     pg.evaluate("""() => { const s = Rennspiel.spiel, z0 = s.zeichnen; s.zeichnen = function () {}; let g = 0; window.__t = 5000; s.uhr.letzte = window.__t; s.uhr.rest = 0;
                       while ((s.zustand !== 'rennen' || !s.rennen.gasErlaubt) && g++ < 900) { window.__t += 1000 / 60; s._frameRumpf(window.__t); }
@@ -54,7 +54,7 @@ try:
                         for i in range(6): pg.evaluate("() => { window.__wand(); }"); pg.evaluate(FRAME, 1)
                         pg.evaluate("""() => { const s = Rennspiel.spiel, v = s.fahrzeuge[0].vehicle, g = s.motoFxGruppe; window.__wand();
                           if (g) { const r = [-Math.sin(v.heading), -Math.cos(v.heading)]; Rennspiel.Moto.m3fx.funkenSpawn(g.userData.fx.funken, 40, v.x, s.fahrzeuge[0].mesh.position.y, v.z, r[0], r[1]); } }""")
-                        pg.evaluate(FRAME, 4)
+                        pg.evaluate(FRAME, 2)
                     elif fall == 'puff':
                         pg.evaluate("() => { Rennspiel.Grafik.Effekte.ausloesen(Rennspiel.spiel, 'puff', 0, 1.2); }")
                         pg.evaluate(FRAME, 9)
@@ -77,8 +77,8 @@ try:
                     pg.screenshot(path=os.path.join(out, name + '.png'), timeout=180000)
                     d = pg.evaluate("""() => { const s = Rennspiel.spiel, gl = s.renderer.getContext(), r = s.renderer; s.zeichnen(); const calls = r.info.render.calls; gl.finish(); const m = [];
                       for (let k = 0; k < 5; k++) { const w0 = Date.now(), n = 8; for (let i = 0; i < n; i++) { s.zeichnen(); gl.finish(); } m.push((Date.now() - w0) / n); } m.sort((a, b) => a - b);
-                      return { calls, ms: m[2], z: Rennspiel.Grafik.Effekte.zaehler(s) }; }""")
-                    r = {'fall': name, 'calls': d['calls'], 'ms': round(d['ms'], 1), 'zaehler': d['z'], 'fehler': fehler[:5]}
+                      const S = s._g4.add, al = []; for (let i = 0; i < S.n && al.length < 3; i++) if (S.alt[i] < S.max[i]) al.push([+S.x[i].toFixed(1), +S.y[i].toFixed(1), +S.z[i].toFixed(1), +S.size[i].toFixed(2), +S.alpha[i].toFixed(2)]); const mp = s.fahrzeuge[0].mesh.position, cp = s.kameras[0].kamera.position; return { calls, ms: m[2], z: Rennspiel.Grafik.Effekte.zaehler(s), dbg: [al, [mp.x, mp.y, mp.z].map((x) => +x.toFixed(1)), [cp.x, cp.y, cp.z].map((x) => +x.toFixed(1))] }; }""")
+                    r = {'fall': name, 'calls': d['calls'], 'ms': round(d['ms'], 1), 'zaehler': d['z'], 'fehler': fehler[:1], 'dbg': d.get('dbg')}
                     res.append(r); print(json.dumps(r, ensure_ascii=False), flush=True); ctx.close()
         b.close()
 finally:
