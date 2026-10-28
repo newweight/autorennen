@@ -4,3 +4,4 @@ Reihenfolge laut Sebastian: 0 Schräglage smoother → M3 → M4 → G1 → G2 �
 Mac-Ordner ~/Desktop/Spiele war iCloud-„nur Cloud“ → Arbeit aus GitHub-Zweig `motorrad`.
 
 - 28.10. 07:10 Start Punkt 0: Sonnet-Agent baut schraeglage.js neu (Gierrate glätten, kritisch gedämpfte Feder, Ratenbegrenzung, dt-genau), Messung vorher/nachher.
+- 28.10. Werkbank auf dem M2 angelegt: ~/Desktop/Spiele/werkbank (auftrag/ → ergebnis/), Start: bash ~/Desktop/Spiele/werkbank/werkbank.command

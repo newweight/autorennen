@@ -22,7 +22,7 @@ window.Rennspiel = window.Rennspiel || {};
   const G = 9.81;
   const MAX_WINKEL = 45 * Math.PI / 180;       // Deckel der Schräglage
   // Alle Stellschrauben der Schräglage an einer Stelle; überschreibbar über window.Rennspiel.Moto.lageKonfig (z. B. { einlenkzeit: 0.5 }).
-  const KONFIG = { gierTau: 0.15, einlenkzeit: 0.4, anteil90: 0.9, maxRateGrad: 90, maxWinkelGrad: 45, maxSchritt: 1 / 240, maxDt: 0.25, maxGierrate: 8 };
+  const KONFIG = { gierTau: 0.10, einlenkzeit: 0.28, anteil90: 0.9, maxRateGrad: 90, maxWinkelGrad: 45, maxSchritt: 1 / 240, maxDt: 0.25, maxGierrate: 8 };
   const K = () => Object.assign({}, KONFIG, R.Moto.lageKonfig || {});
   /** Eigenfrequenz ω0 (1/s) der kritisch gedämpften Feder: Sprungantwort 1 − (1+ωt)e^(−ωt) erreicht `anteil` nach `zeit` (Newton-Suche). */
   function omega0(zeit, anteil) {

@@ -14,14 +14,14 @@
     "sollMax": 34.5
    },
    "neu": {
-    "maxWinkelgeschw": 61.3,
-    "maxWinkelbeschl": 228.7,
-    "ruckRms": 1848.2,
-    "verzoegerungMs": 340,
-    "maxLage": 33.5,
+    "maxWinkelgeschw": 66.2,
+    "maxWinkelbeschl": 524.5,
+    "ruckRms": 5321.6,
+    "verzoegerungMs": 231,
+    "maxLage": 34.4,
     "sollMax": 34.5
    },
-   "ruckFaktor": 61.7
+   "ruckFaktor": 21.4
   },
   {
    "szenario": "slalom",
@@ -35,14 +35,14 @@
     "sollMax": 34.5
    },
    "neu": {
-    "maxWinkelgeschw": 60.4,
-    "maxWinkelbeschl": 258.8,
-    "ruckRms": 2976.5,
-    "verzoegerungMs": 349,
-    "maxLage": 33.5,
+    "maxWinkelgeschw": 66.4,
+    "maxWinkelbeschl": 646.1,
+    "ruckRms": 8709.2,
+    "verzoegerungMs": 240,
+    "maxLage": 34.4,
     "sollMax": 34.5
    },
-   "ruckFaktor": 211.1
+   "ruckFaktor": 72.1
   },
   {
    "szenario": "kreisfahrt",
@@ -56,14 +56,14 @@
     "sollMax": 32.5
    },
    "neu": {
-    "maxWinkelgeschw": 53.2,
-    "maxWinkelbeschl": 246.2,
-    "ruckRms": 2133.6,
-    "verzoegerungMs": 330,
-    "maxLage": 33.2,
+    "maxWinkelgeschw": 63.4,
+    "maxWinkelbeschl": 564.4,
+    "ruckRms": 6222,
+    "verzoegerungMs": 225,
+    "maxLage": 33.6,
     "sollMax": 32.5
    },
-   "ruckFaktor": 52.6
+   "ruckFaktor": 18
   },
   {
    "szenario": "kreisfahrt",
@@ -77,14 +77,14 @@
     "sollMax": 32.5
    },
    "neu": {
-    "maxWinkelgeschw": 53.5,
-    "maxWinkelbeschl": 278.2,
-    "ruckRms": 3338.7,
-    "verzoegerungMs": 337,
-    "maxLage": 33.2,
+    "maxWinkelgeschw": 63.7,
+    "maxWinkelbeschl": 704.8,
+    "ruckRms": 9861.6,
+    "verzoegerungMs": 234,
+    "maxLage": 33.6,
     "sollMax": 32.5
    },
-   "ruckFaktor": 161
+   "ruckFaktor": 54.5
   },
   {
    "szenario": "impulse",
@@ -98,14 +98,14 @@
     "sollMax": 24.6
    },
    "neu": {
-    "maxWinkelgeschw": 52.7,
-    "maxWinkelbeschl": 485.3,
-    "ruckRms": 1866.1,
-    "verzoegerungMs": 255,
-    "maxLage": 10.8,
+    "maxWinkelgeschw": 82.2,
+    "maxWinkelbeschl": 1053.9,
+    "ruckRms": 4549.3,
+    "verzoegerungMs": 187,
+    "maxLage": 14.3,
     "sollMax": 24.6
    },
-   "ruckFaktor": 29.8
+   "ruckFaktor": 12.2
   },
   {
    "szenario": "impulse",
@@ -119,14 +119,14 @@
     "sollMax": 24.6
    },
    "neu": {
-    "maxWinkelgeschw": 53.2,
-    "maxWinkelbeschl": 540.7,
-    "ruckRms": 2496.1,
-    "verzoegerungMs": 261,
-    "maxLage": 10.8,
+    "maxWinkelgeschw": 83.5,
+    "maxWinkelbeschl": 1140.4,
+    "ruckRms": 6384.4,
+    "verzoegerungMs": 195,
+    "maxLage": 14.4,
     "sollMax": 24.6
    },
-   "ruckFaktor": 74.8
+   "ruckFaktor": 29.3
   }
  ]
 }
