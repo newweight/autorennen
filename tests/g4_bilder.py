@@ -14,6 +14,8 @@ SEED = "(() => { let a = 123456789; Math.random = () => { a |= 0; a = a + 0x6D2B
 FRAME = "(n) => { const s = Rennspiel.spiel; for (let i = 0; i < n; i++) { window.__t += 1000 / 60; s._frameRumpf(window.__t); } }"
 KAM = """([a, dist, hh, seite]) => { const s = Rennspiel.spiel, f = s.fahrzeuge[0].mesh, k = s.kameras[0].kamera, p = new THREE.Vector3(); f.getWorldPosition(p); const h = s.fahrzeuge[0].vehicle.heading;
   k.position.set(p.x + Math.sin(h + a) * dist, p.y + hh, p.z + Math.cos(h + a) * dist); k.lookAt(p.x - Math.sin(h) * (seite || 0), p.y + 0.8, p.z - Math.cos(h) * (seite || 0)); k.updateMatrixWorld(true); }"""
+KAM2 = """([a]) => { const s = Rennspiel.spiel, st = s._g4, o = st.ringe[0], k = s.kameras[0].kamera, p = new THREE.Vector3(); o.getWorldPosition(p); const d = new THREE.Vector3(0, 0, 1).transformDirection(o.matrixWorld);
+  k.position.set(p.x - d.x * 9 + d.z * 3, p.y + 0.3, p.z - d.z * 9 - d.x * 3); k.lookAt(p.x, p.y + 0.3, p.z); k.updateMatrixWorld(true); }"""
 res = []
 try:
     with sync_playwright() as p:
@@ -41,15 +43,18 @@ try:
                       while ((s.zustand !== 'rennen' || !s.rennen.gasErlaubt) && g++ < 900) { window.__t += 1000 / 60; s._frameRumpf(window.__t); }
                       s.zeichnen = z0; document.getElementById('ui').style.display = 'none'; }""")
                     pg.evaluate(FRAME, 30)
-                    if fall == 'regen_cockpit':
-                        pg.evaluate("() => { const k = Rennspiel.spiel.kameras[0]; k.modusIndex = Rennspiel.config.kamera.modi.indexOf('cockpit'); k._erstesMal = true; }")
+                    pg.evaluate("(m) => { const k = Rennspiel.spiel.kameras[0]; k.modusIndex = Rennspiel.config.kamera.modi.indexOf(m); k._erstesMal = true; }", 'cockpit' if fall == 'regen_cockpit' else 'verfolger')
                     if fall in ('regen', 'regen_cockpit', 'tempo'):
                         pg.evaluate("() => { const s = Rennspiel.spiel, v = s.fahrzeuge[0].vehicle; s.__h = setInterval(() => {}, 1e9); window.__fix = () => { v.vLaengs = Math.max(v.vLaengs, v.daten.vMax * 0.95); s.kameras[0]._tempoAnteil = 0.95; }; }")
                         for i in range(70 if fall != "tempo" else 14):
                             pg.evaluate("() => { window.__fix(); }"); pg.evaluate(FRAME, 1)
-                    elif fall == 'funken':
-                        pg.evaluate("() => { const s = Rennspiel.spiel, v = s.fahrzeuge[0].vehicle; v.vLaengs = 25; Rennspiel.Grafik.Effekte.ausloesen(s, 'funken', 0, 40); }")
-                        pg.evaluate(FRAME, 5)
+                    elif fall == 'funken':   # echter Anprall: Fahrzeug an die Bande drücken (Schleifen), Motorrad zusätzlich M3-Funken
+                        pg.evaluate("""() => { const s = Rennspiel.spiel, v = s.fahrzeuge[0].vehicle, st = s.strecke, sp = st.spline, p = sp.punktBei(120), max = st.seitenabstandMax !== undefined ? st.seitenabstandMax : st.breite / 2 + 40;
+                          window.__wand = () => { v.x = p.x + p.nx * (max - 0.3); v.z = p.z + p.nz * (max - 0.3); v.heading = Math.atan2(-p.tx, -p.tz); v.vLaengs = 25; }; window.__wand(); }""")
+                        for i in range(6): pg.evaluate("() => { window.__wand(); }"); pg.evaluate(FRAME, 1)
+                        pg.evaluate("""() => { const s = Rennspiel.spiel, v = s.fahrzeuge[0].vehicle, g = s.motoFxGruppe; window.__wand();
+                          if (g) { const r = [-Math.sin(v.heading), -Math.cos(v.heading)]; Rennspiel.Moto.m3fx.funkenSpawn(g.userData.fx.funken, 40, v.x, s.fahrzeuge[0].mesh.position.y, v.z, r[0], r[1]); } }""")
+                        pg.evaluate(FRAME, 4)
                     elif fall == 'puff':
                         pg.evaluate("() => { Rennspiel.Grafik.Effekte.ausloesen(Rennspiel.spiel, 'puff', 0, 1.2); }")
                         pg.evaluate(FRAME, 14)
@@ -61,12 +66,13 @@ try:
                         else:
                             pg.evaluate("""() => { const s = Rennspiel.spiel, v = s.fahrzeuge[0].vehicle, st = s.strecke, h = st.hindernisse.find((x) => x.typ === 'brand' && !x.lava), sp = st.spline, q = sp.punktBei(h.s - 14);
                               v.x = q.x + q.nx * h.seitenabstand * 0.6; v.z = q.z + q.nz * h.seitenabstand * 0.6; v.vLaengs = 0; v.heading = Math.atan2(-q.tx, -q.tz); }""")
-                        pg.evaluate(FRAME, 60)
+                        pg.evaluate(FRAME, 100)
                     # Kamera
                     nah = {'regen': [0.0, 7.5 if not moto else 6, 2.6, 0], 'tempo': [0.0, 8 if not moto else 6.5, 2.6, 0], 'funken': [0.7, 5.5 if not moto else 5, 1.6, 0], 'puff': [0.6, 8 if not moto else 7, 2.2, 0],
                            'feuer': [0.0, 11, 2.0, 10] if moto else [0.35, 9, 2.2, 14]}.get(fall)
-                    pg.evaluate("""([src, a]) => { const s = Rennspiel.spiel, z0 = s.zeichnen, f = eval(src); window.__kamArgs = a; s.zeichnen = function () { if (window.__kamArgs) f(window.__kamArgs); return z0.apply(this, arguments); }; }""", [KAM, nah])
+                    pg.evaluate("""([src, a]) => { const s = Rennspiel.spiel, z0 = s.zeichnen, f = eval(src); window.__kamArgs = a; s.zeichnen = function () { if (window.__kamArgs) f(window.__kamArgs); return z0.apply(this, arguments); }; }""", [KAM2 if (moto and fall == 'feuer') else KAM, nah])
                     pg.evaluate(FRAME, 1)
+                    pg.evaluate("() => { if (window.__fix) window.__fix(); Rennspiel.spiel.zeichnen(); }")
                     name = f'{spiel}_{stufe}_{fall}'
                     pg.screenshot(path=os.path.join(out, name + '.png'), timeout=180000)
                     d = pg.evaluate("""() => { const s = Rennspiel.spiel, gl = s.renderer.getContext(), r = s.renderer; s.zeichnen(); const calls = r.info.render.calls; gl.finish(); const m = [];

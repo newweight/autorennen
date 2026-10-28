@@ -21,8 +21,8 @@
   const MOTO = window.MOTORRAD === true;
 
   const PARAM = {
-    schoen: { add: 360, norm: 260, funken: 1, flamme: 0.6, blur: 0.32, tropfen: 26, tropfenCockpit: 55, spritz: 0.6 },
-    ultra: { add: 700, norm: 480, funken: 1.7, flamme: 1, blur: 0.7, tropfen: 40, tropfenCockpit: 90, spritz: 1 },
+    schoen: { add: 360, norm: 260, funken: 1, flamme: 0.6, blur: 0.55, tropfen: 26, tropfenCockpit: 55, spritz: 0.6 },
+    ultra: { add: 700, norm: 480, funken: 1.7, flamme: 1, blur: 0.95, tropfen: 40, tropfenCockpit: 90, spritz: 1 },
   };
   const klemme = (v, a, b) => Math.max(a, Math.min(b, v));
   function zufall(seed) {
@@ -52,7 +52,7 @@
       fragmentShader: 'varying float vA; varying vec3 vC; uniform float uKern;\n' +
         'void main(){ vec2 d = gl_PointCoord - 0.5; float r = length(d) * 2.0; if (r > 1.0) discard;\n' +
         ' float f = uKern > 0.5 ? exp(-r * r * 3.2) : smoothstep(1.0, 0.15, r);\n' +
-        ' vec3 c = uKern > 0.5 ? vC + vec3(0.55, 0.45, 0.25) * exp(-r * r * 14.0) : vC;\n' +
+        ' vec3 c = uKern > 0.5 ? vC + vec3(0.3, 0.24, 0.12) * exp(-r * r * 14.0) : vC;\n' +
         ' gl_FragColor = vec4(c, vA * f);\n#include <colorspace_fragment>\n}',
       transparent: true, depthWrite: false, fog: false, blending: additiv ? THREE.AdditiveBlending : THREE.NormalBlending,
     });
@@ -84,6 +84,8 @@
       S.col[i * 3] = S.r0[i] + (S.r1[i] - S.r0[i]) * t; S.col[i * 3 + 1] = S.g0[i] + (S.g1[i] - S.g0[i]) * t; S.col[i * 3 + 2] = S.b0[i] + (S.b1[i] - S.b0[i]) * t;
     }
     S.aktiv = n;
+    if (n === 0 && S.leer) return;
+    S.leer = n === 0;
     const g = S.obj.geometry.attributes;
     g.position.needsUpdate = g.aSize.needsUpdate = g.aAlpha.needsUpdate = g.aCol.needsUpdate = true;
     S.obj.visible = n > 0;
@@ -96,26 +98,29 @@
   const bunt = () => BUNT[Math.floor(rnd() * BUNT.length) % BUNT.length];
 
   function funken(st, x, y, z, rx, rz, n, tempo) {
+    st.zahl.funken++;
     const S = st.add, f = st.P.funken; n = Math.round(n * f);
     for (let k = 0; k < n; k++) {
       const a = (rnd() - 0.5) * 2.6, c = Math.cos(a), s = Math.sin(a), v = zw(2.5, 4 + klemme(tempo, 0, 30) * 0.28);
-      emit(S, x + zw(-0.25, 0.25), y + zw(0, 0.3), z + zw(-0.25, 0.25), (-rx * c + rz * s) * v, zw(0.8, 3.6), (-rz * c - rx * s) * v, zw(0.3, 0.75), 0.17, 0.05, FUNKE0, FUNKE1, 1, 9.8, 0.4);
-      if (k % 3 === 0) emit(S, x, y + 0.15, z, (-rx * c + rz * s) * v * 0.3, 0.4, (-rz * c - rx * s) * v * 0.3, 0.2, 0.55, 0.2, HOF, FUNKE1, 0.55, 0, 2);
+      emit(S, x + zw(-0.25, 0.25), y + zw(0, 0.3), z + zw(-0.25, 0.25), (-rx * c + rz * s) * v, zw(0.8, 3.6), (-rz * c - rx * s) * v, zw(0.3, 0.75), 0.26, 0.08, FUNKE0, FUNKE1, 1, 9.8, 0.4);
+      if (k % 3 === 0) emit(S, x, y + 0.15, z, (-rx * c + rz * s) * v * 0.3, 0.4, (-rz * c - rx * s) * v * 0.3, 0.22, 0.85, 0.3, HOF, FUNKE1, 0.7, 0, 2);
     }
     emit(S, x, y + 0.2, z, 0, 0.2, 0, 0.16, 0.9, 1.5, [1, 0.85, 0.5], HOF, 0.5, 0, 0);
   }
   function puff(st, x, y, z, gross) {
+    st.zahl.puff++;
     const S = st.add, N = st.norm, f = st.P.funken, m = gross || 1;
-    const n = Math.round(34 * f * m);
-    for (let k = 0; k < n; k++) {
-      const th = rnd() * 6.2832, ph = Math.acos(zw(-0.2, 1)), v = zw(2.5, 6.5) * m, c = bunt(), w = [c[0] * 0.5 + 0.5, c[1] * 0.5 + 0.5, c[2] * 0.5 + 0.5];
-      emit(S, x, y + 0.5, z, Math.sin(ph) * Math.cos(th) * v, Math.cos(ph) * v + 1.5, Math.sin(ph) * Math.sin(th) * v, zw(0.8, 1.4), 0.4, 0.1, w, c, 0.95, 4.5, 1.6);
+    const n = Math.round(30 * f * m);
+    for (let k = 0; k < n; k++) {   // bunte Konfetti-Funken (normale Mischung: bleiben auch vor hellem Himmel farbig)
+      const th = rnd() * 6.2832, ph = Math.acos(zw(-0.2, 1)), v = zw(2.5, 6.5) * m, c = bunt();
+      emit(N, x, y + 0.5, z, Math.sin(ph) * Math.cos(th) * v, Math.cos(ph) * v + 1.5, Math.sin(ph) * Math.sin(th) * v, zw(0.8, 1.4), 0.5, 0.2, c, c, 0.95, 4.5, 1.6);
+      if (k % 2 === 0) emit(S, x, y + 0.5, z, Math.sin(ph) * Math.cos(th) * v, Math.cos(ph) * v + 1.5, Math.sin(ph) * Math.sin(th) * v, zw(0.5, 0.9), 0.3, 0.06, [c[0] * 0.8, c[1] * 0.8, c[2] * 0.8], c, 0.8, 4.5, 1.6);
     }
-    emit(S, x, y + 0.7, z, 0, 0.3, 0, 0.28, 2.4 * m, 4.6 * m, [1, 0.95, 0.7], [1, 0.5, 0.3], 0.55, 0, 0);
+    emit(S, x, y + 0.7, z, 0, 0.3, 0, 0.25, 2.2 * m, 4.2 * m, [1, 0.8, 0.45], [1, 0.45, 0.25], 0.4, 0, 0);
     const r = Math.round(10 * Math.min(1.5, f) * m);
     for (let k = 0; k < r; k++) {
       const th = rnd() * 6.2832, v = zw(0.5, 2);
-      emit(N, x + Math.cos(th) * 0.4, y + 0.5, z + Math.sin(th) * 0.4, Math.cos(th) * v, zw(1, 2.4), Math.sin(th) * v, zw(1.4, 2.2), 0.9 * m, 3.4 * m, RAUCH0, RAUCH1, 0.34, -0.15, 1.2);
+      emit(N, x + Math.cos(th) * 0.4, y + 0.5, z + Math.sin(th) * 0.4, Math.cos(th) * v, zw(1, 2.4), Math.sin(th) * v, zw(1.6, 2.4), 1.0 * m, 3.8 * m, [0.72, 0.7, 0.78], [0.86, 0.86, 0.9], 0.5, -0.15, 1.2);
     }
   }
   function flamme(st, x, y, z, breite, hoch) {
@@ -129,8 +134,8 @@
     const q = st.P.spritz, N = st.norm, qx = rz, qz = -rx;
     for (let k = 0; k < 2; k++) {
       const seite = (k ? 1 : -1) * 0.75, v = tempo * 0.12;
-      emit(N, x - rx * 1.5 + qx * seite, y + 0.12, z - rz * 1.5 + qz * seite, -rx * v + qx * seite * 1.6 + zw(-0.4, 0.4), zw(0.7, 1.7), -rz * v + qz * seite * 1.6 + zw(-0.4, 0.4), zw(0.55, 1.0),
-        0.35, zw(1.1, 1.8), [0.78, 0.84, 0.92], [0.9, 0.93, 0.97], 0.22 * q + 0.08, 1.2, 1.5);
+      emit(N, x - rx * 1.5 + qx * seite, y + 0.3, z - rz * 1.5 + qz * seite, -rx * v + qx * seite * 1.6 + zw(-0.4, 0.4), zw(0.7, 1.7), -rz * v + qz * seite * 1.6 + zw(-0.4, 0.4), zw(0.55, 1.0),
+        0.3, zw(0.9, 1.4), [0.82, 0.88, 0.95], [0.92, 0.95, 0.98], 0.2 * q + 0.08, 1.2, 1.5);
     }
   }
 
@@ -144,14 +149,14 @@
     c.width = 640; c.height = 360;
     const g = c.getContext('2d'), w = c.width, h = c.height, cx = w / 2, cy = h / 2, rz = zufall(77);
     const vg = g.createRadialGradient(cx, cy, h * 0.28, cx, cy, Math.hypot(cx, cy));
-    vg.addColorStop(0, 'rgba(8,10,16,0)'); vg.addColorStop(0.55, 'rgba(8,10,16,0.10)'); vg.addColorStop(1, 'rgba(8,10,16,0.55)');
+    vg.addColorStop(0, 'rgba(8,10,16,0)'); vg.addColorStop(0.55, 'rgba(8,10,16,0.16)'); vg.addColorStop(1, 'rgba(8,10,16,0.62)');
     g.fillStyle = vg; g.fillRect(0, 0, w, h);
     g.lineCap = 'round';
     for (let i = 0; i < 90; i++) {
       const a = rz() * 6.2832, r0 = Math.hypot(cx, cy) * (0.5 + rz() * 0.3), r1 = r0 + Math.hypot(cx, cy) * (0.15 + rz() * 0.3), dx = Math.cos(a) * (w / h), dy = Math.sin(a);
       const x0 = cx + dx * r0 * 0.82, y0 = cy + dy * r0 * 0.82, x1 = cx + dx * r1 * 0.82, y1 = cy + dy * r1 * 0.82;
-      const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(255,255,255,' + (0.1 + rz() * 0.22).toFixed(2) + ')');
-      g.strokeStyle = gr; g.lineWidth = 0.8 + rz() * 1.8; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+      const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(255,255,255,' + (0.18 + rz() * 0.3).toFixed(2) + ')');
+      g.strokeStyle = gr; g.lineWidth = 1.1 + rz() * 2.4; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
     }
   }
   let tropfenBild = null;
@@ -222,7 +227,7 @@
       const o = st.ringe[i]; if (!o.parent) continue;
       o.getWorldPosition(_v); if (_v.distanceToSquared(kam) > 110 * 110) continue;
       nah++; const rc = o.geometry.parameters.radius;
-      for (let k = rate(o, 22 * P.flamme), n = 0; n < k; n++) {
+      for (let k = rate(o, 40 * P.flamme), n = 0; n < k; n++) {
         const a = rnd() * 6.2832; _v.set(Math.cos(a) * rc, Math.sin(a) * rc, 0); o.localToWorld(_v); _w.set(Math.cos(a) * (rc + 1), Math.sin(a) * (rc + 1), 0); o.localToWorld(_w); _w.sub(_v);
         emit(st.add, _v.x, _v.y, _v.z, _w.x * zw(0.2, 0.7), _w.y * zw(0.2, 0.7) + zw(1, 2.2), _w.z * zw(0.2, 0.7), zw(0.55, 1), zw(0.75, 1.2), 0.15, FLAMME0, FLAMME1, 0.75, -0.6, 0.7);
       }
@@ -298,7 +303,7 @@
   // ---------- Anwenden / Zurück / Bild ----------
   function effAn(sp, stufe) {
     const P = PARAM[stufe]; if (!P) return;
-    const st = sp._g4 = { stufe, P, aktiv: false, add: systemBauen(P.add, true), norm: systemBauen(P.norm, false), zeit: 0, t0: 0, frame: 0 };
+    const st = sp._g4 = { stufe, P, aktiv: false, add: systemBauen(P.add, true), norm: systemBauen(P.norm, false), zeit: 0, t0: 0, frame: 0, zahl: { funken: 0, puff: 0 } };
     sp.szene.add(st.norm.obj); sp.szene.add(st.add.obj);
     try { ueberlagerungAn(sp, st); } catch (e) { try { console.warn('Grafik G4 Overlay:', e); } catch (e2) { /* egal */ } }
     try { quellenSuchen(sp, st); } catch (e) { st.ringe = []; st.brand = []; }
@@ -338,7 +343,7 @@
       schritt(st.add, dt); schritt(st.norm, dt);
     }
     // Tempo-Streifen
-    const tA = klemme(kam._tempoAnteil || 0, 0, 1), blur = zwei || pause ? 0 : st.P.blur * klemme((tA - 0.55) / 0.4, 0, 1) * (cockpit ? 0.45 : 1);
+    const tA = klemme(kam._tempoAnteil || 0, 0, 1), blur = zwei || pause ? 0 : st.P.blur * klemme((tA - 0.55) / 0.4, 0, 1) * (cockpit ? 0.5 : 1);
     if (st.streifen) {
       const an = blur > 0.01;
       st.streifen.style.display = an ? 'block' : 'none'; st.streifen.style.opacity = an ? blur.toFixed(3) : '0';
@@ -377,7 +382,7 @@
 
   G.Effekte = {
     PARAM,
-    zaehler: (sp) => (sp && sp._g4 ? { add: sp._g4.add.aktiv, norm: sp._g4.norm.aktiv, tropfen: sp._g4.tr ? sp._g4.tr.length : 0, ringe: sp._g4.ringe ? sp._g4.ringe.length : 0, brand: sp._g4.brand ? sp._g4.brand.length : 0 } : null),
+    zaehler: (sp) => (sp && sp._g4 ? { add: sp._g4.add.aktiv, norm: sp._g4.norm.aktiv, tropfen: sp._g4.tr ? sp._g4.tr.length : 0, ringe: sp._g4.ringe ? sp._g4.ringe.length : 0, funken: sp._g4.zahl.funken, puff: sp._g4.zahl.puff, brand: sp._g4.brand ? sp._g4.brand.length : 0 } : null),
     /** Prüfhilfen (nur Schön/Ultra): Effekt an Fahrzeug nr auslösen. */
     ausloesen: (sp, art, nr, staerke) => {
       const st = sp && sp._g4; if (!st) return false;
