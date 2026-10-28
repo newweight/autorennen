@@ -37,13 +37,13 @@
   klasse([0x80868d], 0.8, 0.35);                                                // Bremse
   klasse([0xd9a626], 0.9, 0.28);                                                // Gold (Gabel)
   klasse([0x4b5058], 0.7, 0.4);                                                 // Motorblock
-  klasse([0x18222c, 0x2c3c4c, 0x3b4d62, 0x2b78e0], 0.65, 0.05);                 // Glas (Scheiben, Verkleidungsscheibe)
+  klasse([0x18222c, 0x2c3c4c, 0x3b4d62, 0x2b78e0], 0.5, 0.06);                 // Glas (Scheiben, Verkleidungsscheibe)
   klasse([0x26292e, 0x131518, 0x0d0e10, 0x17181a, 0x1b1b1c, 0x25272b, 0x2c2e33, 0xcdb48a, 0x1e1f23, 0x41454c, 0x15171a,
     0x16171b, 0x111214, 0x23262d, 0x16181c, 0x6a707a], 0.0, 0.88);               // matt: Kunststoff, Reifen, Innenraum, Verdeck, Stiefel …
   const GLEICH = 0.0025;
   // Standardklasse je Mesh-Name, wenn die Farbe keine bekannte ist
   const STANDARD = { rad: [0.92, 0.2], teile: [0.3, 0.55], lenkTeile: [0.3, 0.55], fahrer: [0.0, 0.85] };
-  const LACK = { schoen: [0.25, 0.3], ultra: [0.3, 0.26] };
+  const LACK = { schoen: [0.08, 0.4], ultra: [0.1, 0.32] };
 
   function geoMitPbr(geo, name, stufe) {
     const cache = geoMitPbr.cache || (geoMitPbr.cache = new WeakMap());
@@ -51,15 +51,17 @@
     let e = cache.get(geo); if (!e) { e = {}; cache.set(geo, e); }
     if (e[schluessel]) return e[schluessel];
     const col = geo.attributes.color; if (!col) return null;
-    const n = col.count, a = new Float32Array(n * 2), std = STANDARD[name] || LACK[stufe];
-    let letzte = -1, lm = std[0], lr = std[1];
+    const n = col.count, a = new Float32Array(n * 2), neuFarbe = new Float32Array(n * 3), std = STANDARD[name] || LACK[stufe];
+    let lack = false, letzte = -1, lm = std[0], lr = std[1];
     for (let i = 0; i < n; i++) {
       const r = col.getX(i), g = col.getY(i), b = col.getZ(i), k = (Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255);
       if (k !== letzte) {
-        letzte = k; lm = std[0]; lr = std[1];
-        for (let j = 0; j < KLASSEN.length; j++) { const c = KLASSEN[j].rgb; if (Math.abs(c[0] - r) < GLEICH && Math.abs(c[1] - g) < GLEICH && Math.abs(c[2] - b) < GLEICH) { lm = KLASSEN[j].m; lr = KLASSEN[j].r; break; } }
+        letzte = k; lm = std[0]; lr = std[1]; lack = !STANDARD[name];
+        for (let j = 0; j < KLASSEN.length; j++) { const c = KLASSEN[j].rgb; if (Math.abs(c[0] - r) < GLEICH && Math.abs(c[1] - g) < GLEICH && Math.abs(c[2] - b) < GLEICH) { lm = KLASSEN[j].m; lr = KLASSEN[j].r; lack = false; break; } }
       }
       a[i * 2] = lm; a[i * 2 + 1] = lr;
+      const f = lack ? 0.62 : 1;           // Lack etwas abdunkeln (ACES hellt/sättigt auf), Chrom/Glas/Kunststoff unverändert
+      neuFarbe[i * 3] = r * f; neuFarbe[i * 3 + 1] = g * f; neuFarbe[i * 3 + 2] = b * f;
     }
     const g2 = new THREE.BufferGeometry();       // teilt alle Attribut-Puffer mit dem Original (kein Speicher-Mehrverbrauch außer g1Pbr)
     Object.keys(geo.attributes).forEach((k) => g2.setAttribute(k, geo.attributes[k]));
@@ -67,6 +69,7 @@
     g2.groups = geo.groups.map((x) => Object.assign({}, x));
     if (geo.boundingSphere) g2.boundingSphere = geo.boundingSphere.clone();
     if (geo.boundingBox) g2.boundingBox = geo.boundingBox.clone();
+    g2.setAttribute('color', new THREE.BufferAttribute(neuFarbe, 3));
     g2.setAttribute('g1Pbr', new THREE.BufferAttribute(a, 2));
     g2.userData.g1Original = geo;
     e[schluessel] = g2;
@@ -89,7 +92,7 @@
     const st = sp._g1;
     if (st.env) { st.env.dispose(); st.env = null; }
     const hz = sp.szene.background && sp.szene.background.isColor ? sp.szene.background.clone() : new THREE.Color(0x8fc8ff);
-    const zen = hz.clone().multiply(new THREE.Color(0.5, 0.7, 1.05));
+    const zen = hz.clone().multiply(new THREE.Color(0.72, 0.82, 1.0));
     const boden = hz.clone().multiplyScalar(0.28).lerp(new THREE.Color(0x3f5a2a), 0.3);
     const geo = new THREE.SphereGeometry(50, 32, 16), pos = geo.attributes.position, farben = new Float32Array(pos.count * 3), c = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
@@ -134,16 +137,16 @@
 
   function matVeredeln(st, orig, name, stufe) {
     const k = orig; let m = st.mats.get(k); if (m) return m;
-    const schoen = stufe === 'schoen', ei = schoen ? 0.8 : 1.0;
-    const gemeinsam = { envMap: st.envTex, envMapIntensity: ei, side: orig.side };
+    const schoen = stufe === 'schoen', ei = schoen ? 0.45 : 0.55;
+    const gemeinsam = { envMap: st.envTex, envMapIntensity: orig.vertexColors ? ei : name === 'rad' ? 0.15 : name === 'felge' ? ei * 1.5 : ei * 0.5, side: orig.side };
     if (orig.vertexColors) {
       Object.assign(gemeinsam, { vertexColors: true, roughness: 1, metalness: 1 });
     } else {
       const c = name === 'felge' ? [0.92, 0.2] : name === 'rad' ? [0, 0.9] : LACK[stufe];
-      Object.assign(gemeinsam, { color: orig.color.clone(), roughness: c[1], metalness: c[0] });
+      Object.assign(gemeinsam, { color: orig.color.clone().multiplyScalar(0.8), roughness: c[1], metalness: c[0] });
     }
     if (schoen) m = new THREE.MeshStandardMaterial(gemeinsam);
-    else m = new THREE.MeshPhysicalMaterial(Object.assign(gemeinsam, { clearcoat: 0.8, clearcoatRoughness: 0.06 }));
+    else m = new THREE.MeshPhysicalMaterial(Object.assign(gemeinsam, { clearcoat: 0.7, clearcoatRoughness: 0.05 }));
     if (orig.vertexColors) pbrEinhaengen(m);
     st.mats.set(k, m); st.erzeugt.set(m, orig);
     return m;
@@ -165,6 +168,13 @@
       } else if (EMPFAENGER[n] && o.material && o.material.isMeshLambertMaterial) {
         st.orig.set(o, { recv: o.receiveShadow }); o.receiveShadow = true;
       }
+    });
+    // Himmel/Wetter (Wolken, Regen, Feuerwerk) bleiben wie sie sind: der Hintergrund wird nicht tone-gemappt, die Wolken sollen nicht zum Himmel „verblassen“
+    sp.szene.traverse((o) => {
+      let wetter = o.isPoints; for (let a = o; a && !wetter; a = a.parent) wetter = /^Wetter/.test(a.name);
+      if (!wetter || !o.material) return;
+      const ms = Array.isArray(o.material) ? o.material : [o.material];
+      ms.forEach((m) => { if (m && m.toneMapped && !st.tm.has(m)) { st.tm.add(m); m.toneMapped = false; m.needsUpdate = true; } });
     });
     if (stufe === 'ultra') glowAnlegen(sp);
   }
@@ -206,6 +216,7 @@
     st.glows.forEach((s) => { if (s.parent) s.parent.remove(s); s.material.dispose(); });
     st.mats.forEach((m) => m.dispose());
     if (st.env) { st.env.dispose(); st.env = null; }
+    st.tm.forEach((m) => { m.toneMapped = true; m.needsUpdate = true; }); st.tm = new Set();
     st.orig = new Map(); st.mats = new Map(); st.erzeugt = new Map(); st.glows = []; st.glowFuer = new WeakSet(); st.envTex = null;
     if (st.merk) {
       const r = sp.renderer, m = st.merk;
@@ -224,7 +235,7 @@
     const stufe = G.stufe;
     if (!sp._g1) {
       if (stufe === 'normal') return;               // NORMAL: nichts anfassen
-      sp._g1 = { aktiv: false, orig: new Map(), mats: new Map(), erzeugt: new Map(), glows: [], glowFuer: new WeakSet(), env: null, envTex: null, merk: null, zaehler: 0 };
+      sp._g1 = { tm: new Set(), aktiv: false, orig: new Map(), mats: new Map(), erzeugt: new Map(), glows: [], glowFuer: new WeakSet(), env: null, envTex: null, merk: null, zaehler: 0 };
     }
     const st = sp._g1;
     if (st.aktiv) zurueck(sp);
@@ -234,7 +245,7 @@
     const ultra = stufe === 'ultra';
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.ACESFilmicToneMapping;
-    r.toneMappingExposure = 1.0;
+    r.toneMappingExposure = 1.2;       // ACES drückt die Mitteltöne – Welt dafür etwas heller
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
     st.richtung = s.position.clone().normalize();
