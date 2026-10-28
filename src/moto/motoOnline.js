@@ -11,7 +11,7 @@
 //   Eingabe          Trick-Taste als Bit `k` in jeder eingabe-Nachricht (gehalten oder angetippt).
 //   Ergebnis         Spalte „Stunt“ (beim Stuntrennen Platz- + Stuntpunkte, Rang), Meldung der Stuntpunkte an die Portal-Bestenliste.
 //   Server-Adresse   window.MOTORRAD_SERVER (z. B. 'mac-mini.tailnet.ts.net' oder 'wss://…'), wenn Motorrad.html NICHT vom Spielserver kommt (Portal, Port 10002).
-//   Bestenliste      R.Moto.bestenliste.melden(eintrag): POST {window.MOTORRAD_PORTAL}/api/bestenliste (Beschreibung: server/README.md, Abschnitt „Motorrad M4“).
+//   Bestenliste      R.Moto.bestenliste.melden(eintrag): POST {window.MOTORRAD_PORTAL}/api/bestenliste {spiel:'motorrad', modus, name, punkte} (Beschreibung: server/README.md, „Motorrad M4“).
 // Abschalten: window.MOTORRAD_ONLINE = false (vor dem Laden) → alles wie in M3 (nur offline).
 // ============================================================
 (function () {
@@ -31,8 +31,12 @@
   // ================================================================ Server-Adresse (Portal-Seite ≠ Spielserver)
   // Erlaubt: host[:port] oder ws(s)://host[:port] – nur Buchstaben, Ziffern, Punkt, Minus (keine Pfade, keine Zugangsdaten). Wird vom Betreiber in Motorrad.html gesetzt, NICHT aus der Adresszeile
   // gelesen (ein Link darf Kinder nicht auf einen fremden Server schicken).
+  // Standard für das Spieleportal: Motorrad.html unter Port 10002 (portal_server.py) → Spielserver am selben Rechner auf Port 10000 (wie die Autorennen-Karte im Portal),
+  // mit dem Protokoll der Seite (https → wss). Ist window.MOTORRAD_SERVER gesetzt, gilt das; kommt die Seite vom Spielserver selbst (/Motorrad.html), bleibt alles wie es ist (gleiche Adresse).
   function serverUrlSetzen() {
-    const roh = typeof window.MOTORRAD_SERVER === 'string' ? window.MOTORRAD_SERVER.trim() : '';
+    let roh = typeof window.MOTORRAD_SERVER === 'string' ? window.MOTORRAD_SERVER.trim() : '';
+    const l = window.location;
+    if (!roh && l && l.port === '10002' && l.hostname) roh = l.hostname + ':10000';
     if (!roh) return null;
     const m = /^(wss?:\/\/)?([A-Za-z0-9][A-Za-z0-9.\-]*(?::\d{1,5})?)\/?$/.exec(roh);
     if (!m) { console.error('MOTORRAD_SERVER ungültig:', roh); return null; }
@@ -49,7 +53,12 @@
   if (o.verfuegbar) R.Online.verfuegbar = o.verfuegbar;
   const MP = R.Menue.prototype;
   if (o.onlineOeffnen) MP.onlineOeffnen = o.onlineOeffnen;
-  if (o.htmlOnlineKarte) MP.htmlOnlineKarte = function () { return o.htmlOnlineKarte.apply(this, arguments).replace('Mit Freunden übers Internet: Raum + Code', 'Mit Freunden: Motorrad-Raum + Code <kbd>O</kbd>'); };
+  if (o.htmlOnlineKarte) {
+    MP.htmlOnlineKarte = function () {       // der Text steht zweimal in der Karte (title="…" und sichtbar): zuerst das Attribut (ohne <kbd>), dann den sichtbaren Text
+      return o.htmlOnlineKarte.apply(this, arguments).split('title="Mit Freunden übers Internet: Raum + Code"').join('title="Mit Freunden: Motorrad-Raum + Code (Taste O)"')
+        .split('Mit Freunden übers Internet: Raum + Code').join('Mit Freunden: Motorrad-Raum + Code <kbd>O</kbd>');
+    };
+  }
   const tasteAlt = MP.taste;
   MP.taste = function (code) {
     const frei = !(this.onlineUi && this.onlineUi.sichtbar) && !(this.garageUi && this.garageUi.sichtbar);
@@ -64,7 +73,7 @@
     for (let n = w.nextNode(); n; n = w.nextNode()) {
       const alt = n.nodeValue;
       if (!/Auto|🚗|🏎/.test(alt)) continue;
-      const neu = alt.replace(/\bAutos\b/g, 'Motorräder').replace(/\bAuto\b/g, 'Motorrad').replace(/🚗/g, '🏍️').replace(/Rempeln \(gut bei/g, 'Rempeln (gut bei');
+      const neu = alt.replace(/\bAutos\b/g, 'Motorräder').replace(/\bAuto\b/g, 'Motorrad').replace(/🚗/g, '🏍️').replace(/🏎️?/g, '🏍️');
       if (neu !== alt) n.nodeValue = neu;
     }
   }
@@ -73,39 +82,44 @@
   B.zeichnen = function () { const r = zeichnenAlt.apply(this, arguments); try { texteErsetzen(this.wurzel); } catch (e) { /* nur Optik */ } return r; };
 
   // ================================================================ Bestenliste (Portal)
-  // Schnittstelle zum Portal (liegt nicht in diesem Repo): POST <MOTORRAD_PORTAL>/api/bestenliste, JSON
-  //   { spiel: 'motorrad', art: 'stunt', name, punkte, platz, strecke, zeit, modus: 'online' | 'stuntrennen-online', raum }
-  // Alternativ ruft window.MOTORRAD_BESTENLISTE(eintrag) das Portal selbst auf (z. B. iframe-postMessage). Nicht gesendete Meldungen werden (max. 20) im Browser
-  // vorgemerkt und beim nächsten Start/der nächsten Meldung nachgeholt. Der Server rechnet die Punkte; dieser Client meldet sie nur weiter.
+  // Schnittstelle zum Portal (liegt nicht in diesem Repo; portal_server.py, Port 10002): POST <MOTORRAD_PORTAL>/api/bestenliste, JSON
+  //   { spiel: 'motorrad', modus: 'stunt-online' | 'stuntrennen-online', name, punkte }          (wie Snake/Tetris/Air-Hockey: ganze Punkte, größer = besser)
+  // Der Portal-Server muss dafür nur BESTEN_SPIELE um "motorrad": {"stunt-online", "stuntrennen-online"} ergänzen (Beschreibung: server/README.md, „Motorrad M4“).
+  // window.MOTORRAD_BESTENLISTE(eintrag) ersetzt den POST (z. B. iframe-postMessage ans Portal); der Eintrag enthält dann zusätzlich platz/strecke/zeit/raum.
+  // Nicht gesendete Meldungen (Portal nicht erreichbar, 5xx) merkt sich der Browser (max. 20) und holt sie beim nächsten Start nach; eine Ablehnung (4xx, z. B. Portal kennt
+  // „motorrad“ noch nicht) wird verworfen, nicht ewig wiederholt. Der Server rechnet die Punkte; dieser Client meldet sie nur weiter.
   const SCHLUESSEL = 'motorrad.bestenliste.offen';
+  const BL_MODI = ['stunt-online', 'stuntrennen-online'];
   function warteschlange() { try { const l = JSON.parse(window.localStorage.getItem(SCHLUESSEL) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
   function warteschlangeSchreiben(l) { try { window.localStorage.setItem(SCHLUESSEL, JSON.stringify(l.slice(-20))); } catch (e) { /* egal */ } }
   function eintragPruefen(e) {
     if (!e || typeof e.name !== 'string' || !e.name || e.name.length > 40) return null;
     const p = Math.floor(+e.punkte);
     if (!(p > 0) || p > 10000000) return null;
-    return { spiel: 'motorrad', art: 'stunt', name: e.name, punkte: p, platz: Math.max(0, Math.min(99, Math.floor(+e.platz) || 0)), strecke: String(e.strecke || '').slice(0, 40),
-      zeit: typeof e.zeit === 'number' && isFinite(e.zeit) ? Math.round(e.zeit * 100) / 100 : null, modus: e.modus === 'stuntrennen-online' ? 'stuntrennen-online' : 'online', raum: String(e.raum || '').slice(0, 8) };
+    return { spiel: 'motorrad', modus: BL_MODI.indexOf(e.modus) >= 0 ? e.modus : 'stunt-online', name: e.name, punkte: p, platz: Math.max(0, Math.min(99, Math.floor(+e.platz) || 0)),
+      strecke: String(e.strecke || '').slice(0, 40), zeit: typeof e.zeit === 'number' && isFinite(e.zeit) ? Math.round(e.zeit * 100) / 100 : null, raum: String(e.raum || '').slice(0, 8) };
   }
+  /** Antwort: 'ok' | 'dauerhaft' (vom Portal abgelehnt) | 'spaeter' (nicht erreichbar, nochmal versuchen). */
   function senden(eintrag) {
-    if (typeof window.MOTORRAD_BESTENLISTE === 'function') { try { return Promise.resolve(window.MOTORRAD_BESTENLISTE(eintrag)).then(() => true, () => false); } catch (e) { return Promise.resolve(false); } }
-    if (typeof fetch !== 'function') return Promise.resolve(false);
+    if (typeof window.MOTORRAD_BESTENLISTE === 'function') { try { return Promise.resolve(window.MOTORRAD_BESTENLISTE(eintrag)).then((ok) => (ok === false ? 'spaeter' : 'ok'), () => 'spaeter'); } catch (e) { return Promise.resolve('spaeter'); } }
+    if (typeof fetch !== 'function') return Promise.resolve('spaeter');
     const basis = typeof window.MOTORRAD_PORTAL === 'string' ? window.MOTORRAD_PORTAL.replace(/\/+$/, '') : '';
-    return fetch(basis + '/api/bestenliste', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eintrag), keepalive: true })
-      .then((r) => !!r && r.ok, () => false);
+    const body = JSON.stringify({ spiel: eintrag.spiel, modus: eintrag.modus, name: eintrag.name, punkte: eintrag.punkte });
+    return fetch(basis + '/api/bestenliste', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true })
+      .then((r) => (r && r.ok ? 'ok' : (r && r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429 ? 'dauerhaft' : 'spaeter')), () => 'spaeter');
   }
   function nachholen() {
     const l = warteschlange();
     if (!l.length) return;
     warteschlangeSchreiben([]);
-    l.forEach((e) => { senden(e).then((ok) => { if (!ok) warteschlangeSchreiben(warteschlange().concat([e])); }); });
+    l.forEach((e) => { senden(e).then((a) => { if (a === 'spaeter') warteschlangeSchreiben(warteschlange().concat([e])); }); });
   }
   function melden(roh) {
     const e = eintragPruefen(roh);
     if (!e) return Promise.resolve(false);
-    return senden(e).then((ok) => { if (!ok) warteschlangeSchreiben(warteschlange().concat([e])); else nachholen(); return ok; });
+    return senden(e).then((a) => { if (a === 'spaeter') warteschlangeSchreiben(warteschlange().concat([e])); else if (a === 'ok') nachholen(); else console.warn('Bestenliste: vom Portal abgelehnt (Spiel/Modus dort eingetragen?)'); return a === 'ok'; });
   }
-  M.bestenliste = { melden, eintragPruefen, warteschlange, nachholen };
+  M.bestenliste = { melden, eintragPruefen, warteschlange, nachholen, senden, MODI: BL_MODI };
   try { window.addEventListener('load', () => setTimeout(nachholen, 3000)); } catch (e) { /* ohne Fenster */ }
 
   // ================================================================ Trick-Taste online
@@ -174,6 +188,13 @@
   async function serverKannMotorrad(ui) {
     if (ui.serverMoto === null && ui._halloP) await ui._halloP;
     return ui.serverMoto === true;
+  }
+  /** Einladungslink: basis = Adresse laut Autorennen-Regel (…/ der eigenen Herkunft oder die öffentliche https-Adresse des Spielservers). Eigene Herkunft → genau diese Seite (auch im Portal
+   *  unter /motorrad/), öffentliche Spielserver-Adresse → deren /Motorrad.html (der Spielserver liefert sie bei eingeschaltetem Motorrad-Schalter aus). */
+  function einladung(basis, code) {
+    const l = window.location;
+    if (l && basis === l.origin + '/') return l.origin + (l.pathname || '/') + '?raum=' + code;
+    return basis + 'Motorrad.html?raum=' + code;
   }
   function nachrichtAnpassen(msg, e) {
     msg.moto = true;
@@ -352,9 +373,9 @@
     }
     try { texteErsetzen(ui.ergEl); } catch (e) { /* nur Optik */ }
     if (eigene && eigene.stunt > 0) {
-      melden({ name: eigene.name, punkte: eigene.stunt, platz: eigene.platz, strecke: K.strecke, zeit: eigene.zeit, modus: m.stuntrennen === true ? 'stuntrennen-online' : 'online', raum: K.raum });
+      melden({ name: eigene.name, punkte: eigene.stunt, platz: eigene.platz, strecke: K.strecke, zeit: eigene.zeit, modus: m.stuntrennen === true ? 'stuntrennen-online' : 'stunt-online', raum: K.raum });
     }
   }
 
-  M.online = { verbindung, serverKannMotorrad, nachrichtAnpassen, zeilen, werte, wertSetzen, lobbyHost, lobbyGast, aufbau, abbau, eingabe, zustand, ereignis, ergebnis, bildVor, texteErsetzen, serverUrl };
+  M.online = { verbindung, serverKannMotorrad, einladung, nachrichtAnpassen, zeilen, werte, wertSetzen, lobbyHost, lobbyGast, aufbau, abbau, eingabe, zustand, ereignis, ergebnis, bildVor, texteErsetzen, serverUrl };
 })();

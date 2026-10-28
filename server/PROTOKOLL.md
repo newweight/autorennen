@@ -194,6 +194,42 @@ Browser: Zeile erscheint nur bei `recht:true`; Einschalten verlangt einen zweite
 
 ---
 
+# Motorrad online (M4, 28.10.2026) – additiv, Protokoll-Version bleibt 4
+
+Motorrad-Räume laufen auf **demselben Spielserver und demselben `/ws`** wie die Autorennen-Räume – aber hinter einem Schalter und in **eigenen, getrennten Räumen**.
+Ohne Schalter (Standard) verhält sich der Server bitgleich wie vorher; ein alter Autorennen-Client merkt von M4 nichts (er schickt nie `moto`/`k` und bekommt nie `mo`/`mu`).
+
+**Schalter** (Server): `node server/server.js --motorrad` · Umgebungsvariable `MOTORRAD_ONLINE=1` · oder die leere Datei `<Spielordner>/motorrad.an` (wirkt ohne Neustart, höchstens 2 s Verzögerung;
+Spielordner = Elternordner von `server/`). Aus: `hallo` ohne `moto`, `raumErstellen {moto:true}` → `fehler {grund:'keinMotorrad'}` (ohne Zeitsperre, ohne Raumwechsel), `/Motorrad.html` → 404.
+
+**Browser → Server (neu)**
+- `raumErstellen {moto:true, einstellungen:{…, unfall:'aus'|'sanft'|'echt', stuntrennen:bool}}` · `raumBeitreten {code, moto:true}` – ohne `moto:true` (alte Clients, Autorennen) entsteht/gilt ein Autoraum.
+  Beitritt mit der falschen Art → `fehler {grund:'falscheArt'}` (kein Fehlversuch-Zähler, Raum bleibt unberührt). Der Client fragt vorher `hallo.moto` ab (alter Server schweigt dazu → „kann noch kein Motorrad online“).
+- `einstellungen {…, unfall, stuntrennen}` (nur Host, Lobby/Ergebnis): `unfall` nur aus der Liste (sonst `sanft`), `stuntrennen` nur ein echtes `true` zählt.
+- `wahl {auto}` / `raumErstellen.auto`: nur Fahrzeuge des **Motorrad-Katalogs** (Crossmaschinen in 8 Farben + Superbike, Roller, Chopper, Quad); Auto-IDs → `fehler {grund:'ungueltig'}`.
+- `eingabe {…, k:1}`: Trick-Taste (Salto/Drehung/Wheelie-Taste) gehalten oder seit der letzten Nachricht angetippt. Wie `r`/`i`: Flanken überleben das Verwerfen überholter Eingaben.
+
+**Server → Browser (neu, nur Motorrad-Räume)**
+- `hallo {…, moto:true}` nur bei eingeschaltetem Schalter. `lobby.einstellungen` enthält `moto:true`, `unfall`, `stuntrennen`; Polizei/Geisterfahrer/Krankenwagen/Abschleppwagen/Verkehr/„Nur Rennautos“ sind erzwungen aus.
+- `start.stationen = {w, k}`: Bogenlänge (m, 2 Stellen) von Werkstatt und Krankenstation (Gegenprobe: der Browser baut sie selbst und muss auf dieselben Plätze kommen).
+- `zustand.mo[i]` (alle Teilnehmer, gleiche Reihenfolge wie `a`): `[0 sturzAnzahl, 1 stuntPunkte, 2 comboMult, 3 comboRestSek, 4 motorrad%, 5 fahrer%, 6 flags, 7 gier, 8 salto, 9 hoehe, 10 nick, 11 meter, 12 szene|0]`
+  - `flags`: 1 Purzelbaum läuft · 2 an einer Station (Halt) · 4 Station: steht · 8 Szene vor Ort · 16 Wheelie · 32 Stoppie · 64 Trick läuft · 128 in der Luft · 256 Halt an der Krankenstation (sonst Werkstatt)
+  - `gier/salto/hoehe/nick`: Pose des Stunts (rad, rad, m, rad) – Schräglage rechnet der Client selbst (aus der Gierrate, wie offline)
+  - `szene`: `[art 0 Abschleppwagen/1 Krankenwagen, phase 0 wartet/1 läuft, t, sB, qB, qH, dir, pflege, frei 0/1, tFrei]` (Szene vor Ort; `0` = keine)
+- `ich.mu = [motorrad%, fahrer%, haltebremse 0/1]` des eigenen Fahrers, **ungerundet** (die Vorhersage rechnet Höchsttempo/Beschleunigung und Haltebremse wie der Server); fehlt im Modus „Unfälle aus“.
+- `ereignis` (an alle, `an:null`): `{art:'stunt', nr, st, name, p, m, g, x}` (Art, Name, Punkte, Combo-Faktor, Gesamt, Meter/Anzahl) · `{art:'sturz', nr, n}` (Purzelbaum Nr. n; das Quad stürzt nie) ·
+  `{art:'unfall', nr, folge:'schreck'|'schaden'|'leicht'|'schwer', szene:'abschlepp'|'kranken'|null, z, gs}` (Folge nach einem Sturz, Motorrad-/Fahrer-% danach).
+  Texte für den Betroffenen („Huch! Alles heil“, „Der Krankenwagen kommt!“ …) kommen wie bei Autos als `ereignis {art:'meldung'}` an ihn.
+- `ergebnis.zeilen[].stunt` = Stuntpunkte, `ergebnis.stuntrennen` (bool): beim Stuntrennen zählt der Browser Platz- + Stuntpunkte zusammen (`stuntrennenWertung`).
+
+**Simulation** (`server/motoSim.js`, `server/simulation.js` `opt.moto`): zweiter vm-Kontext mit denselben Modulen wie `Motorrad.html` (Katalog, M3-Typen, Strecken-Anpassungen, Schräglage/Sturz, Stunts, Unfälle); der Autorennen-Kontext bleibt unberührt.
+Zufall: keine `Math.random` – Folge nach Sturz und KI-Tricks deterministisch (Saat aus Strecke + Fahrer-Nr.). Das Quad wird nach jedem Schritt entschärft (kein Überschlag, kein Sturz-Ereignis).
+Bewusst **nicht** im Server (nur Grafik/Ton): Quad-Wackeln, Auspuffknall, Funken; Schlamm/Wasser/Kisten/Steilwand gibt es nur im Stunt-Park (nur offline).
+Tests: `node tests/test_moto_netz.js` (Server + Clients über WebSocket, Determinismus Server ↔ Vorhersage, Räume getrennt, alter Client), `python3 tests/moto_netz_browser.py` (zwei echte Browser).
+
+**Stuntpunkte → Portal-Bestenliste:** Der Client meldet nach dem Rennen seine eigenen Stuntpunkte an das Portal (`POST {MOTORRAD_PORTAL}/api/bestenliste`, Body `{spiel:'motorrad', modus:'stunt-online'|'stuntrennen-online', name, punkte}`),
+siehe `server/README.md`, Abschnitt „Motorrad online (M4)“. Der Spielserver selbst spricht nie mit dem Portal.
+
 # Brettspiele: WebSocket `/ws-brett` (4 gewinnt, Schach)
 
 Eigener Pfad (`wss:` hinter HTTPS), eigenes Protokoll – das Autorennen-Protokoll `/ws` bleibt unverändert. Code: `server/brettspiele.js`,

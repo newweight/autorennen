@@ -683,7 +683,7 @@
 
     htmlLobby(hw) {
       const L = this.lobby, e = L.einstellungen, c = R.config;
-      const link = einladungsBasis(L.oeffentlich) + (MO() ? 'Motorrad.html' : '') + '?raum=' + L.code;          // M4: Motorrad-Gäste öffnen Motorrad.html
+      const link = MO() ? MO().einladung(einladungsBasis(L.oeffentlich), L.code) : einladungsBasis(L.oeffentlich) + '?raum=' + L.code;          // M4: Motorrad-Gäste öffnen die Motorrad-Seite (nicht Autorennen.html)
       let qr = '';
       try { qr = R.QR ? R.QR.svg(link, { modul: 3, rand: 2 }) : ''; } catch (err) { qr = ''; }
       const autoName = (id) => { const a = R.carCatalog.waehlbare().find(x => x.id === id); return a ? a.name : id; };
