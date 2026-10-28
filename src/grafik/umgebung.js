@@ -18,8 +18,8 @@
   if (!G || typeof THREE === 'undefined') return;
 
   const PARAM = {
-    schoen: { gras: 2600, blumen: 420, klingen: 5, tannSeg: 8, tannLagen: 5, laubBlobs: 5, staub: 70, oktaven: 4, zirren: false, bump: false },
-    ultra: { gras: 8000, blumen: 1600, klingen: 7, tannSeg: 11, tannLagen: 7, laubBlobs: 7, staub: 200, oktaven: 6, zirren: true, bump: true },
+    schoen: { gras: 7000, blumen: 500, klingen: 6, tannSeg: 8, tannLagen: 5, laubBlobs: 5, staub: 70, oktaven: 4, zirren: false, bump: false },
+    ultra: { gras: 22000, blumen: 1800, klingen: 8, tannSeg: 11, tannLagen: 7, laubBlobs: 7, staub: 200, oktaven: 6, zirren: true, bump: true },
   };
 
   function zufall(seed) {
@@ -113,11 +113,11 @@
   function grasbueschel(klingen) {
     const rnd = zufall(77), pos = [], col = [], nor = [];
     for (let k = 0; k < klingen; k++) {
-      const w = (k / klingen) * Math.PI * 2 + rnd() * 0.6, rad = 0.05 + rnd() * 0.07, hoehe = 0.34 + rnd() * 0.4, lean = 0.05 + rnd() * 0.17, bw = 0.045 + rnd() * 0.03;
+      const w = (k / klingen) * Math.PI * 2 + rnd() * 0.6, rad = 0.05 + rnd() * 0.07, hoehe = 0.22 + rnd() * 0.3, lean = 0.04 + rnd() * 0.12, bw = 0.03 + rnd() * 0.022;
       const cx = Math.cos(w) * rad, cz = Math.sin(w) * rad, tx = Math.cos(w + 1.57) * bw, tz = Math.sin(w + 1.57) * bw;
       pos.push(cx - tx, 0, cz - tz, cx + tx, 0, cz + tz, cx + Math.cos(w) * lean, hoehe, cz + Math.sin(w) * lean);
       const ton = 0.85 + 0.3 * rnd();
-      col.push(0.5 * ton, 0.5 * ton, 0.5 * ton, 0.5 * ton, 0.5 * ton, 0.5 * ton, 1.18 * ton, 1.18 * ton, 1.18 * ton);
+      col.push(0.78 * ton, 0.78 * ton, 0.78 * ton, 0.78 * ton, 0.78 * ton, 0.78 * ton, 1.3 * ton, 1.3 * ton, 1.3 * ton);
       nor.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
     }
     const g = new THREE.BufferGeometry();
@@ -300,9 +300,9 @@ void main(){
     // Grundfarbe aus dem Boden (Jahreszeit/Thema wirken automatisch)
     const grund = new THREE.Color(0x5f9e3a);
     sp.szene.traverse((o) => { if (o.isMesh && o.name === 'Boden' && o.geometry.attributes.color) { const a = o.geometry.attributes.color, n = a.count, k = Math.max(1, Math.floor(n / 60)); let r = 0, g = 0, b = 0, c = 0; for (let i = 0; i < n; i += k) { r += a.getX(i); g += a.getY(i); b += a.getZ(i); c++; } grund.setRGB(r / c, g / c, b / c); } });
-    const tuft = wueste ? new THREE.Color(0xb59a5a) : grund.clone().lerp(new THREE.Color(0x6fb03a), 0.25);
+    const tuft = wueste ? new THREE.Color(0xb59a5a) : grund.clone().lerp(new THREE.Color(0x9ad24e), 0.45);
     const dichte = (wueste ? 0.45 : f1 ? 0.8 : 1) * (strecke.daten && strecke.daten.zaunLos ? 1 : 1);
-    const anzahl = Math.floor(Math.min(P.gras * dichte, L * (P === PARAM.ultra ? 4.2 : 1.6) * dichte));
+    const anzahl = Math.floor(Math.min(P.gras * dichte, L * (P === PARAM.ultra ? 14 : 5) * dichte));
     const b2 = (s) => (strecke.breiteBei ? strecke.breiteBei(s) : strecke.breite) / 2, rb = strecke.randBreite || 1;
     const start = f1 ? (strecke.seitenabstandMax || b2(0) + 3) + 0.4 : null;
     const platz = (s, sg, dMin, dMax, hoch) => {
@@ -329,8 +329,8 @@ void main(){
     // in Stücke je ~150 m Strecke (Sichtkegel-Auswahl)
     const stuecke = Math.max(1, Math.round(L / 150)), listen = Array.from({ length: stuecke }, () => []);
     for (let i = 0; i < anzahl; i++) {
-      const s = rnd() * L, e = platz(s, rnd() < 0.5 ? -1 : 1, 0.5, 13, 1.7); if (!e) continue;
-      e.sc = 0.7 + rnd() * 0.9; e.w = rnd() * 6.283; e.t = 0.9 + rnd() * 0.25; e.h = rnd();
+      const s = rnd() * L, e = platz(s, rnd() < 0.5 ? -1 : 1, 0.4, 10, 1.9); if (!e) continue;
+      e.sc = 0.9 + rnd() * 0.9; e.w = rnd() * 6.283; e.t = 0.9 + rnd() * 0.25; e.h = rnd();
       listen[Math.min(stuecke - 1, Math.floor(s / L * stuecke))].push(e);
     }
     const d = new THREE.Object3D(), c = new THREE.Color(); let gesamt = 0;

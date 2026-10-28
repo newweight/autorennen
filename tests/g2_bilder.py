@@ -38,6 +38,8 @@ try:
               for (let i = 0; i < (moto ? 40 : 200); i++) { window.__t += 1000 / 60; s._frameRumpf(window.__t); }
               s.zeichnen = z0; document.getElementById('ui').style.display = 'none'; }""", moto)
             d = pg.evaluate("""([ansicht, moto]) => { const s = Rennspiel.spiel; window.__t += 1000 / 60; s._frameRumpf(window.__t);
+              if (ansicht === 'seite') { const f = s.fahrzeuge[0].mesh, k = s.kameras[0].kamera, p = new THREE.Vector3(); f.getWorldPosition(p); const h = s.fahrzeuge[0].vehicle.heading, rx = Math.cos(h), rz = -Math.sin(h), fx = -Math.sin(h), fz = -Math.cos(h);
+                k.position.set(p.x + rx * 7 - fx * 3, p.y + 2.2, p.z + rz * 7 - fz * 3); k.lookAt(p.x + rx * 40 + fx * 25, p.y + 4, p.z + rz * 40 + fz * 25); k.updateMatrixWorld(true); }
               if (ansicht === 'nah' || ansicht === 'weit') { const f = s.fahrzeuge[0].mesh, k = s.kameras[0].kamera, p = new THREE.Vector3(); f.getWorldPosition(p); const h = s.fahrzeuge[0].vehicle.heading;
                 const a = ansicht === 'nah' ? 0.7 : 0.0, dist = ansicht === 'nah' ? (moto ? 6.5 : 4.6) : (moto ? 14 : 16), hh = ansicht === 'nah' ? 1.5 : 6;
                 k.position.set(p.x + Math.sin(h + a) * dist, p.y + hh, p.z + Math.cos(h + a) * dist); k.lookAt(p.x, p.y + 0.5, p.z); k.updateMatrixWorld(true); }
