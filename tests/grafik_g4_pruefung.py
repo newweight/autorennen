@@ -9,7 +9,7 @@ from playwright.sync_api import sync_playwright
 from PIL import Image, ImageChops
 
 basis = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-out = os.path.join(basis, 'tests', 'bilder_g2', 'normal_pruefung'); os.makedirs(out, exist_ok=True)
+out = os.path.join(basis, 'tests', 'bilder_g4', 'normal_pruefung'); os.makedirs(out, exist_ok=True)
 alt = sys.argv[sys.argv.index('--alt') + 1] if '--alt' in sys.argv else '2e3724c'
 tmp = tempfile.mkdtemp(prefix='g1_alt_')
 subprocess.run(f'git -C "{basis}" archive {alt} | tar -x -C "{tmp}"', shell=True, check=True)
@@ -83,7 +83,7 @@ ergebnis = {}
 try:
     with sync_playwright() as p:
         b = p.chromium.launch(args=ARGS)
-        for spiel, kurz in (('Autorennen', 'auto'), ('Motorrad', 'moto')):
+        for spiel, kurz in [x for x in (('Autorennen', 'auto'), ('Motorrad', 'moto')) if x[0] in os.environ.get('SPIELE', 'Autorennen,Motorrad').split(',')]:
             R = ergebnis[spiel] = {}
             ans = [('chase', 0), ('nah', 2)]
             vor, msv, infov, fev = lauf(b, pa, spiel, 'normal', 'tag', ans)
@@ -114,4 +114,4 @@ try:
         b.close()
 finally:
     for s in srv: s.terminate()
-json.dump(ergebnis, open(os.path.join(out, 'ergebnis.json'), 'w'), indent=1)
+json.dump(ergebnis, open(os.path.join(out, 'ergebnis_' + os.environ.get('SPIELE', 'alle') + '.json'), 'w'), indent=1)

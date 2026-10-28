@@ -23,6 +23,7 @@ try:
             for stufe in stufen:
                 for fall in ['regen', 'regen_cockpit', 'tempo', 'funken', 'puff', 'feuer']:
                     if fall == 'regen_cockpit' and not moto and False: continue
+                    if os.environ.get('NUR_FEHLENDE') and os.path.exists(os.path.join(out, f'{spiel}_{stufe}_{fall}.png')): continue
                     ctx = b.new_context(viewport={'width': 960, 'height': 540}); ctx.add_init_script(SEED)
                     pg = ctx.new_page(); fehler = []
                     pg.on('pageerror', lambda e: fehler.append(str(e)))
@@ -44,7 +45,7 @@ try:
                         pg.evaluate("() => { const k = Rennspiel.spiel.kameras[0]; k.modusIndex = Rennspiel.config.kamera.modi.indexOf('cockpit'); k._erstesMal = true; }")
                     if fall in ('regen', 'regen_cockpit', 'tempo'):
                         pg.evaluate("() => { const s = Rennspiel.spiel, v = s.fahrzeuge[0].vehicle; s.__h = setInterval(() => {}, 1e9); window.__fix = () => { v.vLaengs = Math.max(v.vLaengs, v.daten.vMax * 0.95); s.kameras[0]._tempoAnteil = 0.95; }; }")
-                        for i in range(150 if fall != 'tempo' else 40):
+                        for i in range(70 if fall != "tempo" else 14):
                             pg.evaluate("() => { window.__fix(); }"); pg.evaluate(FRAME, 1)
                     elif fall == 'funken':
                         pg.evaluate("() => { const s = Rennspiel.spiel, v = s.fahrzeuge[0].vehicle; v.vLaengs = 25; Rennspiel.Grafik.Effekte.ausloesen(s, 'funken', 0, 40); }")
@@ -60,14 +61,14 @@ try:
                         else:
                             pg.evaluate("""() => { const s = Rennspiel.spiel, v = s.fahrzeuge[0].vehicle, st = s.strecke, h = st.hindernisse.find((x) => x.typ === 'brand' && !x.lava), sp = st.spline, q = sp.punktBei(h.s - 14);
                               v.x = q.x + q.nx * h.seitenabstand * 0.6; v.z = q.z + q.nz * h.seitenabstand * 0.6; v.vLaengs = 0; v.heading = Math.atan2(-q.tx, -q.tz); }""")
-                        pg.evaluate(FRAME, 90)
+                        pg.evaluate(FRAME, 60)
                     # Kamera
                     nah = {'regen': [0.0, 7.5 if not moto else 6, 2.6, 0], 'tempo': [0.0, 8 if not moto else 6.5, 2.6, 0], 'funken': [0.7, 5.5 if not moto else 5, 1.6, 0], 'puff': [0.6, 8 if not moto else 7, 2.2, 0],
                            'feuer': [0.0, 11, 2.0, 10] if moto else [0.35, 9, 2.2, 14]}.get(fall)
                     pg.evaluate("""([src, a]) => { const s = Rennspiel.spiel, z0 = s.zeichnen, f = eval(src); window.__kamArgs = a; s.zeichnen = function () { if (window.__kamArgs) f(window.__kamArgs); return z0.apply(this, arguments); }; }""", [KAM, nah])
                     pg.evaluate(FRAME, 1)
                     name = f'{spiel}_{stufe}_{fall}'
-                    pg.screenshot(path=os.path.join(out, name + '.png'))
+                    pg.screenshot(path=os.path.join(out, name + '.png'), timeout=180000)
                     d = pg.evaluate("""() => { const s = Rennspiel.spiel, gl = s.renderer.getContext(), r = s.renderer; s.zeichnen(); const calls = r.info.render.calls; gl.finish(); const m = [];
                       for (let k = 0; k < 5; k++) { const w0 = Date.now(), n = 8; for (let i = 0; i < n; i++) { s.zeichnen(); gl.finish(); } m.push((Date.now() - w0) / n); } m.sort((a, b) => a - b);
                       return { calls, ms: m[2], z: Rennspiel.Grafik.Effekte.zaehler(s) }; }""")
@@ -76,4 +77,6 @@ try:
         b.close()
 finally:
     srv.terminate()
-json.dump(res, open(os.path.join(out, 'ergebnis.json'), 'w'), indent=1, ensure_ascii=False)
+ep = os.path.join(out, 'ergebnis.json'); alt = json.load(open(ep)) if os.path.exists(ep) else []
+alt = [x for x in alt if x['fall'] not in {r['fall'] for r in res}] + res
+json.dump(alt, open(ep, 'w'), indent=1, ensure_ascii=False)
