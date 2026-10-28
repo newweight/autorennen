@@ -33,7 +33,7 @@ window.Rennspiel = window.Rennspiel || {};
     startCockpit: true,               // Startansicht jedes Rennens = Cockpit (Taste Kamera wechselt weiter)
     aus: false,                       // true = Autorennen-Spiegel (ein Spiegel oben Mitte), kein Lenker (nur für Vergleichsmessungen)
     rollAnteil: 0.5,                  // die Kamera kippt so viel der Schräglage des Motorrads mit (0,5 = halb so stark)
-    rollWeichheit: 9,                 // 1/s: zusätzliche Glättung der Kamera-Kippung
+    rollWeichheit: 10,                // 1/s (τ 0,1 s): zusätzliche eigene Glättung der Kamera-Kippung, on top der Feder in schraeglage.js
     kameraVor: 0.42,                  // m vor der Motorradmitte: so sitzt die Cockpit-Kamera VOR dem Helmschirm (0,40 m) – sonst schneidet der Schirm in Schräglage als dunkles Band durchs Bild
     lenker: {
       seitenverh: 3.4,                // Breite : Höhe des Lenker-Bildes

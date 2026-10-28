@@ -21,7 +21,15 @@ window.Rennspiel = window.Rennspiel || {};
 
   const G = 9.81;
   const MAX_WINKEL = 45 * Math.PI / 180;       // Deckel der Schräglage
-  const TAU = 0.12;                             // Glättung (s)
+  // Alle Stellschrauben der Schräglage an einer Stelle; überschreibbar über window.Rennspiel.Moto.lageKonfig (z. B. { einlenkzeit: 0.5 }).
+  const KONFIG = { gierTau: 0.15, einlenkzeit: 0.4, anteil90: 0.9, maxRateGrad: 90, maxWinkelGrad: 45, maxSchritt: 1 / 240, maxDt: 0.25, maxGierrate: 8 };
+  const K = () => Object.assign({}, KONFIG, R.Moto.lageKonfig || {});
+  /** Eigenfrequenz ω0 (1/s) der kritisch gedämpften Feder: Sprungantwort 1 − (1+ωt)e^(−ωt) erreicht `anteil` nach `zeit` (Newton-Suche). */
+  function omega0(zeit, anteil) {
+    let x = 4; for (let i = 0; i < 30; i++) { const f = 1 - (1 + x) * Math.exp(-x) - anteil, d = x * Math.exp(-x); x += f / Math.max(d, 1e-9) * -1; }
+    return x / zeit;
+  }
+  const TAU = KONFIG.gierTau;                   // (Altname erhalten: jetzt Zeitkonstante der Gierraten-Glättung)
   const PURZEL = { dauer: 1.2, abklingzeit: 2.0, hoehe: 1.3, bande: 6, auto: 6, hindernis: 5, baum: 5 };   // Stärken = Aufprall-Tempo (m/s) wie in collisions.js
 
   const klemme = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
@@ -30,28 +38,44 @@ window.Rennspiel = window.Rennspiel || {};
   /** Ziel-Schräglage (rad, + = links): atan(v · ω / g), auf ±45° begrenzt; v ≤ 0 (Stand, rückwärts) → 0. */
   function winkel(v, gierrate) {
     if (!(v > 0) || !Number.isFinite(gierrate)) return 0;
-    return klemme(Math.atan(v * gierrate / G), -MAX_WINKEL, MAX_WINKEL);
+    return klemme(Math.atan(v * gierrate / G), -K().maxWinkelGrad * Math.PI / 180, K().maxWinkelGrad * Math.PI / 180);
   }
   /** Gierrate (rad/s, + = links) aus zwei Headings; unplausible Sprünge (Reset/Teleport) → 0. */
   function gierrate(heading, vorher, dt) {
     if (!(dt > 1e-4) || vorher === null || vorher === undefined) return 0;
     const d = winkelDiff(heading, vorher);
     if (Math.abs(d) > 1.0) return 0;
-    return klemme(d / dt, -8, 8);
+    return klemme(d / dt, -K().maxGierrate, K().maxGierrate);
   }
 
   function zustand() {
-    return { lean: 0, heading: null, gierGlatt: 0, purzel: { aktiv: false, t: 0, abkling: 0, anzahl: 0 } };
+    return { lean: 0, leanRate: 0, heading: null, gierGlatt: 0, purzel: { aktiv: false, t: 0, abkling: 0, anzahl: 0 } };
   }
 
-  /** Ein Bild: Schräglage nachführen. e = { heading, v, dt }; dt ≤ 0 (Pause) hält den Zustand. Rückgabe: aktueller Winkel. */
+  /** Ein Bild: Schräglage nachführen. e = { heading, v, dt }; dt ≤ 0 (Pause) hält den Zustand. Rückgabe: aktueller Winkel.
+   *  Ablauf: Gierrate (aus Heading-Differenz) → Tiefpass (τ = gierTau, dt-genau) → Ziel = atan(v·ω/g) → kritisch gedämpfte Feder
+   *  (lean, leanRate; in Unterschritten ≤ 1/240 s, also bildratenunabhängig) → Änderungsrate ≤ maxRateGrad, Deckel maxWinkelGrad.
+   *  Heading-Sprung (Reset/Teleport) setzt Feder und Glättung zurück. */
   function bildSchritt(z, e) {
-    const dt = e.dt;
+    const dt = e.dt, c = K();
     if (!(dt > 0)) return z.lean;
+    if (z.leanRate === undefined) z.leanRate = 0;
+    const dtc = Math.min(dt, c.maxDt);
+    if (z.heading !== null && z.heading !== undefined && Math.abs(winkelDiff(e.heading, z.heading)) > 1.0) {   // Teleport/Reset
+      z.lean = 0; z.leanRate = 0; z.gierGlatt = 0; z.heading = e.heading; return 0;
+    }
     const w = gierrate(e.heading, z.heading, dt);
     z.heading = e.heading;
-    const ziel = winkel(e.v, w);
-    z.lean += (ziel - z.lean) * (1 - Math.exp(-dt / TAU));
+    z.gierGlatt += (w - z.gierGlatt) * (1 - Math.exp(-dtc / c.gierTau));
+    const ziel = winkel(e.v, z.gierGlatt);
+    const om = omega0(c.einlenkzeit, c.anteil90), maxR = c.maxRateGrad * Math.PI / 180, maxL = c.maxWinkelGrad * Math.PI / 180;
+    const n = Math.max(1, Math.ceil(dtc / c.maxSchritt)), h = dtc / n;
+    for (let i = 0; i < n; i++) {
+      const acc = om * om * (ziel - z.lean) - 2 * om * z.leanRate;      // kritisch gedämpft
+      z.leanRate = klemme(z.leanRate + acc * h, -maxR, maxR);
+      z.lean = klemme(z.lean + z.leanRate * h, -maxL, maxL);
+      if (Math.abs(z.lean) >= maxL && z.lean * z.leanRate > 0) z.leanRate = 0;
+    }
     return z.lean;
   }
 
@@ -145,5 +169,5 @@ window.Rennspiel = window.Rennspiel || {};
     return erg;
   }
 
-  R.Moto.schraeglage = { G, MAX_WINKEL, TAU, PURZEL, winkel, gierrate, zustand, bildSchritt, purzelPose, purzelStart, purzelSchritt, anwenden, bildFuerSpiel, stoesseAuswerten, installieren };
+  R.Moto.schraeglage = { G, MAX_WINKEL, TAU, KONFIG, omega0, PURZEL, winkel, gierrate, zustand, bildSchritt, purzelPose, purzelStart, purzelSchritt, anwenden, bildFuerSpiel, stoesseAuswerten, installieren };
 })();

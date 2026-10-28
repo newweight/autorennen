@@ -1,0 +1,132 @@
+{
+ "erstellt": "2026-10-28",
+ "annahmen": "Physik 60 Hz, Anzeige liest letztes Heading; dt-Jitter ±20 %; 5 Läufe gemittelt",
+ "ergebnisse": [
+  {
+   "szenario": "slalom",
+   "fps": 30,
+   "alt": {
+    "maxWinkelgeschw": 148.3,
+    "maxWinkelbeschl": 6996.4,
+    "ruckRms": 114115.5,
+    "verzoegerungMs": 126,
+    "maxLage": 36.1,
+    "sollMax": 34.5
+   },
+   "neu": {
+    "maxWinkelgeschw": 61.3,
+    "maxWinkelbeschl": 228.7,
+    "ruckRms": 1848.2,
+    "verzoegerungMs": 340,
+    "maxLage": 33.5,
+    "sollMax": 34.5
+   },
+   "ruckFaktor": 61.7
+  },
+  {
+   "szenario": "slalom",
+   "fps": 60,
+   "alt": {
+    "maxWinkelgeschw": 277.2,
+    "maxWinkelbeschl": 27567.2,
+    "ruckRms": 628293.2,
+    "verzoegerungMs": 126,
+    "maxLage": 35.6,
+    "sollMax": 34.5
+   },
+   "neu": {
+    "maxWinkelgeschw": 60.4,
+    "maxWinkelbeschl": 258.8,
+    "ruckRms": 2976.5,
+    "verzoegerungMs": 349,
+    "maxLage": 33.5,
+    "sollMax": 34.5
+   },
+   "ruckFaktor": 211.1
+  },
+  {
+   "szenario": "kreisfahrt",
+   "fps": 30,
+   "alt": {
+    "maxWinkelgeschw": 152,
+    "maxWinkelbeschl": 7663.7,
+    "ruckRms": 112230.2,
+    "verzoegerungMs": 121,
+    "maxLage": 35.1,
+    "sollMax": 32.5
+   },
+   "neu": {
+    "maxWinkelgeschw": 53.2,
+    "maxWinkelbeschl": 246.2,
+    "ruckRms": 2133.6,
+    "verzoegerungMs": 330,
+    "maxLage": 33.2,
+    "sollMax": 32.5
+   },
+   "ruckFaktor": 52.6
+  },
+  {
+   "szenario": "kreisfahrt",
+   "fps": 60,
+   "alt": {
+    "maxWinkelgeschw": 265.7,
+    "maxWinkelbeschl": 27628.5,
+    "ruckRms": 537390.9,
+    "verzoegerungMs": 119,
+    "maxLage": 34.8,
+    "sollMax": 32.5
+   },
+   "neu": {
+    "maxWinkelgeschw": 53.5,
+    "maxWinkelbeschl": 278.2,
+    "ruckRms": 3338.7,
+    "verzoegerungMs": 337,
+    "maxLage": 33.2,
+    "sollMax": 32.5
+   },
+   "ruckFaktor": 161
+  },
+  {
+   "szenario": "impulse",
+   "fps": 30,
+   "alt": {
+    "maxWinkelgeschw": 185.6,
+    "maxWinkelbeschl": 6327.5,
+    "ruckRms": 55520.4,
+    "verzoegerungMs": 89,
+    "maxLage": 18.4,
+    "sollMax": 24.6
+   },
+   "neu": {
+    "maxWinkelgeschw": 52.7,
+    "maxWinkelbeschl": 485.3,
+    "ruckRms": 1866.1,
+    "verzoegerungMs": 255,
+    "maxLage": 10.8,
+    "sollMax": 24.6
+   },
+   "ruckFaktor": 29.8
+  },
+  {
+   "szenario": "impulse",
+   "fps": 60,
+   "alt": {
+    "maxWinkelgeschw": 232.4,
+    "maxWinkelbeschl": 17436.4,
+    "ruckRms": 186796.2,
+    "verzoegerungMs": 87,
+    "maxLage": 18.3,
+    "sollMax": 24.6
+   },
+   "neu": {
+    "maxWinkelgeschw": 53.2,
+    "maxWinkelbeschl": 540.7,
+    "ruckRms": 2496.1,
+    "verzoegerungMs": 261,
+    "maxLage": 10.8,
+    "sollMax": 24.6
+   },
+   "ruckFaktor": 74.8
+  }
+ ]
+}
