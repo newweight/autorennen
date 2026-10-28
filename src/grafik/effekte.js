@@ -2,7 +2,7 @@
 // Grafik G4 – Effekte (Autorennen UND Motorrad). NUR bei „Schön“ / „Ultra“ aktiv; Normal = bitgleich (nichts wird angelegt, nur zwei
 // durchreichende Umhüllungen).
 //   Partikel : EIN geteiltes System aus zwei THREE.Points (additiv: Funken/Flammen/Glühen, normal: Rauch/Spritzer), eigener Punkt-Shader
-//              (weiche Scheibe, Größe in Weltmetern), feste Obergrenzen (Schön 360/260, Ultra 700/480) → 2 Draw-Calls. Eigener Zufall
+//              (weiche Scheibe, Größe in Weltmetern), feste Obergrenzen (Schön 360/420, Ultra 700/800) → 2 Draw-Calls. Eigener Zufall
 //              (Math.random wird nie angefasst).
 //   Tempo    : Rand-Streifen + Vignette als vorgezeichnete Canvas-Ebene über dem Spiel (nur CSS-Deckkraft je Bild, kein Nachbearbeiten);
 //              Ultra stark, Schön leicht, Cockpit zurückhaltend, nie unter 55 % Tempo.
@@ -21,8 +21,8 @@
   const MOTO = window.MOTORRAD === true;
 
   const PARAM = {
-    schoen: { add: 360, norm: 260, funken: 1, flamme: 0.6, blur: 0.55, tropfen: 26, tropfenCockpit: 55, spritz: 0.6 },
-    ultra: { add: 700, norm: 480, funken: 1.7, flamme: 1, blur: 0.95, tropfen: 40, tropfenCockpit: 90, spritz: 1 },
+    schoen: { add: 360, norm: 420, funken: 1, flamme: 0.6, blur: 0.55, tropfen: 26, tropfenCockpit: 55, spritz: 0.6 },
+    ultra: { add: 700, norm: 800, funken: 1.7, flamme: 1, blur: 0.95, tropfen: 40, tropfenCockpit: 90, spritz: 1 },
   };
   const klemme = (v, a, b) => Math.max(a, Math.min(b, v));
   function zufall(seed) {
@@ -113,19 +113,20 @@
     const n = Math.round(30 * f * m);
     for (let k = 0; k < n; k++) {   // bunte Konfetti-Funken (normale Mischung: bleiben auch vor hellem Himmel farbig)
       const th = rnd() * 6.2832, ph = Math.acos(zw(-0.2, 1)), v = zw(2.5, 6.5) * m, c = bunt();
-      emit(N, x, y + 0.5, z, Math.sin(ph) * Math.cos(th) * v, Math.cos(ph) * v + 1.5, Math.sin(ph) * Math.sin(th) * v, zw(0.9, 1.5), 0.85, 0.35, c, c, 1, 4, 1.4);
+      emit(N, x, y + 0.5, z, Math.sin(ph) * Math.cos(th) * v, Math.cos(ph) * v + 1.5, Math.sin(ph) * Math.sin(th) * v, zw(0.9, 1.5), 1.2, 0.5, c, c, 1, 4, 1.4);
       if (k % 2 === 0) emit(S, x, y + 0.5, z, Math.sin(ph) * Math.cos(th) * v, Math.cos(ph) * v + 1.5, Math.sin(ph) * Math.sin(th) * v, zw(0.5, 0.9), 0.3, 0.06, [c[0] * 0.8, c[1] * 0.8, c[2] * 0.8], c, 0.8, 4.5, 1.6);
     }
     emit(S, x, y + 0.7, z, 0, 0.3, 0, 0.25, 2.2 * m, 4.2 * m, [1, 0.8, 0.45], [1, 0.45, 0.25], 0.4, 0, 0);
     const r = Math.round(10 * Math.min(1.5, f) * m);
     for (let k = 0; k < r; k++) {
       const th = rnd() * 6.2832, v = zw(0.5, 2);
-      emit(N, x + Math.cos(th) * 0.4, y + 0.5, z + Math.sin(th) * 0.4, Math.cos(th) * v, zw(1, 2.4), Math.sin(th) * v, zw(1.6, 2.4), 1.0 * m, 3.8 * m, [0.72, 0.7, 0.78], [0.86, 0.86, 0.9], 0.5, -0.15, 1.2);
+      emit(N, x + Math.cos(th) * 0.4, y + 0.5, z + Math.sin(th) * 0.4, Math.cos(th) * v, zw(1, 2.4), Math.sin(th) * v, zw(1.6, 2.4), 1.0 * m, 3.8 * m, [0.72, 0.7, 0.78], [0.86, 0.86, 0.9], 0.38, -0.15, 1.2);
     }
   }
   function flamme(st, x, y, z, breite, hoch) {
-    const S = st.add;
-    emit(S, x + zw(-breite, breite), y, z + zw(-breite, breite), zw(-0.3, 0.3), zw(1.6, 3.2) * hoch, zw(-0.3, 0.3), zw(0.5, 0.9), zw(0.7, 1.1), 0.2, FLAMME0, FLAMME1, 0.7, -0.5, 0.8);
+    const px = x + zw(-breite, breite), pz = z + zw(-breite, breite), vx = zw(-0.3, 0.3), vy = zw(1.6, 3.2) * hoch, vz = zw(-0.3, 0.3), le = zw(0.7, 1.2);
+    emit(st.norm, px, y, pz, vx, vy, vz, le, zw(1.2, 1.8), 0.4, FLAMME0, FLAMME1, 0.8, -0.5, 0.8);
+    if (rnd() < 0.5) emit(st.add, px, y, pz, vx, vy, vz, le * 0.7, 0.7, 0.15, [1, 0.7, 0.2], [1, 0.3, 0.05], 0.45, -0.5, 0.8);
   }
   function rauch(st, x, y, z, dunkel) {
     emit(st.norm, x + zw(-0.3, 0.3), y, z + zw(-0.3, 0.3), zw(-0.4, 0.4), zw(1, 1.8), zw(-0.4, 0.4), zw(1.5, 2.3), 0.6, 2.6, dunkel ? [0.38, 0.37, 0.42] : RAUCH0, RAUCH1, 0.32, -0.2, 1);
@@ -223,13 +224,15 @@
     const rate = (key, proSek) => { const a = (st.acc.get(key) || 0) + dt * proSek; const n = Math.floor(a); st.acc.set(key, a - n); return Math.min(n, 6); };
     // Feuerringe
     let nah = 0;
-    for (let i = 0; i < st.ringe.length && nah < 8; i++) {
+    for (let i = 0; i < st.ringe.length && nah < 6; i++) {
       const o = st.ringe[i]; if (!o.parent) continue;
       o.getWorldPosition(_v); if (_v.distanceToSquared(kam) > 110 * 110) continue;
       nah++; const rc = o.geometry.parameters.radius;
-      for (let k = rate(o, 40 * P.flamme), n = 0; n < k; n++) {
+      for (let k = rate(o, 70 * P.flamme), n = 0; n < k; n++) {
         const a = rnd() * 6.2832; _v.set(Math.cos(a) * rc, Math.sin(a) * rc, 0); o.localToWorld(_v); _w.set(Math.cos(a) * (rc + 1), Math.sin(a) * (rc + 1), 0); o.localToWorld(_w); _w.sub(_v);
-        emit(st.add, _v.x, _v.y, _v.z, _w.x * zw(0.2, 0.7), _w.y * zw(0.2, 0.7) + zw(1, 2.2), _w.z * zw(0.2, 0.7), zw(0.55, 1), zw(0.75, 1.2), 0.15, FLAMME0, FLAMME1, 0.75, -0.6, 0.7);
+        const vx = _w.x * zw(0.2, 0.7), vy = _w.y * zw(0.2, 0.7) + zw(1, 2.2), vz = _w.z * zw(0.2, 0.7), le = zw(0.9, 1.5);
+        emit(st.norm, _v.x, _v.y, _v.z, vx, vy, vz, le, zw(1.3, 1.9), 0.5, FLAMME0, FLAMME1, 0.8, -0.6, 0.7);
+        if (n % 2 === 0) emit(st.add, _v.x, _v.y, _v.z, vx, vy, vz, le * 0.7, 0.8, 0.15, [1, 0.7, 0.2], [1, 0.3, 0.05], 0.45, -0.6, 0.7);
       }
       if (rate(o.uuid + 'r', 3.5 * P.flamme) > 0) { const a = rnd() * 6.2832; _v.set(Math.cos(a) * rc, Math.sin(a) * rc, 0); o.localToWorld(_v); rauch(st, _v.x, _v.y + 0.3, _v.z, false); }
       if (rate(o.uuid + 'b', 4 * P.flamme) > 0) { const a = rnd() * 6.2832, c = bunt(); _v.set(Math.cos(a) * rc, Math.sin(a) * rc, 0); o.localToWorld(_v); emit(st.add, _v.x, _v.y, _v.z, zw(-1.2, 1.2), zw(0.5, 2.4), zw(-1.2, 1.2), zw(0.9, 1.5), 0.3, 0.08, [c[0] * 0.5 + 0.5, c[1] * 0.5 + 0.5, c[2] * 0.5 + 0.5], c, 0.9, 3.5, 0.6); }
@@ -289,8 +292,8 @@
     const g = sp.motoFxGruppe, pts = g && g.children && g.children[0]; if (!pts || !pts.isPoints || !pts.userData) return;
     const m = pts.material;
     st.moto = { pts, m, size: m.size, toneMapped: m.toneMapped };
-    m.size = 0.4; m.toneMapped = false; m.needsUpdate = true;
-    const hof = new THREE.Points(pts.geometry, new THREE.PointsMaterial({ size: 1.0, vertexColors: true, map: m.map, transparent: true, depthWrite: false, opacity: 0.2, blending: THREE.AdditiveBlending, toneMapped: false, alphaTest: 0.01 }));
+    m.size = 0.38; m.toneMapped = false; m.needsUpdate = true;
+    const hof = new THREE.Points(pts.geometry, new THREE.PointsMaterial({ size: 0.7, vertexColors: true, map: m.map, transparent: true, depthWrite: false, opacity: 0.14, blending: THREE.AdditiveBlending, toneMapped: false, alphaTest: 0.01 }));
     hof.frustumCulled = false; hof.renderOrder = 7; hof.name = 'g4Hof'; g.add(hof); st.moto.hof = hof;
   }
   function motoFunkenAus(st) {

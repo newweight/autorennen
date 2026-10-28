@@ -23,7 +23,7 @@ try:
         for spiel in spiele:
             moto = spiel == 'moto'
             for stufe in stufen:
-                for fall in ['regen', 'regen_cockpit', 'tempo', 'funken', 'puff', 'feuer']:
+                for fall in os.environ.get('FAELLE', 'regen,regen_cockpit,tempo,funken,puff,feuer').split(','):
                     if fall == 'regen_cockpit' and not moto and False: continue
                     if os.environ.get('NUR_FEHLENDE') and os.path.exists(os.path.join(out, f'{spiel}_{stufe}_{fall}.png')): continue
                     ctx = b.new_context(viewport={'width': 960, 'height': 540}); ctx.add_init_script(SEED)
