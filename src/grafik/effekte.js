@@ -266,8 +266,8 @@
       const f = fz[i]; if (!f || !f.vehicle || f.ausgeschieden || !f.mesh) continue;
       const v = f.vehicle, tempo = Math.abs(v.vLaengs || v.tempo || 0), p = pos(f);
       const sBande = bs && bs[i] > 0 ? bs[i] : 0;
-      if (sBande > 1 && frei('b' + i, 0.12)) { { const l = zw(-1.5, 2); for (let sg = -1; sg <= 1; sg += 2) funken(st, p[0] + p[3] * l + p[4] * 1.05 * sg, p[1] + 0.25, p[2] + p[4] * l - p[3] * 1.05 * sg, p[3], p[4], 4 + sBande, tempo); } if (sBande > 14 && frei('p' + i, 1.5)) puff(st, p[0], p[1], p[2], 0.7); }
-      else if (v._anBande && tempo > 6 && frei('s' + i, 0.05)) { const l = zw(-1.5, 2); for (let sg = -1; sg <= 1; sg += 2) funken(st, p[0] + p[3] * l + p[4] * 1.05 * sg, p[1] + 0.2, p[2] + p[4] * l - p[3] * 1.05 * sg, p[3], p[4], 2, tempo); }
+      if (sBande > 1 && frei('b' + i, 0.12)) { { const l = zw(-1.5, 2); for (let sg = -1; sg <= 1; sg += 2) funken(st, p[0] + p[3] * l + p[4] * 1.05 * sg, p[1] + 0.25, p[2] + p[4] * l - p[3] * 1.05 * sg, p[3], p[4], 8 + sBande * 1.5, tempo); } if (sBande > 14 && frei('p' + i, 1.5)) puff(st, p[0], p[1], p[2], 0.7); }
+      else if (v._anBande && tempo > 6 && frei('s' + i, 0.05)) { const l = zw(-1.5, 2); for (let sg = -1; sg <= 1; sg += 2) funken(st, p[0] + p[3] * l + p[4] * 1.05 * sg, p[1] + 0.2, p[2] + p[4] * l - p[3] * 1.05 * sg, p[3], p[4], 4, tempo); }
       const mz = f.motoZ && f.motoZ.purzel;
       if (mz) { const neu = !!mz.aktiv; if (neu && !f._g4Purzel && frei('u' + i, 2)) puff(st, p[0], p[1], p[2], 0.8); f._g4Purzel = neu; }
     }
