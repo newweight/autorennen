@@ -119,7 +119,7 @@
   function glowTextur(ring) {
     const c = document.createElement('canvas'); c.width = c.height = 128;
     const x = c.getContext('2d'), g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
-    if (ring) { g.addColorStop(0, 'rgba(255,120,20,0)'); g.addColorStop(0.55, 'rgba(255,120,20,0)'); g.addColorStop(0.74, 'rgba(255,150,40,0.55)'); g.addColorStop(0.86, 'rgba(255,110,20,0.18)'); g.addColorStop(1, 'rgba(255,90,10,0)'); }
+    if (ring) { g.addColorStop(0, 'rgba(255,120,20,0)'); g.addColorStop(0.55, 'rgba(255,120,20,0)'); g.addColorStop(0.74, 'rgba(255,120,20,0.34)'); g.addColorStop(0.86, 'rgba(255,90,10,0.12)'); g.addColorStop(1, 'rgba(255,90,10,0)'); }
     else { g.addColorStop(0, 'rgba(255,248,215,1)'); g.addColorStop(0.18, 'rgba(255,240,190,0.55)'); g.addColorStop(0.5, 'rgba(255,230,160,0.15)'); g.addColorStop(1, 'rgba(255,220,140,0)'); }
     x.fillStyle = g; x.fillRect(0, 0, 128, 128);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
@@ -194,6 +194,7 @@
         });
       } else if (o.isMesh && o.geometry && o.geometry.type === 'TorusGeometry' && o.material && o.material.isMeshBasicMaterial && o.material.color.getHex() === 0xff5a10) {
         st.glowFuer.add(o);
+        o.parent.traverse((m) => { const ms = Array.isArray(m.material) ? m.material : [m.material]; ms.forEach((x) => { if (x && x.isMeshBasicMaterial && x.toneMapped && !st.tm.has(x)) { st.tm.add(x); x.toneMapped = false; x.needsUpdate = true; } }); });   // Feuerfarben nicht ausbleichen
         const r = o.geometry.parameters.radius, s = glowSprite(true, (r + 0.25) * 2 * 1.7); s.userData.ring = true; o.parent.add(s); st.glows.push(s);
       }
     });

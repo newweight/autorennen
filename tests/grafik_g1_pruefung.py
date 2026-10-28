@@ -24,18 +24,23 @@ ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshade
 SEED = "(() => { let a = 123456789; Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; })();"
 STUFEN = ['normal', 'schoen', 'ultra']
 
-def lauf(browser, port_, spiel, stufe, tageszeit, ansichten):
+def lauf(browser, port_, spiel, stufe, tageszeit, ansichten, rundweg=False):
     """Ein Rennstart, feste Szene; liefert {ansicht: (PNG-Bytes, draw_calls, dreiecke)} und ms je Bild."""
     moto = spiel == 'Motorrad'
     ctx = browser.new_context(viewport={'width': 960, 'height': 540}); ctx.add_init_script(SEED)
     pg = ctx.new_page(); fehler = []
     pg.on('pageerror', lambda e: fehler.append(str(e)))
     pg.goto(f'http://127.0.0.1:{port_}/{spiel}.html'); pg.wait_for_timeout(1200)
+    autos = ['crossmaschine', 'crossmaschine-rot'] if moto else ['porsche-911', 'multivan']
     if stufe != 'normal':
         pg.evaluate('(s) => Rennspiel.Grafik.setzen(s)', stufe)
     else:   # Schalter existiert nur im Nachher-Stand; Normal ist Standard (nichts gespeichert)
         pass
-    autos = ['crossmaschine', 'crossmaschine-rot'] if moto else ['porsche-911', 'multivan']
+    if rundweg:      # erst Ultra einschalten und ein Rennen starten, dann zurück auf Normal: danach muss alles wieder bitgleich sein
+        pg.evaluate("() => { Rennspiel.Grafik.setzen('ultra'); window.__t = 1000; Rennspiel.spiel.rennenStarten({ modus: 'solo', streckeId: 'wiese', autoIds: ['%s', '%s'], runden: 1, gegner: 3, tageszeit: 'tag', wetter: 'sonne' }); }" % tuple(autos))
+        pg.wait_for_timeout(300)
+        pg.evaluate("() => { Rennspiel.Grafik.setzen('normal'); }")
+    pg.evaluate(SEED)
     pg.evaluate("""([a, tz]) => { window.__t = 1000; performance.now = () => window.__t; Rennspiel.spiel.uhr.letzte = window.__t;
       Rennspiel.spiel.rennenStarten({ modus: 'solo', streckeId: 'wiese', autoIds: a, runden: 1, gegner: 3, schwierigkeit: 'mittel', fahrhilfe: ['wenig', 'wenig'], tageszeit: tz, wetter: 'sonne' });
       window.requestAnimationFrame = () => 0; }""", [autos, tageszeit])
@@ -52,8 +57,9 @@ def lauf(browser, port_, spiel, stufe, tageszeit, ansichten):
             k.position.set(p.x + Math.sin(h + a) * dist, p.y + (window.MOTORRAD ? 1.6 : 1.4), p.z + Math.cos(h + a) * dist); k.lookAt(p.x, p.y + 0.5, p.z); k.updateMatrixWorld(true); s.zeichnen(); }
           const r = s.renderer; return [r.domElement.toDataURL('image/png'), r.info.render.calls, r.info.render.triangles]; }""", nah)
         erg[name] = (base64.b64decode(d[0].split(',')[1]), d[1], d[2])
-    ms = pg.evaluate("""() => { const s = Rennspiel.spiel, gl = s.renderer.getContext(); s.zeichnen(); gl.finish(); const t0 = performance.__echt ? 0 : 0;
-      const n = 20, a = Date.now.call(Date); const w0 = Date.now(); for (let i = 0; i < n; i++) { s.zeichnen(); gl.finish(); } return (Date.now() - w0) / n; }""")
+    ms = pg.evaluate("""() => { const s = Rennspiel.spiel, gl = s.renderer.getContext(); s.zeichnen(); gl.finish(); const m = [];
+      for (let k = 0; k < 5; k++) { const w0 = Date.now(), n = 12; for (let i = 0; i < n; i++) { s.zeichnen(); gl.finish(); } m.push((Date.now() - w0) / n); }
+      m.sort((a, b) => a - b); return m[2]; }""")
     info = pg.evaluate("() => { const r = Rennspiel.spiel.renderer; const st = Rennspiel.spiel._g1; return { tm: r.toneMapping, schatten: r.shadowMap.enabled, g1: !!(st && st.aktiv), glows: st ? st.glows.length : 0 }; }")
     ctx.close()
     return erg, ms, info, fehler
@@ -82,6 +88,8 @@ try:
                 ImageChops.difference(Image.open(io.BytesIO(vor[a][0])).convert('RGB'), Image.open(io.BytesIO(nach[a][0])).convert('RGB')).point(lambda v: min(255, v * 8)).save(os.path.join(out, f'{kurz}_normal_{a}_diff_x8.png'))
             R['normal_vorher_nachher']['renderer'] = {'vorher': infov, 'nachher': infon, 'fehler': fev + fen}
             R['ms_je_bild'] = {'normal_vorher': round(msv, 1), 'normal': round(msn, 1)}
+            rw, _, _, _ = lauf(b, pn, spiel, 'normal', 'tag', ans, rundweg=True)
+            R['normal_nach_ultra_zurueckgeschaltet'] = {a: diff(nach[a][0], rw[a][0]) for a, _ in ans}
             for st in STUFEN:
                 erg = nach if st == 'normal' else None
                 if st != 'normal':
