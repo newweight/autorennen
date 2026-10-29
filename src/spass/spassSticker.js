@@ -4,7 +4,7 @@
 //   R.SpassSticker.ereignis(spiel, name, d)  Ereignis melden → Liste NEU freigeschalteter Sticker (leer, wenn nichts neu)
 //   R.SpassSticker.stand(spiel) / .hat(spiel, id) / .zurueck(spiel)
 // Ereignisse: tuning { voll } (S2) · sieg · ziel { platz, streckeId, nacht, zwei } · muenzen { rennen (im Rennen gesammelt), gesamt } · trampolin · kanone · geist · hupe · stimme ·
-//   sprung { sek } · salto · ring · bus · wheelie { m } · stoppie { m }
+//   sprung { sek } · salto · ring · bus · wheelie { m } · stoppie { m } · S3: superman · handstand · backflip (Motorrad) · fassrolle (Auto) · zeitlupe
 // Speicher: localStorage 'rennspiel.spass.sticker.<spiel>' (ohne localStorage im Arbeitsspeicher). Reine Logik, ohne DOM (Node-Test).
 // ============================================================
 (function () {
@@ -29,13 +29,18 @@
     { id: 'zwei', emoji: '👫', name: 'Zu zweit', text: 'Ein Rennen zu zweit gefahren.' },
     { id: 'tuning1', emoji: '🔧', name: 'Erstes Tuning', text: 'Die erste Tuning-Stufe gekauft.' },
     { id: 'tuningVoll', emoji: '🏁', name: 'Voll getunt', text: 'Ein Fahrzeug in allem auf Stufe 5 getunt.' },
+    { id: 'zeitlupe', emoji: '🎬', name: 'Zeitlupen-Sprung', text: 'Ein so großer Sprung, dass die Zeitlupe kam!' },
   ];
   const AUTO = [
     { id: 'sprung', emoji: '✈️', name: 'Weitspringer', text: 'Länger als 1,5 Sekunden in der Luft.' },
+    { id: 'fassrolle', emoji: '🛢️', name: 'Erste Fassrolle', text: 'Das Auto in der Luft um die Längsachse gedreht!' },
     { id: 'sammler', emoji: '⭐', name: 'Sticker-Sammler', text: '10 Sticker gesammelt.' },
     { id: 'siege3', emoji: '🔥', name: 'Dreimal Erster', text: '3 Rennen gewonnen.' },
   ];
   const MOTO = [
+    { id: 'superman', emoji: '🦸', name: 'Superman', text: 'Der Fahrer fliegt gestreckt über dem Motorrad!' },
+    { id: 'handstand', emoji: '🤹', name: 'Handstand', text: 'Ein Handstand auf dem Lenker in der Luft.' },
+    { id: 'backflip', emoji: '🔄', name: 'Backflip', text: 'Ein Rückwärtssalto in der Luft.' },
     { id: 'salto', emoji: '🤸‍♂️', name: 'Erster Salto', text: 'Einen Salto in der Luft gedreht!' },
     { id: 'ring', emoji: '🔥', name: 'Feuerring', text: 'Durch den Feuerring gesprungen.' },
     { id: 'bus', emoji: '🚌', name: 'Bus-Springer', text: 'Über die Busse gesprungen.' },
@@ -90,6 +95,9 @@
       case 'stimme': geben('stimme'); break;
       case 'tuning': geben('tuning1'); if (d.voll) geben('tuningVoll'); break;   // S2: Tuning gekauft ({ voll: alles auf Stufe 5 })
       case 'sprung': if (sp !== 'motorrad' && d.sek >= 1.5) geben('sprung'); break;
+      case 'zeitlupe': geben('zeitlupe'); break;                                  // S3: großer Sprung mit Zeitlupe (beide Spiele)
+      case 'superman': case 'handstand': case 'backflip': if (sp === 'motorrad') geben(name); break;   // S3
+      case 'fassrolle': if (sp !== 'motorrad') geben('fassrolle'); break;
       case 'salto': if (sp === 'motorrad') geben('salto'); break;
       case 'ring': if (sp === 'motorrad') geben('ring'); break;
       case 'bus': if (sp === 'motorrad') geben('bus'); break;

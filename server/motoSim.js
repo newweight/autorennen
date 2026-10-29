@@ -114,7 +114,7 @@ function einbauen(simulation, R, e) {
         if (mz && mz.purzel.aktiv) fl |= 1;
         if (u && u.halt) { fl |= 2; if (u.halt.steht) fl |= 4; if (u.halt.art === 'kranken') fl |= 256; }
         if (u && u.szene) fl |= 8;
-        if (z) { if (z.wheelie.aktiv) fl |= 16; if (z.stoppie.aktiv) fl |= 32; if (z.trick) fl |= 64; if (z.luft) fl |= 128; }
+        if (z) { if (z.wheelie.aktiv) fl |= 16; if (z.stoppie.aktiv) fl |= 32; if (z.trick || z.neuPose) fl |= 64; if (z.luft) fl |= 128; }
         const p = z ? z.pose : null;
         const meter = z ? (z.wheelie.aktiv ? z.wheelie.meter : z.stoppie.aktiv ? z.stoppie.meter : 0) : 0;
         let sz = 0;
@@ -123,7 +123,8 @@ function einbauen(simulation, R, e) {
           sz = [s.art === 'abschlepp' ? 0 : 1, s.phase === 'lauf' ? 1 : 0, rd(s.t || 0, 2), rd(s.sB || 0, 2), rd(s.qB || 0, 2), rd(s.qH || 0, 2), s.dir || 0, rd(s.pflege || 0, 2), s.frei ? 1 : 0, rd(s.tFrei || 0, 2)];
         }
         liste.push([mz ? mz.purzel.anzahl : 0, z ? z.punkte : 0, c.mult, rd(c.rest, 1), u ? rd(u.zustand, 1) : 100, u ? rd(u.gesundheit, 1) : 100, fl,
-          p ? rd(p.gier, 3) : 0, p ? rd(p.salto, 3) : 0, p ? rd(p.hoehe, 3) : 0, p ? rd(p.nick, 3) : 0, rd(meter, 0), sz]);
+          p ? rd(p.gier, 3) : 0, p ? rd(p.salto, 3) : 0, p ? rd(p.hoehe, 3) : 0, p ? rd(p.nick, 3) : 0, rd(meter, 0), sz,
+          z && z.neuPose ? z.neuPose.code : 0, z && z.neuPose ? rd(z.neuPose.p, 3) : 0]);        // S3: [13] neuer Trick (1 Superman · 2 Handstand · 3 Backflip), [14] Fortschritt
       }
       return liste;
     },
