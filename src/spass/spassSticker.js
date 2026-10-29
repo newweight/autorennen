@@ -4,7 +4,7 @@
 //   R.SpassSticker.ereignis(spiel, name, d)  Ereignis melden → Liste NEU freigeschalteter Sticker (leer, wenn nichts neu)
 //   R.SpassSticker.stand(spiel) / .hat(spiel, id) / .zurueck(spiel)
 // Ereignisse: tuning { voll } (S2) · sieg · ziel { platz, streckeId, nacht, zwei } · muenzen { rennen (im Rennen gesammelt), gesamt } · trampolin · kanone · geist · hupe · stimme ·
-//   sprung { sek } · S4: kurz { sterne, alle } · frei { gefunden } · freiAufgabe { geschafft, gesamt } · ko · koFinale · foto · salto · ring · bus · wheelie { m } · stoppie { m } · S5: huepfer { n } · teleport · dino · S6: magnet · gleiten · grind { m } · wand { m } · halfpipe { hoch } · riese · mini · haustier · kostuem · S3: superman · handstand · backflip (Motorrad) · fassrolle (Auto) · zeitlupe
+//   sprung { sek } · S4: kurz { sterne, alle } · frei { gefunden } · freiAufgabe { geschafft, gesamt } · ko · koFinale · foto · salto · ring · bus · wheelie { m } · stoppie { m } · S5: huepfer { n } · teleport · dino · S6: magnet · gleiten · S7: strecke { anzahl } · grind { m } · wand { m } · halfpipe { hoch } · riese · mini · haustier · kostuem · S3: superman · handstand · backflip (Motorrad) · fassrolle (Auto) · zeitlupe
 // Speicher: localStorage 'rennspiel.spass.sticker.<spiel>' (ohne localStorage im Arbeitsspeicher). Reine Logik, ohne DOM (Node-Test).
 // ============================================================
 (function () {
@@ -56,6 +56,9 @@
     { id: 'mini', emoji: '🐜', name: 'Mini-Flitzer', text: 'Mini geworden und blitzschnell gefahren.' },
     { id: 'haustier', emoji: '🐶', name: 'Tierfreund', text: 'Mit einem Haustier ein Rennen gefahren.' },
     { id: 'kostuem', emoji: '🎭', name: 'Verkleidet', text: 'Ein Rennen im Kostüm gefahren.' },
+    // S7: Strecken-Editor
+    { id: 'streckeEigen', emoji: '✏️', name: 'Erste eigene Strecke', text: 'Du hast deine erste Strecke gemalt und gespeichert.' },
+    { id: 'baumeister', emoji: '🏗️', name: 'Baumeister', text: '5 eigene Strecken gespeichert.' },
   ];
   const AUTO = [
     { id: 'sprung', emoji: '✈️', name: 'Weitspringer', text: 'Länger als 1,5 Sekunden in der Luft.' },
@@ -143,6 +146,7 @@
       case 'mini': geben('mini'); break;
       case 'haustier': geben('haustier'); break;
       case 'kostuem': geben('kostuem'); break;
+      case 'strecke': if (d.anzahl >= 1) geben('streckeEigen'); if (d.anzahl >= 5) geben('baumeister'); break;   // S7: eigene Strecke gespeichert ({ anzahl } = gespeicherte Strecken)
       case 'superman': case 'handstand': case 'backflip': if (sp === 'motorrad') geben(name); break;   // S3
       case 'fassrolle': if (sp !== 'motorrad') geben('fassrolle'); break;
       case 'salto': if (sp === 'motorrad') geben('salto'); break;

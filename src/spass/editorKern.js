@@ -26,7 +26,7 @@
   const K = {
     welt: 1600,              // Zeichenfläche: Quadrat, ±800 m
     abstand: 12,             // Abstand der Kontrollpunkte (m)
-    sigma: 28,               // Glättung (m)
+    sigma: 38,               // Glättung (m)
     minLaenge: 900, maxLaenge: 6000,
     minRadius: 36,           // engste Kurve (m); die engsten Katalog-Strecken haben ≈ 25 m
     minAbstand: 48,          // Mindestabstand zweier getrennter Streckenstücke (Mitte–Mitte, m)
@@ -639,8 +639,28 @@
   }
 
   // ---------------------------------------------------------------- Teilen: Code (Text) und Datei
-  const b64 = (s) => { if (typeof btoa === 'function') return btoa(unescape(encodeURIComponent(s))); return Buffer.from(s, 'utf8').toString('base64'); };
-  const unb64 = (s) => { if (typeof atob === 'function') return decodeURIComponent(escape(atob(s))); return Buffer.from(s, 'base64').toString('utf8'); };
+  // Base64 ohne btoa/Buffer (läuft auch im Server-Kontext); Text als UTF-8
+  const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  function b64(text) {
+    const t = unescape(encodeURIComponent(text));
+    let o = '';
+    for (let i = 0; i < t.length; i += 3) {
+      const a = t.charCodeAt(i), b = i + 1 < t.length ? t.charCodeAt(i + 1) : NaN, c = i + 2 < t.length ? t.charCodeAt(i + 2) : NaN;
+      o += B64[a >> 2] + B64[((a & 3) << 4) | ((b || 0) >> 4)] + (isNaN(b) ? '=' : B64[((b & 15) << 2) | ((c || 0) >> 6)]) + (isNaN(c) ? '=' : B64[c & 63]);
+    }
+    return o;
+  }
+  function unb64(text) {
+    const t = String(text).replace(/=+$/, '');
+    let bits = 0, n = 0, o = '';
+    for (let i = 0; i < t.length; i++) {
+      const v = B64.indexOf(t[i]);
+      if (v < 0) throw new Error('Zeichen');
+      bits = (bits << 6) | v; n += 6;
+      if (n >= 8) { n -= 8; o += String.fromCharCode((bits >> n) & 255); bits &= (1 << n) - 1; }
+    }
+    return decodeURIComponent(escape(o));
+  }
   /** Strecke als Text-Code (Punkte als ganzzahlige Schritte von 0,5 m, Unterschiede zum Vorgänger). */
   function code(d) {
     let lx = 0, lz = 0;
@@ -715,6 +735,6 @@
   R.Editor = {
     K, WELTEN, ARTEN, ARTEN_INFO, MAXJE, FEHLER, Speicher,
     verarbeiten, neu, geometrie, regel, stelle, setzen, entfernen, hoeheSetzen, eintrag, registrieren, aufraeumen, planEinsetzen, fahrtest, pruefen, code, ausCode, sauber,
-    kreuzungenVon, kreuzungenFinden, umfang, neuAbtasten, kruemmungMax, messen, zuNah, welt, spielName,
+    kreuzungenVon, kreuzungenFinden, umfang, neuAbtasten, kruemmungMax, messen, zuNah, welt, spielName, glaettenGauss, umfangHalten, entspannen, startGerade,
   };
 })();
