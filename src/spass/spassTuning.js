@@ -192,7 +192,31 @@
   const mat4 = (x, y, z, rx, ry, rz) => { const m = new THREE.Matrix4(); m.makeRotationFromEuler(new THREE.Euler(rx || 0, ry || 0, rz || 0)); m.setPosition(x, y, z); return m; };
   const kasten = (b, h, t, m, farbe) => ({ geo: new THREE.BoxGeometry(b, h, t), m, farbe });
   const rohr = (r, l, m, farbe) => ({ geo: new THREE.CylinderGeometry(r, r, l, 10), m, farbe });
+  /** Farbiger Ring (Torus, Achse = x) – als Felgenring auf der Außenseite breiter Reifen (S3: schwarz auf schwarz war kaum zu sehen). */
+  const ring = (r, dicke, m, farbe) => { const g = new THREE.TorusGeometry(r, dicke, 6, 28); g.rotateY(Math.PI / 2); return { geo: g, m, farbe }; };
+  const reifenFarbe = (st) => (st >= C().max ? FARBE.gold : 0xff7a1a);   // leuchtendes Orange, Stufe 5 Gold
   const sichtbar = (s) => ({ motor: s.motor >= C().teileAb, reifen: s.reifen >= C().teileAb, bremsen: s.bremsen >= C().teileAb });
+
+  /**
+   * S3: Heck-Anker für den Spoiler aus der echten Karosserie: höchste Fläche im Streifen z0 ± 0,12 m (Kofferraumdeckel bei Limousine/Coupé,
+   * Heckklappen-Kante bei Kombi/Van/Kleinwagen, Motorhaube bei Fließheck) und halbe Breite dort. inv = Matrix Welt → Fahrzeug.
+   */
+  function heckProfil(mesh, inv, z0) {
+    let y = -Infinity, x = 0;
+    const v = new THREE.Vector3(), mm = new THREE.Matrix4();
+    mesh.traverse((o) => {
+      if (!o.isMesh || o.name === 'schatten' || o.name === 'tuningTeile' || !o.geometry || !o.geometry.attributes.position) return;
+      mm.multiplyMatrices(inv, o.matrixWorld);
+      const p = o.geometry.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        v.fromBufferAttribute(p, i).applyMatrix4(mm);
+        if (v.z < z0 - 0.12 || v.z > z0 + 0.12 || v.y < 0.55) continue;
+        if (v.y > y) y = v.y;
+        if (Math.abs(v.x) > x) x = Math.abs(v.x);
+      }
+    });
+    return Number.isFinite(y) ? { y, halb: x } : null;
+  }
 
   /**
    * Teile an die Fahrzeug-Gruppe hängen (Name „tuningTeile“, vorher vorhandene werden ersetzt). Rückgabe: das Mesh oder null (nichts sichtbar).
@@ -225,8 +249,13 @@
         teile.push(rohr(0.055, 0.8, mat4(0.2, hint.y + 0.02, hint.z - 0.12, Math.PI / 2, 0, 0), gold(s.motor)));
         teile.push(rohr(0.075, 0.12, mat4(0.2, hint.y + 0.02, hint.z + 0.3, Math.PI / 2, 0, 0), s.motor >= C().max ? FARBE.flamme : FARBE.dunkel));
       }
-      if (sb.reifen) {  // breiter Hinterreifen: dicke dunkle Walze seitlich auf dem Reifen
-        teile.push(rohr(hint.r * 0.98, Math.max(0.1, hint.br * 0.55), mat4(hint.x, hint.y, hint.z, 0, 0, Math.PI / 2), FARBE.dunkel));
+      if (sb.reifen) {  // breiter Hinterreifen: dicke dunkle Walze seitlich auf dem Reifen + farbige Ringe auf beiden Seiten
+        const lb = Math.max(0.1, hint.br * 0.55);
+        teile.push(rohr(hint.r * 0.98, lb, mat4(hint.x, hint.y, hint.z, 0, 0, Math.PI / 2), FARBE.dunkel));
+        [-1, 1].forEach((sg) => {
+          teile.push(ring(hint.r * 0.80, 0.022, mat4(hint.x + sg * (lb / 2 + 0.004), hint.y, hint.z), reifenFarbe(s.reifen)));
+          teile.push(ring(hint.r * 0.93, 0.012, mat4(hint.x + sg * (lb / 2 + 0.004), hint.y, hint.z), FARBE.chrom));
+        });
       }
       if (sb.bremsen) { // Goldgabel: zwei Standrohre am Vorderrad
         [-1, 1].forEach((sg) => teile.push(rohr(0.03, 0.5, mat4(vorn.x + sg * 0.08, vorn.y + 0.28, vorn.z - 0.08, -0.32, 0, 0), s.bremsen >= C().max ? FARBE.gold : 0xd9a600)));
@@ -238,18 +267,21 @@
           teile.push(rohr(0.036, 0.36, mat4(sg * breite * 0.26, 0.27, zMax + 0.07, Math.PI / 2, 0, 0), FARBE.dunkel));
         });
       }
-      if (sb.reifen) {  // breitere Reifen: dunkle Walze neben jedem Rad (außen), Radius wie das Rad
+      if (sb.reifen) {  // breitere Reifen: dunkle Walze neben jedem Rad (außen) + farbiger Felgenring auf der Außenseite (rot, Stufe 5 gold)
         raeder.forEach((g) => {
           const r = radInfo(g); if (!(r.r < 1.2)) return;
-          const aussen = r.x >= 0 ? 1 : -1;
+          const aussen = r.x >= 0 ? 1 : -1, xa = r.x + aussen * (r.br / 2 + 0.07);
           teile.push(rohr(r.r * 0.97, 0.12, mat4(r.x + aussen * (r.br / 2 + 0.01), r.y, r.z, 0, 0, Math.PI / 2), FARBE.dunkel));
+          teile.push(ring(r.r * 0.80, 0.03, mat4(xa + aussen * 0.004, r.y, r.z), reifenFarbe(s.reifen)));
+          teile.push(ring(r.r * 0.93, 0.014, mat4(xa + aussen * 0.004, r.y, r.z), FARBE.chrom));
         });
       }
-      if (sb.bremsen) { // Heckspoiler: Flügel auf zwei Stützen, rot (Stufe 5: gold)
-        const fl = s.bremsen >= C().max ? FARBE.gold : FARBE.rot, zh = zMax - Math.min(0.55, tiefe * 0.1), yh = yMax * 0.82;
-        teile.push(kasten(breite * 0.86, 0.06, 0.34, mat4(0, yh, zh), fl));
-        [-1, 1].forEach((sg) => teile.push(kasten(0.07, yh * 0.34, 0.12, mat4(sg * breite * 0.3, yh - yh * 0.17, zh - 0.02), fl)));
-        if (s.bremsen >= 4) [-1, 1].forEach((sg) => teile.push(kasten(0.04, 0.16, 0.38, mat4(sg * breite * 0.43, yh + 0.05, zh), fl)));
+      if (sb.bremsen) { // Heckspoiler: sitzt auf der Karosserie am Heck (Lage je Modell aus dem Heckprofil), Flügel auf zwei Stützen, rot (Stufe 5: gold)
+        const fl = s.bremsen >= C().max ? FARBE.gold : FARBE.rot, z0 = zMax - 0.17, hp = heckProfil(mesh, inv, z0) || { y: yMax * 0.72, halb: breite * 0.4 };
+        const yf = hp.y, breiteF = Math.max(0.7, Math.min(hp.halb * 2 * 0.92, breite * 0.8)), yw = yf + 0.15;
+        teile.push(kasten(breiteF, 0.045, 0.30, mat4(0, yw, z0 + 0.01, -0.12), fl));                        // Flügel (hinten leicht hoch)
+        [-1, 1].forEach((sg) => teile.push(kasten(0.05, 0.19, 0.08, mat4(sg * breiteF * 0.34, yf + 0.065, z0 - 0.03), fl)));
+        if (s.bremsen >= 4) [-1, 1].forEach((sg) => teile.push(kasten(0.03, 0.12, 0.32, mat4(sg * (breiteF / 2 + 0.01), yw + 0.03, z0 + 0.01), fl)));
       }
     }
     if (!teile.length) return null;
