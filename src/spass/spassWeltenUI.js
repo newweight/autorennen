@@ -6,6 +6,9 @@
 //   Regenbogenspur     Schalter „🌈 Regenbogenspur“ (Standard aus): verblassendes Farbband hinter dem eigenen Fahrzeug (1 Draw-Call je Spieler, nur mit Schalter).
 //   Dino-Begleiter     Schalter „🦖 Dino-Begleiter“ (Aus · Dino-Land · Überall; Standard Dino-Land): freundlicher Dino läuft neben der Strecke mit (Beine + Schwanz animiert,
 //                      Kopf hoch + freundliches Brüllen bei Sprüngen/Trampolin/Kanone). Keine Kollision (nur Optik, steht neben der Fahrbahn).
+//                      FIX1 – Aufgaben (nur Offline-Rennen, nicht in Kurz-Level/Freie Fahrt/K.-o.; Rechenteil R.SpassWelten.dino in spassWelten.js):
+//                        🪙 wirft ab und zu 3 Goldstücke auf die Fahrbahn vor dir (Bogenflug aus dem Maul; einsammeln = Garage-Kasse + 1, zählt im Rennen mit)
+//                        🏁 ruft „Wettrennen!“: wer zuerst an der Fahne 300 m weiter ist, gewinnt (Dino-Tempo nach Schwierigkeit); Sieger-Einblendung, Sticker „Dino geschlagen“
 //   Speicher           localStorage 'rennspiel.spass.welten.<spiel>' { spur, dino }.
 // ============================================================
 (function () {
@@ -198,6 +201,7 @@
     D.beine.geometry.dispose(); D.beine.dispose();
     if (D.gruppe.children[0] && D.gruppe.children[0].material) D.gruppe.children[0].material.dispose();
     sp.dinoBegleiter = null;
+    aufAbbauen(sp);
   }
   const dinoAktivFuer = (strecke) => { const m = einst().dino; return m === 'immer' || (m === 'dino' && strecke && strecke.id === 'dino'); };
   function dinoSchritt(sp, D, dt) {
@@ -208,13 +212,18 @@
     // Immer ein Stück VOR dem Fahrzeug, direkt aus dessen s (keine Glättung der Position: die ließ den Dino bei Tempo zurückfallen, hinter die Kamera;
     // das Pendeln ±3 m lässt ihn lebendig neben dem Spieler laufen statt starr mitzurutschen)
     const vor = (moto() ? 5 : 6) + Math.sin(jetzt() * 0.7) * 3;
-    D.s = spl.wrapS(sNah + vor);
+    // FIX1: im Wettrennen läuft der Dino seine eigene Bahn (Rechenteil), danach gleitet er in höchstens 2,5 s zurück an die Seite des Spielers
+    const wr = sp.dinoAuf && sp.dinoAuf.L.rennen;
+    const ziel = spl.wrapS(sNah + vor);
+    if (wr) { D.frei = jetzt() + 2.5; D.s = spl.wrapS(wr.sD); D.lauf = wr.vD; }
+    else if (D.frei && jetzt() < D.frei && D.s !== null) { const dd = spl.differenzS(ziel, D.s), mx = 70 * dt; D.s = Math.abs(dd) > 200 ? ziel : spl.wrapS(D.s + klemme(dd, -mx, mx)); D.lauf = 0; }
+    else { D.s = ziel; D.lauf = 0; }
     const p = spl.punktBei(D.s), b2 = st.breite / 2, dist = b2 + Math.max(3.5, Math.min((st.zaunAbstand || 14) - 5, 5));
     const x = p.x + p.nx * dist, z = p.z + p.nz * dist, y = st.bodenHoehe(x, z);
     const verdeckt = st.imTunnel && st.imTunnel(D.s, 12);
     D.gruppe.visible = !verdeckt; D.beine.visible = !verdeckt;
     if (verdeckt) return;
-    const tempo = Math.abs(v.vLaengs || 0), sk = moto() ? 0.8 : 1.0;
+    const tempo = D.lauf > 0 ? D.lauf : Math.abs(v.vLaengs || 0), sk = moto() ? 0.8 : 1.0;
     D.phase += tempo * dt / 5.5 * Math.PI * 2 * (sp.pausiert ? 0 : 1);
     const ph = D.phase, idle = tempo < 1.5 ? jetzt() : 0;
     if (D.roar > 0) D.roar = Math.max(0, D.roar - dt);
@@ -243,6 +252,152 @@
     D.roar = 0.9;
     if (R.Audio && R.Audio.dinoFreund) { try { R.Audio.dinoFreund(); } catch (e) { /* Ton egal */ } }
     sticker('dino');
+  }
+
+  // ------------------------------------------------------------------ Dino-Aufgaben (FIX1): Goldstücke werfen + Wettrennen
+  const AUF_CSS = '#dino-wett{position:fixed;left:50%;top:70px;transform:translateX(-50%);width:min(320px,70vw);height:34px;z-index:60;pointer-events:none;font-size:20px;line-height:1}' +
+    '#dino-wett .bahn{position:absolute;left:14px;right:14px;top:16px;height:5px;border-radius:3px;background:rgba(255,255,255,.55);box-shadow:0 0 0 1px rgba(0,0,0,.35)}' +
+    '#dino-wett .ich,#dino-wett .dino{position:absolute;top:0;transform:translateX(-50%)}#dino-wett .fahne{position:absolute;top:0;right:-2px}' +
+    '#dino-sieg{position:fixed;left:50%;top:24%;transform:translate(-50%,0);z-index:70;pointer-events:none;text-align:center;font:900 clamp(26px,5.2vw,52px)/1.15 system-ui,sans-serif;color:#fff;' +
+    'text-shadow:0 3px 0 #1d6b2a,0 0 18px rgba(0,0,0,.55);padding:.35em .8em;border-radius:.6em;background:rgba(40,160,70,.82);animation:dinoSieg 3.2s ease-out forwards}' +
+    '#dino-sieg.v{background:rgba(190,90,40,.84);text-shadow:0 3px 0 #6b2d1d,0 0 18px rgba(0,0,0,.55)}#dino-sieg small{display:block;font-size:.45em;font-weight:700;margin-top:.2em}' +
+    '@keyframes dinoSieg{0%{opacity:0;transform:translate(-50%,16px) scale(.6)}12%{opacity:1;transform:translate(-50%,0) scale(1.08)}20%{transform:translate(-50%,0) scale(1)}82%{opacity:1}100%{opacity:0;transform:translate(-50%,-14px) scale(1)}}';
+  function aufStil() {
+    if (typeof document === 'undefined' || document.getElementById('dino-auf-stil')) return;
+    const s = document.createElement('style'); s.id = 'dino-auf-stil'; s.textContent = AUF_CSS; document.head.appendChild(s);
+  }
+  function fahneTextur() {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d');
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 16; x++) { g.fillStyle = (x + y) % 2 ? '#111' : '#fff'; g.fillRect(x * 16, y * 16, 16, 16); }
+    g.fillStyle = 'rgba(20,110,40,.92)'; g.fillRect(40, 10, 176, 44); g.fillStyle = '#fff'; g.font = '900 34px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('🦖 ZIEL', 128, 33);
+    const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
+  }
+  function aufNeu(sp) {
+    aufStil();
+    const A = { L: R.SpassWelten.dino.neu(sp.strecke), pool: [], an: new Map(), tor: null, wett: null, sieg: null, siegBis: 0, torBis: 0, tmp: new THREE.Vector3() };
+    A.geo = new THREE.CylinderGeometry(0.62, 0.62, 0.13, 22); A.geo.rotateX(Math.PI / 2);
+    A.mat = new THREE.MeshLambertMaterial({ color: 0xffc928, emissive: 0x6a4600 });
+    const b2 = (sp.strecke.breite || 12) / 2 + 0.9;
+    const tor = new THREE.Group(); tor.name = 'DinoFahne'; tor.visible = false;
+    const pm = new THREE.MeshLambertMaterial({ color: 0xf0f0f0 });
+    [-1, 1].forEach((sg) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, 6.4, 8), pm); m.position.set(0, 3.2, sg * b2); tor.add(m); });
+    A.tex = fahneTextur();
+    const ban = new THREE.Mesh(new THREE.PlaneGeometry(b2 * 2, 1.9), new THREE.MeshBasicMaterial({ map: A.tex, side: THREE.DoubleSide }));
+    ban.rotation.y = -Math.PI / 2; ban.position.set(0, 5.5, 0); tor.add(ban);
+    const strip = new THREE.Mesh(new THREE.PlaneGeometry(1.4, b2 * 2 - 1.8), new THREE.MeshBasicMaterial({ map: A.tex, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+    strip.rotation.x = -Math.PI / 2; strip.rotation.z = Math.PI / 2; strip.position.set(0, 0.07, 0); tor.add(strip);
+    A.tor = tor; sp.szene.add(tor);
+    return A;
+  }
+  function aufAbbauen(sp) {
+    const A = sp.dinoAuf; if (!A) return;
+    A.pool.forEach((m) => { if (m.parent) m.parent.remove(m); });
+    if (A.geo) A.geo.dispose();
+    if (A.mat) A.mat.dispose();
+    if (A.tor) { if (A.tor.parent) A.tor.parent.remove(A.tor); A.tor.traverse((c) => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); }); }
+    if (A.tex) A.tex.dispose();
+    ['wett', 'sieg'].forEach((k) => { if (A[k] && A[k].parentNode) A[k].parentNode.removeChild(A[k]); });
+    sp.dinoAuf = null;
+  }
+  function aufMesh(sp, A, id) {
+    let m = A.an.get(id);
+    if (m) return m;
+    m = A.pool.find((x) => !x.userData.belegt);
+    if (!m) { m = new THREE.Mesh(A.geo, A.mat); m.frustumCulled = false; m.renderOrder = 3; A.pool.push(m); sp.szene.add(m); }
+    m.userData.belegt = true; m.visible = true; A.an.set(id, m); return m;
+  }
+  function aufFrei(A, id) { const m = A.an.get(id); if (m) { m.visible = false; m.userData.belegt = false; A.an.delete(id); } }
+  function aufMelden(sp, i, text, ms) { try { sp._meldung(i, text, ms); } catch (e) { /* egal */ } }
+  function siegEinblenden(A, gewonnen, zeit) {
+    if (typeof document === 'undefined') return;
+    if (A.sieg && A.sieg.parentNode) A.sieg.parentNode.removeChild(A.sieg);
+    const d = document.createElement('div'); d.id = 'dino-sieg'; if (!gewonnen) d.className = 'v';
+    d.innerHTML = gewonnen ? '🏆 Du hast den Dino geschlagen!<small>Geschafft in ' + zeit.toFixed(1).replace('.', ',') + ' Sekunden 🦖</small>' : '🦖 Der Dino war schneller!<small>Versuch es noch einmal – beim nächsten Wettrennen!</small>';
+    document.body.appendChild(d); A.sieg = d; A.siegBis = jetzt() + 3.4;
+  }
+  function aufLeiste(A, wr, st, f) {
+    if (typeof document === 'undefined') return;
+    if (!A.wett) {
+      const d = document.createElement('div'); d.id = 'dino-wett';
+      d.innerHTML = '<div class="bahn"></div><span class="ich">' + (moto() ? '🏍️' : '🏎️') + '</span><span class="dino">🦖</span><span class="fahne">🏁</span>';
+      document.body.appendChild(d); A.wett = d;
+    }
+    A.wett.style.display = '';
+    const p = klemme(st.spline.differenzS(f.nah.s, wr.s0) / wr.weg, 0, 1), q = klemme((wr.sD - wr.s0) / wr.weg, 0, 1);
+    const ich = A.wett.querySelector('.ich'), dino = A.wett.querySelector('.dino');
+    ich.style.left = (14 + p * 268) + 'px'; ich.style.top = '-6px'; dino.style.left = (14 + q * 268) + 'px'; dino.style.top = '12px';
+  }
+  /** Ein Bild der Dino-Aufgaben (Rechenteil, Anzeige, Einsammeln, Wettrennen). Nur normale Offline-Rennen mit Dino. */
+  function aufgabenSchritt(sp, Dn, dt) {
+    const st = sp.strecke, rn = sp.rennen, f = sp.fahrzeuge.find((x) => x && x.istSpieler);
+    const aktiv = !!(f && rn && st && sp.zustand === 'rennen' && rn.gasErlaubt && !(sp.einstellungen && sp.einstellungen.spassModus));
+    if (!aktiv) {
+      const B = sp.dinoAuf;
+      if (B) { B.tor.visible = false; B.an.forEach((m, id) => aufFrei(B, id)); if (B.wett) B.wett.style.display = 'none'; }
+      return;
+    }
+    const A = sp.dinoAuf || (sp.dinoAuf = aufNeu(sp)), Lg = A.L, v = f.vehicle, i = sp.fahrzeuge.indexOf(f), t = rn.teilnehmer[i];
+    const zeit = jetzt();
+    if (A.sieg && zeit > A.siegBis) { if (A.sieg.parentNode) A.sieg.parentNode.removeChild(A.sieg); A.sieg = null; }
+    if (!f.nah || f.ausgeschieden || (t && t.imZiel)) { A.tor.visible = false; if (A.wett) A.wett.style.display = 'none'; return; }
+    const d = sp.pausiert ? 0 : Math.min(dt || 0.016, 0.05);
+    const K = { s: f.nah.s, x: v.x, z: v.z, v: Math.abs(v.vLaengs || 0), vMax: v.daten && v.daten.vMax, schw: sp._dinoSchw || 'mittel',
+      bereit: !v.imFlug && !v.imLooping && !(f.flug && f.flug.aktiv) && !v.verkehr };
+    R.SpassWelten.dino.schritt(Lg, st, K, d);
+    const sk = moto() ? 0.8 : 1.0;
+    while (Lg.ereig.length) {
+      const e = Lg.ereig.shift();
+      if (e.name === 'gold') {
+        const o = A.tmp.set(Dn.gruppe.position.x, Dn.gruppe.position.y + 5.2 * sk, Dn.gruppe.position.z);
+        e.muenzen.forEach((g) => { g.o = [o.x, o.y, o.z]; });
+        Dn.roar = 0.9; if (R.Audio && R.Audio.dinoFreund) { try { R.Audio.dinoFreund(); } catch (er) { /* Ton egal */ } }
+        aufMelden(sp, i, '🦖 Der Dino wirft dir Gold! 🪙', 1500);
+      } else if (e.name === 'sammeln') {
+        if (R.Garage && t) { try { R.Garage.gutschreiben(t.name, 1); } catch (er) { /* Konto egal */ } }
+        if (sp.muenzen && sp.muenzen.gesammelt) sp.muenzen.gesammelt[i] = (sp.muenzen.gesammelt[i] || 0) + 1;
+        const hd = sp.huds && sp.huds[f.spielerNr];
+        if (hd && hd.muenzenSetzen && sp.muenzen) hd.muenzenSetzen(sp.muenzen.anzahlVon(i), 1);
+        if (sp.muenzen && sp.muenzen.ton) { try { sp.muenzen.ton(); } catch (er) { /* Ton egal */ } }
+        if (sp.spassKonfetti) sp.spassKonfetti.burst(v.x, v.y + 1.6, v.z, 14);
+      } else if (e.name === 'wettrennen') {
+        Dn.roar = 0.9; if (R.Audio && R.Audio.dinoFreund) { try { R.Audio.dinoFreund(); } catch (er) { /* Ton egal */ } }
+        aufMelden(sp, i, '🦖 Wettrennen!\nWer zuerst an der Fahne ist (' + Math.round(e.weg) + ' m)!', 2800);
+        A.torBis = Infinity;
+      } else if (e.name === 'sieg' || e.name === 'verloren') {
+        const g = e.name === 'sieg';
+        siegEinblenden(A, g, e.zeit);
+        if (g) { sticker('dinoSieg'); if (sp.spassKonfetti) sp.spassKonfetti.burst(v.x, v.y + 3, v.z, 110); if (R.Audio && R.Audio.zLand) { try { R.Audio.zLand(); } catch (er) { /* Ton egal */ } } }
+        else if (R.Audio && R.Audio.dinoFreund) { try { R.Audio.dinoFreund(); } catch (er) { /* Ton egal */ } }
+        A.torBis = zeit + 2.5;
+      } else if (e.name === 'abbruch') A.torBis = zeit;
+    }
+    // Goldstücke zeichnen
+    const ids = new Set();
+    Lg.gold.forEach((g) => {
+      ids.add(g.id);
+      const m = aufMesh(sp, A, g.id), w = R.SpassWelten.dino.goldPos(st, g), y0 = w.y + 0.95;
+      if (g.alter < 0) { m.visible = false; return; }
+      m.visible = true;
+      if (g.alter < g.flug && g.o) {
+        const u = g.alter / g.flug;
+        m.position.set(g.o[0] + (w.x - g.o[0]) * u, g.o[1] + (y0 - g.o[1]) * u + 4.2 * 4 * u * (1 - u), g.o[2] + (w.z - g.o[2]) * u);
+        m.rotation.y = u * 14;
+      } else {
+        const rest = g.dauer - g.alter, blink = rest < 3 && Math.floor(rest * 6) % 2 === 0;
+        m.position.set(w.x, y0 + Math.sin(zeit * 3 + g.id) * 0.12, w.z); m.rotation.y = zeit * 3.2 + g.id; m.visible = !blink;
+      }
+    });
+    A.an.forEach((m, id) => { if (!ids.has(id)) aufFrei(A, id); });
+    // Fahne + Fortschrittsleiste
+    const wr = Lg.rennen;
+    if (wr) {
+      const p = st.spline.punktBei(wr.sMark);
+      A.tor.visible = true; A.tor.position.set(p.x, st.hoeheAn(p.x, p.z), p.z); A.tor.rotation.set(0, -Math.atan2(p.tz, p.tx), 0);
+      aufLeiste(A, wr, st, f);
+    } else {
+      A.tor.visible = zeit < A.torBis;
+      if (A.wett) A.wett.style.display = 'none';
+    }
   }
 
   // ------------------------------------------------------------------ Szene
@@ -279,6 +434,7 @@
   const rennenStarten = P.rennenStarten;
   P.rennenStarten = function () {
     const r = rennenStarten.apply(this, arguments);
+    try { this._dinoSchw = (arguments[0] && arguments[0].schwierigkeit) || (R.config && R.config.schwierigkeitStandard) || 'mittel'; } catch (e) { /* egal */ }
     try { this._mondHuepfer = 0; dinoAbbauen(this); if (this.regenSpuren) { this.regenSpuren.forEach((S) => loesen(S.m)); this.regenSpuren = null; } begleiterAbgleichen(this); } catch (e) { console.error('Welten UI (Start):', e); }
     return r;
   };
@@ -331,7 +487,7 @@
         if (spiel.spassTore) { const t = spiel.spassTore.userData.tex; if (t) t.rotation = jetzt() * 1.4; }
         if (!spiel._welteAbgleich || ++spiel._welteAbgleich % 20 === 0) begleiterAbgleichen(spiel);
         if (!spiel._welteAbgleich) spiel._welteAbgleich = 1;
-        if (spiel.dinoBegleiter) dinoSchritt(spiel, spiel.dinoBegleiter, d);
+        if (spiel.dinoBegleiter) { dinoSchritt(spiel, spiel.dinoBegleiter, d); aufgabenSchritt(spiel, spiel.dinoBegleiter, d); }
         if (spiel.regenSpuren) spiel.regenSpuren.forEach((S) => { if (S.f && S.f.vehicle) spurSchritt(spiel, S.f, S); });
       } catch (e) { if (!R._weltenUIFehler) { R._weltenUIFehler = 1; console.error('Welten UI (Bild):', e); } }
       return r;

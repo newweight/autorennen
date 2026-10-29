@@ -317,6 +317,25 @@
     return { pos: _pos, u: _u, f: _f, theta: th, art: 'magnet' };
   }
 
+  /**
+   * FIX1: Zustand für die ANZEIGE. Offline/Server-Spiel: f.flug. Online kennt die Anzeige von den Fahrzeugen nur das Flug-Flag (fz.aktiv), nicht fz.gleit / fz.z.mag –
+   * deshalb dort: eigener Wagen = Zustand der Vorhersage (rechnet wie der Server), fremde Wagen = aus Position + Flug-Flag abgeleitet (Schirm über der Schlucht, Röhre bei Tempo).
+   */
+  function zeigeZustand(spiel, f, i, st) {
+    const fz = f.flug;
+    if (!fz || !(spiel.zustand === 'online' && spiel.online)) return fz;
+    const on = spiel.online, V = on.vorhersage;
+    if (i === on.du && V && V.fz) return V.fz;
+    const za = st.spass && st.spass.zauber, v = f.vehicle, d = f.anzeige;
+    if (!za || !v || !d || !(v.imFlug || fz.aktiv)) return fz;
+    const e = f._zInf || (f._zInf = { aktiv: false, gleit: null, pipe: null, schiene: fz.schiene || null, z: { mag: null, groesse: 1 }, y: 0, vy: 0 });
+    e.aktiv = fz.aktiv; e.gleit = null; e.z.mag = null; e.schiene = fz.schiene || null; e.pipe = fz.pipe || null;
+    const sp = st.spline, n = sp.naechster(d.x, d.z, f.index >= 0 ? f.index : undefined), gr = st.hoeheAn(d.x, d.z);
+    for (let k = 0; k < za.schluchten.length; k++) { const s = za.schluchten[k], a = sp.differenzS(n.s, s.sT), b = sp.differenzS(n.s, s.sL); if (a >= -1 && b <= 1.5 && (d.y || 0) - gr > 0.3) { e.gleit = { q: n.seitenabstand }; break; } }
+    if (!e.gleit) for (let k = 0; k < za.magnet.length; k++) { const m = za.magnet[k], a = sp.differenzS(n.s, m.s0); if (a > 0 && a < m.laenge && v.vLaengs >= R.config.spass.zauber.magnet.vMin) { e.z.mag = m; break; } }
+    return e;
+  }
+
   function bild(spiel, dt) {
     const F = spiel.fahrzeuge, st = spiel.strecke;
     if (!F || !st) return;
@@ -340,16 +359,19 @@
         f._zSk = Math.abs(n - ziel) < 0.003 ? ziel : n; mesh.scale.setScalar(f._zSk);
       }
       // Flügel / Gleitschirm
-      const fl = mesh.userData.zFluegel || (fz && fz.gleit ? (mesh.userData.zFluegel = fluegelBauen(mesh)) : null);
+      // FIX1: Schirm/Flügel steht SOFORT im ersten Bild des Gleitens (vorher wuchs er in 0,3 s von 0 an); vorab gebaut (kein Ruckler beim Absprung), zum Schluss weich einklappen
+      const zs = zeigeZustand(spiel, f, i, st), gl = !!(zs && zs.gleit);
+      if (!mesh.userData.zFluegel && z && z.schluchten.length && mesh.userData.zBox) mesh.userData.zFluegel = fluegelBauen(mesh);
+      const fl = mesh.userData.zFluegel || (gl ? (mesh.userData.zFluegel = fluegelBauen(mesh)) : null);
       if (fl) {
-        const an = !!(fz && fz.gleit), a0 = fl.userData.auf || 0, a = klemme(a0 + (an ? 1 : -1) * dtt / 0.3, 0, 1);
+        const a0 = fl.userData.auf || 0, a = gl ? (a0 < 0.8 ? 0.8 + 0.2 * Math.min(1, dtt / 0.1) : klemme(a0 + dtt / 0.1, 0, 1)) : klemme(a0 - dtt / 0.35, 0, 1);
         fl.userData.auf = a; fl.visible = a > 0.01;
-        if (fl.visible) { fl.scale.set(moto() ? a : a, a, a); fl.rotation.z = (fz.gleit ? -(f.vehicle.lenkung || 0) * 0.25 : 0); }
+        if (fl.visible) { fl.scale.set(a, a, a); fl.rotation.z = (gl ? -(f.vehicle.lenkung || 0) * 0.25 : 0); }
       }
       // Halfpipe / Wand: Neigung; Röhre: Pose
       let pose = null;
       const d = f.anzeige;
-      if (zz && zz.mag && f.vehicle) pose = poseMagnet(spiel, f, zz.mag, d);
+      if (zs && zs.z && zs.z.mag && f.vehicle) pose = poseMagnet(spiel, f, zs.z.mag, d);
       else if (fz && fz.pipe) {
         const P_ = fz.pipe, phi = P_.phi; const p = st.spline.punktBei(P_.s);
         _f.set(p.tx, 0, p.tz).normalize(); _u.set(-P_.side * Math.sin(phi) * p.nx, Math.cos(phi), -P_.side * Math.sin(phi) * p.nz).normalize();

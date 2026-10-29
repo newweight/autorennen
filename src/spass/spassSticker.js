@@ -46,6 +46,7 @@
     { id: 'regenbogen', emoji: '🌈', name: 'Regenbogen-Fan', text: 'Ein Rennen im Regenbogenland beendet.' },
     { id: 'teleport', emoji: '🌀', name: 'Teleporter', text: 'Durch ein Teleport-Tor gefahren.' },
     { id: 'dinofreund', emoji: '🦖', name: 'Dino-Freund', text: 'Der Dino-Begleiter hat für dich gebrüllt.' },
+    { id: 'dinoSieg', emoji: '🏁', name: 'Dino geschlagen', text: 'Das Wettrennen gegen den Dino gewonnen!' },
     // S6: Fahr-Zauber
     { id: 'magnet', emoji: '🧲', name: 'Magnetfahrer', text: 'Kopfüber an der Decke der Magnet-Röhre gefahren.' },
     { id: 'gleiter', emoji: '🪂', name: 'Gleitflieger', text: 'Über eine Schlucht gesegelt und sicher gelandet.' },
@@ -137,6 +138,7 @@
       case 'huepfer': if (d.n >= 10) geben('mondHupf'); break;                   // S5: Mond-Hüpfer ({ n } im Rennen)
       case 'teleport': geben('teleport'); break;
       case 'dino': geben('dinofreund'); break;
+      case 'dinoSieg': geben('dinoSieg'); break;                                 // FIX1: Wettrennen gegen den Dino-Freund gewonnen
       case 'magnet': geben('magnet'); break;                                     // S6: Fahr-Zauber
       case 'gleiten': geben('gleiter'); break;
       case 'grind': if (d.m >= 20) geben('grind'); break;

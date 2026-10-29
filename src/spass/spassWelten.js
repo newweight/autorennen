@@ -9,7 +9,7 @@
 //                            auf freier, fast gerader Strecke (gleiche Sperrregeln wie Trampolin/Kanone). Durchfahrt durch A → Fahrzeug erscheint bei B (gleiche Richtung zur Straße,
 //                            gleicher Querversatz, gleiches Tempo); übersprungene Checkpoints werden gutgeschrieben. Nur mit Strecken-Option { spass: true } (wie Trampolin/Kanone).
 //   Spiel.physikSchritt      umhüllt (nach spassPhysik.js): nach jedem Schritt je Fahrzeug R.SpassWelten.nachSchritt (Hüpfer, Tore), danach Rennleitung/Index nachziehen.
-// Öffentlich: R.SpassWelten = { nachSchritt, plan, schwerkraft, huepfenPruefen, toreFuer, profil }.
+// Öffentlich: R.SpassWelten = { nachSchritt, plan, schwerkraft, huepfenPruefen, toreFuer, profil, … dino: { neu, schritt, frei, tempo, sBei, goldPos } } (FIX1: Dino-Aufgaben Gold + Wettrennen).
 // Ereignisse (fz.spassE, wie Trampolin/Kanone): 'teleport' · fz.tele = { n, von:{x,y,z}, nach:{x,y,z}, tor } für die Anzeige.
 // ============================================================
 (function () {
@@ -244,5 +244,128 @@
     };
   }
 
-  R.SpassWelten = { nachSchritt, plan, schwerkraft, huepfenPruefen, toreFuer, profil, huepfen, toreBenutzen };
+  // ---------------------------------------------------------------- Dino-Freund: Aufgaben (FIX1, rein – Anzeige in spassWeltenUI.js)
+  //   🪙 Goldstücke   Ab und zu wirft der Dino 3 Goldstücke auf die Fahrbahn VOR dem Spieler (Ort rein aus Zähler + Strecken-Name: deterministisch, kein Math.random).
+  //                   Einsammeln = Garage-Kasse + 1 (Anzeige übernimmt das Gutschreiben). Keine Physik, keine Kollision.
+  //   🏁 Wettrennen   Der Dino ruft „Wettrennen!“: wer zuerst an der Fahne `weg` m weiter ist, gewinnt. Dino-Tempo = Soll-Tempo der Strecke (max. Fahrzeug-Tempo) × tempoFaktor
+  //                   der Schwierigkeit (config.schwierigkeiten – wie die Computer-Fahrer) × tempoAnteil 0,88 (der Dino ist etwas gemütlicher als ein Computer-Fahrer). Kein Einfluss auf das Rennergebnis; Sieg → Sticker „Dino geschlagen“.
+  //   Nur Offline-Anzeige (die Aufgaben laufen im Browser, online gibt es den Dino-Begleiter nicht); der Rechenteil bleibt trotzdem rein und bitgleich testbar.
+  R.config.spass.welten.dino = {
+    gold: { erstNach: 12, pauseMin: 16, pauseSpanne: 12, anzahl: 3, abstand: 5, vorn: 34, vornSek: 1.2, flug: 0.85, dauer: 15, radius: 2.5, qAnteil: 0.55, vMin: 6 },
+    rennen: { erstNach: 38, pauseMin: 50, pauseSpanne: 40, weg: 300, vMin: 8, tau: 1.2, tempoAnteil: 0.88, vorsprung: 6, dMin: 10, maxSek: 70, fahne: 0.9 },
+  };
+  const hashT = (txt) => { let h = 2166136261 >>> 0; for (let i = 0; i < txt.length; i++) { h ^= txt.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h >>> 0; };
+  const mischen = (h, n) => { h = (h ^ Math.imul(n + 1, 0x9E3779B1)) >>> 0; h = Math.imul(h ^ (h >>> 15), 0x85EBCA6B) >>> 0; h = Math.imul(h ^ (h >>> 13), 0xC2B2AE35) >>> 0; return (h ^ (h >>> 16)) >>> 0; };
+
+  /** Ist Bogenlänge s für Dino-Gold/Fahne frei von Sonderelementen (Looping, Schanze, Brücke, Gabelung, Kreuzung, Trampolin/Kanone, Tore, Zauber-Elemente)? */
+  function dinoFrei(st, s) {
+    const sp = st.spline, L = sp.laenge, drin = (a, b) => { const l = sp.wrapS(b - a); return sp.wrapS(s - a) <= l; };
+    if (s < 60 || s > L - 30) return false;
+    let frei = true;
+    const sperre = (a, b) => { if (frei && drin(a, b)) frei = false; };
+    (st.loopings || []).forEach((l) => sperre(l.s0 - 25, l.s1 + 25));
+    (st.schanzen || []).forEach((x) => sperre(x.s - 25, x.s + (x.laenge || 10) + 80));
+    (st.ueberfuehrungen || []).forEach((u) => { sperre(u.s0 - 20, u.s1 + 20); if (u.unten) sperre(u.unten.s0 - 20, u.unten.s1 + 20); });
+    (st.gabelungen || []).forEach((g) => sperre(g.s0 - 20, g.s1 + 20));
+    (st.kreuzungen || []).forEach((k) => [k.a, k.b].forEach((b) => sperre(b.s0 - 25, b.s1 + 25)));
+    const sx = st.spass;
+    if (sx) {
+      (sx.liste || []).forEach((e) => sperre(e.s0 - 25, e.s0 + (e.laenge || 10) + 25));
+      (sx.tore || []).forEach((e) => sperre(e.sA - 20, e.sB + 20));
+      const z = sx.zauber;
+      if (z) {
+        (z.magnet || []).forEach((e) => sperre(e.s0 - 20, e.s1 + 20));
+        (z.schluchten || []).forEach((e) => sperre(e.sT - 40, e.sL + 40));
+        (z.schienen || []).forEach((e) => sperre(e.s0 - 20, e.s1 + 20));
+        if (z.pipe) sperre(z.pipe.s0 - 20, z.pipe.s1 + 20);
+      }
+    }
+    return frei;
+  }
+
+  /** Neuer Aufgaben-Zustand für eine Strecke (Zeiten in Rennsekunden). */
+  function dinoNeu(st) {
+    const c = C().dino, seed = hashT(String((st && (st.id || (st.daten && st.daten.id))) || '') + '|dinoAufgaben');
+    return { seed, n: 0, nR: 0, zeit: 0, tGold: c.gold.erstNach, tRennen: c.rennen.erstNach, gold: [], rennen: null, ereig: [], gesammelt: 0, siege: 0, niederlagen: 0 };
+  }
+
+  /** Mittleres Soll-Tempo (harmonisch) der Strecke über [s0, s0+weg], je Stelle höchstens vMax (das Fahrzeug schafft nie mehr). */
+  function dinoTempo(st, s0, weg, vMax, schw) {
+    const sp = st.spline, tf = ((R.config.schwierigkeiten || {})[schw] || (R.config.schwierigkeiten || {}).mittel || { tempoFaktor: 0.78 }).tempoFaktor;
+    let inv = 0, n = 0;                                         // harmonisches Mittel: Kurven kosten Zeit (wie beim Fahren), sonst wäre der Dino auf kurvigen Stücken unschlagbar
+    for (let d = 0; d <= weg; d += 20) { inv += 1 / Math.max(3, Math.min(vMax, st.tempoBei(sp.wrapS(s0 + d)))); n++; }
+    const ref = Math.min(vMax, n / inv);
+    return klemme(ref * tf * C().dino.rennen.tempoAnteil, C().dino.rennen.dMin, Math.max(C().dino.rennen.dMin, vMax));
+  }
+
+  /** Dino-Fahne: Strecke s des Dinos zur Zeit t nach dem Ruf (sanfter Start). */
+  function dinoSBei(R_, t) {
+    const c = C().dino.rennen, tau = c.tau;
+    return R_.s0 + c.vorsprung + R_.vD * (t - tau * (1 - Math.exp(-t / tau)));
+  }
+
+  /** Weltposition (x, z) eines Dino-Goldstücks. */
+  function dinoGoldPos(st, g) { const p = st.spline.punktBei(g.s); return { x: p.x + p.nx * g.q, z: p.z + p.nz * g.q, y: st.hoeheAn(p.x + p.nx * g.q, p.z + p.nz * g.q), p }; }
+
+  /**
+   * Ein Schritt der Aufgaben. K = { s, x, z, v, bereit (fährt auf dem Boden im laufenden Rennen), schw, vMax }. Ereignisse in D.ereig: { name: 'gold'|'sammeln'|'wettrennen'|'sieg'|'verloren'|'weg', … }.
+   * Goldstücke: D.gold = [{ id, s, q, alter, flug, dauer }] (alter zählt hoch; beim Einsammeln/Ablaufen entfernt).
+   */
+  function dinoSchritt(D, st, K, dt) {
+    const c = C().dino, G = c.gold, W = c.rennen, sp = st.spline, halb = Math.max(2.5, (st.breite || 12) / 2);
+    if (!(dt > 0)) return D;
+    D.zeit += dt;
+    for (let i = D.gold.length - 1; i >= 0; i--) {
+      const g = D.gold[i]; g.alter += dt;
+      if (g.alter >= G.dauer) { D.gold.splice(i, 1); D.ereig.push({ name: 'weg', id: g.id }); continue; }
+      if (K.bereit && g.alter >= G.flug) {
+        const w = dinoGoldPos(st, g), dx = K.x - w.x, dz = K.z - w.z;
+        if (dx * dx + dz * dz <= G.radius * G.radius) { D.gold.splice(i, 1); D.gesammelt++; D.ereig.push({ name: 'sammeln', id: g.id }); }
+      }
+    }
+    // Wettrennen läuft
+    const Rn = D.rennen;
+    if (Rn) {
+      Rn.t += dt; Rn.sD = dinoSBei(Rn, Rn.t);
+      const p = sp.differenzS(K.s, Rn.s0), dD = Rn.sD - Rn.s0;
+      if (p >= Rn.weg) { D.rennen = null; D.siege++; D.tRennen = W.pauseMin + mischen(D.seed, 1000 + D.nR) % (W.pauseSpanne + 1); D.ereig.push({ name: 'sieg', zeit: Rn.t, dinoWeg: dD }); }
+      else if (dD >= Rn.weg) { D.rennen = null; D.niederlagen++; D.tRennen = W.pauseMin + mischen(D.seed, 1000 + D.nR) % (W.pauseSpanne + 1); D.ereig.push({ name: 'verloren', zeit: Rn.t, spielerWeg: p }); }
+      else if (Rn.t > W.maxSek || !K.bereit && Rn.t > 4 && K.v < 1) { D.rennen = null; D.tRennen = 12; D.ereig.push({ name: 'abbruch' }); }
+      else if (p < -40) { D.rennen = null; D.tRennen = 12; D.ereig.push({ name: 'abbruch' }); }   // falsch herum / zurückgesetzt
+      return D;
+    }
+    if (!K.bereit) return D;
+    // Gold werfen
+    if (K.v >= G.vMin) {
+      D.tGold -= dt;
+      if (D.tGold <= 0) {
+        const h = mischen(D.seed, D.n), q = (((h % 7) - 3) / 3) * halb * G.qAnteil, s0 = sp.wrapS(K.s + G.vorn + K.v * G.vornSek);
+        const ok = dinoFrei(st, s0) && dinoFrei(st, sp.wrapS(s0 + G.abstand * (G.anzahl - 1)));
+        if (!ok) D.tGold = 3;
+        else {
+          const lst = [];
+          for (let k = 0; k < G.anzahl; k++) { const g = { id: D.n * 10 + k, s: sp.wrapS(s0 + k * G.abstand), q, alter: -k * 0.12, flug: G.flug, dauer: G.dauer }; D.gold.push(g); lst.push(g); }
+          D.ereig.push({ name: 'gold', muenzen: lst, n: D.n });
+          D.n++; D.tGold = G.pauseMin + mischen(D.seed, 500 + D.n) % (G.pauseSpanne + 1);
+        }
+      }
+    }
+    // Wettrennen rufen (nur im Fahrbetrieb, nicht mit Gold im Flug)
+    if (K.v >= W.vMin && !D.gold.some((g) => g.alter < g.flug + 0.3)) {
+      D.tRennen -= dt;
+      if (D.tRennen <= 0) {
+        let sM = null;
+        for (let d = 0; d <= 60 && sM === null; d += 10) { const s = sp.wrapS(K.s + W.weg + d); if (dinoFrei(st, s)) sM = { s, d }; }
+        if (sM === null) D.tRennen = 8;
+        else {
+          const weg = W.weg + sM.d, vD = dinoTempo(st, K.s, weg, K.vMax || 28, K.schw);
+          D.rennen = { s0: K.s, sMark: sM.s, weg, vD, t: 0, sD: K.s + W.vorsprung, nr: D.nR };
+          D.nR++; D.ereig.push({ name: 'wettrennen', weg, vD });
+        }
+      }
+    }
+    return D;
+  }
+
+  R.SpassWelten = { nachSchritt, plan, schwerkraft, huepfenPruefen, toreFuer, profil, huepfen, toreBenutzen, dino: { neu: dinoNeu, schritt: dinoSchritt, frei: dinoFrei, tempo: dinoTempo, sBei: dinoSBei, goldPos: dinoGoldPos } };
 })();

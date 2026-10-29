@@ -128,6 +128,32 @@ for (const [spn, moto] of [['auto', false], ['motorrad', true]]) {
   pruefe(`B ${spn}: Lauf mit Röhre zweimal bitgleich`, h2 === hAll, `${hAll} ${h2}`);
 }
 
+// ---------------------------------------------------------------- B2) Magnet-Röhre hält das Tempo (FIX1): ohne Gas höchstens leichter Verlust, auch am Berg (Alpen); wer bremst, wird langsamer
+for (const [spn, moto] of [['auto', false], ['motorrad', true]]) {
+  const R = moto ? ladenMoto() : laden();
+  const durch = (id, art) => {
+    const t = neu(id, moto), e = t.st.spass.zauber.magnet[0], sp = t.st.spline, pilot = pilotBauen(R, t.st, t.f, t.v), pt = sp.punktBei(e.s0 - 90);
+    t.v.setzen(pt.x, pt.z, R.headingAus(pt.tx, pt.tz)); t.v.vLaengs = 22; t.f.index = -1;
+    t.S.rennen.verfolgungSetzen(t.S.rennen.teilnehmer[0], t.v.x, t.v.z, e.s0 - 90);
+    let ein = null, aus = null, was = false, min = 1e9;
+    for (let i = 0; i < 60 * 30; i++) {
+      const s = pilot(0, 22);
+      if (art === 'rollen') { s.gas = 0; s.bremse = 0; } else if (art === 'bremsen') { if (was) { s.gas = 0; s.bremse = 1; } } else { s.gas = 1; s.bremse = 0; }
+      t.sim.eingabeSetzen(0, s); t.sim.schritt();
+      const m = !!(t.f.flug.z && t.f.flug.z.mag);
+      if (m && !was) ein = t.v.vLaengs;
+      if (m) min = Math.min(min, t.v.vLaengs);
+      if (!m && was) { aus = t.v.vLaengs; break; }
+      was = m;
+    }
+    return { ein, aus, min };
+  };
+  const ro = ['wiese', 'alpen'].map((id) => durch(id, 'rollen')), gs = durch('alpen', 'gas'), br = durch('wiese', 'bremsen');
+  pruefe(`B2 ${spn}: Magnet-Röhre ohne Gas (Wiese, Alpen mit Steigung) – Tempo bleibt (Verlust ≤ 8 %)`, ro.every((r) => r.ein && r.aus && r.aus >= r.ein * 0.92), ro.map((r) => r.ein && (r.ein * 3.6).toFixed(0) + '→' + (r.aus * 3.6).toFixed(0)).join(' | ') + ' km/h');
+  pruefe(`B2 ${spn}: Magnet-Röhre mit Vollgas am Berg (Alpen) – nie langsamer als bei der Einfahrt (−5 %)`, gs.ein && gs.aus && gs.min >= gs.ein * 0.95, gs.ein && (gs.ein * 3.6).toFixed(0) + '→' + (gs.aus * 3.6).toFixed(0) + ' km/h');
+  pruefe(`B2 ${spn}: wer in der Röhre bremst, wird langsamer (Bremse wirkt)`, br.ein && (!br.aus || br.aus < br.ein * 0.8), br.ein && (br.ein * 3.6).toFixed(0) + '→' + (br.aus ? (br.aus * 3.6).toFixed(0) : 'Stand') + ' km/h');
+}
+
 // ---------------------------------------------------------------- C) Gleiten
 for (const [spn, moto] of [['auto', false], ['motorrad', true]]) {
   const R = moto ? ladenMoto() : laden();
@@ -145,7 +171,7 @@ for (const [spn, moto] of [['auto', false], ['motorrad', true]]) {
       t.sim.eingabeSetzen(0, pilot(0, 32, inGlide ? { lenkung: dq } : {})); t.sim.schritt();
       const g = t.f.flug.gleit;
       if (g && !inGlide) { inGlide = true; r.start = i; r.vorQ = n ? n.seitenabstand : 0; }
-      if (g) { r.qMax = Math.max(r.qMax, Math.abs(g.q)); r.yMax = Math.max(r.yMax, t.f.flug.y - g.y0); schritte++; }
+      if (g) { r.qMax = Math.max(r.qMax, Math.abs(g.q)); r.yMax = Math.max(r.yMax, t.f.flug.y - g.y0 - (g.yL - g.y0) * Math.min(1, g.t / g.T)); schritte++; }
       if (inGlide && !g) { r.ende = i; r.landung = { s: t.f.nah && t.f.nah.s, q: t.f.nah && t.f.nah.seitenabstand, v: t.v.vLaengs, x: t.v.x, z: t.v.z }; break; }
       r.h = hash(hash(r.h, t.v.x), t.v.z);
     }
@@ -157,7 +183,7 @@ for (const [spn, moto] of [['auto', false], ['motorrad', true]]) {
   };
   const a = gleit(0), b = gleit(0), d = gleit(1);
   const T = a.e.sL - a.e.sT;
-  pruefe(`C ${spn}: Gleiten – Absprung an der Linie, Dauer ≈ Lücke/Tempo (${T} m), Höhe 2,3–4,5 m, sichere Landung auf der Straße`, a.start > 0 && a.ende > a.start && Math.abs(a.dauer - T / 32) < 0.4 && a.yMax > 2.3 && a.yMax < 4.5 && a.qMax < a.e.halb && a.landung && a.landung.v > 20, `${a.dauer.toFixed(2)} s, Höhe ${a.yMax.toFixed(2)} m, q max ${a.qMax.toFixed(2)}, v ${a.landung && a.landung.v.toFixed(1)}`);
+  pruefe(`C ${spn}: Gleiten – Absprung an der Linie, Dauer ≈ Lücke/Tempo (${T} m), Höhe 2,3–4,5 m, sichere Landung auf der Straße`, a.start > 0 && a.ende > a.start && (a.landung ? Math.abs(a.dauer - T / (a.landung.v / 0.97)) < 0.15 : false) && a.dauer > 2.2 && a.yMax > 2.3 && a.yMax < 4.5 && a.qMax < a.e.halb && a.landung && a.landung.v > 20, `${a.dauer.toFixed(2)} s, Höhe ${a.yMax.toFixed(2)} m, q max ${a.qMax.toFixed(2)}, v ${a.landung && a.landung.v.toFixed(1)}`);
   pruefe(`C ${spn}: Gleiten deterministisch (zwei Läufe bitgleich)`, a.h === b.h && a.ende === b.ende, `${a.h} ${b.h}`);
   const bs = d.t.f.flug.z, beob = d.t.S.rennen.teilnehmer[0];
   pruefe(`C ${spn}: dauernd nach außen lenken → zu weit daneben → freundlich VOR die Schlucht zurückgesetzt (Tempo ≈ 9, Rennleitung folgt)`, d.qMax > d.e.halb + 0.6 && d.landung && d.landung.s < d.e.sT && d.landung.s > d.e.sT - 40 && d.landung.v < 12 && Math.abs(beob.s - d.landung.s) < 6,

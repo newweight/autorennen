@@ -1,0 +1,30 @@
+autorennen wiese VORHER  gas   : ein 107 -> aus 88 km/h  Verlauf/0,5 s: [108, 115, 121, 123, 114, 105, 96, 94, 92, 90, 88]
+autorennen wiese VORHER  rollen: ein 67 -> aus 34 km/h  Verlauf/0,5 s: [67, 65, 63, 62, 60, 59, 57, 56, 54, 53, 51, 50, 48, 46, 45, 43, 42, 40, 39, 38, 36, 35]
+autorennen wiese NACHHER gas   : ein 104 -> aus 120 km/h  Verlauf/0,5 s: [105, 112, 118, 123, 122, 122, 122, 121, 121]
+autorennen wiese NACHHER rollen: ein 67 -> aus 63 km/h  Verlauf/0,5 s: [67, 66, 66, 66, 66, 66, 65, 65, 65, 65, 65, 64, 64, 64, 64, 64, 64]
+OK   autorennen wiese: Magnet-Röhre ohne Gas – Tempo bleibt (Verlust ≤ 8 %; vorher 50 %)  (67 -> 63 km/h)
+OK   autorennen wiese: Magnet-Röhre mit Vollgas – nie langsamer als bei der Einfahrt (−5 %)  (104 -> 120 km/h)
+OK   autorennen wiese: keine Konsolenfehler  ([])
+autorennen alpen VORHER  gas   : ein 80 -> aus 108 km/h  Verlauf/0,5 s: [79, 77, 77, 77, 79, 86, 93, 101, 108, 114, 120, 112]
+autorennen alpen VORHER  rollen: ein 67 -> aus 32 km/h  Verlauf/0,5 s: [67, 64, 62, 60, 58, 56, 55, 53, 51, 50, 49, 47, 46, 45, 43, 42, 41, 39, 38, 37, 36, 34, 33]
+autorennen alpen NACHHER gas   : ein 77 -> aus 117 km/h  Verlauf/0,5 s: [76, 76, 76, 76, 81, 86, 94, 101, 108, 115, 118]
+autorennen alpen NACHHER rollen: ein 67 -> aus 63 km/h  Verlauf/0,5 s: [67, 67, 66, 66, 66, 66, 66, 65, 65, 65, 65, 65, 64, 64, 64, 64, 64]
+OK   autorennen alpen: Magnet-Röhre ohne Gas – Tempo bleibt (Verlust ≤ 8 %; vorher 52 %)  (67 -> 63 km/h)
+OK   autorennen alpen: Magnet-Röhre mit Vollgas – nie langsamer als bei der Einfahrt (−5 %)  (77 -> 117 km/h)
+OK   autorennen alpen: keine Konsolenfehler  ([])
+motorrad wiese VORHER  gas   : ein 113 -> aus 91 km/h  Verlauf/0,5 s: [113, 105, 98, 95, 95, 91, 94, 100, 104, 97, 91]
+motorrad wiese VORHER  rollen: ein 68 -> aus 33 km/h  Verlauf/0,5 s: [68, 66, 64, 63, 61, 59, 57, 55, 53, 52, 50, 48, 47, 45, 44, 43, 41, 40, 39, 37, 36, 34]
+motorrad wiese NACHHER gas   : ein 108 -> aus 114 km/h  Verlauf/0,5 s: [110, 110, 109, 109, 109, 108, 113, 115, 114, 114]
+motorrad wiese NACHHER rollen: ein 68 -> aus 65 km/h  Verlauf/0,5 s: [68, 68, 68, 68, 67, 67, 67, 67, 67, 66, 66, 66, 66, 66, 65, 65, 65]
+OK   motorrad wiese: Magnet-Röhre ohne Gas – Tempo bleibt (Verlust ≤ 8 %; vorher 51 %)  (68 -> 65 km/h)
+OK   motorrad wiese: Magnet-Röhre mit Vollgas – nie langsamer als bei der Einfahrt (−5 %)  (108 -> 114 km/h)
+OK   motorrad wiese: keine Konsolenfehler  ([])
+motorrad alpen VORHER  gas   : ein 81 -> aus 108 km/h  Verlauf/0,5 s: [80, 77, 76, 76, 78, 84, 91, 97, 103, 109, 114, 114]
+motorrad alpen VORHER  rollen: ein 66 -> aus 30 km/h  Verlauf/0,5 s: [66, 64, 62, 59, 57, 55, 54, 52, 50, 49, 48, 46, 45, 43, 42, 41, 39, 38, 37, 36, 34, 33, 32, 31]
+motorrad alpen NACHHER gas   : ein 79 -> aus 116 km/h  Verlauf/0,5 s: [79, 79, 78, 78, 79, 85, 91, 98, 104, 109, 115, 116]
+motorrad alpen NACHHER rollen: ein 66 -> aus 63 km/h  Verlauf/0,5 s: [66, 66, 66, 66, 66, 65, 65, 65, 65, 65, 64, 64, 64, 64, 64, 64, 63]
+OK   motorrad alpen: Magnet-Röhre ohne Gas – Tempo bleibt (Verlust ≤ 8 %; vorher 55 %)  (66 -> 63 km/h)
+OK   motorrad alpen: Magnet-Röhre mit Vollgas – nie langsamer als bei der Einfahrt (−5 %)  (79 -> 116 km/h)
+OK   motorrad alpen: keine Konsolenfehler  ([])
+
+12 OK, 0 FEHL
