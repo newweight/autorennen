@@ -14,7 +14,7 @@
     name: 'Mond', boden: 0x8d8d94, boden2: 0x6c6c75, himmel: 0x02030a, nebel: 0x04050c, sichtweite: 900,
     lichtHimmel: 0x8f98b8, lichtBoden: 0x4c4c58, sonnenFarbe: 0xffffff, sonnenIntensitaet: 1.45,
     laternen: true, asphalt: 0x4a4b54, zaun: { latten: 0xd6dae4, pfosten: 0x80828c },
-    seed: 61, deko: { felsen: 170, ringe: 34, berge: 22, raketen: 3 },
+    seed: 61, deko: { felsen: 170, ringe: 120, berge: 22, raketen: 3 },
   };
   T.ozean = {
     name: 'Ozean', boden: 0x4f8f86, boden2: 0x7fae8e, himmel: 0x0a6a94, nebel: 0x0d7aa0, sichtweite: 300,
@@ -23,8 +23,8 @@
     seed: 67, deko: { korallen: 170, tang: 230, muscheln: 70, felsen: 80 },
   };
   T.regenbogen = {
-    name: 'Regenbogenland', boden: 0xffffff, boden2: 0xeef2ff, himmel: 0x78c0ff, nebel: 0xcfe8ff, sichtweite: 560,
-    lichtHimmel: 0xffffff, lichtBoden: 0xf0f4ff, sonnenFarbe: 0xfff6e0, sonnenIntensitaet: 1.5,
+    name: 'Regenbogenland', boden: 0xe4ecff, boden2: 0xf3e2f6, himmel: 0x5eb0ff, nebel: 0xb4d8ff, sichtweite: 760,
+    lichtHimmel: 0xf4f8ff, lichtBoden: 0xdfe6fb, sonnenFarbe: 0xfff6e0, sonnenIntensitaet: 1.25,
     laternen: true, asphalt: 0x6b6f86, zaun: { latten: 0xffffff, pfosten: 0xffb4de },
     regenbogen: [0xff4d6d, 0xff9f43, 0xffe14a, 0x4cd97b, 0x4da6ff, 0xa66bff],
     seed: 71, deko: { puffs: 150, boegen: 7, sterne: 60 },
@@ -43,6 +43,53 @@
     const g = new THREE.IcosahedronGeometry(1, 0); g.scale(1, 0.62, 0.85);
     return H.vereinen([{ geo: g, farbe }]);
   };
+  /** Mondkrater: Mulde (flacher dunkler Boden) + innere Wand + Ringwall + flach auslaufender Außenhang; Einheitsgröße (Radius 1), Höhen in Radius-Einheiten. */
+  function kraterGeo() {
+    const NA = 24, prof = [[0, 0.015, 0x50505a], [0.5, 0.015, 0x56565f], [0.66, 0.09, 0x7c7c86], [0.8, 0.22, 0xc0c0cc], [0.9, 0.24, 0xd0d0da], [1.02, 0.13, 0xa8a8b4], [1.25, 0.04, 0x909098], [1.5, 0, 0x8d8d94]];
+
+    const pos = [], col = [], idx = [], c = new THREE.Color();
+    for (let i = 0; i < NA; i++) {
+      const w = i / NA * Math.PI * 2, k = 1 + 0.07 * Math.sin(w * 3 + 1) + 0.04 * Math.sin(w * 5);          // leicht unrund
+      for (let j = 0; j < prof.length; j++) {
+        const r = prof[j][0] * k, hh = prof[j][1] * (1 + 0.1 * Math.sin(w * 4 + j));
+        pos.push(Math.cos(w) * r, hh, Math.sin(w) * r); c.setHex(prof[j][2]); col.push(c.r, c.g, c.b);
+      }
+    }
+    const M = prof.length;
+    for (let i = 0; i < NA; i++) for (let j = 0; j < M - 1; j++) {
+      const a = i * M + j, b = ((i + 1) % NA) * M + j;
+      idx.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  }
+  /** Runder, unregelmäßiger Mondberg (weiche Kuppe mit Graten statt Pyramide); Einheitsgröße (Radius 1, Höhe 1), seed = Variante. */
+  function bergGeo(seed) {
+    const NA = 22, NR = 7, pos = [], col = [], idx = [], c = new THREE.Color();
+    const rau = (w, r) => Math.sin(w * 3 + seed) * 0.5 + Math.sin(w * 7 + seed * 2.3 + r * 4) * 0.25 + Math.sin(w * 13 + seed * 5.1 - r * 7) * 0.12;
+    for (let i = 0; i < NA; i++) {
+      const w = i / NA * Math.PI * 2, rad = 1 + 0.2 * Math.sin(w * 2 + seed) + 0.1 * Math.sin(w * 5 + seed * 1.7);
+      for (let j = 0; j <= NR; j++) {
+        const t = j / NR, r = t * rad;
+        const grund = Math.pow(Math.max(0, 1 - t * t), 1.25);                    // runde Kuppe
+        const grat = Math.max(0, rau(w, t)) * 0.28 * (1 - t) * (t > 0.05 ? 1 : 0);
+        const hh = grund * (0.78 + grat) + (j === NR ? -0.02 : 0);
+        pos.push(Math.cos(w) * r, hh, Math.sin(w) * r);
+        const l = 0.58 + 0.42 * Math.min(1, hh * 1.1) + 0.05 * rau(w, t); c.setRGB(l * 0.86, l * 0.86, l * 0.91); col.push(c.r, c.g, c.b);
+      }
+    }
+    const M = NR + 1;
+    for (let i = 0; i < NA; i++) for (let j = 0; j < NR; j++) {
+      const a = i * M + j, b = ((i + 1) % NA) * M + j;
+      idx.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  }
   function raketeGeo() {
     const teile = [];
     const koerper = new THREE.CylinderGeometry(1.6, 2.0, 14, 10); koerper.translate(0, 8, 0);
@@ -111,25 +158,27 @@
       d.position.set(b.x, b.y + b.g * 0.2, b.z); d.rotation.set(rnd() * 0.5, b.winkel, rnd() * 0.5); d.scale.setScalar(b.g);
       f.setRGB(b.grau * 0.72, b.grau * 0.72, b.grau * 0.76);
     });
-    // Kraterränder: flache Ringe im Gelände (nur Deko, hinter dem Zaun)
+    // Krater: Mulde + Ringwall (verschiedene Größen), nah genug an der Strecke, damit man sie auch in „Normal“ sieht (1 Draw-Call)
     const ringe = [];
     for (let i = 0; i < thema.deko.ringe; i++) {
-      const st = H.stelleSuchen(strecke, rnd, zaun + 12, 200, zaun + 12, 20, 1.2);
-      if (st && H.aufBoden(mitte, st.x, st.z, 40)) { st.r = 7 + rnd() * 20; ringe.push(st); }
+      const rr = 5 + 31 * Math.pow(rnd(), 2.0);                           // viele kleine, wenige große
+      const st = H.stelleSuchen(strecke, rnd, zaun + 1.45 * rr + 1, zaun + 1.45 * rr + 75, zaun + 1.45 * rr, 25, 1.25);
+      if (st && H.aufBoden(mitte, st.x, st.z, 40)) { st.r = rr; st.ell = 0.85 + rnd() * 0.3; st.grau = 1.0 + rnd() * 0.25; ringe.push(st); }
     }
-    const ringG = new THREE.TorusGeometry(1, 0.13, 5, 18); ringG.rotateX(Math.PI / 2);
-    H.instanzMesh(gruppe, 'MondKrater', ringG, new THREE.MeshLambertMaterial({ color: 0x9a9aa4 }), ringe, (b, d) => {
-      d.position.set(b.x, b.y + 0.2, b.z); d.scale.set(b.r, b.r * 0.5, b.r * (0.8 + rnd() * 0.3)); d.rotation.set(0, b.winkel, 0);
+    H.instanzMesh(gruppe, 'MondKrater', kraterGeo(), new THREE.MeshLambertMaterial({ vertexColors: true }), ringe, (b, d, f) => {
+      d.position.set(b.x, b.y + 0.05, b.z); d.scale.set(b.r, b.r * (0.8 + 0.5 * Math.min(1, b.r / 20)), b.r * b.ell); d.rotation.set(0, b.winkel, 0);
+      f.setRGB(b.grau, b.grau, b.grau);
     });
-    // ferne Berge
-    const berge = [];
+    // ferne Berge: weiche Kuppen mit Graten (zwei Formen = 2 Draw-Calls)
+    const berge = [[], []];
     for (let i = 0; i < thema.deko.berge; i++) {
       const st = H.stelleSuchen(strecke, rnd, 260, 640, 220, 10, 1);
-      if (st && H.aufBoden(mitte, st.x, st.z, 30)) { st.h = 40 + rnd() * 90; berge.push(st); }
+      if (st && H.aufBoden(mitte, st.x, st.z, 30)) { st.h = 45 + rnd() * 90; berge[i % 2].push(st); }
     }
-    const bergG = new THREE.ConeGeometry(1, 1, 7); bergG.translate(0, 0.5, 0);
-    H.instanzMesh(gruppe, 'MondBerge', bergG, new THREE.MeshLambertMaterial({ color: 0x7a7a84, flatShading: true }), berge, (b, d) => {
-      d.position.set(b.x, b.y - 2, b.z); d.scale.set(b.h * 1.6, b.h, b.h * 1.3); d.rotation.set(0, b.winkel, 0);
+    berge.forEach((liste, k) => {
+      H.instanzMesh(gruppe, 'MondBerge', bergGeo(1.3 + k * 2.9), new THREE.MeshLambertMaterial({ vertexColors: true }), liste, (b, d) => {
+        d.position.set(b.x, b.y - 2, b.z); d.scale.set(b.h * (1.5 + (b.winkel % 1) * 0.8), b.h, b.h * (1.2 + (b.winkel % 0.7))); d.rotation.set(0, b.winkel, 0);
+      });
     });
     // Raketen-Deko nah hinter dem Zaun (feste Abstände entlang der Strecke)
     const rak = [];
@@ -141,7 +190,7 @@
     H.instanzMesh(gruppe, 'MondRaketen', raketeGeo(), H.vertexMaterial(false), rak, (b, dd) => {
       dd.position.set(b.x, b.y - 0.3, b.z); dd.rotation.set(0, b.winkel, 0); dd.scale.setScalar(b.g);
     });
-    return { felsen: felsen.length, ringe: ringe.length, berge: berge.length, raketen: rak.length };
+    return { felsen: felsen.length, ringe: ringe.length, berge: berge[0].length + berge[1].length, raketen: rak.length };
   };
 
   T.zusatzBauer.ozean = function (gruppe, thema, strecke, rnd) {
@@ -227,6 +276,12 @@
       if (t === 'mond' || t === 'ozean') {
         if (this._wolken) this._wolken.visible = false;
         if (t === 'ozean' && this._sonne) this._sonne.visible = false;
+        // Mond: schwarzer Himmel + große Sonnen-Aura wirkte unnatürlich → Halo-Ring stark abdunkeln (Scheibe bleibt), Gesamthelligkeit etwas zurück
+        if (t === 'mond' && this._sonne && this._sonne.geometry && !this._sonne.userData.s5Halo) {
+          const ca = this._sonne.geometry.attributes.color;
+          if (ca) { for (let i = 2; i < ca.count; i += 3) { ca.setXYZ(i, ca.getX(i) * 0.06, ca.getY(i) * 0.06, ca.getZ(i) * 0.06); } ca.needsUpdate = true; }
+          this._sonne.material.color.setScalar(0.8); this._sonne.userData.s5Halo = true;
+        }
       }
       return erg;
     };

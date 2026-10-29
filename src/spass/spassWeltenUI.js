@@ -59,11 +59,11 @@
   function swirlTextur() {
     const c = document.createElement('canvas'); c.width = c.height = 128;
     const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, 128, 128);
-    const gr = g.createRadialGradient(64, 64, 4, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,.95)'); gr.addColorStop(0.6, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,.12)');
+    const gr = g.createRadialGradient(64, 64, 4, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,.55)'); gr.addColorStop(0.6, 'rgba(255,255,255,.28)'); gr.addColorStop(1, 'rgba(255,255,255,.12)');
     g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-    g.lineWidth = 7; g.lineCap = 'round';
+    g.lineWidth = 6; g.lineCap = 'round';
     for (let k = 0; k < 4; k++) {
-      g.strokeStyle = 'rgba(255,255,255,.85)'; g.beginPath();
+      g.strokeStyle = 'rgba(255,255,255,.6)'; g.beginPath();
       for (let t = 0; t <= 1; t += 0.03) { const a = k * 1.571 + t * 5, r = 6 + t * 56; const x = 64 + Math.cos(a) * r, y = 64 + Math.sin(a) * r; if (t === 0) g.moveTo(x, y); else g.lineTo(x, y); }
       g.stroke();
     }
@@ -84,10 +84,10 @@
       ringe.push({ geo: g2, farbe: 0xffffff });
       // Scheibe (Fächer): Mitte + 32 Randpunkte
       const b = pos.length / 3, N = 32, c = farbe === FA.getHex() ? FA : FB;
-      pos.push(p.x, y0 + 3.0, p.z); col.push(c.r, c.g, c.b); uv.push(0.5, 0.5);
+      pos.push(p.x, y0 + 3.0, p.z); col.push(c.r * 0.75, c.g * 0.75, c.b * 0.75); uv.push(0.5, 0.5);
       for (let i = 0; i <= N; i++) {
         const a = i / N * Math.PI * 2, cx = Math.cos(a), cy = Math.sin(a), q = cx * (rx - 0.6);
-        pos.push(p.x + p.nx * q, y0 + 3.0 + cy * (ry - 0.5), p.z + p.nz * q); col.push(c.r, c.g, c.b); uv.push(0.5 + cx * 0.5, 0.5 + cy * 0.5);
+        pos.push(p.x + p.nx * q, y0 + 3.0 + cy * (ry - 0.5), p.z + p.nz * q); col.push(c.r * 0.75, c.g * 0.75, c.b * 0.75); uv.push(0.5 + cx * 0.5, 0.5 + cy * 0.5);
       }
       for (let i = 1; i <= N; i++) idx.push(b, b + i, b + i + 1);
     };
@@ -98,7 +98,7 @@
     const dg = new THREE.BufferGeometry();
     dg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); dg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); dg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); dg.setIndex(idx);
     const tex = swirlTextur();
-    const dm = new THREE.Mesh(dg, new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    const dm = new THREE.Mesh(dg, new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: false }));
     dm.name = 'TorScheiben'; dm.frustumCulled = false; dm.renderOrder = 4; gruppe.add(dm);
     gruppe.userData.tex = tex;
     return gruppe;
@@ -205,10 +205,11 @@
     const laeuft = !!(v && st && (sp.zustand === 'rennen' || sp.zustand === 'ergebnis'));
     if (!laeuft) { D.gruppe.visible = false; D.beine.visible = false; return; }
     const spl = st.spline, sNah = f.nah && f.nah.s !== undefined ? f.nah.s : spl.naechster(v.x, v.z).s;
-    const vor = moto() ? 10 : 16, ziel = sNah + vor;
-    if (D.s === null || Math.abs(spl.differenzS(D.s, ziel)) > 80) D.s = spl.wrapS(ziel);
-    else D.s = spl.wrapS(D.s + spl.differenzS(D.s, ziel) * Math.min(1, dt * 4));
-    const p = spl.punktBei(D.s), b2 = st.breite / 2, dist = b2 + Math.max(4, Math.min((st.zaunAbstand || 14) - 3, 6.5));
+    // Immer ein Stück VOR dem Fahrzeug, direkt aus dessen s (keine Glättung der Position: die ließ den Dino bei Tempo zurückfallen, hinter die Kamera;
+    // das Pendeln ±3 m lässt ihn lebendig neben dem Spieler laufen statt starr mitzurutschen)
+    const vor = (moto() ? 5 : 6) + Math.sin(jetzt() * 0.7) * 3;
+    D.s = spl.wrapS(sNah + vor);
+    const p = spl.punktBei(D.s), b2 = st.breite / 2, dist = b2 + Math.max(3.5, Math.min((st.zaunAbstand || 14) - 5, 5));
     const x = p.x + p.nx * dist, z = p.z + p.nz * dist, y = st.bodenHoehe(x, z);
     const verdeckt = st.imTunnel && st.imTunnel(D.s, 12);
     D.gruppe.visible = !verdeckt; D.beine.visible = !verdeckt;
