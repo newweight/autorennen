@@ -145,7 +145,7 @@ html.touch-an .garage-knopf { right: 64px; }   /* Platz für die Vollbild-Taste 
 .karte.gewaehlt { border-color: var(--gelb); box-shadow: 0 0 0 .15em var(--gelb), 0 0 1.2em rgba(255,210,58,.7); background: rgba(40, 60, 130, .85); }
 .karte.gewaehlt::after { content: '✔'; position: absolute; top: -.5em; right: -.4em; width: 1.5em; height: 1.5em; line-height: 1.5em;
   border-radius: 50%; background: var(--gelb); color: #1a2550; font-size: .9em; }
-.karten-name { font-size: 1em; font-weight: 900; line-height: 1.15; }
+.karten-name { font-size: 1em; font-weight: 900; line-height: 1.15; hyphens: auto; overflow-wrap: break-word; }
 .karten-sub { font-size: .9em; font-weight: 700; opacity: .92; margin-top: .3em; line-height: 1.25; }
 .karte.gross { width: 11em; padding: 1em .8em; }
 .karte.gross .emoji { font-size: 3.6em; line-height: 1.1; }
