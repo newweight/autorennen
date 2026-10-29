@@ -185,7 +185,7 @@ function autopilot(C, st, v, idx) {
       st1.length + ' Stürze, ' + un1.map(x => x.folge + '@' + x.n).join(','));
     pruefe('C Stunts im Flug (Trick-Taste über Eingabe-Bit → trickSetzen): Stunt-Ereignisse mit Name und Punkten', stu.length >= 1 && stu.every(x => typeof x.name === 'string' && x.p > 0), stu.map(x => x.nr + ':' + x.st + ':' + x.p).join(' '));
     const mo = sim.zustand().mo;
-    pruefe('C zustand.mo: je Teilnehmer 13 Zahlen, Stuntpunkte des Spielers = Summe seiner Stunts', mo.length === 3 && mo.every(a => a.length === 13 && a.slice(0, 12).every(Number.isFinite)) &&
+    pruefe('C zustand.mo: je Teilnehmer 15 Zahlen (S3: + Trick-Code, Fortschritt), Stuntpunkte des Spielers = Summe seiner Stunts', mo.length === 3 && mo.every(a => a.length === 15 && a.slice(0, 12).every(Number.isFinite)) &&
       mo[0][1] === sim.moto.punkte(0), mo.map(a => a[1]).join('/'));
     const quad = new Simulation({ moto: true, einstellungen: { streckeId: 'wiese', gegner: 1, runden: 2, unfall: 'echt', kollisionen: false }, spieler: [{ fahrer: 'Jonas', auto: 'quad' }], seed: 11 });
     const quadEv = [];
@@ -305,7 +305,7 @@ function autopilot(C, st, v, idx) {
   const stuH = sig(evH, 'stunt'), stuG = sig(evG, 'stunt'), sturzH = evH.filter(x => x.art === 'sturz'), sturzG = evG.filter(x => x.art === 'sturz');
   const unfH = evH.filter(x => x.art === 'unfall'), unfG = evG.filter(x => x.art === 'unfall');
   const moH = hostM.letzterZustand && hostM.letzterZustand.mo;
-  pruefe('E Zustände mit mo (je Teilnehmer 13 Zahlen) bei beiden Clients; ich.mu beim eigenen Wagen', !!moH && moH.length === 4 && moH.every(a => a.length === 13) && Array.isArray(hostM.letzterZustand.ich.mu) &&
+  pruefe('E Zustände mit mo (je Teilnehmer 15 Zahlen) bei beiden Clients; ich.mu beim eigenen Wagen', !!moH && moH.length === 4 && moH.every(a => a.length === 15) && Array.isArray(hostM.letzterZustand.ich.mu) &&
     !!gastM.letzterZustand.mo && Array.isArray(gastM.letzterZustand.ich.mu), moH ? JSON.stringify(moH[0]) : 'kein mo');
   pruefe('E Gleiche Ticks, gleiche Werte: mo ist bei beiden Clients bitgleich (alle gemeinsamen Zustände)', (() => {
     let n = 0, gleichAlle = true;
