@@ -100,7 +100,7 @@
 
     // Bühne nur neu bauen, wenn sich die Tuning-Teile ändern
     function buehneTuning(g) {
-      const s = T.stufen(g.fahrer, g.autoId), sb = T.sichtbar(s), schl = g.autoId + ':' + [sb.motor, sb.reifen, sb.bremsen].join('');
+      const s = T.stufen(g.fahrer, g.autoId), sb = T.sichtbar(s), schl = g.autoId + ':' + [sb.motor ? s.motor : 0, sb.reifen ? s.reifen : 0, sb.bremsen ? s.bremsen : 0].join('');   // neu bauen, wenn Teile dazukommen oder sich (Stufe 4/5) ändern
       if (g._tuningBuehne === schl) return;
       g._tuningBuehne = schl;
       if (R.AutoVorschau && R.AutoVorschau.neuBauen) {

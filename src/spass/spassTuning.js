@@ -229,7 +229,7 @@
         teile.push(rohr(hint.r * 0.98, Math.max(0.1, hint.br * 0.55), mat4(hint.x, hint.y, hint.z, 0, 0, Math.PI / 2), FARBE.dunkel));
       }
       if (sb.bremsen) { // Goldgabel: zwei Standrohre am Vorderrad
-        [-1, 1].forEach((sg) => teile.push(rohr(0.032, 0.62, mat4(vorn.x + sg * 0.085, vorn.y + 0.34, vorn.z - 0.09, -0.32, 0, 0), s.bremsen >= C().max ? FARBE.gold : 0xd9a600)));
+        [-1, 1].forEach((sg) => teile.push(rohr(0.03, 0.5, mat4(vorn.x + sg * 0.08, vorn.y + 0.28, vorn.z - 0.08, -0.32, 0, 0), s.bremsen >= C().max ? FARBE.gold : 0xd9a600)));
       }
     } else {
       if (sb.motor) {   // zwei Endrohre hinten
@@ -248,7 +248,7 @@
       if (sb.bremsen) { // Heckspoiler: Flügel auf zwei Stützen, rot (Stufe 5: gold)
         const fl = s.bremsen >= C().max ? FARBE.gold : FARBE.rot, zh = zMax - Math.min(0.55, tiefe * 0.1), yh = yMax * 0.82;
         teile.push(kasten(breite * 0.86, 0.06, 0.34, mat4(0, yh, zh), fl));
-        [-1, 1].forEach((sg) => teile.push(kasten(0.06, yh * 0.3, 0.1, mat4(sg * breite * 0.3, yh - yh * 0.15, zh - 0.02), FARBE.dunkel)));
+        [-1, 1].forEach((sg) => teile.push(kasten(0.07, yh * 0.34, 0.12, mat4(sg * breite * 0.3, yh - yh * 0.17, zh - 0.02), fl)));
         if (s.bremsen >= 4) [-1, 1].forEach((sg) => teile.push(kasten(0.04, 0.16, 0.38, mat4(sg * breite * 0.43, yh + 0.05, zh), fl)));
       }
     }

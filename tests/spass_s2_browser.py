@@ -88,6 +88,7 @@ with sync_playwright() as p:
         page.click('[data-g="tuning:reset"]'); page.wait_for_timeout(300)
         pruefe(tag + ' Alles zurücksetzen: 800 Goldstücke wieder da', page.evaluate("Rennspiel.Garage.konto(%r)" % name) == 800 and page.evaluate("Rennspiel.SpassTuning.summe(Rennspiel.SpassTuning.stufen(%r, %r))" % (name, auto)) == 0)
         # Tastatur: Pfeile
+        page.evaluate("() => { const g = Rennspiel.spiel.menue.garageUi; g.tuningZeile = 0; g.zeichnen(); }")
         page.keyboard.press('Enter'); page.wait_for_timeout(200)
         pruefe(tag + ' Tastatur: Enter kauft (Motor Stufe 1)', page.evaluate("Rennspiel.SpassTuning.stufen(%r, %r).motor" % (name, auto)) == 1)
         page.keyboard.press('ArrowDown'); page.keyboard.press('ArrowRight'); page.wait_for_timeout(200)
@@ -108,8 +109,11 @@ with sync_playwright() as p:
         pruefe(tag + ' Rennen: Spieler Stufen 5/5/5 am Fahrzeug', r['tu'][0] == {'motor': 5, 'reifen': 5, 'bremsen': 5}, r['tu'])
         pruefe(tag + ' Rennen: Computer gleichwertig (Mittel → 3/3/3)', r['tu'][1] == {'motor': 3, 'reifen': 3, 'bremsen': 3} and r['tu'][2] == {'motor': 3, 'reifen': 3, 'bremsen': 3}, r['tu'])
         pruefe(tag + ' Rennen: Tuning-Teile am Mesh (Spieler und Computer)', all(r['teile']), r['teile'])
-        # Bild: hinter und neben dem getunten Spieler (Kamera von Hand, Pause)
-        page.wait_for_timeout(500)
+        # Bild: hinter und neben dem getunten Spieler (Kamera von Hand, Pause), Verfolger-Ansicht ohne Cockpit-Rahmen, nach dem „LOS!“
+        page.evaluate("() => { const k = Rennspiel.spiel.kameras[0]; k.modusIndex = Rennspiel.config.kamera.modi.indexOf('verfolger'); k._erstesMal = true; }")
+        page.wait_for_function('Rennspiel.spiel.rennen.gasErlaubt === true', timeout=120000)
+        page.evaluate("() => { const S = Rennspiel.spiel; for (let i = 0; i < 90; i++) S.physikSchritt(1 / 60); }")
+        page.wait_for_timeout(2600)
         def kamerabild(datei, seite):
             page.evaluate("""(seite) => { const S = Rennspiel.spiel; S.pausiert = true; const f = S.fahrzeuge[0], v = f.vehicle, k = S.kameras[0].kamera, h = v.heading;
               const fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
