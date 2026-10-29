@@ -36,16 +36,17 @@
   function plan(strecke) {
     const c = C(), sp = strecke.spline, L = sp.laenge, breite = strecke.breite || 12;
     const belegt = (R.Spass && R.Spass.sperrZonen) ? R.Spass.sperrZonen(strecke, null, true) : [];
+    let rand = 6, minA = c.minAbstand;                               // Rückfall für kurze/volle Strecken: engere Ränder und Abstände (2. Durchgang)
     const frei = (s) => {
       if (s < c.startFrei || s > L - c.zielFrei) return false;
       if (strecke.gabelBei && strecke.gabelBei(s)) return false;
       if (strecke.kreuzungNah && strecke.kreuzungNah(s, 40)) return false;
-      for (const b of belegt) if (Math.abs(sp.differenzS(s, b.c)) < b.h + 6) return false;
+      for (const b of belegt) if (Math.abs(sp.differenzS(s, b.c)) < b.h + rand) return false;
       return true;
     };
     const seed = hash(String((strecke.daten && strecke.daten.id) || strecke.id || '') + '|frei');
     const gesetzt = [];
-    const abstandOk = (s) => gesetzt.every((e) => Math.abs(sp.differenzS(s, e.s)) >= c.minAbstand);
+    const abstandOk = (s) => gesetzt.every((e) => Math.abs(sp.differenzS(s, e.s)) >= minA);
     const stelle = (wunsch, richtung, art) => {
       for (let v = 0; v < 70; v++) {
         const s = ((wunsch + richtung * v * 8) % L + L) % L;
@@ -56,7 +57,8 @@
     };
     // 1) Sprungweite-Kisten: 80 m vor Trampolin/Schanze (höchstens 3)
     sprungStellen(strecke).slice(0, 3).forEach((sj) => {
-      const s = stelle(sj - 80, -1, 'sprung');
+      let s = null;                                                  // nur davor: 80–220 m vor der Sprungstelle, nächster freier Platz
+      for (let d = 80; d <= 220 && s === null; d += 8) { const x = ((sj - d) % L + L) % L; if (frei(x) && abstandOk(x)) s = x; }
       if (s !== null) gesetzt.push({ s, art: 'sprung', rand: 1 });
     });
     // 2) übrige gleichmäßig, Art wechselt (Goldrausch / Slalom)
@@ -67,6 +69,14 @@
       const s = stelle(wunsch, 1, null);
       if (s === null) continue;
       gesetzt.push({ s, art: k % 2 === 0 ? 'muenzen' : 'slalom', rand: 0 }); k++;
+    }
+    for (const [r2, a2] of [[4, 80], [3, 55], [1, 40]]) {                     // zu wenige? dann enger platzieren (fantasie/dino sind kurz und voller Stunts)
+      if (gesetzt.length >= c.anzahl) break;
+      rand = r2; minA = a2;
+      for (let i = 0; i < 40 && gesetzt.length < c.anzahl; i++) {
+        const s = stelle(c.startFrei + (L - c.startFrei - c.zielFrei) * (i + 0.5) / 40 + phase, 1, null);
+        if (s !== null) { gesetzt.push({ s, art: k % 2 === 0 ? 'muenzen' : 'slalom', rand: 0 }); k++; }
+      }
     }
     gesetzt.sort((a, b) => a.s - b.s);
     return gesetzt.slice(0, c.anzahl).map((e, i) => {

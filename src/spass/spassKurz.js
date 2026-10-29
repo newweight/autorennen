@@ -50,7 +50,7 @@
   const K = () => R.config.spass.kurz;
   R.config.spass = R.config.spass || {};
   R.config.spass.kurz = Object.assign({
-    vSterne3: 33, vSterne2: 26, vLimit: 18, limitMax: 120,     // m/s: Zeit für 3 Sterne = Länge / 33, 2 Sterne = / 26, Abbruch = / 18 (höchstens 120 s)
+    vSterne3: 27, vSterne2: 21, vLimit: 15, limitMax: 120,     // m/s: Zeit für 3 Sterne = Länge / 27, 2 Sterne = / 21, Abbruch = / 15 (höchstens 120 s); Computerfahrer mittel ≈ 24 m/s
     muenzReserve: 1.25, reiheAnzahl: 5, reiheAbstand: 6, muenzRand: 0.38,   // Münzen liegen auf 125 % der verlangten Zahl
     abschnittMin: 300, zielAbstandEnde: 40,
     goldJeStern: 5,

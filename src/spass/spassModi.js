@@ -206,7 +206,6 @@
       r._koWert = R.SpassKO.wertungen(spiel.strecke);
       r.bei('raus', (t) => {
         spiel._ausgeschieden(t);
-        if (t.istSpieler) spiel.spassSticker && spiel.spassSticker('koRaus');
       });
       r.bei('ziel', (t) => { if (t.istSpieler && t.zielPlatz === 1) spiel.spassSticker && spiel.spassSticker('ko', { platz: 1 }); });
       r.bei('wertung', (t) => { if (t.istSpieler) spiel._meldung(t.nr, '✔ Wertung ' + t.koWertung, 700); });

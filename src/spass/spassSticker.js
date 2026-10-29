@@ -4,7 +4,7 @@
 //   R.SpassSticker.ereignis(spiel, name, d)  Ereignis melden → Liste NEU freigeschalteter Sticker (leer, wenn nichts neu)
 //   R.SpassSticker.stand(spiel) / .hat(spiel, id) / .zurueck(spiel)
 // Ereignisse: tuning { voll } (S2) · sieg · ziel { platz, streckeId, nacht, zwei } · muenzen { rennen (im Rennen gesammelt), gesamt } · trampolin · kanone · geist · hupe · stimme ·
-//   sprung { sek } · salto · ring · bus · wheelie { m } · stoppie { m } · S3: superman · handstand · backflip (Motorrad) · fassrolle (Auto) · zeitlupe
+//   sprung { sek } · S4: kurz { sterne, alle } · frei { gefunden } · freiAufgabe { geschafft, gesamt } · ko · koFinale · foto · salto · ring · bus · wheelie { m } · stoppie { m } · S3: superman · handstand · backflip (Motorrad) · fassrolle (Auto) · zeitlupe
 // Speicher: localStorage 'rennspiel.spass.sticker.<spiel>' (ohne localStorage im Arbeitsspeicher). Reine Logik, ohne DOM (Node-Test).
 // ============================================================
 (function () {
@@ -30,6 +30,15 @@
     { id: 'tuning1', emoji: '🔧', name: 'Erstes Tuning', text: 'Die erste Tuning-Stufe gekauft.' },
     { id: 'tuningVoll', emoji: '🏁', name: 'Voll getunt', text: 'Ein Fahrzeug in allem auf Stufe 5 getunt.' },
     { id: 'zeitlupe', emoji: '🎬', name: 'Zeitlupen-Sprung', text: 'Ein so großer Sprung, dass die Zeitlupe kam!' },
+    // S4: neue Modi
+    { id: 'kurz1', emoji: '⭐', name: 'Level-Starter', text: 'Das erste Kurz-Level geschafft.' },
+    { id: 'kurz3', emoji: '🌟', name: 'Drei Sterne', text: 'Ein Kurz-Level mit 3 Sternen geschafft.' },
+    { id: 'kurzAlle', emoji: '🎖️', name: 'Level-Meister', text: 'Alle 12 Kurz-Level geschafft.' },
+    { id: 'frei1', emoji: '❓', name: 'Kisten-Finder', text: 'Die erste ❓-Kiste gefunden.' },
+    { id: 'freiAlle', emoji: '🗺️', name: 'Schatzsucher', text: 'Alle 12 ❓-Kisten einer Strecke geschafft.' },
+    { id: 'ko', emoji: '🥇', name: 'K.-o.-Sieger', text: 'Die K.-o.-Rallye gewonnen.' },
+    { id: 'koFinale', emoji: '🏁', name: 'Im Finale', text: 'Bei der K.-o.-Rallye bis ins Finale gekommen.' },
+    { id: 'foto', emoji: '📸', name: 'Fotograf', text: 'Das erste Foto gemacht.' },
   ];
   const AUTO = [
     { id: 'sprung', emoji: '✈️', name: 'Weitspringer', text: 'Länger als 1,5 Sekunden in der Luft.' },
@@ -96,6 +105,12 @@
       case 'tuning': geben('tuning1'); if (d.voll) geben('tuningVoll'); break;   // S2: Tuning gekauft ({ voll: alles auf Stufe 5 })
       case 'sprung': if (sp !== 'motorrad' && d.sek >= 1.5) geben('sprung'); break;
       case 'zeitlupe': geben('zeitlupe'); break;                                  // S3: großer Sprung mit Zeitlupe (beide Spiele)
+      case 'kurz': if (d.sterne >= 1) geben('kurz1'); if (d.sterne >= 3) geben('kurz3'); if (d.alle) geben('kurzAlle'); break;   // S4: Kurz-Level ({ sterne, alle })
+      case 'frei': if (d.gefunden >= 1) geben('frei1'); break;                    // S4: Freie Fahrt – Kiste gefunden
+      case 'freiAufgabe': if (d.gesamt > 0 && d.geschafft >= d.gesamt) geben('freiAlle'); break;   // S4: alle Aufgaben einer Strecke
+      case 'ko': geben('ko'); geben('koFinale'); break;                           // S4: K.-o.-Rallye gewonnen
+      case 'koFinale': geben('koFinale'); break;
+      case 'foto': geben('foto'); break;
       case 'superman': case 'handstand': case 'backflip': if (sp === 'motorrad') geben(name); break;   // S3
       case 'fassrolle': if (sp !== 'motorrad') geben('fassrolle'); break;
       case 'salto': if (sp === 'motorrad') geben('salto'); break;
