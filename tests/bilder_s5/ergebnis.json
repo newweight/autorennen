@@ -1,9 +1,7 @@
 {
  "draw_calls": {
-  "Autorennen unterwasser normal": {
-   "draussen": 36,
-   "tunnel": 62,
-   "tunnel2": 37
+  "Autorennen dino normal": {
+   "begleiter": 72
   }
  },
  "fehler": []

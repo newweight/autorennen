@@ -1,0 +1,38 @@
+{
+ "Motorrad mond": {
+  "mittel": 86.0,
+  "max": 193,
+  "werte": [
+   32,
+   143,
+   33,
+   29,
+   193
+  ],
+  "fehler": []
+ },
+ "Motorrad unterwasser": {
+  "mittel": 71.4,
+  "max": 139,
+  "werte": [
+   29,
+   139,
+   29,
+   29,
+   131
+  ],
+  "fehler": []
+ },
+ "Motorrad regenbogenland": {
+  "mittel": 84.0,
+  "max": 190,
+  "werte": [
+   27,
+   32,
+   143,
+   28,
+   190
+  ],
+  "fehler": []
+ }
+}

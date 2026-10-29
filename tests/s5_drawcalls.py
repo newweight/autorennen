@@ -9,6 +9,8 @@ ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshade
 SEED = "(() => { let a = 123456789; Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; })();"
 ALT = ['wiese', 'wald', 'wueste', 'fantasie', 'dino', 'alpen', 'formel1', 'mega']
 NEU = ['mond', 'unterwasser', 'regenbogenland']
+REF = {'Autorennen': (131.0, 144), 'Motorrad': (179.6, 278)}     # teuerste bestehende Strecke (Mittel, Höchstwert) aus tests/bilder_s5/drawcalls.json
+if '--neu' in sys.argv: ALT = []     # nur die neuen Strecken messen (Vergleich mit den bekannten Werten der alten, siehe tests/bilder_s5/drawcalls.json)
 SPIELE = [s for s, f in (('Autorennen', '--auto'), ('Motorrad', '--moto')) if not (('--auto' in sys.argv or '--moto' in sys.argv) and f not in sys.argv)]
 erg = {}
 with sync_playwright() as p:
@@ -40,8 +42,9 @@ with sync_playwright() as p:
             print(spiel, sid, erg[spiel + ' ' + sid], flush=True)
             b.close()
     for spiel in SPIELE:
-        a = max(erg[spiel + ' ' + s]['max'] for s in ALT if spiel + ' ' + s in erg); am = max(erg[spiel + ' ' + s]['mittel'] for s in ALT if spiel + ' ' + s in erg)
+        a, am = REF[spiel][::-1] if not ALT else (max(erg[spiel + ' ' + s]['max'] for s in ALT if spiel + ' ' + s in erg), max(erg[spiel + ' ' + s]['mittel'] for s in ALT if spiel + ' ' + s in erg))
         n = {s: (erg[spiel + ' ' + s]['mittel'], erg[spiel + ' ' + s]['max']) for s in NEU if spiel + ' ' + s in erg}
         print(f'{spiel}: teuerste bestehende Strecke: Mittel {am}, Höchstwert {a}; neue (Mittel, Höchstwert): {n}')
         print(('OK   ' if all(v[0] <= am + 0.5 for v in n.values()) else 'FEHL ') + f'{spiel}: neue Strecken im Mittel nicht teurer als die teuerste bestehende')
-json.dump(erg, open(os.path.join(BASIS, 'tests', 'bilder_s5', 'drawcalls.json'), 'w'), indent=1)
+_o = os.path.join(BASIS, 'tests', 'bilder_s5_fix' if '--neu' in sys.argv else 'bilder_s5'); os.makedirs(_o, exist_ok=True)
+json.dump(erg, open(os.path.join(_o, 'drawcalls.json'), 'w'), indent=1)
