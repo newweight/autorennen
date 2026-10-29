@@ -128,6 +128,32 @@ for (const [spn, moto] of [['auto', false], ['motorrad', true]]) {
   pruefe(`B ${spn}: Lauf mit Röhre zweimal bitgleich`, h2 === hAll, `${hAll} ${h2}`);
 }
 
+// ---------------------------------------------------------------- B2) Magnet-Röhre hält das Tempo (FIX1): ohne Gas höchstens leichter Verlust, auch am Berg (Alpen); wer bremst, wird langsamer
+for (const [spn, moto] of [['auto', false], ['motorrad', true]]) {
+  const R = moto ? ladenMoto() : laden();
+  const durch = (id, art) => {
+    const t = neu(id, moto), e = t.st.spass.zauber.magnet[0], sp = t.st.spline, pilot = pilotBauen(R, t.st, t.f, t.v), pt = sp.punktBei(e.s0 - 90);
+    t.v.setzen(pt.x, pt.z, R.headingAus(pt.tx, pt.tz)); t.v.vLaengs = 22; t.f.index = -1;
+    t.S.rennen.verfolgungSetzen(t.S.rennen.teilnehmer[0], t.v.x, t.v.z, e.s0 - 90);
+    let ein = null, aus = null, was = false, min = 1e9;
+    for (let i = 0; i < 60 * 30; i++) {
+      const s = pilot(0, 22);
+      if (art === 'rollen') { s.gas = 0; s.bremse = 0; } else if (art === 'bremsen') { if (was) { s.gas = 0; s.bremse = 0.8; } } else { s.gas = 1; s.bremse = 0; }
+      t.sim.eingabeSetzen(0, s); t.sim.schritt();
+      const m = !!(t.f.flug.z && t.f.flug.z.mag);
+      if (m && !was) ein = t.v.vLaengs;
+      if (m) min = Math.min(min, t.v.vLaengs);
+      if (!m && was) { aus = t.v.vLaengs; break; }
+      was = m;
+    }
+    return { ein, aus, min };
+  };
+  const ro = ['wiese', 'alpen'].map((id) => durch(id, 'rollen')), gs = durch('alpen', 'gas'), br = durch('wiese', 'bremsen');
+  pruefe(`B2 ${spn}: Magnet-Röhre ohne Gas (Wiese, Alpen mit Steigung) – Tempo bleibt (Verlust ≤ 8 %)`, ro.every((r) => r.ein && r.aus && r.aus >= r.ein * 0.92), ro.map((r) => r.ein && (r.ein * 3.6).toFixed(0) + '→' + (r.aus * 3.6).toFixed(0)).join(' | ') + ' km/h');
+  pruefe(`B2 ${spn}: Magnet-Röhre mit Vollgas am Berg (Alpen) – nie langsamer als bei der Einfahrt (−5 %)`, gs.ein && gs.aus && gs.min >= gs.ein * 0.95, gs.ein && (gs.ein * 3.6).toFixed(0) + '→' + (gs.aus * 3.6).toFixed(0) + ' km/h');
+  pruefe(`B2 ${spn}: wer in der Röhre bremst, wird langsamer (Bremse wirkt)`, br.ein && (!br.aus || br.aus < br.ein * 0.8), br.ein && (br.ein * 3.6).toFixed(0) + '→' + (br.aus ? (br.aus * 3.6).toFixed(0) : 'Stand') + ' km/h');
+}
+
 // ---------------------------------------------------------------- C) Gleiten
 for (const [spn, moto] of [['auto', false], ['motorrad', true]]) {
   const R = moto ? ladenMoto() : laden();

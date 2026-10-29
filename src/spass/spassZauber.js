@@ -23,7 +23,7 @@
 
   R.config.spass.zauber = {
     standardAn: true,
-    magnet: { laenge: 150, rampe: 36, vMin: 6, itemZeit: 10, verlustProS: 0.006, bremsSchwelle: 0.25, platz: { je: 2200, max: 2, abLaenge: 1300, kappa: 1 / 320, vorher: 25, nachher: 25 } },
+    magnet: { laenge: 150, rampe: 36, vMin: 6, itemZeit: 10, halten: true, verlustProS: 0.006, bremsSchwelle: 0.25, platz: { je: 2200, max: 2, abLaenge: 1300, kappa: 1 / 320, vorher: 25, nachher: 25 } },
     schlucht: { luecke: 90, vGleitMin: 20, vGleitMax: 44, scheitel: 4, scheitelU: 0.35, landeStaerke: 0.5, qRate: 6, zentrieren: 0.3, randToleranz: 0.6, landeTempo: 0.97, zurueck: 34, resetTempo: 9, pad: 14,
       platz: { je: 2600, max: 2, abLaenge: 1500, kappa: 1 / 380, vorher: 30, nachher: 30 } },
     schiene: { laenge: 54, hoehe: 0.85, rand: 1.0, einfang: 1.2, vMin: 5, ausSek: 0.12, ausLenk: 0.45, hop: 2.4, punkteJeM: 2, platz: { je: 1500, max: 2, abLaenge: 1100, kappa: 1 / 260, vorher: 14, nachher: 22 } },
@@ -207,6 +207,7 @@
    */
   function magnetHalten(z, v, dt) {
     const c = C().magnet, ls = v.letzteSteuerung, br = ls ? (ls.bremse || 0) : 0;
+    if (c.halten === false) return;                          // (nur für Vorher/Nachher-Messungen)
     if (br > c.bremsSchwelle || !(z.magV > 0)) { z.magV = v.vLaengs; return; }
     if (v.vLaengs >= z.magV) { z.magV = v.vLaengs; return; }
     z.magV *= 1 - c.verlustProS * dt;

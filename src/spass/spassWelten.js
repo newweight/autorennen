@@ -248,11 +248,11 @@
   //   🪙 Goldstücke   Ab und zu wirft der Dino 3 Goldstücke auf die Fahrbahn VOR dem Spieler (Ort rein aus Zähler + Strecken-Name: deterministisch, kein Math.random).
   //                   Einsammeln = Garage-Kasse + 1 (Anzeige übernimmt das Gutschreiben). Keine Physik, keine Kollision.
   //   🏁 Wettrennen   Der Dino ruft „Wettrennen!“: wer zuerst an der Fahne `weg` m weiter ist, gewinnt. Dino-Tempo = Soll-Tempo der Strecke (max. Fahrzeug-Tempo) × tempoFaktor
-  //                   der Schwierigkeit (config.schwierigkeiten – wie die Computer-Fahrer). Kein Einfluss auf das Rennergebnis; Sieg → Sticker „Dino geschlagen“.
+  //                   der Schwierigkeit (config.schwierigkeiten – wie die Computer-Fahrer) × tempoAnteil 0,88 (der Dino ist etwas gemütlicher als ein Computer-Fahrer). Kein Einfluss auf das Rennergebnis; Sieg → Sticker „Dino geschlagen“.
   //   Nur Offline-Anzeige (die Aufgaben laufen im Browser, online gibt es den Dino-Begleiter nicht); der Rechenteil bleibt trotzdem rein und bitgleich testbar.
   R.config.spass.welten.dino = {
     gold: { erstNach: 12, pauseMin: 16, pauseSpanne: 12, anzahl: 3, abstand: 5, vorn: 34, vornSek: 1.2, flug: 0.85, dauer: 15, radius: 2.5, qAnteil: 0.55, vMin: 6 },
-    rennen: { erstNach: 38, pauseMin: 50, pauseSpanne: 40, weg: 300, vMin: 8, tau: 1.2, vorsprung: 6, dMin: 10, maxSek: 70, fahne: 0.9 },
+    rennen: { erstNach: 38, pauseMin: 50, pauseSpanne: 40, weg: 300, vMin: 8, tau: 1.2, tempoAnteil: 0.88, vorsprung: 6, dMin: 10, maxSek: 70, fahne: 0.9 },
   };
   const hashT = (txt) => { let h = 2166136261 >>> 0; for (let i = 0; i < txt.length; i++) { h ^= txt.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h >>> 0; };
   const mischen = (h, n) => { h = (h ^ Math.imul(n + 1, 0x9E3779B1)) >>> 0; h = Math.imul(h ^ (h >>> 15), 0x85EBCA6B) >>> 0; h = Math.imul(h ^ (h >>> 13), 0xC2B2AE35) >>> 0; return (h ^ (h >>> 16)) >>> 0; };
@@ -289,13 +289,13 @@
     return { seed, n: 0, nR: 0, zeit: 0, tGold: c.gold.erstNach, tRennen: c.rennen.erstNach, gold: [], rennen: null, ereig: [], gesammelt: 0, siege: 0, niederlagen: 0 };
   }
 
-  /** Mittleres Soll-Tempo der Strecke über [s0, s0+weg], höchstens vMax (das Fahrzeug schafft nie mehr). */
+  /** Mittleres Soll-Tempo (harmonisch) der Strecke über [s0, s0+weg], je Stelle höchstens vMax (das Fahrzeug schafft nie mehr). */
   function dinoTempo(st, s0, weg, vMax, schw) {
     const sp = st.spline, tf = ((R.config.schwierigkeiten || {})[schw] || (R.config.schwierigkeiten || {}).mittel || { tempoFaktor: 0.78 }).tempoFaktor;
-    let sum = 0, n = 0;
-    for (let d = 0; d <= weg; d += 20) { sum += Math.min(vMax, st.tempoBei(sp.wrapS(s0 + d))); n++; }
-    const ref = Math.min(vMax, sum / Math.max(1, n));
-    return klemme(ref * tf, C().dino.rennen.dMin, Math.max(C().dino.rennen.dMin, vMax));
+    let inv = 0, n = 0;                                         // harmonisches Mittel: Kurven kosten Zeit (wie beim Fahren), sonst wäre der Dino auf kurvigen Stücken unschlagbar
+    for (let d = 0; d <= weg; d += 20) { inv += 1 / Math.max(3, Math.min(vMax, st.tempoBei(sp.wrapS(s0 + d)))); n++; }
+    const ref = Math.min(vMax, n / inv);
+    return klemme(ref * tf * C().dino.rennen.tempoAnteil, C().dino.rennen.dMin, Math.max(C().dino.rennen.dMin, vMax));
   }
 
   /** Dino-Fahne: Strecke s des Dinos zur Zeit t nach dem Ruf (sanfter Start). */

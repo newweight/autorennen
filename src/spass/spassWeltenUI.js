@@ -283,7 +283,7 @@
     [-1, 1].forEach((sg) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, 6.4, 8), pm); m.position.set(0, 3.2, sg * b2); tor.add(m); });
     A.tex = fahneTextur();
     const ban = new THREE.Mesh(new THREE.PlaneGeometry(b2 * 2, 1.9), new THREE.MeshBasicMaterial({ map: A.tex, side: THREE.DoubleSide }));
-    ban.rotation.y = Math.PI / 2; ban.position.set(0, 5.5, 0); tor.add(ban);
+    ban.rotation.y = -Math.PI / 2; ban.position.set(0, 5.5, 0); tor.add(ban);
     const strip = new THREE.Mesh(new THREE.PlaneGeometry(1.4, b2 * 2 - 1.8), new THREE.MeshBasicMaterial({ map: A.tex, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
     strip.rotation.x = -Math.PI / 2; strip.rotation.z = Math.PI / 2; strip.position.set(0, 0.07, 0); tor.add(strip);
     A.tor = tor; sp.szene.add(tor);
