@@ -359,21 +359,22 @@ window.Rennspiel = window.Rennspiel || {};
     gruppe.add(m);
   }
 
-  function schildTextur(text, hex) {
-    const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+  function schildTextur(text, hint, hex) {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 256;
     const g = c.getContext('2d');
-    g.fillStyle = hex; g.fillRect(0, 0, 256, 128);
-    g.strokeStyle = '#fff'; g.lineWidth = 8; g.strokeRect(6, 6, 244, 116);
-    g.fillStyle = '#fff'; g.font = 'bold 50px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(text, 128, 66);
-    return new THREE.CanvasTexture(c);
+    g.fillStyle = hex; g.fillRect(0, 0, 512, 256);
+    g.strokeStyle = '#fff'; g.lineWidth = 12; g.strokeRect(10, 10, 492, 236);
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = 'bold 104px Arial, sans-serif'; g.fillText(text, 256, 100);                 // Stunt-Name (englisch, Text von vorn lesbar, nicht gespiegelt)
+    g.fillStyle = '#ffe14a'; g.font = 'bold 50px Arial, sans-serif'; g.fillText(hint, 256, 190);   // kindgerechter Hinweis darunter
+    const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
   }
 
   /** Zonen: Bodenmarkierung (Randbalken, Pfeile) in einem Mesh + Schilder an beiden Seiten am Anfang. */
   function zonenBauen(zonen, strecke, gruppe) {
     if (!zonen.length) return;
     const sp = strecke.spline, s = sammler(), quad = new THREE.PlaneGeometry(1, 1), box = new THREE.BoxGeometry(1, 1, 1);
-    const farbe = { wheelie: [0xffb000, 0xffffff, 0xff7a00, '#ff7a00', 'WHEELIE'], stoppie: [0x2f8bff, 0xffffff, 0x1c5fd0, '#1c5fd0', 'STOPPIE'] };
+    const farbe = { wheelie: [0xffb000, 0xffffff, 0xff7a00, '#ff7a00', 'WHEELIE', 'Trick-Taste'], stoppie: [0x2f8bff, 0xffffff, 0x1c5fd0, '#1c5fd0', 'VORDERRAD!', 'vorne bremsen'] };
     const texturen = {}, schilder = [];
     zonen.forEach((z) => {
       const f = farbe[z.art] || farbe.wheelie, len = sp.differenzS(z.s1, z.s0);
@@ -389,18 +390,18 @@ window.Rennspiel = window.Rennspiel || {};
           s.add(quad, mat(p.x - p.nx * sg * 0.55, y, p.z - p.nz * sg * 0.55, ry, 0.5, 2.2, 1, -Math.PI / 2), f[2]);
         });
       }
-      if (!texturen[z.art]) texturen[z.art] = schildTextur(f[4], f[3]);
+      if (!texturen[z.art]) texturen[z.art] = schildTextur(f[4], f[5], f[3]);
       [-1, 1].forEach((sg) => {
-        const p = sp.punktBei(z.s0 - 6), q = (strecke.breite / 2 + 1.6) * sg, x = p.x + p.nx * q, zz = p.z + p.nz * q, g0 = strecke.hoeheAn(x, zz);
-        s.add(box, mat(x, g0 + 1.5, zz, headingY(p.tx, p.tz), 0.15, 3, 0.15), 0x55565e);
-        schilder.push({ x, z: zz, y: g0 + 3.2, ry: headingY(p.tx, p.tz) + Math.PI, art: z.art });
+        const p = sp.punktBei(z.s0 - 12), q = (strecke.breite / 2 + 1.6) * sg, x = p.x + p.nx * q, zz = p.z + p.nz * q, g0 = strecke.hoeheAn(x, zz);
+        s.add(box, mat(x + p.tx * 0.12, g0 + 1.3, zz + p.tz * 0.12, headingY(p.tx, p.tz), 0.18, 2.6, 0.18), 0x55565e);        // Pfosten HINTER dem Schild (von vorn nicht im Bild), endet unter der Tafel
+        schilder.push({ x, z: zz, y: g0 + 3.9, ry: headingY(p.tx, p.tz) + Math.PI, art: z.art });                              // Schild VOR der Zone (12 m), Vorderseite zum Fahrer
       });
     });
     quad.dispose(); box.dispose();
     const mesh = new THREE.Mesh(s.geo(), new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
     mesh.name = 'ZonenMarken';
     gruppe.add(mesh);
-    const geo = new THREE.PlaneGeometry(3.2, 1.6), mats = {};
+    const geo = new THREE.PlaneGeometry(4.4, 2.2), mats = {};
     schilder.forEach((sc) => {
       const mm = mats[sc.art] || (mats[sc.art] = new THREE.MeshBasicMaterial({ map: texturen[sc.art], side: THREE.DoubleSide }));
       const m = new THREE.Mesh(geo, mm);

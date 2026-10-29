@@ -140,7 +140,7 @@ window.Rennspiel = window.Rennspiel || {};
       const b = c.mult ? Math.round(c.rest / R.config.motoStunts.combo.fenster * 100) : 0;
       if (zl.c !== ct) { zl.c = ct; m.eCombo.textContent = ct; m.eCombo.classList.toggle('an', !!ct); m.eBalkenBox.classList.toggle('an', !!ct); m.eCombo.classList.toggle('gross', c.mult >= 2); }
       if (zl.b !== b) { zl.b = b; m.eBalken.style.width = b + '%'; }
-      const live = z.wheelie.aktiv ? '🔥 Wheelie ' + Math.round(z.wheelie.meter) + ' m' : z.stoppie.aktiv ? '🔥 Stoppie ' + Math.round(z.stoppie.meter) + ' m' : '';
+      const live = z.wheelie.aktiv ? '🔥 Wheelie ' + Math.round(z.wheelie.meter) + ' m' : z.stoppie.aktiv ? '🔥 Vorderrad ' + Math.round(z.stoppie.meter) + ' m' : '';
       if (zl.l !== live) { zl.l = live; m.eLive.textContent = live; m.eLive.classList.toggle('an', !!live); }
     });
   }
