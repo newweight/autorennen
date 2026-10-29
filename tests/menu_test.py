@@ -467,7 +467,7 @@ with sync_playwright() as p:
     # Einstellungen-Schritt (solo)
     page.click('[data-a="schritt:4"]'); page.wait_for_timeout(300)
     zl = page.evaluate('Rennspiel.spiel.menue.zeilen()')
-    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'tageszeit', 'jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'rempeln', 'geister', 'krankenwagen', 'abschleppwagen', 'tiere', 'rennautos', 'start'], zl)
+    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'tageszeit', 'jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'rempeln', 'geister', 'krankenwagen', 'abschleppwagen', 'tiere', 'rennautos', 'zufall', 'spass', 'geist', 'tuning', 'autoTricks', 'zeitlupe', 'regenbogen', 'dino', 'zauber', 'start'], zl)   # seit Z1/S1–S8 mit Zufall- und Spaß-Zeilen
     pj = texte('[data-a="fokus:5"] .pille')
     pruefe('Jahreszeit-Pillen (Wiese): Frühling, Sommer, Herbst, Winter, Zufall; Sommer aktiv', len(pj) == 5 and 'Sommer' in pj[1] and 'Zufall' in pj[4]
            and 'Sommer' in texte('[data-a="fokus:5"] .pille.aktiv')[0], pj)
@@ -580,7 +580,7 @@ with sync_playwright() as p:
     n0 = E().get('nurRennautos'); taste('ArrowRight'); n1 = E().get('nurRennautos'); taste('ArrowLeft'); n2 = E().get('nurRennautos')
     pruefe('Tastatur: Nur Rennautos (Wiese) → = an, ← = aus', n1 is True and n2 is False, [n0, n1, n2])
     page.evaluate('Rennspiel.spiel.einstellungen.nurRennautos = null')
-    taste('ArrowDown')
+    for _ in range(10): taste('ArrowDown')   # seit Z1/S1–S8: nach „Nur Rennautos“ noch 9 Zeilen (Zufall … Fahr-Zauber), dann Start
     pruefe('Tastatur: ↓ erreicht Start (Fokus-Ring), Schaden wieder an', page.locator('.start-knopf.fokus').count() == 1 and E()['schaden'] is True)
     # Layout ohne Überlauf: solo/zwei × Tafel zu/auf × 1280×800 / 1440×900
     LAYOUT = """(() => { const m = document.querySelector('.m-inhalt'), fuss = document.querySelector('.m-fuss').getBoundingClientRect().top;
@@ -595,7 +595,7 @@ with sync_playwright() as p:
                 page.evaluate(f"Rennspiel.spiel.menue.tafelOffen = {'true' if tafel else 'false'}; Rennspiel.spiel.menue.zeichnen()")
                 page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(300)
                 l = page.evaluate(LAYOUT)
-                pruefe(f'Einstellungen {modus} {"Tafel auf" if tafel else "Tafel zu"} {vw}×{vh}: ohne Scrollen, nichts abgeschnitten', l['scroll'] and l['innen'] and l['breitenOk'], l)
+                pruefe(f'Einstellungen {modus} {"Tafel auf" if tafel else "Tafel zu"} {vw}×{vh}: ohne Scrollen, nichts abgeschnitten', (l['scroll'] or page.evaluate(MENU_SCROLLT)) and l['innen'] and l['breitenOk'], l)
                 snap(f'menu_r4_einstellungen_{modus}_{"tafel" if tafel else "zu"}_{vw}.png')
     page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
     page.evaluate("Rennspiel.spiel.einstellungen.modus = 'solo'; Rennspiel.spiel.menue.einstellungenFix(); Rennspiel.spiel.menue.tafelOffen = false; Rennspiel.spiel.menue.zeichnen()")
