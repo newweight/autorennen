@@ -50,6 +50,8 @@
       nurRennautos: null, autoVorFormel: null,
       // Z1: Zufällige Strecke (Münzen/Hindernisse jede Runde und jedes Rennen neu), Standard AN, abschaltbar (track/zufall.js)
       zufall: !(c.zufall && c.zufall.standardAn === false),
+      // S1 (Spaß-Paket, src/spass): Spaß-Elemente (Trampolin/Kanone) und Geist vom besten Lauf, Standard AN
+      spass: !(c.spass && c.spass.standardAn === false), geist: !(c.spass && c.spass.geistStandardAn === false),
     };
   }
 
@@ -102,6 +104,7 @@
       nurRennautos: typeof r.nurRennautos === 'boolean' ? r.nurRennautos : null,      // v29 F3
       autoVorFormel: Array.isArray(r.autoVorFormel) && r.autoVorFormel.length === 2 && r.autoVorFormel.every(x => autoOk(x, null)) ? r.autoVorFormel.slice() : null,
       zufall: typeof r.zufall === 'boolean' ? r.zufall : std.zufall,      // Z1: alte Speicherstände ohne das Feld → Standard (an)
+      spass: typeof r.spass === 'boolean' ? r.spass : std.spass, geist: typeof r.geist === 'boolean' ? r.geist : std.geist,      // S1
     };
   }
 
@@ -344,7 +347,9 @@
       const variante = e.variante && daten.varianten && daten.varianten[e.variante] ? e.variante : '';   // Runde 6: ungültig → Normal
       // Z1: Zufällige Strecke – Seed nur im Rennen (streckeAufbauen/online setzt _zufallSeed; Menühintergrund: keiner), wird hier verbraucht
       const zufallOpt = R.ZufallSpiel ? R.ZufallSpiel.opt(this, daten) : undefined;
-      const strecke = new R.Strecke(daten, zufallOpt ? { welt, variante, hindernisMenge: e.hindernisMenge, zufall: zufallOpt } : { welt, variante, hindernisMenge: e.hindernisMenge });
+      const sOpt = zufallOpt ? { welt, variante, hindernisMenge: e.hindernisMenge, zufall: zufallOpt } : { welt, variante, hindernisMenge: e.hindernisMenge };
+      if (e.spass !== false && R.Spass) sOpt.spass = true;      // S1: Trampolin/Kanone (Menü „Spaß-Elemente“, Standard an; aus = keine Option = bitgleich wie vorher)
+      const strecke = new R.Strecke(daten, sOpt);
       this.strecke = strecke;
       strecke.tempoKlasse = e.tempoKlasse || this.tempoKlasse;   // 14.10. (v20): Kurvenschilder (world/schilder.js) beschriften je Tempo-Klasse
       // Runde 4: Wetter/Jahreszeit/Wind (Standard Sommer/klar/0 = wie bisher)
