@@ -505,3 +505,14 @@ h3.pokal-zeile.fokus { outline: .12em solid var(--gelb); background: rgba(40, 60
 .karte.strecke[data-a="strecke:mega"] { border-color: #6fd3c8; background: rgba(20, 84, 90, .8); }
 .karte.strecke[data-a="strecke:mega"].gewaehlt { background: rgba(30, 118, 124, .92); }
 .karte.strecke[data-a="strecke:mega"] .strecken-bild { background: linear-gradient(90deg, #4f9a3a 0 25%, #eef3f8 25% 45%, #d9a85a 45% 70%, #c987e0 70%) !important; }
+
+/* S5: Karten der neuen Welten */
+.karte.strecke.t-mond { border-color: #aab3d6; background: rgba(28, 30, 52, .8); }
+.karte.strecke.t-mond .strecken-hinweis { background: rgba(150,170,255,.35); }
+.karte.strecke.t-mond.gewaehlt { background: rgba(52, 58, 98, .94); }
+.karte.strecke.t-ozean { border-color: #5fd0e8; background: rgba(10, 70, 100, .78); }
+.karte.strecke.t-ozean .strecken-hinweis { background: rgba(90,220,240,.35); }
+.karte.strecke.t-ozean.gewaehlt { background: rgba(14, 104, 140, .92); }
+.karte.strecke.t-regenbogen { border-color: #ffc2e6; background: rgba(120, 90, 170, .72); }
+.karte.strecke.t-regenbogen .strecken-hinweis { background: rgba(255,200,120,.4); }
+.karte.strecke.t-regenbogen.gewaehlt { background: rgba(150, 110, 210, .92); }

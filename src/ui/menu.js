@@ -620,11 +620,13 @@
     }
 
     htmlStrecke() {
-      const farben = { wiese: ['#7ed957', '#3a8f2f'], wald: ['#2f7a3a', '#143d1f'], wueste: ['#f2c768', '#c98a34'], fantasie: ['#ff8fd8', '#9b5de5'], dino: ['#6fae3a', '#3d6b1e'], formel1: ['#8d949c', '#3a3f46'] };
+      const farben = { wiese: ['#7ed957', '#3a8f2f'], wald: ['#2f7a3a', '#143d1f'], wueste: ['#f2c768', '#c98a34'], fantasie: ['#ff8fd8', '#9b5de5'], dino: ['#6fae3a', '#3d6b1e'], formel1: ['#8d949c', '#3a3f46'],
+        mond: ['#a3a3ae', '#4c4c58'], ozean: ['#3fb0c9', '#14607a'], regenbogen: ['#ffd9f0', '#8fb6ff'] };   // S5: neue Welten
+      const himmelFarben = { fantasie: '#b48cff', dino: '#f2b36a', mond: '#05060f', ozean: '#0c78a6', regenbogen: '#8fd0ff' };
       const labels = { leicht: 'leicht', mittel: 'mittel', schnell: 'schnell', spass: 'spaß' };
       return `<div class="reihe strecken">` + R.trackCatalog.map((s) => {
         const f = farben[s.id] || farben[s.thema] || farben.wiese;      // v29: Formel 1 = graue Asphaltkarte
-        const himmel = s.thema === 'fantasie' ? '#b48cff' : s.thema === 'dino' ? '#f2b36a' : '#8fc8ff';   // Dino: Vulkan-Dunst
+        const himmel = himmelFarben[s.thema] || '#8fc8ff';   // Dino: Vulkan-Dunst
         // Hinweis aus den Katalogdaten (Fantasie: Loopings, Bälle, Wasserstrahl)
         const teile = [];
         // nur, was in der Standard-Welt der Strecke aktiv ist (Runde 4: Wiese/Wald/Wüste haben Bälle erst in „Verrückt“)
@@ -632,6 +634,9 @@
         if (s.loopings && s.loopings.length && aktiv('loopings')) teile.push(s.loopings.length + ' Loopings');
         if (s.baelle && s.baelle.length && aktiv('baelle')) teile.push('Bälle');
         if (s.wasserstrahlen && s.wasserstrahlen.length && aktiv('wasserstrahlen')) teile.push('Wasserstrahl');
+        if (s.schwerkraft && s.schwerkraft < 1) teile.push(s.schwerkraft + ' g, Hüpfer');
+        if (s.glasTunnel && s.glasTunnel.length) teile.push('Glastunnel');
+        if (s.regenbogenFahrbahn) teile.push('Regenbogen-Fahrbahn');
         const hinweis = teile.length ? `<div class="strecken-hinweis">🎡 ${teile.join(', ')}</div>` : '';
         const pille = s.schwierigkeit ? `<span class="s-pille s-${s.schwierigkeit}">${labels[s.schwierigkeit] || s.schwierigkeit}</span>` : '';
         return `<div class="karte strecke t-${s.thema}${this.e.streckeId === s.id ? ' gewaehlt' : ''}" data-a="strecke:${s.id}">` +
