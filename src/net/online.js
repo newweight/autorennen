@@ -819,6 +819,7 @@
         f.fahrhilfe = t.hilfe; f.index = -1; f.stehZeit = 0; f.resetHinweis = false; f.falschHerum = false; f.falschZeit = 0;
         f.netRs = 0; f.netWinkel = null;
         f.schatten = new R.Vehicle(auto.fahrwerte, { tempoKlasse: e.tempoKlasse });
+        if (R.SpassTuning && t.tuning && e.tuning === true) { R.SpassTuning.anwenden(f.vehicle, R.SpassTuning.saeubern(t.tuning)); R.SpassTuning.anwenden(f.schatten, R.SpassTuning.saeubern(t.tuning)); if (f.mesh) R.SpassTuning.teileAnbauen(f.mesh, auto, R.SpassTuning.saeubern(t.tuning)); }   // S2: Tuning wie im Server (nur wenn der Raum es erlaubt)
         if (i !== du && !e.kollisionen) this.geist(f.mesh);          // Stufe 1: Geister; Stufe 2 (kollisionen) deckend
         tl.push({ vehicle: f.vehicle, name: t.name, istSpieler: !!t.mensch });
       });
@@ -876,7 +877,8 @@
       this.kollisionen = e.kollisionen === true;        // Stufe 2 (Rempeln): Vorhersage kennt die anderen Autos
       const andere = this.kollisionen ? m.teilnehmer.map((t, i) => (i === du ? null : { nr: i, auto: katalog.find(a => a.id === t.autoId) || katalog[0] })).filter(Boolean) : [];
       this.vorhersage = new R.NetzVorhersage({ strecke, auto: mein.auto, tempoKlasse: e.tempoKlasse, fahrhilfe: m.teilnehmer[du].hilfe,
-        umwelt: () => (spiel.wetter ? spiel.wetter.umwelt() : undefined), kollisionen: this.kollisionen, andere, rempeln: 'sanft' });
+        umwelt: () => (spiel.wetter ? spiel.wetter.umwelt() : undefined), kollisionen: this.kollisionen, andere, rempeln: 'sanft',
+        tuning: R.SpassTuning && e.tuning === true && m.teilnehmer[du].tuning ? R.SpassTuning.saeubern(m.teilnehmer[du].tuning) : null });
       if (this.vorhersage.dz) mein.dachL = this.vorhersage.dz;     // v24: der eigene Dach-Zustand IST der der Vorhersage (Klappzeit/Gas-Sperre), HUD und Optik lesen ihn
       const vp = this.vorhersage.vp, p0 = plaetze[du];
       vp.setzen(p0.x, p0.z, p0.heading); vp.y = strecke.hoeheAn(p0.x, p0.z);

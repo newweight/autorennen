@@ -24,7 +24,7 @@ const MODULE = [
   'vendor/three.min.js',
   'src/config.js', 'src/physics/vehicle.js', 'src/physics/collisions.js', 'src/physics/schaden.js', 'src/cars/carCatalog.js', 'src/cars/dachregel.js',
   'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/zufall.js', 'src/track/looping.js', 'src/track/schanze.js',
-  'src/track/anlauf.js', 'src/spass/spassKern.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/tribuenen.js', 'src/world/formel1.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
+  'src/track/anlauf.js', 'src/spass/spassKern.js', 'src/spass/spassTuning.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/tribuenen.js', 'src/world/formel1.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
   'src/world/kleber.js', 'src/world/polizei.js', 'src/world/verkehr.js', 'src/world/tiere.js', 'src/race/raceManager.js', 'src/race/startBoost.js', 'src/ai/driver.js', 'src/net/protokoll.js',
   'src/track/megastrecke.js',   // v22: Megastrecke (Add-on, nach Wetter/Themen/Strecke geladen)
   'src/main.js', 'src/spass/spassPhysik.js',      // S1: Trampolin/Kanone (Add-on, nach main.js)
@@ -149,6 +149,8 @@ function einstellungenPruefen(roh, spielerAnzahl, moto) {
     zufall: r.zufall === true,
     // S1 (additiv): Spaß-Elemente (Trampolin/Kanone, src/spass); nur ein echtes true schaltet ein (alter Browser sendet das Feld nicht → feste alte Strecke)
     spass: r.spass === true,
+    // S2 (additiv): Tuning mit Goldstücken (src/spass/spassTuning.js) wirkt nur, wenn der Raum es erlaubt (Lobby-Schalter, Standard AUS = fair); nur ein echtes true schaltet ein
+    tuning: r.tuning === true,
     // 12.10. Hindernis-Menge: nur 'normal' | 'viele' | 'sehrViele' (unbekannt, Zahl, null … → 'normal'); alle Browser bauen dieselbe Strecke
     hindernisMenge: c.hindernisMenge && c.hindernisMenge.stufen && typeof r.hindernisMenge === 'string' &&
       Object.prototype.hasOwnProperty.call(c.hindernisMenge.stufen, r.hindernisMenge) ? r.hindernisMenge : ((c.hindernisMenge && c.hindernisMenge.standard) || 'normal'),
@@ -241,10 +243,15 @@ class Simulation {
     if (e.nurRennautos === true && R.carCatalog.formelFeld) {
       gegnerAutos = R.carCatalog.formelFeld({ spieler: spielerIds.map(id => katalog.find(a => a.id === id) || katalog[0]), gegner: G, seed: [e.streckeId, G, spielerIds.join('+')].join('|') }).gegner;
     }
+    // S2: Tuning nur mit Raum-Schalter; Menschen bringen ihre Stufen mit (geklemmt auf 0..5), Computer bekommen gleichwertiges (R.SpassTuning.kiStufen) – Server und Browser rechnen gleich
+    const tuMenschen = e.tuning === true && R.SpassTuning ? spieler.map(s => R.SpassTuning.saeubern(s.tuning)) : null;
+    const tuKi = tuMenschen ? R.SpassTuning.kiStufen(tuMenschen.map(x => x || {}), e.schwierigkeit) : null;
+    const tuStufen = [];
     const teilnehmer = plaetze.map((p, i) => {
       const istSpieler = i < P;
       const auto = istSpieler ? (katalog.find(a => a.id === spielerIds[i]) || katalog[0]) : (gegnerAutos[i - P] || katalog[0]);
       const vehicle = new R.Vehicle(auto.fahrwerte, { tempoKlasse: e.tempoKlasse });
+      if (tuMenschen) { const ts = istSpieler ? tuMenschen[i] : tuKi; if (ts && R.SpassTuning.anwenden(vehicle, ts)) tuStufen[i] = R.SpassTuning.alsListe(ts); }
       vehicle.setzen(p.x, p.z, p.heading);
       vehicle.y = strecke.hoeheAn(p.x, p.z);
       const f = { vehicle, mesh: null, auto, radwinkel: 0, looping: R.Looping ? R.Looping.zustand() : null, flug: R.Schanzen ? R.Schanzen.zustand() : null,
@@ -259,7 +266,7 @@ class Simulation {
       return { vehicle, name: istSpieler ? spielerNamen[i] : computerNamen[i - P], istSpieler };
     });
     this.teilnehmerInfo = teilnehmer.map((t, i) => ({ nr: i, name: t.name, autoId: sim.fahrzeuge[i].auto.id, optionen: !t.istSpieler && sim.fahrzeuge[i].auto.optionen ? sim.fahrzeuge[i].auto.optionen : undefined, mensch: t.istSpieler,
-      hilfe: sim.fahrzeuge[i].fahrhilfe }));
+      hilfe: sim.fahrzeuge[i].fahrhilfe, tuning: tuStufen[i] || undefined }));
     const rennen = new R.RaceManager(strecke, teilnehmer, { runden: e.runden });
     sim.rennen = rennen;
     sim.startBoost = R.StartBoost && rennen.countdownDauer > 0 ? new R.StartBoost(teilnehmer.length) : null;

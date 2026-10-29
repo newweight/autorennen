@@ -54,6 +54,7 @@
     constructor(opt) {
       this.strecke = opt.strecke;
       this.vp = new R.Vehicle(opt.auto.fahrwerte, { tempoKlasse: opt.tempoKlasse });
+      if (opt.tuning && R.SpassTuning) R.SpassTuning.anwenden(this.vp, opt.tuning);   // S2: Tuning wie im Server (nur Räume mit Tuning)
       this.fahrhilfe = opt.fahrhilfe;
       this.umwelt = opt.umwelt || (() => undefined);
       this.idx = -1;

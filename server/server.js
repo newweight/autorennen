@@ -264,6 +264,8 @@ function starten(opt) {
   let motoIdsListe = null;
   const idsFuer = (raum) => (raum && raum.art === 'moto' ? (motoIdsListe || (motoIdsListe = ladenMoto().carCatalog.waehlbare().map(a => a.id))) : autoIds);
   const hilfen = Object.keys(R.config.fahrhilfen);
+  /** S2: Tuning-Stufen aus der Nachricht (Liste von 3 ganzen Zahlen 0..5) – alles andere → null (kein Tuning). */
+  const tuningAus = (t) => (R.SpassTuning && Array.isArray(t) && t.length === 3 ? R.SpassTuning.alsListe(R.SpassTuning.saeubern(t)) : null);
   let verbindungen = 0;
   const MAX_PRO_IP = 8, MAX_RAEUME_PRO_IP = 5, TEUER_MS = 3000, BEITRITT_FENSTER_MS = 10000, BEITRITT_FEHLER = 5;   // v27 F4
   const proIp = new Map();
@@ -307,7 +309,7 @@ function starten(opt) {
   const fehler = (ws, grund, text) => senden(ws, { t: 'fehler', grund, text });
 
   function lobbySenden(raum, hinweis) {
-    const spieler = raum.spieler.map((c, i) => ({ id: c.id, nr: i, fahrer: c.fahrer, auto: c.auto, hilfe: c.hilfe, bereit: c === raum.host || !!c.bereit, istHost: c === raum.host }));
+    const spieler = raum.spieler.map((c, i) => ({ id: c.id, nr: i, fahrer: c.fahrer, auto: c.auto, hilfe: c.hilfe, bereit: c === raum.host || !!c.bereit, istHost: c === raum.host, tuning: raum.einstellungen && raum.einstellungen.tuning === true && c.tuning ? c.tuning : undefined }));
     for (const c of raum.spieler) {
       senden(c.ws, { t: 'lobby', code: raum.code, zustand: raum.zustand, du: c.id, spieler, einstellungen: raum.einstellungen,
         max: N.MAX_SPIELER, hinweis: hinweis || undefined, oeffentlich: oeffentlich || undefined });
@@ -350,7 +352,7 @@ function starten(opt) {
     const spieler = raum.spieler.slice();
     let sim;
     try {
-      sim = new Simulation({ einstellungen: raum.einstellungen, spieler: spieler.map(c => ({ fahrer: c.fahrer, auto: c.auto, hilfe: c.hilfe })),
+      sim = new Simulation({ einstellungen: raum.einstellungen, spieler: spieler.map(c => ({ fahrer: c.fahrer, auto: c.auto, hilfe: c.hilfe, tuning: c.tuning })),
         seed: crypto.randomInt(1, 2 ** 31), moto: raum.art === 'moto' });
     } catch (e) {
       console.error('Simulation konnte nicht gebaut werden:', e && e.stack);
@@ -459,6 +461,7 @@ function starten(opt) {
         c.fahrer = fahrerNamen.includes(m.fahrer) ? m.fahrer : fahrerNamen[0];
         c.auto = idsFuer(neu).includes(m.auto) ? m.auto : idsFuer(neu)[0];
         c.hilfe = hilfen.includes(m.hilfe) ? m.hilfe : R.config.fahrhilfeStandard;
+        c.tuning = tuningAus(m.tuning);      // S2: Tuning-Stufen [Motor, Reifen, Bremsen] (wirkt nur in Räumen mit Tuning-Schalter)
         senden(c.ws, { t: 'raum', code, du: c.id, host: true });
         lobbySenden(neu);
         log('Raum ' + code + (art === 'moto' ? ' (Motorrad)' : '') + ' erstellt, offen: ' + raeume.size);
@@ -481,6 +484,7 @@ function starten(opt) {
         c.fahrer = freierFahrer(ziel, m.fahrer);
         c.auto = idsFuer(ziel).includes(m.auto) ? m.auto : idsFuer(ziel)[0];
         c.hilfe = hilfen.includes(m.hilfe) ? m.hilfe : R.config.fahrhilfeStandard;
+        c.tuning = tuningAus(m.tuning);      // S2: Tuning-Stufen [Motor, Reifen, Bremsen] (wirkt nur in Räumen mit Tuning-Schalter)
         c.bereit = false;
         ziel.spieler.push(c);
         c.raum = ziel;
@@ -508,6 +512,7 @@ function starten(opt) {
         }
         if (m.auto !== undefined) { if (!idsFuer(raum).includes(m.auto)) return fehler(c.ws, 'ungueltig', raum.art === 'moto' ? 'Unbekanntes Motorrad' : 'Unbekanntes Auto'); c.auto = m.auto; }
         if (m.hilfe !== undefined) { if (!hilfen.includes(m.hilfe)) return fehler(c.ws, 'ungueltig', 'Unbekannte Fahrhilfe'); c.hilfe = m.hilfe; }
+        if (m.tuning !== undefined) c.tuning = tuningAus(m.tuning);      // S2
         lobbySenden(raum);
         return;
       }

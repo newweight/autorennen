@@ -123,6 +123,16 @@
     return summe(erg) > 0 ? erg : null;
   }
 
+  /** Stufen aus einer Nachricht (Liste [motor, reifen, bremsen] oder Objekt), jede Stufe auf ganze Zahlen 0..max geklemmt; ungültig → null. */
+  function saeubern(roh) {
+    if (!roh || typeof roh !== 'object') return null;
+    const l = Array.isArray(roh) ? roh : ARTEN.map((k) => roh[k]);
+    const erg = {};
+    ARTEN.forEach((k, i) => { erg[k] = ganz(+l[i], 0, C().max, 0); });
+    return erg;
+  }
+  const alsListe = (s) => (s ? ARTEN.map((k) => s[k] | 0) : null);
+
   // ---------- Schalter ----------
   const schalterKey = () => schluessel() + '.schalter';
   function an() {
@@ -249,6 +259,6 @@
     return m;
   }
 
-  R.SpassTuning = { ARTEN, laden, speichern, stufen, summe, preis, investiert, kaufen, rueckgaengig, zuruecksetzen, faktoren, anwenden, kiStufen, an, anSetzen, fuerTeilnehmer, teileAnbauen, sichtbar,
+  R.SpassTuning = { ARTEN, laden, speichern, stufen, summe, preis, investiert, kaufen, rueckgaengig, zuruecksetzen, faktoren, anwenden, kiStufen, saeubern, alsListe, an, anSetzen, fuerTeilnehmer, teileAnbauen, sichtbar,
     _ramLeeren() { _ram = {}; _ramAn = null; } };
 })();
