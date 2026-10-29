@@ -114,8 +114,38 @@ function ladenMoto() {
  * moto (M4, Standard false = bitgleich wie vorher): Motorrad-Raum – zusätzliche Felder `moto: true`, `unfall` ('aus'|'sanft'|'echt'), `stuntrennen` (bool);
  * Polizei, Verkehr (Geisterfahrer/Krankenwagen/Abschleppwagen) und „Nur Rennautos“ gibt es für Motorräder nicht und sind immer aus.
  */
+// S8: eigene Strecke (S7-Editor) online – der Host schickt den Streckencode (in Teilen), der Server prüft ihn mit R.Editor.ausCode → pruefen (Größe, Kurven,
+// Kreuzungen, Elemente; fremde Daten werden bereinigt), trägt die Strecke deterministisch (id = Hash der Punkte) in den Katalog ein und alle Browser tun dasselbe aus
+// demselben Code. Höchstens EIGEN_MAX Strecken gleichzeitig im Katalog (älteste fliegt raus); der Code bleibt in den Raum-Einstellungen (`eigen`) und wird bei jeder Prüfung
+// still neu eingetragen, falls die Strecke inzwischen verdrängt wurde.
+const EIGEN_MAX = 16, EIGEN_CODE_MAX = 14000;
+const eigenListe = [];            // [{ code, id }] – neueste hinten
+function eigenRegistrieren(code, moto) {
+  if (typeof code !== 'string' || !code || code.length > EIGEN_CODE_MAX) return null;
+  const kontexte = [laden()].concat(moto ? [ladenMoto()] : []);
+  let id = null;
+  const i0 = eigenListe.findIndex((x) => x.code === code);
+  if (i0 >= 0 && kontexte.every((R) => R.trackCatalog.some((t) => t.id === eigenListe[i0].id))) return eigenListe[i0].id;
+  for (const R of kontexte) {
+    if (!R.Editor) return null;
+    const d = R.Editor.ausCode(code);
+    if (!d) return null;
+    id = R.Editor.registrieren(d).id;
+  }
+  if (i0 >= 0) eigenListe.splice(i0, 1);
+  eigenListe.push({ code, id });
+  while (eigenListe.length > EIGEN_MAX) {
+    const alt = eigenListe.shift();
+    if (!eigenListe.some((x) => x.id === alt.id)) for (const R of [laden()].concat(RM ? [RM] : [])) { const k = R.trackCatalog.findIndex((t) => t.id === alt.id && t.eigen); if (k >= 0) R.trackCatalog.splice(k, 1); }
+  }
+  return id;
+}
+function eigenPruefen(code) { const R = laden(); if (!R.Editor || typeof code !== 'string' || code.length > EIGEN_CODE_MAX) return null; const d = R.Editor.ausCode(code); return d ? { name: d.name } : null; }
+
 function einstellungenPruefen(roh, spielerAnzahl, moto) {
-  const R = laden(), c = R.config, r = roh || {}, N = R.Netz;
+  const R = laden(), c = R.config, r0 = roh || {}, N = R.Netz;
+  const eigenId = typeof r0.eigen === 'string' && r0.eigen ? eigenRegistrieren(r0.eigen, moto === true) : null;       // S8: eigene Strecke (fehlt/ungültig → normale Wahl)
+  const r = eigenId ? Object.assign({}, r0, { streckeId: eigenId, welt: '', variante: '' }) : r0;
   const zahl = (v, lo, hi, d) => (Number.isFinite(+v) && v !== null && v !== '' ? Math.max(lo, Math.min(hi, Math.round(+v))) : d);
   const daten = R.trackCatalog.find(t => t.id === r.streckeId) || R.trackCatalog[0];
   const welt = typeof r.welt === 'string' && daten.welten && daten.welten[r.welt] ? r.welt : '';
@@ -162,6 +192,7 @@ function einstellungenPruefen(roh, spielerAnzahl, moto) {
     hindernisMenge: c.hindernisMenge && c.hindernisMenge.stufen && typeof r.hindernisMenge === 'string' &&
       Object.prototype.hasOwnProperty.call(c.hindernisMenge.stufen, r.hindernisMenge) ? r.hindernisMenge : ((c.hindernisMenge && c.hindernisMenge.standard) || 'normal'),
   };
+  if (eigenId) erg.eigen = r0.eigen;      // S8: Streckencode der eigenen Strecke (Gäste tragen sie damit selbst ein); ohne eigene Strecke fehlt das Feld (bitgleich wie vorher)
   if (moto === true) {
     Object.assign(erg, { polizei: false, geisterfahrer: false, krankenwagen: false, abschleppwagen: false, verkehr: 'aus', nurRennautos: false,
       moto: true, unfall: MOTO_UNFALL.includes(r.unfall) ? r.unfall : 'sanft', stuntrennen: r.stuntrennen === true });
@@ -572,4 +603,4 @@ class Simulation {
   }
 }
 
-module.exports = { laden, ladenMoto, kontextLaden, Simulation, einstellungenPruefen, MODULE, MOTO_UNFALL };
+module.exports = { laden, ladenMoto, kontextLaden, Simulation, einstellungenPruefen, eigenRegistrieren, eigenPruefen, EIGEN_CODE_MAX, MODULE, MOTO_UNFALL };

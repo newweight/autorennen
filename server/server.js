@@ -21,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
-const { laden, ladenMoto, Simulation, einstellungenPruefen } = require('./simulation');
+const { laden, ladenMoto, Simulation, einstellungenPruefen, eigenPruefen, EIGEN_CODE_MAX } = require('./simulation');
 const RadApi = require('./radApi');                 // Radwelt R3c-D: Speicher-API (/api/rad/…, nur 127.0.0.1), eigene Datei
 const Brett = require('./brettspiele');            // Brettspiele (4 gewinnt, Schach): eigener WebSocket-Pfad /ws-brett, eigene Datei
 const RadRaum = require('./radRaum');              // Radwelt R4-F: „Zusammen fahren“, eigener WebSocket-Pfad /ws-rad, eigene Datei
@@ -37,7 +37,7 @@ const MIME = {
 };
 
 const R = laden();
-const RAUM_NACHRICHTEN = new Set(['wahl', 'bereit', 'einstellungen', 'start', 'geladen', 'eingabe', 'zurLobby']);
+const RAUM_NACHRICHTEN = new Set(['wahl', 'bereit', 'einstellungen', 'strecke', 'start', 'geladen', 'eingabe', 'zurLobby']);
 // M4 (Motorrad online): Schalter. AUS (Standard) = der Server verhält sich bitgleich wie vorher (kein Motorrad.html, `moto`-Wünsche werden abgelehnt).
 // AN mit `--motorrad` (oder MOTORRAD_ONLINE=1) oder mit der leeren Datei <Spielordner>/motorrad.an (ohne Neustart wirksam, z. B. `touch motorrad.an`).
 const MOTORRAD_MARKE = path.join(WURZEL, 'motorrad.an');
@@ -527,6 +527,21 @@ function starten(opt) {
         raum.einstellungen = einstellungenPruefen(Object.assign({}, raum.einstellungen, m.einstellungen || {}), raum.spieler.length, raum.art === 'moto');
         lobbySenden(raum);
         return;
+      case 'strecke': {      // S8: eigene Strecke online – Streckencode in Teilen { i, n, d } (eine Nachricht darf höchstens 4096 Byte haben)
+        if (c !== raum.host) return fehler(c.ws, 'nurHost', 'Nur der Host darf das ändern');
+        if (raum.zustand !== 'lobby' && raum.zustand !== 'ergebnis') return;
+        if (!Number.isInteger(m.i) || !Number.isInteger(m.n) || m.n < 1 || m.n > 6 || m.i < 0 || m.i >= m.n || typeof m.d !== 'string' || m.d.length > 3200) return fehler(c.ws, 'streckeFalsch', 'Die Strecke kam nicht richtig an');
+        if (m.i === 0) c.streckeTeile = [];
+        if (!c.streckeTeile || c.streckeTeile.length !== m.i) { c.streckeTeile = null; return fehler(c.ws, 'streckeFalsch', 'Die Strecke kam nicht richtig an'); }
+        c.streckeTeile.push(m.d);
+        if (c.streckeTeile.length < m.n) return;
+        const code = c.streckeTeile.join(''); c.streckeTeile = null;
+        if (code.length > EIGEN_CODE_MAX || !eigenPruefen(code)) return fehler(c.ws, 'streckeFalsch', 'Diese Strecke kann ich nicht fahren');
+        raum.einstellungen = einstellungenPruefen(Object.assign({}, raum.einstellungen, { eigen: code }), raum.spieler.length, raum.art === 'moto');
+        if (raum.einstellungen.eigen !== code) return fehler(c.ws, 'streckeFalsch', 'Diese Strecke kann ich nicht fahren');
+        lobbySenden(raum);
+        return;
+      }
       case 'start':
         if (c !== raum.host) return fehler(c.ws, 'nurHost', 'Nur der Host startet das Rennen');
         if (raum.zustand !== 'lobby' && raum.zustand !== 'ergebnis') return;
