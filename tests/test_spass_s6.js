@@ -145,7 +145,7 @@ for (const [spn, moto] of [['auto', false], ['motorrad', true]]) {
       t.sim.eingabeSetzen(0, pilot(0, 32, inGlide ? { lenkung: dq } : {})); t.sim.schritt();
       const g = t.f.flug.gleit;
       if (g && !inGlide) { inGlide = true; r.start = i; r.vorQ = n ? n.seitenabstand : 0; }
-      if (g) { r.qMax = Math.max(r.qMax, Math.abs(g.q)); r.yMax = Math.max(r.yMax, t.f.flug.y - g.y0); schritte++; }
+      if (g) { r.qMax = Math.max(r.qMax, Math.abs(g.q)); r.yMax = Math.max(r.yMax, t.f.flug.y - g.y0 - (g.yL - g.y0) * Math.min(1, g.t / g.T)); schritte++; }
       if (inGlide && !g) { r.ende = i; r.landung = { s: t.f.nah && t.f.nah.s, q: t.f.nah && t.f.nah.seitenabstand, v: t.v.vLaengs, x: t.v.x, z: t.v.z }; break; }
       r.h = hash(hash(r.h, t.v.x), t.v.z);
     }
@@ -157,7 +157,7 @@ for (const [spn, moto] of [['auto', false], ['motorrad', true]]) {
   };
   const a = gleit(0), b = gleit(0), d = gleit(1);
   const T = a.e.sL - a.e.sT;
-  pruefe(`C ${spn}: Gleiten – Absprung an der Linie, Dauer ≈ Lücke/Tempo (${T} m), Höhe 2,3–4,5 m, sichere Landung auf der Straße`, a.start > 0 && a.ende > a.start && Math.abs(a.dauer - T / 32) < 0.4 && a.yMax > 2.3 && a.yMax < 4.5 && a.qMax < a.e.halb && a.landung && a.landung.v > 20, `${a.dauer.toFixed(2)} s, Höhe ${a.yMax.toFixed(2)} m, q max ${a.qMax.toFixed(2)}, v ${a.landung && a.landung.v.toFixed(1)}`);
+  pruefe(`C ${spn}: Gleiten – Absprung an der Linie, Dauer ≈ Lücke/Tempo (${T} m), Höhe 2,3–4,5 m, sichere Landung auf der Straße`, a.start > 0 && a.ende > a.start && (a.landung ? Math.abs(a.dauer - T / (a.landung.v / 0.97)) < 0.15 : false) && a.dauer > 2.2 && a.yMax > 2.3 && a.yMax < 4.5 && a.qMax < a.e.halb && a.landung && a.landung.v > 20, `${a.dauer.toFixed(2)} s, Höhe ${a.yMax.toFixed(2)} m, q max ${a.qMax.toFixed(2)}, v ${a.landung && a.landung.v.toFixed(1)}`);
   pruefe(`C ${spn}: Gleiten deterministisch (zwei Läufe bitgleich)`, a.h === b.h && a.ende === b.ende, `${a.h} ${b.h}`);
   const bs = d.t.f.flug.z, beob = d.t.S.rennen.teilnehmer[0];
   pruefe(`C ${spn}: dauernd nach außen lenken → zu weit daneben → freundlich VOR die Schlucht zurückgesetzt (Tempo ≈ 9, Rennleitung folgt)`, d.qMax > d.e.halb + 0.6 && d.landung && d.landung.s < d.e.sT && d.landung.s > d.e.sT - 40 && d.landung.v < 12 && Math.abs(beob.s - d.landung.s) < 6,

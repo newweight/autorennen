@@ -1,0 +1,17 @@
+auto wiese #0  gas: ein 73 min 73 aus 101  |  rollen: ein 57 min 17 aus 17
+auto wald #0  gas: ein 71 min 71 aus 76  |  rollen: ein 30 min 0 aus null
+auto wueste #0  gas: ein 73 min 73 aus 89  |  rollen: ein 61 min 26 aus 26
+auto wueste #1  gas: ein 72 min 72 aus 98  |  rollen: ein 55 min 8 aus 8
+auto alpen #0  gas: ein 73 min 66 aus 66  |  rollen: ein 53 min 4 aus null
+auto formel1 #0  gas: ein 73 min 73 aus 140  |  rollen: ein 63 min 31 aus 31
+auto formel1 #1  gas: ein 73 min 73 aus 140  |  rollen: ein 63 min 31 aus 31
+auto mond #0  gas: ein 73 min 73 aus 131  |  rollen: ein 64 min 33 aus 33
+auto regenbogenland #0  gas: ein 73 min 73 aus 132  |  rollen: ein 63 min 30 aus 30
+auto: mittleres Verhältnis Ausfahrt/Einfahrt  Vollgas 1.482  rollen 0.312
+motorrad wiese #0  gas: ein 71 min 71 aus 99  |  rollen: ein 57 min 14 aus 14
+motorrad alpen #0  gas: ein 69 min 69 aus 104  |  rollen: ein 56 min 8 aus 8
+motorrad formel1 #0  gas: ein 72 min 72 aus 130  |  rollen: ein 62 min 26 aus 26
+motorrad formel1 #1  gas: ein 72 min 72 aus 130  |  rollen: ein 62 min 26 aus 26
+motorrad mond #0  gas: ein 72 min 72 aus 124  |  rollen: ein 63 min 30 aus 30
+motorrad regenbogenland #0  gas: ein 81 min 81 aus 131  |  rollen: ein null min 3600000000 aus null
+motorrad: mittleres Verhältnis Ausfahrt/Einfahrt  Vollgas 1.642  rollen 0.282

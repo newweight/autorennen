@@ -23,8 +23,8 @@
 
   R.config.spass.zauber = {
     standardAn: true,
-    magnet: { laenge: 150, rampe: 36, vMin: 6, itemZeit: 10, platz: { je: 2200, max: 2, abLaenge: 1300, kappa: 1 / 320, vorher: 25, nachher: 25 } },
-    schlucht: { luecke: 44, vGleitMin: 18, vGleitMax: 44, scheitel: 3.2, qRate: 9, zentrieren: 0.25, randToleranz: 0.6, landeTempo: 0.97, zurueck: 34, resetTempo: 9, pad: 14,
+    magnet: { laenge: 150, rampe: 36, vMin: 6, itemZeit: 10, verlustProS: 0.006, bremsSchwelle: 0.25, platz: { je: 2200, max: 2, abLaenge: 1300, kappa: 1 / 320, vorher: 25, nachher: 25 } },
+    schlucht: { luecke: 90, vGleitMin: 20, vGleitMax: 44, scheitel: 4, scheitelU: 0.35, landeStaerke: 0.5, qRate: 6, zentrieren: 0.3, randToleranz: 0.6, landeTempo: 0.97, zurueck: 34, resetTempo: 9, pad: 14,
       platz: { je: 2600, max: 2, abLaenge: 1500, kappa: 1 / 380, vorher: 30, nachher: 30 } },
     schiene: { laenge: 54, hoehe: 0.85, rand: 1.0, einfang: 1.2, vMin: 5, ausSek: 0.12, ausLenk: 0.45, hop: 2.4, punkteJeM: 2, platz: { je: 1500, max: 2, abLaenge: 1100, kappa: 1 / 260, vorher: 14, nachher: 22 } },
     wand: { laenge: 38, hoehe: 2.3, abstand: 0.3, einfang: 1.7, vMin: 11, lenkMin: 0.15, ausSek: 0.12, ausLenk: 0.45, hop: 1.2, punkteJeM: 3, platz: { je: 2300, max: 2, abLaenge: 1400, kappa: 1 / 260, vorher: 14, nachher: 22 } },
@@ -54,7 +54,7 @@
 
   /** Neuer Zustand (fz.z). */
   function zustand() {
-    return { mag: null, magN: 0, magItem: 0, riese: 0, mini: 0, groesse: 1, orig: null, punkte: 0, grindM: 0, wandM: 0, versatz: null, pipeN: 0, gleitN: 0, ausZeit: 0, letzter: null };
+    return { mag: null, magN: 0, magV: 0, magItem: 0, riese: 0, mini: 0, groesse: 1, orig: null, punkte: 0, grindM: 0, wandM: 0, versatz: null, pipeN: 0, gleitN: 0, ausZeit: 0, letzter: null };
   }
   const zz = (fz) => fz.z || (fz.z = zustand());
 
@@ -200,6 +200,19 @@
     melden(fz, 'magnetEnde');
   }
 
+  /**
+   * FIX1: Tempo in der Magnet-Röhre bleibt erhalten (vorher bremsten Reibung/Steigung die Fahrt bis auf ein Drittel ab).
+   * Wer nicht bremst, behält das Einfahrtstempo (nur ein leichter Verlust verlustProS); wer Gas gibt, wird schneller; wer bremst (Bremse > bremsSchwelle), wird langsamer.
+   * Rein aus Zustand + letzter Steuerung → Server, Vorhersage und Offline-Spiel rechnen bitgleich.
+   */
+  function magnetHalten(z, v, dt) {
+    const c = C().magnet, ls = v.letzteSteuerung, br = ls ? (ls.bremse || 0) : 0;
+    if (br > c.bremsSchwelle || !(z.magV > 0)) { z.magV = v.vLaengs; return; }
+    if (v.vLaengs >= z.magV) { z.magV = v.vLaengs; return; }
+    z.magV *= 1 - c.verlustProS * dt;
+    if (v.vLaengs < z.magV) v.vLaengs = z.magV;
+  }
+
   function gleitStart(fz, v, st, nah, e, q) {
     const c = C().schlucht, sp = st.spline, z = zz(fz);
     const vF = klemme(Math.max(v.vLaengs, c.vGleitMin), c.vGleitMin, c.vGleitMax);
@@ -208,7 +221,7 @@
     const y0 = st.hoeheAn(v.x, v.z, nah.index);
     fz.index = nah.index;
     fz.gleit = { nr: e.nr, t: u0 * gap / vF, T: gap / vF, sT: e.sT, sL: e.sL, q: klemme(q, -(e.halb + 1), e.halb + 1), halb: e.halb, vF, y0, yL: st.hoeheAn(pL.x, pL.z, nah.index) };
-    fz.aktiv = true; fz.rampe = null; fz.rampenH = 0; fz.vy = 3; fz.y = y0; fz.yVorher = y0; fz.t = 0; fz.sprungGemeldet = true;
+    fz.aktiv = true; fz.rampe = null; fz.rampenH = 0; fz.vy = 4; fz.y = y0; fz.yVorher = y0; fz.t = 0; fz.sprungGemeldet = true;
     fz.startX = v.x; fz.startZ = v.z; fz.fluege++; fz.nicken = 0; fz.nickenVorher = 0;
     v.vLaengs = vF; v.vQuer = 0; v.imFlug = true;
     z.gleitN++;
@@ -260,11 +273,11 @@
       for (let i = 0; i < za.magnet.length; i++) {
         const e = za.magnet[i], aA = sp.differenzS(sAlt, e.s0), aN = sp.differenzS(sNeu, e.s0);
         if (!((aA < 0 && aN >= 0 && aN < 20) || (aN > 0 && aN < e.rampe * 0.5))) continue;   // Linie überquert – oder (nach einem Hüpfer/Sprung) in der Einfahrt gelandet
-        if (v.vLaengs >= C().magnet.vMin || z.magItem > 0) { z.mag = e; z.magN++; v.imFlug = true; melden(fz, 'magnet'); }
+        if (v.vLaengs >= C().magnet.vMin || z.magItem > 0) { z.mag = e; z.magN++; z.magV = v.vLaengs; v.imFlug = true; melden(fz, 'magnet'); }
         break;
       }
     }
-    if (z.mag) return null;                                   // in der Röhre: keine anderen Elemente (nie überlappend geplant)
+    if (z.mag) { magnetHalten(z, v, dt); return null; }       // in der Röhre: Tempo halten, keine anderen Elemente (nie überlappend geplant)
     // Schlucht: Linie sT überquert → Gleiten; auf dem Boden mitten in der Schlucht (z. B. nach einem Sprung) ebenso
     for (let i = 0; i < za.schluchten.length; i++) {
       const e = za.schluchten[i], aA = sp.differenzS(sAlt, e.sT), aN = sp.differenzS(sNeu, e.sT), inn = sp.differenzS(sNeu, e.sT) >= 0 && sp.differenzS(sNeu, e.sL) < 0;
@@ -305,7 +318,9 @@
     Gl.q = klemme(Gl.q + dq * dt, -(Gl.halb + 6), Gl.halb + 6);
     const u = Math.min(1, Gl.t / Gl.T), s = Gl.sT + (Gl.sL - Gl.sT) * u;
     const w = weltPose(st, s, Gl.q);
-    const y = Gl.y0 + (Gl.yL - Gl.y0) * u + 4 * c.scheitel * u * (1 - u);
+    // Höhenprofil (FIX1): Schirm öffnet sofort → schneller Auftrieb bis zum Scheitel (scheitelU), danach langer Gleitflug, der flach ausläuft (sanfte Landung ohne Senkrechtstoß)
+    const U = c.scheitelU, h = u < U ? c.scheitel * Math.sin(Math.PI / 2 * u / U) : c.scheitel * (1 + Math.cos(Math.PI * (u - U) / (1 - U))) / 2;
+    const y = Gl.y0 + (Gl.yL - Gl.y0) * u + h;
     v.x = w.x; v.z = w.z;
     v.heading = R.headingAus(w.tx * Gl.vF + w.nx * dq, w.tz * Gl.vF + w.nz * dq);
     v.vLaengs = Gl.vF; v.vQuer = 0; v.neigung *= Math.exp(-3 * dt);
@@ -321,7 +336,7 @@
       const boden = st.hoeheAn(v.x, v.z, fz.index), n = st.abfrage(v.x, v.z, fz.index);
       v.heading = R.headingAus(w.tx, w.tz);
       fz.tempoVorLandung = Gl.vF; v.vLaengs = Gl.vF * c.landeTempo; v.vQuer = 0;
-      fz.landeStaerke = 2.5; fz.letzteFlugzeit = fz.t; fz.maxFlugzeit = Math.max(fz.maxFlugzeit || 0, fz.t); fz.letzteWeite = Gl.sL - Gl.sT;
+      fz.landeStaerke = c.landeStaerke; fz.letzteFlugzeit = fz.t; fz.maxFlugzeit = Math.max(fz.maxFlugzeit || 0, fz.t); fz.letzteWeite = Gl.sL - Gl.sT;
       fz.letzteLandung = { sauber: true, aufStrasse: true, winkel: 0, seitenabstand: n.seitenabstand, s: n.s };
       fz.landungen++; fz.aktiv = false; fz.y = boden; fz.vy = 0; fz.nicken = -0.05; v.imFlug = false; v.untergrund = n.untergrund;
       melden(fz, 'gleitLand');
