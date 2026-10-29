@@ -145,7 +145,7 @@ window.Rennspiel = window.Rennspiel || {};
   //  (leicht: viel Roller/Quad/Chopper, profi aufwärts: Superbike, Roller verschwindet). Ohne opt.schwierigkeit oder mit config.motoGegnerGemischt === false: wie bisher nur Crossmaschinen.
   //  Deterministisch aus opt.seed (gewichtete Auswahl ohne Zurücklegen), nie die Typen der Spieler. Quad kippt auch als Gegner nie (kippt:false im Eintrag).
   const GEWICHT = {
-    superbike: (r) => 0.2 + 0.5 * r, roller: (r) => Math.max(0, 4 - 0.6 * r), chopper: (r) => Math.max(0.3, 2.2 - 0.2 * r), quad: (r) => Math.max(0.5, 3 - 0.3 * r),
+    superbike: (r) => 0.2 + 0.5 * r, roller: (r) => Math.max(0, 3.6 - 0.9 * r), chopper: (r) => Math.max(0.2, 2.4 - 0.3 * r), quad: (r) => Math.max(0.3, 3.2 - 0.45 * r),
   };
   function gegnerGemischt(katalog, anzahl, opt) {
     opt = opt || {};
