@@ -257,7 +257,13 @@
   }
 
   // ------------------------------------------------------------------ Flügel (Auto) / Gleitschirm (Motorrad)
+  const _fluegelCache = {};
   function fluegelBauen(mesh) {
+    const bk = mesh.userData.zBox, key = moto() + ':' + (bk ? [bk.max.y, bk.max.x - bk.min.x, bk.max.z - bk.min.z].map((x) => x.toFixed(2)).join(',') : '-');
+    if (!_fluegelCache[key]) _fluegelCache[key] = fluegelNeu(mesh);
+    const k = _fluegelCache[key].clone(); k.visible = false; mesh.add(k); return k;   // Klon teilt Geometrie und Material → nichts freizugeben
+  }
+  function fluegelNeu(mesh) {
     const gr = new THREE.Group(); gr.name = 'zFluegel'; gr.visible = false;
     const box = mesh.userData.zBox, hoehe = box ? box.max.y : 1.4, breit = box ? (box.max.x - box.min.x) : 1.9, lang = box ? (box.max.z - box.min.z) : 4.4;
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
@@ -287,7 +293,6 @@
       const fin = new THREE.BoxGeometry(0.08, 0.5, 0.7); fin.translate(0, hoehe + 0.2, -lang * 0.42); teile.push({ geo: fin, farbe: 0xe0262b });
       const mm = new THREE.Mesh(H.vereinen(teile), new THREE.MeshLambertMaterial({ vertexColors: true })); mm.frustumCulled = false; gr.add(mm);
     }
-    mesh.add(gr);
     return gr;
   }
 
