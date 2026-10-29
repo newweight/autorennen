@@ -253,7 +253,7 @@ function autopilot(C, st, v, idx) {
   const [sh, sg] = await Promise.all([hostM.auf('start', null, 8000), gastM.auf('start', null, 8000)]);
   pruefe('E Start Motorrad-Raum: Teilnehmer = 2 Menschen (Superbike, Quad) + 2 Computer-Motorräder, `stationen` (Werkstatt/Krankenstation) und moto in den Einstellungen',
     sh && sg && sh.du === 0 && sg.du === 1 && sh.teilnehmer.length === 4 && sh.teilnehmer[0].autoId === 'superbike' && sh.teilnehmer[1].autoId === 'quad' &&
-    sh.teilnehmer.slice(2).every(t => !t.mensch && /^crossmaschine/.test(t.autoId)) && sh.einstellungen.moto === true && sh.stationen && sh.stationen.w > 0 && sh.stationen.k > 0 &&
+    sh.teilnehmer.slice(2).every(t => !t.mensch && /^(crossmaschine|superbike|roller|chopper|quad)/.test(t.autoId)) && sh.einstellungen.moto === true && sh.stationen && sh.stationen.w > 0 && sh.stationen.k > 0 &&
     JSON.stringify(sh.stationen) === JSON.stringify(sg.stationen), sh && JSON.stringify(sh.stationen) + ' ' + sh.teilnehmer.map(t => t.autoId).join(','));
   pruefe('E Start Auto-Raum parallel unverändert: 3 Teilnehmer, keine Motorrad-Felder (stationen/moto)', sa1 && sa2 && sa1.teilnehmer.length === 3 && sa1.stationen === undefined && sa1.einstellungen.moto === undefined);
 
