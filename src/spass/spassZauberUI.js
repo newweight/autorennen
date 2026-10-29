@@ -293,7 +293,8 @@
 
   // ------------------------------------------------------------------ Pose (je Bild)
   const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _x = new THREE.Vector3(), _u2 = new THREE.Vector3(), _n = new THREE.Vector3(), _pos = new THREE.Vector3(), _ym = new THREE.Vector3(0, 1, 0), _flat = new THREE.Vector3();
-  function basis(f, u, quat) { _x.crossVectors(u, f).normalize(); _u2.crossVectors(f, _x).normalize(); _m.makeBasis(_x, _u2, f); quat.setFromRotationMatrix(_m); }
+  const _nf = new THREE.Vector3();
+  function basis(f, u, quat) { _nf.copy(f).negate(); _x.crossVectors(u, _nf).normalize(); _u2.crossVectors(_nf, _x).normalize(); _m.makeBasis(_x, _u2, _nf); quat.setFromRotationMatrix(_m); }   // Modell: vorn = −z (wie looping.js)
   const Z = { pose: new Map() };
 
   /** Magnet: Pose an der Röhrenwand (liefert { pos, u, f } in Z.pose je Fahrzeug) – Position und Orientierung nach Rollwinkel θ(s). */
