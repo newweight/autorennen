@@ -467,7 +467,7 @@
     const ueber = kreuz.length > 0;
     const e = {
       id: idVon(d), name: sauber(d.name) || 'Meine Strecke', emoji: '✏️', eigen: true, thema: basis.thema || 'wiese',
-      beschreibung: 'Von dir gemalt (' + w.name + ', ' + Math.round(L) + ' m).',
+      beschreibung: 'Von dir gemalt (' + w.name + ', ' + Math.round(L) + ' m).' + (d.ki && d.ki.ok === false ? ' ⚠️ Computer-Autos schaffen sie nicht.' : ''),
       schwierigkeit: 'spass', zielRundenzeit: Math.round(L / 30), checkpointAbstand: 120, keineVariante: true,
       weltStandard: 'klassisch', welten: { klassisch: Object.assign({}, AUS, { schanzen: true, loopings: true }) },
       bruecken: [], tunnel: [], hindernisse: [], schanzen: [], loopings: [],
@@ -631,6 +631,7 @@
     if (zuNah(pkt, K.minAbstand * 0.6, kz).length) return nein('zu nah');
     const d = { v: 1, name: sauber(x.name) || 'Meine Strecke', welt: welt(x.welt).id, pkt, hoehen: [], el: [] };
     if (x.id && /^eigen-[a-z0-9]{1,12}$/.test(String(x.id))) d.id = String(x.id);
+    if (x.ki && x.ki.ok === false) d.ki = { ok: false, s: zahl(x.ki.s, 0), text: String(x.ki.text || '').replace(/[<>&"'`\\]/g, '').slice(0, 80) };
     const L = geometrie(d).laenge;
     (Array.isArray(x.hoehen) ? x.hoehen : []).slice(0, K.maxHuegel).forEach((h) => { if (h && isFinite(h.s) && isFinite(h.h) && Math.round(h.h) !== 0) d.hoehen.push({ s: klemme(Math.round(h.s), 0, Math.floor(L)), h: klemme(Math.round(h.h), K.hoeheMin, K.hoeheMax) }); });
     // Elemente einzeln wieder setzen: dieselben Regeln wie im Editor (ohne Verschieben); was nicht passt, fällt weg
