@@ -44,7 +44,7 @@ with sync_playwright() as p:
         page.screenshot(path=os.path.join(bild, tag + '_01_menue.png'))
         # ---- Menü-Schalter + Album
         pruefe(tag + ' Menü zeigt Spaß-Zeile', page.evaluate("!!document.querySelector('.m-spass')") or True)
-        page.evaluate("Rennspiel.spiel.menue.schritt = 2; Rennspiel.spiel.menue.zeichnen()")
+        page.evaluate("Rennspiel.spiel.menue.schritt = 4; Rennspiel.spiel.menue.zeichnen()")
         page.wait_for_timeout(300)
         pruefe(tag + ' Spaß-Zeile im Menü-Schritt Start', page.evaluate("!!document.querySelector('.m-spass')"))
         page.screenshot(path=os.path.join(bild, tag + '_02_menue_start.png'))
