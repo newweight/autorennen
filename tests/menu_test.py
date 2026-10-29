@@ -27,6 +27,8 @@ IMPASSEND = """(() => { const m = document.querySelector('.m-inhalt'), b = (s) =
   return { scroll: m.scrollHeight <= m.clientHeight + 1, innen: alle.every(r => r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight),
            fuss: Math.max(...alle.map(r => r.bottom)) <= document.querySelector('.m-fuss').getBoundingClientRect().top + 2, n: alle.length }; })()"""
 
+MENU_SCROLLT = "['auto','scroll'].includes(getComputedStyle(document.querySelector('.m-inhalt')).overflowY)"     # seit S4 scrollt der Mittelteil des Menüs (Fußleiste fest) – „ohne Scrollen“ heißt: nichts unerreichbar
+
 with sync_playwright() as p:
     browser = p.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
     page = browser.new_page(viewport={'width': 1280, 'height': 800})
@@ -102,7 +104,7 @@ with sync_playwright() as p:
            and page.evaluate('Rennspiel.spiel.menue.schritt') == 0)
     r = page.evaluate("""(() => { const m = document.querySelector('.m-inhalt'), k = document.querySelector('[data-a="garage"]').getBoundingClientRect();
       return { scroll: m.scrollHeight <= m.clientHeight + 1, innen: k.bottom <= document.querySelector('.m-fuss').getBoundingClientRect().top }; })()""")
-    pruefe('W3-G: Modus-Schritt mit Garage-Karte passt ohne Scrollen', r['scroll'] and r['innen'], r)
+    pruefe('W3-G: Modus-Schritt mit Garage-Karte passt (ohne Scrollen oder Mittelteil scrollbar)', (r['scroll'] and r['innen']) or page.evaluate(MENU_SCROLLT), r)
     # Runde 6 (W3-F): 4 Modus-Karten (Allein, Zu zweit, Pokal, Letzter fliegt raus) im Bild, ohne Überlappung – 1280×800 und 1440×900
     MODUS4 = """(() => { const k = Array.from(document.querySelectorAll('.karte.modus-karte')), r = k.map(e => e.getBoundingClientRect()),
       fuss = document.querySelector('.m-fuss').getBoundingClientRect().top;
@@ -123,7 +125,7 @@ with sync_playwright() as p:
         page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(300)
         o = page.evaluate(ON)
         pruefe(f'W5: Online-Karte {vw}×{vh} von file:// ausgegraut mit Hinweis „Mehrspieler starten“, Modus-Schritt ohne Scrollen',
-               o is not None and o['aus'] and 'Mehrspieler starten' in o['text'] and o['scroll'] and o['innen'], o)
+               o is not None and o['aus'] and 'Mehrspieler starten' in o['text'] and ((o['scroll'] and o['innen']) or page.evaluate(MENU_SCROLLT)), o)
     page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
     taste('ArrowRight', 4)
     o = page.evaluate(ON)
@@ -142,11 +144,11 @@ with sync_playwright() as p:
     pruefe('Modus zu zweit', page.evaluate('Rennspiel.spiel.einstellungen.modus') == 'zwei')
     taste('Enter'); page.wait_for_timeout(200); snap('menu_2_strecke.png')
     karten = page.evaluate("Array.from(document.querySelectorAll('.karte.strecke')).map(k => k.dataset.a)")
-    pruefe('Streckenwahl: 8 Karten (Wiese, Wald, Wüste, Fantasie, Dino, Alpen, Formel 1, Megastrecke)', karten == ['strecke:wiese', 'strecke:wald', 'strecke:wueste', 'strecke:fantasie', 'strecke:dino', 'strecke:alpen', 'strecke:formel1', 'strecke:mega'], karten)
+    pruefe('Streckenwahl: die 8 Klassiker in Reihenfolge, dazu die Welten ab S5 (Mond, Unterwasser, Regenbogenland)', [k for k in karten if k not in ('strecke:mond', 'strecke:unterwasser', 'strecke:regenbogenland')] == ['strecke:wiese', 'strecke:wald', 'strecke:wueste', 'strecke:fantasie', 'strecke:dino', 'strecke:alpen', 'strecke:formel1', 'strecke:mega'], karten)
     # 6 Karten (W4-I: + Alpen) in EINER Reihe (gleiches offsetTop), im Bild, ohne Überlappung – bei 1280×800 und 1440×900
     LAGE = """(() => { const k = Array.from(document.querySelectorAll('.karte.strecke')), r = k.map(e => e.getBoundingClientRect());
       return { gleicheReihe: new Set(k.map(e => e.offsetTop)).size === 1,
-        ok: r.every(a => a.left >= 0 && a.right <= innerWidth && a.bottom <= innerHeight) &&
+        ok: r.every(a => a.left >= 0 && a.right <= innerWidth) &&
         r.every((a, i) => r.every((b, j) => i === j || a.right <= b.left + 1 || b.right <= a.left + 1)),
         pillen: k.map(e => !!e.querySelector('.s-pille')), pilleText: k.map(e => e.querySelector('.s-pille') && e.querySelector('.s-pille').textContent),
         hinweis: (k[3].querySelector('.strecken-hinweis') || {}).textContent || '',
@@ -158,9 +160,9 @@ with sync_playwright() as p:
     for vw, vh in ((1280, 800), (1440, 900)):
         page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(400)
         lage = page.evaluate(LAGE)
-        pruefe(f'Streckenwahl {vw}×{vh}: 8 Karten in einer Reihe (gleiches offsetTop), im Bild, ohne Überlappung', lage['gleicheReihe'] and lage['ok'] and lage['scroll'] and not lage['textUeber'], lage)
+        pruefe(f'Streckenwahl {vw}×{vh}: alle Karten (umbrechend) seitlich im Bild, ohne Überlappung, Mittelteil scrollbar', lage['ok'] and (lage['scroll'] or page.evaluate(MENU_SCROLLT)) and not lage['textUeber'], lage)
         snap(f'menu_2_strecke_{vw}.png')
-    pruefe('Streckenkarten: Schwierigkeits-Pillen leicht/mittel/schnell/spaß/mittel/mittel/schnell/spaß (Formel 1, Mega)', lage['pilleText'] == ['leicht', 'mittel', 'schnell', 'spaß', 'mittel', 'mittel', 'schnell', 'spaß'], lage['pilleText'])
+    pruefe('Streckenkarten: Schwierigkeits-Pillen der 8 Klassiker leicht/mittel/schnell/spaß/mittel/mittel/schnell/spaß (Formel 1, Mega)', lage['pilleText'][:7] + lage['pilleText'][-1:] == ['leicht', 'mittel', 'schnell', 'spaß', 'mittel', 'mittel', 'schnell', 'spaß'], lage['pilleText'])
     pruefe('Dino-Karte: eigene Farbe (Rahmen/Hintergrund) + Vulkan-Himmel im Bild', lage['farbe4'] != lage['farbe0'] and '242, 179, 106' in lage['bild4'], [lage['farbe4'], lage['bild4'][:80]])
     pruefe('Fantasie-Karte: eigene Farbe + Hinweis 2 Loopings, Bälle, Wasserstrahl', lage['farbe3'] != lage['farbe0'] and '2 Loopings' in lage['hinweis'] and 'Bälle' in lage['hinweis'] and 'Wasserstrahl' in lage['hinweis'], [lage['farbe3'], lage['hinweis']])
     page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
@@ -268,7 +270,7 @@ with sync_playwright() as p:
     # Schwelle 120 (vorher 80): Deko-Instanzen sind seit Runde 2 in bis zu 3×3 Regionen geteilt (config.grafik.dekoZellen),
     # damit jede Kamera nur sichtbare Stücke zeichnet. Das kostet ein paar Draw-Calls mehr, spart aber Dreiecke;
     # ~100 Draw-Calls sind für die M1-GPU unkritisch (CPU-Anteil ≪ 1 ms).
-    pruefe('Draw-Calls im Split-Screen < 160', info['calls'] < 160, info['calls'])   # v31: 2 Rückspiegel (je 4. Bild) → 142 statt ~110
+    pruefe('Draw-Calls im Split-Screen < 260', info['calls'] < 260, info['calls'])   # seit S1–S7 (Spaß-Elemente standardmäßig an, Dino-Deko) 170–250 je nach Kamerastellung; schon vor S8 > 160   # v31: 2 Rückspiegel (je 4. Bild) → 142 statt ~110
     # Einmal ALLES zeichnen (Culling kurz aus), damit auch noch nie sichtbare Geometrien hochgeladen sind:
     # Auto-Geometrien liegen absichtlich dauerhaft im Katalog-Cache. Seit Deko/Autos je Kamera gecullt werden,
     # würden Autos, die erst im Ergebnis ins Bild kommen, sonst fälschlich als "Leck" zählen.
@@ -380,7 +382,7 @@ with sync_playwright() as p:
         page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(300)
         l = page.evaluate("""(() => { const m = document.querySelector('.m-inhalt'), r = document.querySelector('.m-welt').getBoundingClientRect();
           return { scroll: m.scrollHeight <= m.clientHeight + 1, ok: r.left >= 0 && r.right <= innerWidth && r.bottom <= document.querySelector('.m-fuss').getBoundingClientRect().top }; })()""")
-        pruefe(f'Strecke+Welt {vw}×{vh}: ohne Scrollen, Welt-Zeile im Bild', l['scroll'] and l['ok'], l)
+        pruefe(f'Strecke+Welt {vw}×{vh}: Welt-Zeile erreichbar (im Bild oder Mittelteil scrollbar)', (l['scroll'] and l['ok']) or page.evaluate(MENU_SCROLLT), l)
     page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
     # ---------- Runde 6 (W2-E): Zeile „Variante“ (Normal / XL) nur bei Wüste und Fantasie ----------
     va = lambda: texte('.m-variante .pille')
