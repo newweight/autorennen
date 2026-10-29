@@ -195,7 +195,7 @@ Im Menü, Schritt 5 (Los!), unten: **🎪 Spaß-Elemente** (An/Aus, Standard An)
 - **🤸 Trampolin:** bunte Matte auf der Geraden – drüberfahren (ab Schritttempo) schleudert dich ca. 4 m hoch (knapp 2 s), im Flug richtet das Spiel dich Richtung Straße aus.
 - **💥 Kanone:** rot-gelbe Röhre mit blauem Ring. Du wirst eingezogen, es zählt **3 – 2 – 1**, dann **RUMMS** – du fliegst mit Konfetti ein Stück die Strecke entlang und landest sicher auf der Straße.
 - **👻 Geist:** dein bester Lauf je Strecke und Fahrzeug fährt als durchsichtiges Geisterauto mit (nur allein, ohne Zusammenstoß, nur offline).
-- **📒 Sticker-Album:** Auto 20, Motorrad 24 Sticker (Sieg, Münzen, Trampolin, Kanone, Geist geschlagen, Hupe, Stimme, Stunts …). Neue Sticker melden sich mit „Neuer Sticker!“, das Album ist im Menü.
+- **📒 Sticker-Album:** Auto 22, Motorrad 28 Sticker (Sieg, Münzen, Trampolin, Kanone, Geist geschlagen, Hupe, Stimme, Stunts …). Neue Sticker melden sich mit „Neuer Sticker!“, das Album ist im Menü.
 - Online: Trampolin und Kanone rechnet der Server genauso wie du (ein Schalter „Spaß-Elemente“ im Raum folgt); Geist, Sticker und Stimmen sind nur auf deinem Gerät.
 
 ## 🔧 Tuning mit Goldstücken (S2, Auto und Motorrad)
@@ -262,3 +262,9 @@ In **Schnell** fahren die Autos **220 bis 270 km/h** (Multivan 220 … Porsche 2
   - `hudHz` (Standard 20): wie oft Tacho und Minimap neu gezeichnet werden.
 - Andere Programme/Tabs schließen, Mac ans Netzteil (im Akkubetrieb drosselt macOS manchmal).
 - Zwei Spieler gleichzeitig: manche Tastaturen können nicht alle Tasten gleichzeitig – kurz testen (↑ + ← + W + A halten). Tasten lassen sich in `src/config.js` unter `tasten` ändern.
+
+## 🤸 Neue Tricks und Zeitlupe (S3)
+- **Motorrad, in der Luft:** **Trick-Taste** (rechte Umschalt, Spieler 2 linke Umschalt, am Handy der Trick-Knopf) **plus eine Pfeiltaste** kurz antippen (Reihenfolge egal, höchstens 0,25 s auseinander): **↓ Backflip** (Rückwärtssalto), **↑ Superman** (Fahrer streckt sich nach hinten, Hände am Lenker), **← oder → Handstand** (Fahrer steht kopfüber auf dem Lenker). Trick allein = Drehung, zweimal = Salto wie bisher. Landest du, bevor der Trick mindestens zur Hälfte fertig ist, zählt er nicht; schiefe Landung = Sturz wie bisher.
+- **Auto, in der Luft:** Trick-Taste allein oder mit ←/→ = **Fassrolle**, Trick-Taste mit ↑/↓ = **Schraube**. Unfertig oder schief gelandet → kurzes Wackeln und Abbremsen (Schaden nur im Schaden-Modus). Schalter im Menü: **🤸 Auto-Tricks** (Standard An; Aus = alles wie früher).
+- **Punkte:** Superman 500, Handstand 700, Backflip 500, Fassrolle 300, Schraube 250, mal Combo; jeder weitere **verschiedene** Trick in der Kette gibt +25 % (höchstens +100 %). Neue Sticker: Superman, Handstand, Backflip, Erste Fassrolle, Zeitlupen-Sprung.
+- **🎬 Zeitlupe** (Menü-Schalter, Standard An): bei großen Sprüngen (Trampolin, Kanone) läuft die Anzeige etwa 1 Sekunde mit 0,4× und die Kamera schwenkt seitlich. Die Physik bleibt gleich. Online gibt es nur den Kamera-Schwenk; die neuen Motorrad-Tricks rechnet der Server mit, Auto-Tricks gibt es nur offline.
