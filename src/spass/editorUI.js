@@ -133,7 +133,8 @@
     if (!S.roh.length) {
       g.fillStyle = 'rgba(255,255,255,.85)'; g.font = '900 ' + Math.round(Math.min(a.cw, a.ch) / 15) + 'px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText('Mal eine große Runde!', a.cw / 2, a.ch / 2 - 14); g.font = '800 ' + Math.round(Math.min(a.cw, a.ch) / 26) + 'px Arial';
-      g.fillText('Mit dem Finger oder der Maus – am Ende wieder zum Anfang.', a.cw / 2, a.ch / 2 + 22);
+      const hz = a.cw < 520 ? ['Mit dem Finger oder der Maus –', 'am Ende wieder zum Anfang.'] : ['Mit dem Finger oder der Maus – am Ende wieder zum Anfang.'];   // schmal (Handy hochkant): zweizeilig statt angeschnitten
+      hz.forEach((t, i) => g.fillText(t, a.cw / 2, a.ch / 2 + 22 + i * Math.round(Math.min(a.cw, a.ch) / 20)));
     }
     if (S.roh.length > 1) {
       pfad(g, S.roh, false); g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = Math.max(6, 14 * a.sx * 3); g.strokeStyle = S.ort ? 'rgba(224,74,58,.85)' : 'rgba(40,40,60,.9)'; g.stroke();

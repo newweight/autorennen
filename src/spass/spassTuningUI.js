@@ -94,8 +94,20 @@
       const reset = `<div class="g-zeile reset${g.tuningZeile === 3 ? ' fokus' : ''}"><div class="g-label">🔁 Alles</div><div class="g-wert">` +
         `<div class="g-knopf${rueck ? '' : ' aus'}" data-g="tuning:reset">${rueck ? `Zurücksetzen <small>🪙 +${rueck}</small>` : 'nichts getunt'}</div>` +
         `<span class="g-text klein">Bis Stufe 5; ab Stufe ${R.config.spass.tuning.teileAb} siehst du Teile am Fahrzeug</span></div></div>`;
+      // „Upgrades + Tuning = gesamt“: die alten Garage-Upgrades (Stufe 0–3) bleiben und zählen zusammen mit dem Tuning
+      let gesamtHtml = '';
+      try {
+        const J = R.config.garage.upgradeJeStufe || {}, ud = R.Garage.autoDaten(g.fahrer, g.autoId), tj = R.config.spass.tuning.jeStufe, an = !(g.e && g.e.upgradesZaehlen === false);
+        const zeile = (k, wortU, jeU, jeT) => {
+          const u = an ? Math.round((J[k] !== undefined ? J[k] : jeU) * 100 * ud[k] * 10) / 10 : 0, t = Math.round(jeT * 100 * s[k] * 10) / 10;
+          return `<div class="g-text klein">${A[k].emoji} ${A[k].name}: Upgrades +${u} % + Tuning +${t} % = <b>gesamt +${Math.round((u + t) * 10) / 10} %</b></div>`;
+        };
+        gesamtHtml = `<div class="g-zeile gesamt"><div class="g-label">➕ Gesamt</div><div class="g-wert" style="flex-direction:column;align-items:flex-start;gap:.1em">` +
+          zeile('motor', '', 0.04, tj.vMax) + zeile('reifen', '', 0.04, tj.grip) + zeile('bremsen', '', 0.06, tj.bremsen) +
+          `<div class="g-text klein">${an ? 'Die alten Upgrades (Stufe 0–3) bleiben und zählen dazu.' : 'Die alten Upgrades zählen gerade nicht im Rennen.'}</div></div></div>`;
+      } catch (err) { gesamtHtml = ''; }
       const msg = g.nachricht ? `<div class="g-nachricht ${g.nachrichtArt}">${g.nachricht}</div>` : '<div class="g-nachricht leer">&nbsp;</div>';
-      return `<div class="g-tuningpanel"><h3>🔧 Tuning mit Goldstücken <span class="g-text">· 🪙 ${konto}</span></h3>${zeilen}${reset}${msg}</div>`;
+      return `<div class="g-tuningpanel"><h3>🔧 Tuning mit Goldstücken <span class="g-text">· 🪙 ${konto}</span></h3>${zeilen}${reset}${gesamtHtml}${msg}</div>`;
     }
 
     // Bühne nur neu bauen, wenn sich die Tuning-Teile ändern

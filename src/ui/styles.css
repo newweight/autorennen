@@ -150,7 +150,7 @@ html.touch-an .garage-knopf { right: 64px; }   /* Platz für die Vollbild-Taste 
 .karte.gross { width: 11em; padding: 1em .8em; }
 .karte.gross .emoji { font-size: 3.6em; line-height: 1.1; }
 .karte.gross .karten-name { font-size: 1.15em; margin-top: .2em; }
-.reihe.strecken { gap: .8em; flex-wrap: nowrap; }
+.reihe.strecken { gap: .8em; flex-wrap: wrap; }
 .karte.strecke { width: 10em; padding: .5em; }   /* Runde 5b: 5 Karten (vorher 12,2em bei 4) */
 .karte.strecke .karten-name { font-size: 1.15em; }
 .karte.strecke .karten-sub { font-size: .75em; }
