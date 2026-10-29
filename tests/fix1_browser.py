@@ -207,7 +207,51 @@ def lauf_dino(p):
         pruefe(f'{tag} keine Konsolenfehler', not fehler, fehler[:3])
         b.close()
 
+def lauf_magnet(p):
+    """Tempo-Verlauf in der Magnet-Röhre als Zahl (je 0,5 s), vorher (halten = false) / nachher; Bilder der Fahrt."""
+    for spiel in SPIELE:
+        moto = spiel == 'Motorrad'; tag = spiel.lower()
+        for strecke in ('wiese', 'alpen'):
+            fehler = []
+            b, pg = oeffnen(p, spiel, fehler)
+            starten(pg, moto, strecke)
+            e = pg.evaluate("() => { const e = Rennspiel.spiel.strecke.spass.zauber.magnet[0]; return { s0: e.s0, laenge: e.laenge }; }")
+            res = {}
+            for halten in (False, True):
+                for art in ('gas', 'rollen'):
+                    pg.evaluate("(h) => { Rennspiel.config.spass.zauber.magnet.halten = h; }", halten)
+                    pg.evaluate("([a, q, v, p]) => __tp(a, q, v, p)", [e['s0'] - 60, 0, 22, {'v': 999 if art == 'gas' else 22, 'ohneGas': art == 'rollen'}])
+                    verlauf = []; ein = aus = None; war = False
+                    for i in range(60 * 22):
+                        z = pg.evaluate("__frames(1)")
+                        if z['mag'] and not war: ein = z['v']
+                        if z['mag'] and i % 30 == 0: verlauf.append(round(z['v'] * 3.6))
+                        if war and not z['mag']: aus = z['v']; break
+                        war = z['mag']
+                    res[(halten, art)] = (ein, aus, verlauf)
+                    print(f"{tag} {strecke} {'NACHHER' if halten else 'VORHER '} {art:6s}: ein {ein and round(ein * 3.6)} -> aus {aus and round(aus * 3.6)} km/h  Verlauf/0,5 s: {verlauf}", flush=True)
+            # Bilder (nachher, Vollgas): vor der Röhre, an der Wand, an der Decke, wieder unten
+            pg.evaluate("(h) => { Rennspiel.config.spass.zauber.magnet.halten = h; }", True)
+            pg.evaluate("([a, q, v, p]) => __tp(a, q, v, p)", [e['s0'] - 25, 0, 25, {'v': 999}])
+            pfade = []; plan = [('vor', None, 20), ('wand', 'mag', 40), ('decke', 'mag', 120), ('runter', 'mag', 200)]; erst = None
+            for i in range(1200):
+                z = pg.evaluate("__frames(1)")
+                if z['mag'] and erst is None: erst = i
+                if len(pfade) < len(plan):
+                    name, key, dz = plan[len(pfade)]
+                    if (key is None and i >= dz) or (key == 'mag' and erst is not None and i >= erst + dz):
+                        pf = f'{OUT}/{tag}_magnet_{strecke}_{len(pfade) + 1}_{name}.png'; bild(pg, pf); pfade.append(pf)
+                else: break
+            blatt(pfade, f'{OUT}/{tag}_magnet_{strecke}_blatt.png', 2)
+            v_ = res[(True, 'rollen')]; v0 = res[(False, 'rollen')]
+            pruefe(f'{tag} {strecke}: Magnet-Röhre ohne Gas – Tempo bleibt (Verlust ≤ 8 %; vorher {round((1 - v0[1] / v0[0]) * 100) if v0[0] and v0[1] else "Stand"} %)', bool(v_[0] and v_[1]) and v_[1] >= v_[0] * 0.92, f'{v_[0] and round(v_[0] * 3.6)} -> {v_[1] and round(v_[1] * 3.6)} km/h')
+            g_ = res[(True, 'gas')]
+            pruefe(f'{tag} {strecke}: Magnet-Röhre mit Vollgas – nie langsamer als bei der Einfahrt (−5 %)', bool(g_[0] and g_[1]) and min(g_[2]) >= g_[0] * 3.6 * 0.95, f'{g_[0] and round(g_[0] * 3.6)} -> {g_[1] and round(g_[1] * 3.6)} km/h')
+            pruefe(f'{tag} {strecke}: keine Konsolenfehler', not fehler, fehler[:3])
+            b.close()
+
 with sync_playwright() as p:
+    if MODUS == 'magnet': lauf_magnet(p)
     if MODUS == 'gleit': lauf_gleit(p)
     if MODUS == 'dino': lauf_dino(p)
     print(f'\n{ok} OK, {fehl} FEHL')

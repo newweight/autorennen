@@ -138,7 +138,7 @@ for (const [spn, moto] of [['auto', false], ['motorrad', true]]) {
     let ein = null, aus = null, was = false, min = 1e9;
     for (let i = 0; i < 60 * 30; i++) {
       const s = pilot(0, 22);
-      if (art === 'rollen') { s.gas = 0; s.bremse = 0; } else if (art === 'bremsen') { if (was) { s.gas = 0; s.bremse = 0.8; } } else { s.gas = 1; s.bremse = 0; }
+      if (art === 'rollen') { s.gas = 0; s.bremse = 0; } else if (art === 'bremsen') { if (was) { s.gas = 0; s.bremse = 1; } } else { s.gas = 1; s.bremse = 0; }
       t.sim.eingabeSetzen(0, s); t.sim.schritt();
       const m = !!(t.f.flug.z && t.f.flug.z.mag);
       if (m && !was) ein = t.v.vLaengs;

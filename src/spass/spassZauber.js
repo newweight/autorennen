@@ -23,7 +23,7 @@
 
   R.config.spass.zauber = {
     standardAn: true,
-    magnet: { laenge: 150, rampe: 36, vMin: 6, itemZeit: 10, halten: true, verlustProS: 0.006, bremsSchwelle: 0.25, platz: { je: 2200, max: 2, abLaenge: 1300, kappa: 1 / 320, vorher: 25, nachher: 25 } },
+    magnet: { laenge: 150, rampe: 36, vMin: 6, itemZeit: 10, halten: true, verlustProS: 0.006, bremsSchwelle: 0.9, platz: { je: 2200, max: 2, abLaenge: 1300, kappa: 1 / 320, vorher: 25, nachher: 25 } },
     schlucht: { luecke: 90, vGleitMin: 20, vGleitMax: 44, scheitel: 4, scheitelU: 0.35, landeStaerke: 0.5, qRate: 6, zentrieren: 0.3, randToleranz: 0.6, landeTempo: 0.97, zurueck: 34, resetTempo: 9, pad: 14,
       platz: { je: 2600, max: 2, abLaenge: 1500, kappa: 1 / 380, vorher: 30, nachher: 30 } },
     schiene: { laenge: 54, hoehe: 0.85, rand: 1.0, einfang: 1.2, vMin: 5, ausSek: 0.12, ausLenk: 0.45, hop: 2.4, punkteJeM: 2, platz: { je: 1500, max: 2, abLaenge: 1100, kappa: 1 / 260, vorher: 14, nachher: 22 } },
@@ -202,7 +202,7 @@
 
   /**
    * FIX1: Tempo in der Magnet-Röhre bleibt erhalten (vorher bremsten Reibung/Steigung die Fahrt bis auf ein Drittel ab).
-   * Wer nicht bremst, behält das Einfahrtstempo (nur ein leichter Verlust verlustProS); wer Gas gibt, wird schneller; wer bremst (Bremse > bremsSchwelle), wird langsamer.
+   * Nur volles Bremsen (≥ bremsSchwelle; die Bremshilfe schafft höchstens 0,8) gibt das Tempo frei. Wer nicht bremst, behält das Einfahrtstempo (nur ein leichter Verlust verlustProS); wer Gas gibt, wird schneller; wer bremst (Bremse > bremsSchwelle), wird langsamer.
    * Rein aus Zustand + letzter Steuerung → Server, Vorhersage und Offline-Spiel rechnen bitgleich.
    */
   function magnetHalten(z, v, dt) {
