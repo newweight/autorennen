@@ -76,7 +76,7 @@ try:
           return { lean: u.lage.rotation.z, flip: u.purzel.rotation.x, y: u.purzel.position.y, kmh: Math.round(f.vehicle.tempoKmh), heading: f.anzeige.heading,
             nan: [f.vehicle.x, f.vehicle.z, f.vehicle.heading, u.lage.rotation.z, f.mesh.position.x].some(v => !isFinite(v)), purzel: z ? z.purzel.anzahl : -1 }; }); }'''
         t0 = time.time(); bild = False; letzter = None; stimmt = 0; gesamt = 0; maxl = 0.0; kmh_max = 0
-        while time.time() - t0 < 60 and not (bild and time.time() - t0 > 14):
+        while time.time() - t0 < 150 and not (bild and time.time() - t0 > 14):     # bei Last (SwiftShader, 2 Kerne) läuft die Spielzeit langsamer: bis 150 s warten, bis die erste Kurve kommt
             page.wait_for_timeout(120)
             m = page.evaluate(MESS)
             sp = m[0]; kmh_max = max(kmh_max, sp['kmh'])
