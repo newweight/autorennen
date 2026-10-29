@@ -245,7 +245,7 @@ class Simulation {
     const spielerIds = spieler.map(s => s.auto);
     const plaetze = strecke.startpositionen(P + G);
     // 14.10. (v20): Computer-Füller wie im Einzelspiel nur aus Passat, Multivan, 911, T-Roc (gemischter Lack, T-Roc Dach/Lack); deterministisch je Rennen
-    let gegnerAutos = R.carCatalog.gegnerAutos(G, { seed: [e.streckeId, G, spielerIds.join('+')].join('|'), spielerIds });
+    let gegnerAutos = R.carCatalog.gegnerAutos(G, { seed: [e.streckeId, G, spielerIds.join('+')].join('|'), spielerIds, schwierigkeit: e.schwierigkeit });   // S8: schwierigkeit nur für das Motorrad-Feld
     // v29 (F3): Modus „Nur Rennautos“ – Gegner = Formel-Renner in eigenen Farben (wie main.js streckeAufbauen)
     if (e.nurRennautos === true && R.carCatalog.formelFeld) {
       gegnerAutos = R.carCatalog.formelFeld({ spieler: spielerIds.map(id => katalog.find(a => a.id === id) || katalog[0]), gegner: G, seed: [e.streckeId, G, spielerIds.join('+')].join('|') }).gegner;

@@ -750,7 +750,7 @@
       const plaetze = strecke.startpositionen(opt.spieler + opt.gegner);
       // 14.10. (v20): Computer-Gegner nur aus den 4 Modellen mit der guten Optik (Passat, Multivan, 911, T-Roc), bunt gemischt (Lack, T-Roc: Dach
       // offen/zu, Lack blau/gulf), deterministisch je Rennen (Seed aus Strecke, Gegnerzahl und Spielerautos; opt.gegnerSeed überschreibt)
-      let gegnerAutos = R.carCatalog.gegnerAutos(opt.gegner, { seed: opt.gegnerSeed !== undefined ? opt.gegnerSeed : [trackId, opt.gegner, spielerIds.join('+')].join('|'), spielerIds });
+      let gegnerAutos = R.carCatalog.gegnerAutos(opt.gegner, { seed: opt.gegnerSeed !== undefined ? opt.gegnerSeed : [trackId, opt.gegner, spielerIds.join('+')].join('|'), spielerIds, schwierigkeit: opt.schwierigkeit || R.config.schwierigkeitStandard });   // S8: schwierigkeit nur für das Motorrad-Feld
       // 17.10. (v29, F3): Modus „Nur Rennautos“ – alle Gegner fahren den Formel-Renner, jeder in eigener Teamfarbe; die Spieler behalten ihre Wahl
       // (fahren zwei Spieler Formel in gleicher Farbe, bekommt Spieler 2 eine andere). Ohne den Modus bleibt alles wie bisher.
       let spielerAutos = null;

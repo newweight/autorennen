@@ -141,7 +141,38 @@ window.Rennspiel = window.Rennspiel || {};
     kat.splice.apply(kat, [i, 0].concat(typKatalog()));
   }
   const gegnerAlt = kat.gegnerAutos;                        // motoKatalog.js: gegnerMotorraeder(kat, …) – hier nur Crossmaschinen (ohne typ) als Pool
-  if (R.Moto.katalog && R.Moto.katalog.gegnerMotorraeder) kat.gegnerAutos = (anzahl, opt) => R.Moto.katalog.gegnerMotorraeder(kat.filter((a) => !a.typ), anzahl, opt);
+  // S8: gemischtes Feld – mit opt.schwierigkeit (main.js, Server) fahren auch Superbike/Roller/Chopper/Quad als KI-Gegner mit, gewichtet nach Schwierigkeit
+  //  (leicht: viel Roller/Quad/Chopper, profi aufwärts: Superbike, Roller verschwindet). Ohne opt.schwierigkeit oder mit config.motoGegnerGemischt === false: wie bisher nur Crossmaschinen.
+  //  Deterministisch aus opt.seed (gewichtete Auswahl ohne Zurücklegen), nie die Typen der Spieler. Quad kippt auch als Gegner nie (kippt:false im Eintrag).
+  const GEWICHT = {
+    superbike: (r) => 0.2 + 0.5 * r, roller: (r) => Math.max(0, 4 - 0.6 * r), chopper: (r) => Math.max(0.3, 2.2 - 0.2 * r), quad: (r) => Math.max(0.5, 3 - 0.3 * r),
+  };
+  function gegnerGemischt(katalog, anzahl, opt) {
+    opt = opt || {};
+    const cfg = R.config && R.config.schwierigkeiten, sw = cfg && cfg[opt.schwierigkeit];
+    if (!sw || (R.config && R.config.motoGegnerGemischt === false)) return R.Moto.katalog.gegnerMotorraeder(katalog.filter((a) => !a.typ), anzahl, opt);
+    const spielerIds = opt.spielerIds || [], rang = sw.rang;
+    const cross = katalog.filter((a) => a.sonderbau === 'motorrad' && !a.typ && !spielerIds.includes(a.id));
+    const neu = katalog.filter((a) => a.sonderbau === 'motorrad' && a.typ && !spielerIds.includes(a.id));
+    const kand = [];
+    cross.forEach((a) => kand.push({ a, w: 3 / Math.max(1, cross.length) }));
+    neu.forEach((a) => { const g = GEWICHT[a.typ]; const w = g ? g(rang) : 1; if (w > 0) kand.push({ a, w }); });
+    if (!kand.length) return R.Moto.katalog.gegnerMotorraeder(katalog.filter((a) => !a.typ), anzahl, opt);
+    // Zufall wie motoKatalog.js (gleiche Saat-Regel, eigener Zusatz „gemischt“)
+    const hashText = (t) => { let h = 2166136261 >>> 0; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h >>> 0; };
+    let sd = hashText('moto|gemischt|' + String(opt.seed === undefined ? 'rennen' : opt.seed)) >>> 0;
+    const rnd = () => { sd = (sd + 0x6D2B79F5) >>> 0; let t = sd; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const liste = [];
+    let rest = [];
+    for (let j = 0; j < anzahl; j++) {
+      if (!rest.length) rest = kand.map((k) => ({ a: k.a, key: Math.pow(Math.max(1e-9, rnd()), 1 / k.w) })).sort((x, y) => y.key - x.key || (x.a.id < y.a.id ? -1 : 1));
+      const basis = rest.shift().a;
+      liste.push(Object.assign({}, basis, { optionen: Object.assign({}, basis.optionen || {}, { farbe: basis.farbe }) }));
+    }
+    return liste;
+  }
+  R.Moto.typen.gegnerGemischt = gegnerGemischt;
+  if (R.Moto.katalog && R.Moto.katalog.gegnerMotorraeder) kat.gegnerAutos = (anzahl, opt) => gegnerGemischt(kat, anzahl, opt);
   else if (gegnerAlt) kat.gegnerAutos = gegnerAlt;
   profileEintragen();
 

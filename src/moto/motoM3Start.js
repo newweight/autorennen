@@ -129,8 +129,67 @@
     return r;
   };
 
+  // ---------- S8: Online – Quad-Wackeln, Auspuffknall und Funken auch bei fremden Fahrern ----------
+  // Online läuft die Physik nur im Server (spiel.zustand 'online', physikM3 ruft nichts auf). Hier wird aus den ohnehin vorhandenen Anzeigedaten abgeleitet
+  // (Tempo, Höhe, Flug-Flag, Sturz-Zustand f.motoZ aus dem Ereignis 'sturz', f.nah.untergrund): keine Physik, nichts davon geht zurück an den Server.
+  //  - Quad-Wackeln: Tempo bricht binnen 0,2 s um ≥ 5,5 m/s ein (ein Aufprall wie offline PURZEL.auto/bande 5–6 m/s) oder harte Landung nach dem Flug
+  //  - Knall: Gas-Ersatz = „beschleunigt“ (geglätteter Tempo-Anstieg) → „rollt aus/bremst“ bei hohem Tempo; Ton nur nahe am eigenen Motorrad, nach Entfernung leiser
+  //  - Funken: Sturz-Rutschen (wie offline: rutschFunken) und harte Landung auf Asphalt (Fallgeschwindigkeit aus der gezeigten Höhe)
+  const ONL = { quadDrop: 5.5, quadFenster: 0.2, quadLandung: 3.5, knallReichweite: 45, accAn: 0.8, accAus: -0.3 };
+  function onlineZustand(f) {
+    const z3 = zustand3(f);
+    return z3.onl || (z3.onl = { v: [], vAlt: null, yAlt: null, vyLuft: 0, luftAlt: false, acc: 0, funkenRest: 0, gas: 0 });
+  }
+  function onlineEffekte(spiel, dt) {
+    const ui = spiel.online, nT = ui && ui.nT;
+    if (!ui || ui.phase !== 'rennen' || !(dt > 0) || !nT || !spiel.fahrzeuge) return;
+    const fxg = spiel.motoFxGruppe && spiel.motoFxGruppe.userData.fx, strecke = spiel.strecke, purzelK = SL() ? SL().PURZEL : null;
+    const t = spiel.rennen ? spiel.rennen.zeit : 0, du = ui.du, eigen = spiel.fahrzeuge[du] && spiel.fahrzeuge[du].vehicle;
+    for (let i = 0; i < nT; i++) {
+      const f = spiel.fahrzeuge[i], v = f && f.vehicle;
+      if (!f || !v || !f.mesh) continue;
+      const u = f.mesh.userData, z3 = zustand3(f), o = onlineZustand(f);
+      const tempo = Math.abs(v.vLaengs), luft = !!v.imFlug, boden = strecke.hoeheAn(v.x, v.z), r = v.richtung();
+      const vy = o.yAlt === null ? 0 : (v.y - o.yAlt) / dt;
+      // Teleport/Reset (großer Ortssprung): Messwerte neu beginnen, nichts auslösen
+      if (o.xAlt !== undefined && Math.hypot(v.x - o.xAlt, v.z - o.zAlt) > 6) { o.v.length = 0; o.vAlt = null; o.yAlt = null; o.luftAlt = luft; o.xAlt = v.x; o.zAlt = v.z; continue; }
+      o.xAlt = v.x; o.zAlt = v.z;
+      // Tempo-Verlauf der letzten 0,2 s
+      o.v.push({ t, v: v.vLaengs }); while (o.v.length > 1 && t - o.v[0].t > ONL.quadFenster) o.v.shift();
+      const drop = o.v.length > 1 ? o.v[0].v - v.vLaengs : 0;
+      if (luft) o.vyLuft = vy;
+      const landung = o.luftAlt && !luft ? Math.max(0, -o.vyLuft) : 0;
+      // 1. Quad wackelt (nie ein Überschlag)
+      if (u && u.kippt === false) {
+        if (drop >= ONL.quadDrop || landung >= ONL.quadLandung) { if (z3.wackel <= 0.2) z3.wackel = TY.WACKEL.dauer; o.v.length = 0; }
+        if (f.motoZ) TY.quadEntschaerfen(f.motoZ, z3, purzelK);
+      }
+      // 2. Auspuffknall (Gas-Ersatz aus dem Tempo-Anstieg)
+      if (o.vAlt !== null) o.acc += ((v.vLaengs - o.vAlt) / dt - o.acc) * Math.min(1, dt / 0.15);
+      o.gas = o.acc > ONL.accAn ? 1 : (o.acc < ONL.accAus ? 0 : o.gas);
+      const k = FX.knallPruefen(z3.knall, { gas: o.gas, tempo, vMax: v.daten ? v.daten.vMax : (f.auto && f.auto.fahrwerte ? f.auto.fahrwerte.vMax : 60), t });
+      if (k && !luft) {
+        const d = i === du || !eigen ? 0 : Math.hypot(v.x - eigen.x, v.z - eigen.z);
+        if (d < ONL.knallReichweite) FX.knallSpielen({ anzahl: k.anzahl, staerke: k.staerke * (1 - d / ONL.knallReichweite) * (i === du ? 1 : 0.8) });
+      }
+      // 3. Funken
+      if (fxg) {
+        const pz = f.motoZ && f.motoZ.purzel, untergrund = f.nah && f.nah.untergrund ? f.nah.untergrund : 'strasse';
+        let n = 0;
+        if (pz) {
+          const rate = FX.rutschFunken({ purzelAktiv: pz.aktiv, purzelT: pz.t, purzelDauer: purzelK ? purzelK.dauer : 1.2, abkling: pz.abkling, abklingzeit: purzelK ? purzelK.abklingzeit : 2, tempo, untergrund });
+          o.funkenRest += rate * dt; const m = Math.floor(o.funkenRest); o.funkenRest -= m; n += m;
+        }
+        if (landung > 0) n += FX.aufsetzFunken({ landungNeu: true, landeStaerke: landung, untergrund });
+        if (n > 0) FX.funkenSpawn(fxg.funken, n, v.x, boden, v.z, r.x, r.z);
+      }
+      o.vAlt = v.vLaengs; o.yAlt = v.y; o.luftAlt = luft;
+    }
+  }
+
   // ---------- Anzeige je Bild ----------
   function bildM3(spiel, dt) {
+    if (spiel.online) { try { onlineEffekte(spiel, dt); } catch (e) { console.error('Motorrad S8 (online Effekte):', e); } }
     const sz = spiel.stunt, liste = spiel.fahrzeuge || [];
     for (let i = 0; i < liste.length; i++) {
       const f = liste[i], u = f && f.mesh && f.mesh.userData;
@@ -312,5 +371,5 @@ body.moto-park .hud-runde, body.moto-park .hud-platz { display: none !important;
     };
   }
 
-  R.Moto.m3start = { physikM3, bildM3, zustand3 };
+  R.Moto.m3start = { physikM3, bildM3, zustand3, onlineEffekte, ONL };
 })();
