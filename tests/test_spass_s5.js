@@ -180,7 +180,7 @@ for (const moto of [false, true]) for (const id of NEU) {
   for (const spiel of ['auto', 'motorrad']) {
     SK.zurueck(spiel);
     const kat = SK.katalog(spiel).map((k) => k.id), neu = ['mond', 'mondHupf', 'tiefsee', 'regenbogen', 'teleport', 'dinofreund'];
-    pruefe(`G ${spiel}: sechs neue Sticker im Katalog (eindeutig, ≤ 44)`, neu.every((id) => kat.includes(id)) && new Set(kat).size === kat.length && kat.length <= 44, kat.length);
+    pruefe(`G ${spiel}: sechs neue Sticker im Katalog (eindeutig, ≤ 60)`, neu.every((id) => kat.includes(id)) && new Set(kat).size === kat.length && kat.length <= 60, kat.length);
     const g = (n, d) => SK.ereignis(spiel, n, d).map((k) => k.id);
     SK.ereignis(spiel, 'ziel', { platz: 2, streckeId: 'wiese' });
     const r1 = g('ziel', { platz: 2, streckeId: 'mond' }), r2 = g('ziel', { platz: 2, streckeId: 'unterwasser' }), r3 = g('ziel', { platz: 2, streckeId: 'regenbogenland' });

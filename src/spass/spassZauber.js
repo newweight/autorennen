@@ -28,10 +28,10 @@
       platz: { je: 2600, max: 2, abLaenge: 1500, kappa: 1 / 380, vorher: 30, nachher: 30 } },
     schiene: { laenge: 54, hoehe: 0.85, rand: 1.0, einfang: 1.2, vMin: 5, ausSek: 0.12, ausLenk: 0.45, hop: 2.4, punkteJeM: 2, platz: { je: 1500, max: 2, abLaenge: 1100, kappa: 1 / 260, vorher: 14, nachher: 22 } },
     wand: { laenge: 38, hoehe: 2.3, abstand: 0.3, einfang: 1.7, vMin: 11, lenkMin: 0.15, ausSek: 0.12, ausLenk: 0.45, hop: 1.2, punkteJeM: 3, platz: { je: 2300, max: 2, abLaenge: 1400, kappa: 1 / 260, vorher: 14, nachher: 22 } },
-    pipe: { s0: 800, s1: 872, qF: 6, r: 6, rampe: 14, wMin: 5, pumpe: 4, abstandStart: 0.08, vMin: 4, hopInnen: 1.0 },
+    pipe: { s0: 800, s1: 872, qF: 6, r: 6, rampe: 14, wMin: 5, pumpe: 2.5, vyMax: 11, reibung: 0.3, abstandStart: 0.08, vMin: 4, hopInnen: 2.0 },
     extras: { n: 3, radius: 2.6, erneuerung: 12, vorher: 25,
-      riese: { zeit: 8, faktor: 2.1, vMax: 0.92, besch: 0.85, schiebe: 0.09 },
-      mini: { zeit: 8, faktor: 0.6, vMax: 1.12, besch: 1.2 },
+      riese: { zeit: 8, faktor: 2.1, vMax: 0.9, besch: 0.8, schiebe: 0.09 },
+      mini: { zeit: 8, faktor: 0.6, vMax: 1.15, besch: 1.35 },
       magnet: { zeit: 10 } },
     abstand: 110,
   };
@@ -259,7 +259,7 @@
     if (!z.mag && za.magnet.length) {
       for (let i = 0; i < za.magnet.length; i++) {
         const e = za.magnet[i], aA = sp.differenzS(sAlt, e.s0), aN = sp.differenzS(sNeu, e.s0);
-        if (!(aA < 0 && aN >= 0 && aN < 20)) continue;
+        if (!((aA < 0 && aN >= 0 && aN < 20) || (aN > 0 && aN < e.rampe * 0.5))) continue;   // Linie überquert – oder (nach einem Hüpfer/Sprung) in der Einfahrt gelandet
         if (v.vLaengs >= C().magnet.vMin || z.magItem > 0) { z.mag = e; z.magN++; v.imFlug = true; melden(fz, 'magnet'); }
         break;
       }
@@ -371,6 +371,7 @@
     fz.t += dt; fz.yVorher = fz.y; fz.nickenVorher = fz.nicken;
     const lenk = klemme((steuerung && steuerung.lenkung) || 0, -1, 1);
     v.lenkung += (lenk - v.lenkung) * Math.min(1, 6 * dt);
+    P.vF *= Math.exp(-c.reibung * dt);
     P.s += P.vF * dt;
     const a = P.s - e.s0, w = pipeW(e, a), re = Math.max(0.3, e.r * w);
     const aus = lenk * P.side;                                       // > 0: nach außen (zur Wand) lenken
@@ -398,7 +399,7 @@
       const wp = weltPose(st, P.s, q), grund = st.hoeheAn(wp.x, wp.z, fz.index) - pipeProfil(e, P.s, q);
       const vx = pt.tx * P.vF + pt.nx * lat, vz = pt.tz * P.vF + pt.nz * lat;
       v.x = wp.x; v.z = wp.z; v.heading = R.headingAus(vx, vz); v.vLaengs = Math.hypot(vx, vz); v.vQuer = 0;
-      fz.pipe = null; fz.vy = Math.max(2, re * P.w); fz.y = grund + re; fz.yVorher = fz.y; fz.t = 0; fz.sprungGemeldet = false; fz.fluege++;
+      fz.pipe = null; fz.vy = klemme(re * P.w, 2, C().pipe.vyMax); fz.y = grund + re; fz.yVorher = fz.y; fz.t = 0; fz.sprungGemeldet = false; fz.fluege++;
       melden(fz, 'pipeLuft');
       return null;
     }

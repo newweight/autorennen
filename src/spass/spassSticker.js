@@ -4,7 +4,7 @@
 //   R.SpassSticker.ereignis(spiel, name, d)  Ereignis melden → Liste NEU freigeschalteter Sticker (leer, wenn nichts neu)
 //   R.SpassSticker.stand(spiel) / .hat(spiel, id) / .zurueck(spiel)
 // Ereignisse: tuning { voll } (S2) · sieg · ziel { platz, streckeId, nacht, zwei } · muenzen { rennen (im Rennen gesammelt), gesamt } · trampolin · kanone · geist · hupe · stimme ·
-//   sprung { sek } · S4: kurz { sterne, alle } · frei { gefunden } · freiAufgabe { geschafft, gesamt } · ko · koFinale · foto · salto · ring · bus · wheelie { m } · stoppie { m } · S5: huepfer { n } · teleport · dino · S3: superman · handstand · backflip (Motorrad) · fassrolle (Auto) · zeitlupe
+//   sprung { sek } · S4: kurz { sterne, alle } · frei { gefunden } · freiAufgabe { geschafft, gesamt } · ko · koFinale · foto · salto · ring · bus · wheelie { m } · stoppie { m } · S5: huepfer { n } · teleport · dino · S6: magnet · gleiten · grind { m } · wand { m } · halfpipe { hoch } · riese · mini · haustier · kostuem · S3: superman · handstand · backflip (Motorrad) · fassrolle (Auto) · zeitlupe
 // Speicher: localStorage 'rennspiel.spass.sticker.<spiel>' (ohne localStorage im Arbeitsspeicher). Reine Logik, ohne DOM (Node-Test).
 // ============================================================
 (function () {
@@ -46,6 +46,16 @@
     { id: 'regenbogen', emoji: '🌈', name: 'Regenbogen-Fan', text: 'Ein Rennen im Regenbogenland beendet.' },
     { id: 'teleport', emoji: '🌀', name: 'Teleporter', text: 'Durch ein Teleport-Tor gefahren.' },
     { id: 'dinofreund', emoji: '🦖', name: 'Dino-Freund', text: 'Der Dino-Begleiter hat für dich gebrüllt.' },
+    // S6: Fahr-Zauber
+    { id: 'magnet', emoji: '🧲', name: 'Magnetfahrer', text: 'Kopfüber an der Decke der Magnet-Röhre gefahren.' },
+    { id: 'gleiter', emoji: '🪂', name: 'Gleitflieger', text: 'Über eine Schlucht gesegelt und sicher gelandet.' },
+    { id: 'grind', emoji: '🛹', name: 'Geländer-Rutscher', text: '20 Meter auf einem Geländer gegrindet.' },
+    { id: 'wandfahrer', emoji: '🧱', name: 'Wandläufer', text: '15 Meter an der Wand entlanggefahren.' },
+    { id: 'halfpipe', emoji: '🛝', name: 'Halfpipe-Held', text: 'In der Halfpipe über 3 Meter hoch gefahren.' },
+    { id: 'riese', emoji: '🏔️', name: 'Riesen-Spaß', text: 'Acht Sekunden lang ein Riese gewesen.' },
+    { id: 'mini', emoji: '🐜', name: 'Mini-Flitzer', text: 'Mini geworden und blitzschnell gefahren.' },
+    { id: 'haustier', emoji: '🐶', name: 'Tierfreund', text: 'Mit einem Haustier ein Rennen gefahren.' },
+    { id: 'kostuem', emoji: '🎭', name: 'Verkleidet', text: 'Ein Rennen im Kostüm gefahren.' },
   ];
   const AUTO = [
     { id: 'sprung', emoji: '✈️', name: 'Weitspringer', text: 'Länger als 1,5 Sekunden in der Luft.' },
@@ -124,6 +134,15 @@
       case 'huepfer': if (d.n >= 10) geben('mondHupf'); break;                   // S5: Mond-Hüpfer ({ n } im Rennen)
       case 'teleport': geben('teleport'); break;
       case 'dino': geben('dinofreund'); break;
+      case 'magnet': geben('magnet'); break;                                     // S6: Fahr-Zauber
+      case 'gleiten': geben('gleiter'); break;
+      case 'grind': if (d.m >= 20) geben('grind'); break;
+      case 'wand': if (d.m >= 15) geben('wandfahrer'); break;
+      case 'halfpipe': if (d.hoch >= 3) geben('halfpipe'); break;
+      case 'riese': geben('riese'); break;
+      case 'mini': geben('mini'); break;
+      case 'haustier': geben('haustier'); break;
+      case 'kostuem': geben('kostuem'); break;
       case 'superman': case 'handstand': case 'backflip': if (sp === 'motorrad') geben(name); break;   // S3
       case 'fassrolle': if (sp !== 'motorrad') geben('fassrolle'); break;
       case 'salto': if (sp === 'motorrad') geben('salto'); break;

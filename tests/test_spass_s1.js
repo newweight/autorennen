@@ -298,7 +298,7 @@ const zustandsText = (a) => [a.v.x, a.v.z, a.v.y, a.v.heading, a.v.vLaengs, a.fz
   const sp = 'auto', mo = 'motorrad';
   SK.zurueck(sp); SK.zurueck(mo);
   const ka = SK.katalog(sp), km = SK.katalog(mo);
-  pruefe('G Katalog: 15–44 Sticker je Spiel (S2 +2, S3 +2/+4, S4 +8), eindeutige ids, alle mit Emoji/Text', ka.length >= 15 && ka.length <= 44 && km.length >= 15 && km.length <= 44 && new Set(ka.map((k) => k.id)).size === ka.length && ka.every((k) => k.emoji && k.name && k.text), ka.length + '/' + km.length);
+  pruefe('G Katalog: 15–60 Sticker je Spiel (S2 +2, S3 +2/+4, S4 +8, S5 +6, S6 +9), eindeutige ids, alle mit Emoji/Text', ka.length >= 15 && ka.length <= 60 && km.length >= 15 && km.length <= 60 && new Set(ka.map((k) => k.id)).size === ka.length && ka.every((k) => k.emoji && k.name && k.text), ka.length + '/' + km.length);
   let n = SK.ereignis(sp, 'ziel', { platz: 1, streckeId: 'wiese' }).map((k) => k.id);
   pruefe('G erster Sieg → Im Ziel, Erster Sieg, Aufs Treppchen', ['ziel', 'sieg', 'podium'].every((i) => n.includes(i)) && n.length === 3, n.join(','));
   pruefe('G zweiter Sieg: nichts Neues (nur einmal)', SK.ereignis(sp, 'ziel', { platz: 1, streckeId: 'wiese' }).length === 0);
