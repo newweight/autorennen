@@ -767,6 +767,7 @@
         // Runde 6 (W3-G): Garage-Werte (Lack, Upgrade-Faktoren) nur für Spieler – die KI nie
         const gw = istSpieler && R.Garage ? R.Garage.fahrzeugWerte(spielerNamen[i], auto.id, opt.upgradesZaehlen !== false) : null;
         const f = this.fahrzeugHinzufuegen(auto, p.x, p.z, p.heading, gw);
+        if (R.SpassTuning) R.SpassTuning.fuerTeilnehmer(this, f, i, istSpieler, opt, spielerNamen, auto);   // S2: Tuning (Goldstücke), aus/0 Stufen = nichts
         f.vehicle.y = strecke.hoeheAn(p.x, p.z);
         this._vorherAngleichen(f);
         f.istSpieler = istSpieler;

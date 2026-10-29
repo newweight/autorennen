@@ -3,7 +3,7 @@
 //   R.SpassSticker.katalog(spiel)            [{ id, emoji, name, text }]  (spiel = 'auto' | 'motorrad')
 //   R.SpassSticker.ereignis(spiel, name, d)  Ereignis melden → Liste NEU freigeschalteter Sticker (leer, wenn nichts neu)
 //   R.SpassSticker.stand(spiel) / .hat(spiel, id) / .zurueck(spiel)
-// Ereignisse: sieg · ziel { platz, streckeId, nacht, zwei } · muenzen { rennen (im Rennen gesammelt), gesamt } · trampolin · kanone · geist · hupe · stimme ·
+// Ereignisse: tuning { voll } (S2) · sieg · ziel { platz, streckeId, nacht, zwei } · muenzen { rennen (im Rennen gesammelt), gesamt } · trampolin · kanone · geist · hupe · stimme ·
 //   sprung { sek } · salto · ring · bus · wheelie { m } · stoppie { m }
 // Speicher: localStorage 'rennspiel.spass.sticker.<spiel>' (ohne localStorage im Arbeitsspeicher). Reine Logik, ohne DOM (Node-Test).
 // ============================================================
@@ -27,6 +27,8 @@
     { id: 'stimme', emoji: '🎤', name: 'Eigene Stimme', text: 'Eine Hupe oder einen Jubel aufgenommen.' },
     { id: 'nacht', emoji: '🌙', name: 'Nachtfahrer', text: 'Ein Rennen bei Nacht beendet.' },
     { id: 'zwei', emoji: '👫', name: 'Zu zweit', text: 'Ein Rennen zu zweit gefahren.' },
+    { id: 'tuning1', emoji: '🔧', name: 'Erstes Tuning', text: 'Die erste Tuning-Stufe gekauft.' },
+    { id: 'tuningVoll', emoji: '🏁', name: 'Voll getunt', text: 'Ein Fahrzeug in allem auf Stufe 5 getunt.' },
   ];
   const AUTO = [
     { id: 'sprung', emoji: '✈️', name: 'Weitspringer', text: 'Länger als 1,5 Sekunden in der Luft.' },
@@ -86,6 +88,7 @@
       case 'geist': geben('geist'); break;
       case 'hupe': geben('hupe'); break;
       case 'stimme': geben('stimme'); break;
+      case 'tuning': geben('tuning1'); if (d.voll) geben('tuningVoll'); break;   // S2: Tuning gekauft ({ voll: alles auf Stufe 5 })
       case 'sprung': if (sp !== 'motorrad' && d.sek >= 1.5) geben('sprung'); break;
       case 'salto': if (sp === 'motorrad') geben('salto'); break;
       case 'ring': if (sp === 'motorrad') geben('ring'); break;

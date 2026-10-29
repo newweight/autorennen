@@ -270,6 +270,18 @@
     b.gruppe.visible = false;
   }
 
-  R.AutoVorschau = { kachel, alleKacheln, binden, behalten, drehen, winkel, autoId, lack, stoppen, debug,
+  /** S2 (additiv): Modell der Bühne `index` neu bauen (z. B. nach Tuning-Teilen); Lack und Drehwinkel bleiben. */
+  function neuBauen(index) {
+    const b = S.buehnen[index];
+    if (!b || !b.auto || !b.gruppe) return false;
+    gruppeEntfernen(b.gruppe);
+    b.gruppe = gruppeNehmen(b.auto, b.lack);
+    b.gruppe.visible = false;
+    S.szene.add(b.gruppe);
+    if (b.einblenden >= 1) zeichneBuehne(b, 0);
+    return true;
+  }
+
+  R.AutoVorschau = { neuBauen, kachel, alleKacheln, binden, behalten, drehen, winkel, autoId, lack, stoppen, debug,
     get verfuegbar() { return init(); }, get laeuft() { return S.laeuft; } };
 })();
