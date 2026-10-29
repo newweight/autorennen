@@ -133,7 +133,7 @@
   R.Schanzen.flugSchritt = function (fz, vehicle, strecke, steuerung, dt) {
     const e = flugSchritt0.apply(this, arguments);
     if (fz && fz.huepfer && !fz.aktiv) {
-      fz.huepfer = false;
+      fz.huepfer = false; fz.huepfLandung = true;      // Anzeige: sanfte Landung statt Kamerawackeln
       if (fz.tempoVorLandung > 0) vehicle.vLaengs = Math.max(vehicle.vLaengs, fz.tempoVorLandung * C().huepfer.tempoErhalt);
       fz.huepfSperre = Math.round(C().huepfer.abklingen / R.config.physik.schritt);
     }

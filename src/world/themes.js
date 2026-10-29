@@ -1997,7 +1997,7 @@
     const rnd = zufall(textSeed(strecke.id || 'strecke') ^ thema.seed);
     const gruppe = new THREE.Group();
     gruppe.name = 'Deko ' + themaName;
-    const bauer = (strecke.daten && strecke.daten.formel1) ? formel1Deko : { wiese: wieseDeko, wald: waldDeko, wueste: wuesteDeko, fantasie: fantasieDeko, dino: dinoDeko, alpen: alpenDeko }[themaName] || wieseDeko;
+    const bauer = (strecke.daten && strecke.daten.formel1) ? formel1Deko : (themes.zusatzBauer && themes.zusatzBauer[themaName]) || { wiese: wieseDeko, wald: waldDeko, wueste: wuesteDeko, fantasie: fantasieDeko, dino: dinoDeko, alpen: alpenDeko }[themaName] || wieseDeko;
     const anzahl = bauer(gruppe, thema, strecke, rnd);
     // Instanzen bewegen sich nicht: Begrenzungskugeln einmal berechnen
     gruppe.children.forEach((m) => {
@@ -2158,5 +2158,8 @@
   themes.zufall = zufall;
   themes.dinoTeile = dinoTeile;     // Runde 5b: laufende Dinos (world/dynamik.js)
   themes.dinoGeo = dinoGeo;
+  // S5: Hilfen für Zusatz-Themen (world/themenS5.js); zusatzBauer[name](gruppe, thema, strecke, rnd) baut deren Deko
+  themes.zusatzBauer = {};
+  themes.hilfe = { vereinen, vertexMaterial, instanzMesh, dekoGrenze, hinterZaun, istFrei, stelleSuchen, streckenMitte, aufBoden, ellipsoid, zylinderZwischen, zufall, textSeed };
   R.themes = themes;
 })();

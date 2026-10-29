@@ -198,7 +198,12 @@ void main(){
   let _bild = null;
   const farbe3 = (hex) => new THREE.Color(hex);
 
+  // S5: neue Welten ohne G2-Himmel/Gras (Mond: schwarzer Weltraum, Ozean: Wasser, Regenbogenland: Wolkenboden ohne Gras)
+  const S5_OHNE = { mond: { himmel: 1, gras: 1 }, ozean: { himmel: 1, gras: 1 }, regenbogen: { gras: 1 } };
+  const ohne = (sp, was) => { const t = sp.strecke && sp.strecke.daten && sp.strecke.daten.thema; return !!(S5_OHNE[t] && S5_OHNE[t][was]); };
+
   function himmelBauen(sp, P, st) {
+    if (ohne(sp, 'himmel')) return;
     const sz = sp.szene, w = sp.wetter;
     const bg = sz.background && sz.background.isColor ? sz.background.clone() : new THREE.Color(0x8fc8ff);
     const nebel = sz.fog ? sz.fog.color.clone() : bg.clone();
@@ -294,6 +299,7 @@ void main(){
   }
 
   function grasBauen(sp, P, st) {
+    if (ohne(sp, 'gras')) return;
     const strecke = sp.strecke; if (!strecke || !strecke.spline || !strecke.bodenHoehe) return;
     const thema = strecke.daten && strecke.daten.thema ? strecke.daten.thema : 'wiese';
     const f1 = !!(strecke.daten && strecke.daten.formel1), wueste = thema === 'wueste';

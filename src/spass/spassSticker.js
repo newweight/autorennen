@@ -4,7 +4,7 @@
 //   R.SpassSticker.ereignis(spiel, name, d)  Ereignis melden → Liste NEU freigeschalteter Sticker (leer, wenn nichts neu)
 //   R.SpassSticker.stand(spiel) / .hat(spiel, id) / .zurueck(spiel)
 // Ereignisse: tuning { voll } (S2) · sieg · ziel { platz, streckeId, nacht, zwei } · muenzen { rennen (im Rennen gesammelt), gesamt } · trampolin · kanone · geist · hupe · stimme ·
-//   sprung { sek } · S4: kurz { sterne, alle } · frei { gefunden } · freiAufgabe { geschafft, gesamt } · ko · koFinale · foto · salto · ring · bus · wheelie { m } · stoppie { m } · S3: superman · handstand · backflip (Motorrad) · fassrolle (Auto) · zeitlupe
+//   sprung { sek } · S4: kurz { sterne, alle } · frei { gefunden } · freiAufgabe { geschafft, gesamt } · ko · koFinale · foto · salto · ring · bus · wheelie { m } · stoppie { m } · S5: huepfer { n } · teleport · dino · S3: superman · handstand · backflip (Motorrad) · fassrolle (Auto) · zeitlupe
 // Speicher: localStorage 'rennspiel.spass.sticker.<spiel>' (ohne localStorage im Arbeitsspeicher). Reine Logik, ohne DOM (Node-Test).
 // ============================================================
 (function () {
@@ -39,6 +39,13 @@
     { id: 'ko', emoji: '🥇', name: 'K.-o.-Sieger', text: 'Die K.-o.-Rallye gewonnen.' },
     { id: 'koFinale', emoji: '🏁', name: 'Im Finale', text: 'Bei der K.-o.-Rallye bis ins Finale gekommen.' },
     { id: 'foto', emoji: '📸', name: 'Fotograf', text: 'Das erste Foto gemacht.' },
+    // S5: neue Welten
+    { id: 'mond', emoji: '🌙', name: 'Mondfahrer', text: 'Ein Rennen auf dem Mond zu Ende gefahren.' },
+    { id: 'mondHupf', emoji: '🦘', name: 'Mondhüpfer', text: '10 Hüpfer über Mond-Bodenwellen in einem Rennen.' },
+    { id: 'tiefsee', emoji: '🐋', name: 'Tiefseetaucher', text: 'Ein Rennen im Unterwasser-Glastunnel beendet.' },
+    { id: 'regenbogen', emoji: '🌈', name: 'Regenbogen-Fan', text: 'Ein Rennen im Regenbogenland beendet.' },
+    { id: 'teleport', emoji: '🌀', name: 'Teleporter', text: 'Durch ein Teleport-Tor gefahren.' },
+    { id: 'dinofreund', emoji: '🦖', name: 'Dino-Freund', text: 'Der Dino-Begleiter hat für dich gebrüllt.' },
   ];
   const AUTO = [
     { id: 'sprung', emoji: '✈️', name: 'Weitspringer', text: 'Länger als 1,5 Sekunden in der Luft.' },
@@ -90,6 +97,9 @@
         if (d.platz >= 1 && d.platz <= 3) geben('podium');
         if (d.nacht) geben('nacht');
         if (d.zwei) geben('zwei');
+        if (d.streckeId === 'mond') geben('mond');
+        if (d.streckeId === 'unterwasser') geben('tiefsee');
+        if (d.streckeId === 'regenbogenland') geben('regenbogen');
         if (d.streckeId) { z.strecken[d.streckeId] = 1; if (STRECKEN.every((s) => z.strecken[s])) geben('strecken'); }
         break;
       case 'muenzen':
@@ -111,6 +121,9 @@
       case 'ko': geben('ko'); geben('koFinale'); break;                           // S4: K.-o.-Rallye gewonnen
       case 'koFinale': geben('koFinale'); break;
       case 'foto': geben('foto'); break;
+      case 'huepfer': if (d.n >= 10) geben('mondHupf'); break;                   // S5: Mond-Hüpfer ({ n } im Rennen)
+      case 'teleport': geben('teleport'); break;
+      case 'dino': geben('dinofreund'); break;
       case 'superman': case 'handstand': case 'backflip': if (sp === 'motorrad') geben(name); break;   // S3
       case 'fassrolle': if (sp !== 'motorrad') geben('fassrolle'); break;
       case 'salto': if (sp === 'motorrad') geben('salto'); break;

@@ -447,15 +447,15 @@
     Object.assign(gemeinsam(), {
       id: 'mond', name: 'Mond', emoji: '🌙', thema: 'mond',
       beschreibung: 'Fahr auf dem Mond! Wenig Schwerkraft: Bodenwellen werfen dich in die Luft, Krater, Raketen – und die Erde leuchtet am Himmel.',
-      schwierigkeit: 'spass', breite: 14, zaunAbstand: 14, zielRundenzeit: 120,
-      schwerkraft: 0.35, gripFaktor: 0.92, bremsFaktor: 0.85, keineWolken: true,
+      schwierigkeit: 'spass', breite: 14, zaunAbstand: 14, zielRundenzeit: 85,
+      schwerkraft: 0.35, trampolinFaktor: 0.5, gripFaktor: 0.92, bremsFaktor: 0.85, keineWolken: true,
       huepfer: { faktor: 0.8, vMin: 12 },
       huegel: DATEN.mond.huegel, punkte: DATEN.mond.punkte,
     }),
     Object.assign(gemeinsam(), {
       id: 'unterwasser', name: 'Unterwasser', emoji: '🐋', thema: 'ozean',
       beschreibung: 'Am Meeresgrund durch den Glastunnel: Wale, Fische und Rochen schwimmen draußen vorbei, Blasen steigen auf.',
-      schwierigkeit: 'spass', breite: 13, zaunAbstand: 14, zielRundenzeit: 110,
+      schwierigkeit: 'spass', breite: 13, zaunAbstand: 9, zielRundenzeit: 78,
       keineWolken: true, keineSonne: true,
       glasTunnel: [{ s0: 300, s1: 1000 }, { s0: 1380, s1: 2020 }],
       huegel: DATEN.unterwasser.huegel, punkte: DATEN.unterwasser.punkte,
@@ -463,7 +463,7 @@
     Object.assign(gemeinsam(), {
       id: 'regenbogenland', name: 'Regenbogenland', emoji: '🌈', thema: 'regenbogen',
       beschreibung: 'Die Fahrbahn ist ein Regenbogen über den Wolken – bunt, weich und ein bisschen verrückt.',
-      schwierigkeit: 'spass', breite: 14, zaunAbstand: 14, zielRundenzeit: 105,
+      schwierigkeit: 'spass', breite: 14, zaunAbstand: 14, zielRundenzeit: 65,
       regenbogenFahrbahn: true,
       huegel: DATEN.regenbogenland.huegel, punkte: DATEN.regenbogenland.punkte,
     }),

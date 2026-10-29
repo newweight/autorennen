@@ -28,6 +28,7 @@ const MODULE = [
   'src/track/anlauf.js', 'src/spass/spassKern.js', 'src/spass/spassTuning.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/tribuenen.js', 'src/world/formel1.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
   'src/world/kleber.js', 'src/world/polizei.js', 'src/world/verkehr.js', 'src/world/tiere.js', 'src/race/raceManager.js', 'src/race/startBoost.js', 'src/ai/driver.js', 'src/net/protokoll.js',
   'src/track/megastrecke.js',   // v22: Megastrecke (Add-on, nach Wetter/Themen/Strecke geladen)
+  'src/world/themenS5.js',      // S5: Themen Mond/Ozean/Regenbogen (nach themes/wetter)
   'src/main.js', 'src/spass/spassPhysik.js',      // S1: Trampolin/Kanone (Add-on, nach main.js)
   'src/spass/spassWelten.js',                     // S5: Hüpfer, Teleport-Tore, Grip je Strecke (Add-on, nach spassPhysik)
 ];
@@ -100,7 +101,7 @@ const MOTO_UNFALL = ['aus', 'sanft', 'echt'];       // erlaubte Werte der Raum-E
 let RM = null;
 function ladenMoto() {
   if (RM) return RM;
-  const bisMega = MODULE.indexOf('src/track/megastrecke.js');
+  const bisMega = MODULE.indexOf('src/world/themenS5.js');   // S5: Themen-Add-on gehört dazu
   const liste = MODULE.slice(0, bisMega + 1).concat(MOTO_VOR, ['src/main.js', 'src/spass/spassPhysik.js', 'src/spass/spassWelten.js'], MOTO_NACH);
   RM = kontextLaden(liste, { MOTORRAD: true });
   return kollisionsHuelle(RM);
