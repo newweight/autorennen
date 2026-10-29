@@ -25,6 +25,8 @@ function einbauen(simulation, R, e) {
   const sim = simulation.sim, M = R.Moto, SL = M.schraeglage, St = M.stunts, U = M.unfall, TY = M.typen, N = R.Netz, rd = N.rund;
   const nT = simulation.nT;
   const trick = [];                  // Trick-Taste je Spieler-Nr gehalten?
+  // S8: Kistenstapel auf normalen Strecken (src/moto/motoS8Welt.js) – Treffer als Ereignis `kiste` (nur Anzeige; die Wirkung rechnen Server und Vorhersage gleich)
+  sim.s8Ereignis = (i, k) => { if (i < nT) simulation.ereignisse.push({ an: null, art: 'kiste', nr: i, k }); };
 
   // ---- Trick-Taste statt Tastatur: stuntStart.js liest cfg.taste[spielerNr] über input.istGedrueckt; online hat jeder Teilnehmer seinen eigenen Code ----
   R.config.motoStunts.taste = Array.from({ length: MAX_TEILNEHMER }, (_, i) => 'Trick' + i);

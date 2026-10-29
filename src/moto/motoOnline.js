@@ -339,6 +339,8 @@
     if (!K) return;
     if (m.art === 'stunt' && m.nr === K.du) {
       H.ereignis(spiel, K.du, { art: m.st, name: m.name, punkte: m.p, mult: m.m, meter: m.x, n: m.x });
+    } else if (m.art === 'kiste') {                    // S8: ein Kistenstapel (Schlamm/Wasser/Kisten auf normalen Strecken) wurde getroffen – nur Anzeige
+      try { if (R.Moto.s8 && R.Moto.s8.kisteAnzeigen) R.Moto.s8.kisteAnzeigen(spiel, m.nr, m.k); } catch (e) { /* nur Optik */ }
     } else if (m.art === 'sturz') {
       const f = spiel.fahrzeuge[m.nr];
       if (f && f.motoZ && !(f.mesh && f.mesh.userData && f.mesh.userData.kippt === false)) {

@@ -98,7 +98,7 @@ function laden() {
 // M3-Typen), angepasste Strecken (Schanzen/Zonen), Schräglage/Sturz, Stunts, Unfälle. Der Autorennen-Kontext (laden) bleibt unberührt: Auto-Räume laufen bitgleich wie vorher.
 // Reihenfolge wie Motorrad.html: Katalog/Typen/Logik VOR main.js, die Verdrahtungs-Umhüllungen (Spiel.physikSchritt …) danach.
 const MOTO_VOR = ['src/world/garage.js', 'src/moto/motoKatalog.js', 'src/moto/motoTypen.js', 'src/moto/schraeglage.js', 'src/moto/stunts.js', 'src/moto/stuntWelt.js', 'src/moto/unfall.js'];
-const MOTO_NACH = ['server/motoHaken.js', 'src/moto/stuntStart.js', 'src/moto/unfallWelt.js', 'src/moto/unfallStart.js', 'src/spass/spassTricks.js'];
+const MOTO_NACH = ['server/motoHaken.js', 'src/moto/stuntStart.js', 'src/moto/unfallWelt.js', 'src/moto/unfallStart.js', 'src/spass/spassTricks.js', 'src/moto/motoS8Welt.js'];
 const MOTO_UNFALL = ['aus', 'sanft', 'echt'];       // erlaubte Werte der Raum-Einstellung `unfall` (Standard sanft)
 let RM = null;
 function ladenMoto() {

@@ -182,6 +182,8 @@
       if (fz && R.SpassWelten && !fz.aktiv) R.SpassWelten.nachSchritt(fz, v, st, n, xAlt, zAlt, dt);
       // S6: Magnet-Röhre, Schlucht-Gleiten, Schiene/Wand, Halfpipe (src/spass/spassZauber.js, wie im Server; Extras/Riese/Mini rechnet nur der Server)
       if (fz && R.SpassZauber && st.spass && st.spass.zauber) R.SpassZauber.nachSchritt(fz, v, st, n, xAlt, zAlt, dt);
+      // S8: Schlamm/Wasser/Kisten auf normalen Strecken (src/moto/motoS8Welt.js, wie im Server)
+      if (st.spass && st.spass.s8 && R.Moto && R.Moto.s8) R.Moto.s8.eigen(this.s8z || (this.s8z = R.Moto.s8.zNeu()), v, st, n, dt, !!(fz && fz.aktiv && fz.y - st.hoeheAn(v.x, v.z) > 1.6));
       if (lp) {
         const pt = st.spline.punktBei(n.s), dx = v.x - xAlt, dz = v.z - zAlt;
         this._loopingErgebnis(R.Looping.einfahrt(lp, v, st, n.s, n.s + dx * pt.tx + dz * pt.tz, n.seitenabstand + dx * pt.nx + dz * pt.nz));
@@ -319,6 +321,7 @@
       const v = this.vp;
       R.Netz.fahrzeugSchreiben(v, ich.v);
       if (this.svAn) { v.imFlug = !!(this.fz && this.fz.aktiv); v.imLooping = !!(this.lp && (this.lp.aktiv || this.lp.fallen)); }
+      if (this.strecke.spass && this.strecke.spass.s8 && R.Moto && R.Moto.s8) R.Moto.s8.drinSetzen(this.s8z || (this.s8z = R.Moto.s8.zNeu()), v, this.strecke);   // S8: Trefferkreis der Kistenstapel aus der Server-Position
       this.idx = ich.idx;
       v._bandeIndex = ich.bi >= 0 ? ich.bi : undefined;
       v._buschSperre = ich.bs || 0;
