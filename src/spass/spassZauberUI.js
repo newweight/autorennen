@@ -354,6 +354,7 @@
       const sch = mesh.getObjectByName ? mesh.getObjectByName('schatten') : null;
       if (pose) {
         mesh.position.copy(pose.pos); basis(pose.f, pose.u, _q); mesh.quaternion.copy(_q);
+        if (mesh.userData.moto && mesh.userData.lage) { mesh.userData.lage.rotation.z = 0; if (mesh.userData.purzel) mesh.userData.purzel.rotation.x = 0; }   // Motorrad: keine zusätzliche Schräglage an Wand/Decke
         f._zPose = { u: pose.u.clone(), f: pose.f.clone(), pos: pose.pos.clone(), art: pose.art };
         if (sch && sch.visible) { sch.visible = false; mesh.userData._zSchatten = true; }
       } else {
@@ -403,13 +404,17 @@
       const stark = pz.art === 'magnet' ? 1 : pz.art === 'pipe' ? 0.45 : 0.55;
       _cU.copy(_ym).lerp(pz.u, stark).normalize();
       let zPos, zBlick;
-      if (k.modus === 'cockpit') { zPos = pz.pos.clone().addScaledVector(pz.u, 1.15).addScaledVector(pz.f, 0.4); zBlick = zPos.clone().addScaledVector(pz.f, 30).addScaledVector(pz.u, -0.5); }
+      if (k.modus === 'cockpit') { const ck = cfg.cockpit || {}; zPos = pz.pos.clone().addScaledVector(pz.u, ck.hoehe || 1.15).addScaledVector(pz.f, ck.vor === undefined ? 0.4 : ck.vor); zBlick = zPos.clone().addScaledVector(pz.f, ck.blickWeite || 30).addScaledVector(pz.u, -0.5); }
       else { zPos = pz.pos.clone().addScaledVector(pz.f, -e.abstand * 0.95).addScaledVector(_cU, e.hoehe * 1.05); zBlick = pz.pos.clone().addScaledVector(pz.f, e.vorausblick * 0.5).addScaledVector(_cU, 0.9); }
-      if (!K.an) { K.pos.copy(kam.position); K.blick.copy(k.blick); K.oben.copy(kam.up); K.an = true; }
-      const t = 1 - Math.exp(-9 * dt);
-      K.pos.lerp(zPos, t); K.blick.lerp(zBlick, Math.min(1, t * 1.6)); K.oben.lerp(_cU, t).normalize();
+      // Weich wird nur der Abstand zum Fahrzeug (nicht die Weltposition – sonst hinkt die Kamera bei Tempo hinterher)
+      zPos.sub(pz.pos); zBlick.sub(pz.pos);
+      if (!K.an) { K.pos.copy(kam.position).sub(pz.pos); K.blick.copy(k.blick).sub(pz.pos); K.oben.copy(kam.up); K.an = true; }
+      const t = k.modus === 'cockpit' ? 1 : 1 - Math.exp(-9 * dt);
+      K.pos.lerp(zPos, t); K.blick.lerp(zBlick, Math.min(1, t * 1.6)); K.oben.lerp(_cU, 1 - Math.exp(-9 * dt)).normalize();
+      K.pos.add(pz.pos); K.blick.add(pz.pos);
       kam.position.copy(K.pos); kam.up.copy(K.oben); kam.lookAt(K.blick);
       k.blick.copy(K.blick); k.pos.copy(K.pos);
+      K.pos.sub(pz.pos); K.blick.sub(pz.pos);
     } catch (err) { if (!R._zauberKamFehler) { R._zauberKamFehler = 1; console.error('Zauber UI (Kamera):', err); } }
   };
 
