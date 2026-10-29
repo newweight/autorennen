@@ -15,7 +15,7 @@ def pruefe(name, gut, info=''):
 def lauf(p, html, prefix, lvl):
     fehler = []
     b = p.chromium.launch(args=ARGS); ctx = b.new_context(viewport={'width': 1100, 'height': 650}, accept_downloads=True)
-    page = ctx.new_page(); page.set_default_timeout(240000)
+    page = ctx.new_page(); page.set_default_timeout(60000)
     page.on('pageerror', lambda e: fehler.append('pageerror: ' + str(e)))
     page.on('console', lambda m: fehler.append('console.error: ' + m.text) if m.type == 'error' and 'GPU stall' not in m.text and 'WebGL' not in m.text else None)
     def neu():
@@ -23,7 +23,7 @@ def lauf(p, html, prefix, lvl):
     sp = 'motorrad' if prefix == 'moto' else 'auto'
     neu()
     # --- Menü: Modus-Schritt mit den neuen Karten
-    page.evaluate("Rennspiel.spiel.menue.zeigen(2)" ); page.wait_for_timeout(400)
+    page.evaluate("Rennspiel.spiel.menue.zeigen(0)"); page.wait_for_timeout(400)
     karten = page.evaluate("[...document.querySelectorAll('[data-a^=\"spassmodus:\"]')].map(e=>e.dataset.a)")
     pruefe(f'{prefix}: Menü zeigt Kurz-Level / Freie Fahrt / K.-o.-Rallye', karten == ['spassmodus:kurz', 'spassmodus:frei', 'spassmodus:ko'], karten)
     page.screenshot(path=f'{OUT}/{prefix}_modus.png')
@@ -49,9 +49,8 @@ def lauf(p, html, prefix, lvl):
     page.evaluate("()=>{const S=Rennspiel.spiel; S._s4Modus={art:'frei'}; S.rennenStarten();}"); page.wait_for_timeout(1200)
     r = page.evaluate("""()=>{const S=Rennspiel.spiel; S.pausiert=false; let n=0; while(S.rennen.zustand!=='laeuft' && n<900){S.physikSchritt(1/60); n++;}
       const z=S.s4.frei, k=z.kisten[0], f=S.fahrzeuge[0].vehicle;
-      const p=S.strecke.spline.punktBei(Math.max(0,k.e.s-6)); f.setzen(p.x,p.z,Math.atan2(p.tx,p.tz)); if(f.v!==undefined){}
+      f.setzen(k.x,k.z,0); f.y=k.y;
       const vor=Rennspiel.SpassFrei.anzahl(z.sp,z.id).gefunden.length; let m=0;
-      S.autopilot(0,true);
       while(!z.aufgabe && m<600){ S.physikSchritt(1/60); m++; }
       return {kisten:z.kisten.length, vor, nach:Rennspiel.SpassFrei.anzahl(z.sp,z.id).gefunden.length, aufgabe:z.aufgabe?z.aufgabe.art:null, m}}""")
     page.wait_for_timeout(500); page.screenshot(path=f'{OUT}/{prefix}_frei.png')
