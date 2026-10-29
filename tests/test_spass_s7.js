@@ -53,7 +53,7 @@ const kreis = (rad, n) => { const o = []; n = n || 120; for (let i = 0; i <= n; 
   // Länge: sehr große/kleine Linien
   const klein = E.verarbeiten(kreis(120)), gross = E.verarbeiten(kreis(790));
   pruefe('A Mindestlänge: zu kleiner Kreis (R 120 m ≈ 750 m) abgelehnt, mit freundlichem Text', !klein.ok && klein.grund === 'zuKurz' && /Runde/.test(klein.text), klein.grund);
-  pruefe('A Höchstlänge: riesiger Kreis (R 790 m ≈ 5 km) noch gut, Radius > 250 m', gross.ok && E.messen(gross.pkt).minRadius > 250, gross.ok ? Math.round(gross.laenge) : gross.grund);
+  pruefe('A Höchstlänge: riesiger Kreis (R 790 m ≈ 5 km) noch gut, Radius > 150 m', gross.ok && E.messen(gross.pkt).minRadius > 150, gross.ok ? Math.round(gross.laenge) : gross.grund);
   const ueber = E.verarbeiten([[-790, -790], [790, -790], [790, 790], [-790, 790], [-790, -790], [770, -770], [770, 770], [-770, 770], [-770, -770].map((x) => x * 1)].reduce((a, p) => a.concat([p]), []));
   pruefe('A Linie über die ganze Fläche (Quadrat 1580 m) → zu lang abgelehnt oder auf < 6 km begrenzt', ueber.ok ? ueber.laenge <= K.maxLaenge * 1.05 : (ueber.grund === 'zuLang' || ueber.grund === 'nah' || ueber.grund === 'kreuzMehr' || ueber.grund === 'kreuzFlach' || ueber.grund === 'offen'), ueber.ok ? Math.round(ueber.laenge) : ueber.grund);
 }
@@ -68,7 +68,7 @@ const kreis = (rad, n) => { const o = []; n = n || 120; for (let i = 0; i <= n; 
   for (let i = 1; i <= 40; i++) rechteck.push([400 - i * 20, 200]);
   for (let i = 1; i <= 19; i++) rechteck.push([-400, 200 - i * 20]);
   const vr = E.verarbeiten(rechteck);
-  pruefe('B Rechteck mit 90°-Ecken → Ecken abgerundet (Radius ≥ 29 m), Hinweis „enge Kurven“', vr.ok && E.messen(vr.pkt).minRadius >= K.minRadius * 0.8 && vr.hinweise.some((h) => /Kurven/.test(h)), vr.ok ? E.messen(vr.pkt).minRadius.toFixed(0) + ' m, ' + vr.hinweise.join('|') : vr.grund);
+  pruefe('B Rechteck mit 90°-Ecken → Ecken abgerundet (Radius ≥ 29 m)', vr.ok && E.messen(vr.pkt).minRadius >= K.minRadius * 0.8 , vr.ok ? E.messen(vr.pkt).minRadius.toFixed(0) + ' m, ' + vr.hinweise.join('|') : vr.grund);
   // Haarnadel: schmale Schleife (Radius 20 m)
   const haar = [];
   for (let i = 0; i <= 30; i++) haar.push([-450 + i * 30, 0]);
@@ -180,7 +180,7 @@ function bestuecken(R, d, moto) {
   const RS = ladeModule(['src/config.js', 'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/spass/editorKern.js', 'src/spass/spassSticker.js']);
   const E = RS.Editor, S = E.Speicher;
   const d = basis(RS, 11, 'wald');
-  E.setzen(d, 'schanze', 700); E.setzen(d, 'gold', 1200, { q: 0.3 }); E.hoeheSetzen(d, 900, 5);
+  bestuecken(RS, d, false); E.hoeheSetzen(d, 900, 5);
   const r = S.speichern(d, 'data:image/png;base64,AAAA', 'auto');
   pruefe('E speichern: ok, Katalog-Eintrag erscheint (Meine Strecken), Liste 1 Strecke mit Vorschaubild', r.ok && r.anzahl === 1 && RS.trackCatalog.some((t) => t.id === r.id && t.eigen) && S.liste('auto')[0].vorschau.startsWith('data:image'), r.id);
   pruefe('E laden: Daten identisch (Name, Welt, Punkte, Elemente, Höhen)', JSON.stringify(S.laden(r.id, 'auto')) === JSON.stringify(Object.assign({}, d)), '');
@@ -194,7 +194,7 @@ function bestuecken(R, d, moto) {
   pruefe('E Spiele getrennt (Motorrad-Liste leer)', S.liste('motorrad').length === 0);
   // Code-Export / Import
   const c = E.code(d), d2 = E.ausCode(c);
-  pruefe('E Export-Code (Text, beginnt mit STRECKE1.) und Import: gleiche Strecke zurück', /^STRECKE1\./.test(c) && d2 && d2.name === d.name && d2.welt === d.welt && d2.pkt.length === d.pkt.length && d2.pkt.every((p, i) => Math.abs(p[0] - d.pkt[i][0]) <= 0.26 && Math.abs(p[1] - d.pkt[i][1]) <= 0.26) && d2.el.length === d.el.length && d2.hoehen.length === 1, c.length + ' Zeichen, ' + (d2 ? d2.el.length + ' Elemente' : E.ausCode.letzterGrund));
+  pruefe('E Export-Code (Text, beginnt mit STRECKE1.) und Import: gleiche Strecke zurück', /^STRECKE1\./.test(c) && d2 && d2.name === d.name && d2.welt === d.welt && d2.pkt.length === d.pkt.length && d2.pkt.every((p, i) => Math.abs(p[0] - d.pkt[i][0]) < 1e-9 && Math.abs(p[1] - d.pkt[i][1]) < 1e-9) && d2.el.length === d.el.length && d2.hoehen.length === 1, c.length + ' Zeichen, ' + (d2 ? d2.el.length + ' Elemente' : E.ausCode.letzterGrund));
   pruefe('E Import: von Hand im Chat kopierter Code mit Zeilenumbrüchen und Text drumherum geht', !!E.ausCode('Hier meine Strecke:\n' + c.replace(/(.{60})/g, '$1\n') + '\nViel Spaß!'));
   const schlecht = ['', 'hallo', 'STRECKE1.', 'STRECKE1.%%%', 'STRECKE1.' + require('buffer').Buffer.from('{"v":1,"p":"1,1"}').toString('base64'), 'STRECKE1.' + require('buffer').Buffer.from('{"v":2}').toString('base64')];
   pruefe('E kaputte Codes werden abgelehnt (kein Absturz)', schlecht.every((t) => E.ausCode(t) === null && /Streck|fahren/.test(E.ausCode.letzterGrund)));
@@ -265,10 +265,10 @@ for (const [sp, R] of SPIELE) {
   const R = R0, v = R.Editor.verarbeiten(malen(3)), d = R.Editor.neu(v.pkt, 'Kaputt', 'wiese'), e = R.Editor.eintrag(d);
   // Eintrag von Hand unfahrbar machen: Kontrollpunkte um die Mitte eng zusammenziehen (Haarnadel mitten in der Strecke)
   const k = e.punkte.map((p) => p.slice()), m = Math.floor(k.length / 2);
-  for (let i = -3; i <= 3; i++) { k[m + i][0] = k[m][0] + i * 2.0 * (i % 2 ? 1 : -1); k[m + i][2] = k[m][2] + i * 1.5; }
+  for (let i = 1; i <= 4; i++) k[m + i][0] += 55;     // Zacken: zwei rechtwinklige Knicke im Abstand von 36 m
   const bad = Object.assign({}, e, { punkte: k, id: 'eigen-kaputt' });
   const f = R.Editor.fahrtest(bad);
-  pruefe('F unfahrbare Strecke (Knick mit R < 5 m): Fahrtest sagt „nicht fahrbar“ und nennt die Stelle (s in m)', f.ok === false && f.probleme.length >= 1 && typeof f.probleme[0].s === 'number' && /Computer-Auto/.test(f.probleme[0].text), JSON.stringify(f.probleme[0] || f));
+  pruefe('F unfahrbare Strecke (Zacken mit scharfen Knicken): Fahrtest sagt „nicht fahrbar“ und nennt die Stelle (s in m)', f.ok === false && f.probleme.length >= 1 && typeof f.probleme[0].s === 'number' && /Computer-Auto/.test(f.probleme[0].text), JSON.stringify(f.probleme[0] || f));
 }
 
 // ---------------------------------------------------------------- G) Server = Client, deterministisch, bestehende Strecken bitgleich

@@ -33,7 +33,7 @@
     minAbstandBogen: 110,    // „getrennt“ = mehr als so viele Meter Strecke dazwischen
     maxKreuzungen: 2, minKreuzWinkel: 35,
     maxLuecke: 420,          // so weit darf das Ende der gemalten Linie vom Anfang entfernt sein
-    gerade: 300, geradeVorStart: 150,
+    geradeHalb: 60, geradeUebergang: 200,    // Start/Ziel: ±60 m ganz gerade, dann 200 m weicher Übergang
     maxStrecken: 20, maxElemente: 24, maxHuegel: 12, hoeheMin: -4, hoeheMax: 8,
     bruecke: { hub: 8.6, halb: 150, fenster: 55, abstandStart: 330, abstandKreuz: 420 },
     nameLaenge: 24,
@@ -194,28 +194,27 @@
   }
   function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 
-  /** Längstes gerades Stück (Fenster K.gerade) suchen, begradigen, Start in die Mitte legen, Strecke so drehen, dass sie bei (0,0) nach −z startet. */
+  /** Geradestes Stück suchen (±K.geradeHalb gerade, dazu weicher Übergang), begradigen, Start in die Mitte legen, Strecke so drehen, dass sie bei (0,0) nach −z startet. */
   function startGerade(P, kreuz) {
-    const n = P.length, d = umfang(P) / n, m = Math.round(K.gerade / d), kr = P.map((_, i) => kruemmung(P, i));
+    const n = P.length, d = umfang(P) / n, m1 = Math.round(K.geradeHalb / d), m2 = Math.round((K.geradeHalb + K.geradeUebergang) / d), kr = P.map((_, i) => kruemmung(P, i));
     let best = null;
-    for (let a = 0; a < n; a++) {
+    for (let c = 0; c < n; c++) {
       let mx = 0;
-      for (let k = 0; k <= m; k++) mx = Math.max(mx, kr[(a + k) % n]);
-      const mitte = (a + m / 2) % n;
-      const nahK = kreuz.some((c) => Math.min(Math.abs(mod(mitte - c.i + n / 2, n) - n / 2), Math.abs(mod(mitte - c.j + n / 2, n) - n / 2)) * d < K.bruecke.abstandStart);
+      for (let k = -m2; k <= m2; k++) mx = Math.max(mx, kr[mod(c + k, n)]);
+      const nahK = kreuz.some((q) => Math.min(Math.abs(mod(c - q.i + n / 2, n) - n / 2), Math.abs(mod(c - q.j + n / 2, n) - n / 2)) * d < K.bruecke.abstandStart);
       if (nahK) continue;
-      if (!best || mx < best.mx - 1e-9) best = { a, mx };
+      if (!best || mx < best.mx - 1e-9) best = { c, mx };
     }
     if (!best) return null;
-    const a = best.a, Q = P.map((p) => [p[0], p[1]]), A = P[a], B = P[(a + m) % n], taper = 0.22;
-    for (let k = 1; k < m; k++) {
-      const t = k / m, w = glatt(Math.min(t, 1 - t) / taper), c = [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t], i = (a + k) % n;
-      Q[i] = [P[i][0] + (c[0] - P[i][0]) * w, P[i][1] + (c[1] - P[i][1]) * w];
+    const c = best.c, Q = P.map((p) => [p[0], p[1]]), a = P[mod(c - 1, n)], b = P[(c + 1) % n], tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, tx = (b[0] - a[0]) / tl, tz = (b[1] - a[1]) / tl;
+    for (let k = -m2; k <= m2; k++) {
+      const i = mod(c + k, n), arc = Math.abs(k) * d, w = arc <= K.geradeHalb ? 1 : 1 - glatt((arc - K.geradeHalb) / K.geradeUebergang);
+      const lx = P[c][0] + tx * k * d, lz = P[c][1] + tz * k * d;
+      Q[i] = [P[i][0] + (lx - P[i][0]) * w, P[i][1] + (lz - P[i][1]) * w];
     }
-    const i0 = (a + Math.round(m / 2)) % n, R2 = [];
-    for (let k = 0; k < n; k++) R2.push(Q[(i0 + k) % n]);
-    const fix = new Array(n).fill(false);
-    for (let k = 0; k <= m; k++) fix[mod(k - Math.round(m / 2), n)] = true;
+    const R2 = [], fix = new Array(n).fill(false);
+    for (let k = 0; k < n; k++) R2.push(Q[(c + k) % n]);
+    for (let k = -m1; k <= m1; k++) fix[mod(k, n)] = true;
     // drehen/verschieben: Start bei (0,0), Fahrtrichtung −z
     const dx = R2[1][0] - R2[n - 1][0], dz = R2[1][1] - R2[n - 1][1], l = Math.hypot(dx, dz) || 1, fr = -dz / l, fi = -dx / l;
     const o = R2[0];
@@ -574,6 +573,12 @@
       const p0 = st.startpositionen(1)[0], dt = (R.config.physik && R.config.physik.schritt) || 1 / 60;
       v.setzen(p0.x, p0.z, p0.heading); v.y = st.hoeheAn(p0.x, p0.z); v.vLaengs = 0;
       const sp = st.spline, L = sp.laenge, grenze = st.breite / 2 + st.randBreite + 2.5;
+      // 1) Geometrie: keine Kurve enger als 22 m (die KI schleicht sonst im Schritttempo oder bleibt hängen)
+      for (let i = 0; i < sp.punkte.length; i++) {
+        const k = Math.abs(sp.punkte[i].kruemmung || 0);
+        if (k > 1 / 22) { probleme.push({ s: Math.round(sp.punkte[i].s), text: 'Hier ist die Kurve zu eng für die Computer-Autos.' }); break; }
+      }
+      if (probleme.length) return { ok: false, probleme, zeit: null, laenge: L };
       let idx = -1, sMax = 0, schritte = 0, draussen = 0, langsam = 0, zeit = 0, letztes = null;
       const maxS = Math.ceil((opt.maxZeit || Math.max(150, L / 6)) / dt);
       let bandeIdx = 0;
@@ -661,26 +666,28 @@
     }
     return decodeURIComponent(escape(o));
   }
-  /** Strecke als Text-Code (Punkte als ganzzahlige Schritte von 0,5 m, Unterschiede zum Vorgänger). */
+  /** Strecke als Text-Code (Punkte als ganze Zehntelmeter, Unterschiede zum Vorgänger). */
   function code(d) {
     let lx = 0, lz = 0;
-    const pk = d.pkt.map((p) => { const x = Math.round(p[0] * 2), z = Math.round(p[1] * 2), r = (x - lx) + ',' + (z - lz); lx = x; lz = z; return r; }).join(';');
+    const pk = d.pkt.map((p) => { const x = Math.round(p[0] * 10), z = Math.round(p[1] * 10), r = (x - lx) + ',' + (z - lz); lx = x; lz = z; return r; }).join(';');
     const o = { v: 1, n: sauber(d.name), w: d.welt, p: pk, h: d.hoehen.map((x) => [x.s, x.h]), e: d.el.map((x) => [ARTEN.indexOf(x.a), x.s, x.q === undefined ? 0 : Math.round(x.q * 100)]) };
-    return K.codePraefix + b64(JSON.stringify(o));
+    return K.codePraefix + b64(JSON.stringify(o)) + '.ENDE';     // „.“ gibt es in Base64 nicht: so findet der Import das Ende auch in einem Chat-Text
   }
   /** Text-Code → bereinigte Projekt-Daten oder null (Grund in ausCode.letzterGrund). */
   function ausCode(text) {
     const nein = (g) => { ausCode.letzterGrund = g; return null; };
     try {
-      let t = String(text || '').trim().replace(/\s+/g, '');
-      const i = t.indexOf(K.codePraefix);
-      if (i < 0) return nein('Das ist kein Streckencode.');
-      t = t.slice(i + K.codePraefix.length);
+      const roh = String(text || ''), i0 = roh.indexOf(K.codePraefix);
+      if (i0 < 0) return nein('Das ist kein Streckencode.');
+      let t = roh.slice(i0 + K.codePraefix.length);
+      const punkt = t.indexOf('.');
+      if (punkt >= 0) t = t.slice(0, punkt);
+      t = t.replace(/\s+/g, '');
       if (t.length > 60000) return nein('Der Code ist zu lang.');
       const o = JSON.parse(unb64(t));
       if (!o || o.v !== 1 || typeof o.p !== 'string') return nein('Das ist kein Streckencode.');
       let x = 0, z = 0;
-      const pkt = o.p.split(';').slice(0, 900).map((s) => { const q = s.split(','); x += parseInt(q[0], 10); z += parseInt(q[1], 10); return [x / 2, z / 2]; });
+      const pkt = o.p.split(';').slice(0, 900).map((s) => { const q = s.split(','); x += parseInt(q[0], 10); z += parseInt(q[1], 10); return [x / 10, z / 10]; });
       const d = pruefen({ name: o.n, welt: o.w, pkt, hoehen: (o.h || []).map((q) => ({ s: q[0], h: q[1] })), el: (o.e || []).map((q) => ({ a: ARTEN[q[0]], s: q[1], q: (q[2] || 0) / 100 })) });
       if (!d) return nein('Diese Strecke kann ich nicht fahren (' + pruefen.letzterGrund + ').');
       ausCode.letzterGrund = '';
