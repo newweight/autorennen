@@ -365,7 +365,8 @@ window.Rennspiel = window.Rennspiel || {};
     g.fillStyle = hex; g.fillRect(0, 0, 512, 256);
     g.strokeStyle = '#fff'; g.lineWidth = 12; g.strokeRect(10, 10, 492, 236);
     g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.font = 'bold 104px Arial, sans-serif'; g.fillText(text, 256, 100);                 // Stunt-Name (englisch, Text von vorn lesbar, nicht gespiegelt)
+    let px = 104; g.font = 'bold ' + px + 'px Arial, sans-serif'; while (g.measureText(text).width > 450 && px > 40) { px -= 4; g.font = 'bold ' + px + 'px Arial, sans-serif'; }
+    g.fillText(text, 256, 100);                 // Stunt-Name (englisch, Text von vorn lesbar, nicht gespiegelt)
     g.fillStyle = '#ffe14a'; g.font = 'bold 50px Arial, sans-serif'; g.fillText(hint, 256, 190);   // kindgerechter Hinweis darunter
     const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
   }
@@ -374,7 +375,7 @@ window.Rennspiel = window.Rennspiel || {};
   function zonenBauen(zonen, strecke, gruppe) {
     if (!zonen.length) return;
     const sp = strecke.spline, s = sammler(), quad = new THREE.PlaneGeometry(1, 1), box = new THREE.BoxGeometry(1, 1, 1);
-    const farbe = { wheelie: [0xffb000, 0xffffff, 0xff7a00, '#ff7a00', 'WHEELIE', 'Trick-Taste'], stoppie: [0x2f8bff, 0xffffff, 0x1c5fd0, '#1c5fd0', 'VORDERRAD!', 'vorne bremsen'] };
+    const farbe = { wheelie: [0xffb000, 0xffffff, 0xff7a00, '#ff7a00', 'WHEELIE', 'Trick-Taste'], stoppie: [0x2f8bff, 0xffffff, 0x1c5fd0, '#1c5fd0', 'HINTERRAD HOCH!', 'fest bremsen'] };
     const texturen = {}, schilder = [];
     zonen.forEach((z) => {
       const f = farbe[z.art] || farbe.wheelie, len = sp.differenzS(z.s1, z.s0);

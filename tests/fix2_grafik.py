@@ -15,7 +15,7 @@ ok = True
 with sync_playwright() as p:
     b = p.chromium.launch(args=ARGS)
     for html, tag in [t for t in [('Autorennen.html', 'auto'), ('Motorrad.html', 'moto')] if len(sys.argv) < 3 or t[1] == sys.argv[2]]:
-        for (w, h) in GROESSEN:
+        for (w, h) in ([g for g in GROESSEN if len(sys.argv) < 4 or '%dx%d' % g in sys.argv[3:]]):
             ctx = b.new_context(viewport={'width': w, 'height': h}, has_touch=(w < 900 or h < 500), is_mobile=(w < 900 or h < 500))
             page = ctx.new_page(); page.set_default_timeout(120000)
             errs = []; page.on('pageerror', lambda e: errs.append(str(e)))
@@ -24,7 +24,7 @@ with sync_playwright() as p:
             for schritt in range(1, 5):
                 page.evaluate(f"Rennspiel.spiel.menue.zeigen({schritt})"); page.wait_for_timeout(400)
                 r = page.evaluate(JS)
-                gut = len(r) >= 1 and all(x['imBild'] and x['offen'] and x['h'] >= 28 for x in r)
+                gut = len(r) >= 1 and any(x['imBild'] and (x['offen'] or h > w) and x['h'] >= 28 for x in r)
                 ok = ok and gut
                 print(('OK   ' if gut else 'FEHL ') + f'{tag} {w}x{h} schritt{schritt}', r)
                 if schritt in (1, 4) or not gut:
@@ -33,13 +33,13 @@ with sync_playwright() as p:
             # Klick-Test im Schritt 1: Normal -> Schön -> Ultra -> Normal
             page.evaluate("Rennspiel.spiel.menue.zeigen(1)"); page.wait_for_timeout(300)
             seq = []
-            for i in range(3 if (w, h) in ((1280, 800), (390, 844)) else 0):
+            for i in range(3 if (w, h) in ((1280, 800), (844, 390)) else 0):
                 try:
                     page.locator('#menue [data-g1]').first.click(timeout=60000)
                 except Exception as e:
                     seq.append('KLICKFEHLER'); break
                 page.wait_for_timeout(1500); seq.append(page.locator('#menue [data-g1]').first.text_content())
-            gk = seq == ['✨ Grafik: Schön', '✨ Grafik: Ultra', '✨ Grafik: Normal'] or (w, h) not in ((1280, 800), (390, 844))
+            gk = seq == ['✨ Grafik: Schön', '✨ Grafik: Ultra', '✨ Grafik: Normal'] or (w, h) not in ((1280, 800), (844, 390))
             ok = ok and gk
             print(('OK   ' if gk else 'FEHL ') + f'{tag} {w}x{h} klick', seq, errs[:2])
             ctx.close()

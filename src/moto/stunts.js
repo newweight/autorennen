@@ -337,7 +337,7 @@ window.Rennspiel = window.Rennspiel || {};
     const wheelieOk = boden && e.zone === 'wheelie' && e.halten && e.v >= zk.minTempo;
     const stoppieOk = boden && e.zone === 'stoppie' && e.bremse && e.v >= (z.stoppie.aktiv ? 3 : zk.stoppieMinTempo);
     zoneSchritt(z, z.wheelie, wheelieOk, e.weg, zk, k, 'wheelie', 'Wheelie!', k.punkte.wheelieProMeter, e.jetzt);
-    zoneSchritt(z, z.stoppie, stoppieOk, e.weg, zk, k, 'stoppie', 'Vorderrad!', k.punkte.stoppieProMeter, e.jetzt);
+    zoneSchritt(z, z.stoppie, stoppieOk, e.weg, zk, k, 'stoppie', 'Hinterrad hoch!', k.punkte.stoppieProMeter, e.jetzt);
 
     // --- Anzeige-Pose ---
     const pose = z.pose;
