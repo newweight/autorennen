@@ -289,7 +289,9 @@ window.Rennspiel = window.Rennspiel || {};
       vertexShader: 'attribute float aSize; attribute float aAlpha; attribute float aGrau; uniform float uScale; varying float vA; varying float vG;\n' +
         'void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv; gl_PointSize = clamp(aSize * uScale / max(0.2, -mv.z), 1.0, 420.0); vA = aAlpha; vG = aGrau; }',
       fragmentShader: 'varying float vA; varying float vG;\n' +
-        'void main() { float r = length(gl_PointCoord - vec2(0.5)) * 2.0; float a = (1.0 - smoothstep(0.3, 1.0, r)) * vA; if (a < 0.004) discard; gl_FragColor = vec4(vec3(vG), a); }',
+        'void main() { float r = length(gl_PointCoord - vec2(0.5)) * 2.0; float a = (1.0 - smoothstep(0.0, 1.0, r)) * vA; if (a < 0.004) discard;\n' +
+        '  float n = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;   // Dithering gegen 8-Bit-Streifen auf dunklem Grund\n' +
+        '  gl_FragColor = vec4(vec3(max(vG, 0.08) + n / 90.0), clamp(a + n / 120.0, 0.0, 1.0)); }',
     });
     const pts = new THREE.Points(geo, mat);
     pts.frustumCulled = false; pts.name = 'QualmWolken';
