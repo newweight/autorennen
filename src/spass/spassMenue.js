@@ -65,7 +65,7 @@
   // ============================================================
   // Teil B: Modus-Karten „⭐ Kurz-Level“, „🗺️ Freie Fahrt“, „🏁 K.-o.-Rallye“ im Schritt „Modus“
   //   e.spassModus ('' | 'kurz' | 'frei' | 'ko') – nur im Arbeitsspeicher (nicht in den gespeicherten Einstellungen). Ein Klick/Enter auf eine normale Karte löscht ihn.
-  //   Pfeiltasten ←→ laufen jetzt über alle Karten: … Online → Kurz-Level → Freie Fahrt → K.-o.-Rallye → Allein.
+  //   Tasten: ←→ wie bisher über die vier Karten (+ Online); ↓ springt in die Spaß-Reihe (Kurz-Level), dort ←→ im Kreis, ↑ zurück zu „Allein“.
   //   Kurz-Level: Enter/Klick öffnet die Level-Übersicht (Fahrer/Fahrzeug wie zuletzt gewählt, „ändern“ führt zu Schritt 3).
   //   Freie Fahrt/K.-o.: weiter wie gewohnt (Strecke, Fahrer, Fahrzeug, Los!); im Schritt „Los!“ erklärt ein Hinweis, was gilt. Kurz-Level und Freie Fahrt nur allein.
   // ============================================================
@@ -146,19 +146,14 @@
   M.taste = function (code) {
     try {
       if (this.schritt === 0 && !R.SpassModi.offen()) {
-        const T = R.config.tasten, links = code === T.spieler[0].links || code === T.spieler[1].links, rechts = code === T.spieler[0].rechts || code === T.spieler[1].rechts;
-        if (links || rechts) {
-          const dx = rechts ? 1 : -1, art = this.e.spassModus || '';
-          if (art) {
-            const i = ARTEN.indexOf(art) + dx;
-            if (i < 0) this.modusKarte('online');
-            else if (i >= ARTEN.length) { this.modusKarte('solo'); }
-            else modusSetzen(this, ARTEN[i]);
-            this.aenderung();
-            return true;
-          }
-          if (this.onlineGewaehlt && dx > 0) { modusSetzen(this, 'kurz'); this.aenderung(); return true; }
+        const T = R.config.tasten, sp = T.spieler, art = this.e.spassModus || '';
+        const links = code === sp[0].links || code === sp[1].links, rechts = code === sp[0].rechts || code === sp[1].rechts;
+        const runter = code === sp[0].bremse || code === sp[1].bremse, hoch = code === sp[0].gas || code === sp[1].gas;
+        if (art && (links || rechts)) {                              // innerhalb der Spaß-Reihe im Kreis
+          modusSetzen(this, ARTEN[(ARTEN.indexOf(art) + (rechts ? 1 : ARTEN.length - 1)) % ARTEN.length]); this.aenderung(); return true;
         }
+        if (art && hoch) { this.modusKarte('solo'); this.aenderung(); return true; }      // ↑ zurück zu den normalen Karten
+        if (!art && runter) { modusSetzen(this, 'kurz'); this.aenderung(); return true; } // ↓ in die Spaß-Reihe
       }
     } catch (err) { console.error('Spaß S4 (Modus-Tasten):', err); }
     return taste.apply(this, arguments);
