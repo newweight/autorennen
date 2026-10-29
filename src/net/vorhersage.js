@@ -75,7 +75,7 @@
       const st0 = opt.strecke || {};
       this.kz = sv.kleber && R.Kleber && st0.kleber && st0.kleber.length ? R.Kleber.zustand() : null;
       this.az = sv.anlauf && R.Anlauf && ((st0.loopings && st0.loopings.length) || (st0.schanzen && st0.schanzen.length)) ? R.Anlauf.zustand() : null;
-      this.fz = sv.flug && R.Schanzen && ((st0.schanzen && st0.schanzen.length) || (st0.spass && (st0.spass.liste.length || (st0.spass.tore && st0.spass.tore.length))) || (st0.katalog && st0.katalog.huepfer)) ? R.Schanzen.zustand() : null;   // S5: auch Tore/Hüpfer (Mond)
+      this.fz = sv.flug && R.Schanzen && ((st0.schanzen && st0.schanzen.length) || (st0.spass && (st0.spass.liste.length || (st0.spass.tore && st0.spass.tore.length) || st0.spass.zauber)) || (st0.katalog && st0.katalog.huepfer)) ? R.Schanzen.zustand() : null;   // S5: auch Tore/Hüpfer (Mond)
       this.lp = sv.looping && R.Looping && st0.loopings && st0.loopings.length ? R.Looping.zustand() : null;
       this.svAn = !!(this.kz || this.az || this.fz || this.lp);
       if (this.az) R.Anlauf.stellen(opt.strecke);           // Anlauf-Stellen einmal vorab berechnen (Mindest-Anlauf, ein paar ms) – nicht erst mitten im Rennen
@@ -180,6 +180,8 @@
       if (fz && st.spass && R.Spass && !fz.aktiv && R.Spass.nachSchritt(fz, v, st, n, xAlt, zAlt, dt) === 'kanone') this.sonder = true;
       // S5: Hüpfer (Mond) und Teleport-Tore (src/spass/spassWelten.js, wie im Server); der Teleport schreibt nur den Ort um – die Rennleitung rechnet allein der Server
       if (fz && R.SpassWelten && !fz.aktiv) R.SpassWelten.nachSchritt(fz, v, st, n, xAlt, zAlt, dt);
+      // S6: Magnet-Röhre, Schlucht-Gleiten, Schiene/Wand, Halfpipe (src/spass/spassZauber.js, wie im Server; Extras/Riese/Mini rechnet nur der Server)
+      if (fz && R.SpassZauber && st.spass && st.spass.zauber) R.SpassZauber.nachSchritt(fz, v, st, n, xAlt, zAlt, dt);
       if (lp) {
         const pt = st.spline.punktBei(n.s), dx = v.x - xAlt, dz = v.z - zAlt;
         this._loopingErgebnis(R.Looping.einfahrt(lp, v, st, n.s, n.s + dx * pt.tx + dz * pt.tz, n.seitenabstand + dx * pt.nx + dz * pt.nz));

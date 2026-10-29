@@ -235,6 +235,7 @@
           tageszeit: e.tageszeit, kollisionen: e.kollisionen !== false, hindernisMenge: e.hindernisMenge, polizei: e.polizei === true,
           geisterfahrer: e.geisterfahrer === true, krankenwagen: e.krankenwagen === true, abschleppwagen: e.abschleppwagen === true, tiere: e.tiere !== false,      // v28 (W10): Tiere queren die Straße (Standard an)
           spass: e.spass !== false,      // S1 (additiv): Spaß-Elemente (Trampolin/Kanone) – Wert aus dem Menü des Gastgebers
+          zauber: !!(R.SpassZauber && R.SpassZauber.an()),   // S6: Fahr-Zauber (Menü „✨ Fahr-Zauber“)
           zufall: e.zufall !== false,      // Z1 (additiv): Zufällige Strecke – Münzen/Hindernisse jede Runde neu (Standard an; alter Server ignoriert das Feld)
           nurRennautos: R.carCatalog.nurRennautos(e, R.trackCatalog.find(t => t.id === e.streckeId)),      // v29 (F3): alle Computer-Gegner fahren den Formel-Renner (bei der Formel-1-Strecke Standard an)
           verkehr: e.krankenwagen === true || e.abschleppwagen === true ? 'wenig' : 'aus' } }, this.meineWahl());      // v25: Verkehr (additiv); v28 W1: Krankenwagen/Abschleppwagen je einzeln, `verkehr` nur noch abgeleitet für alte Server   // Stufe 2: zuletzt gewählt (Standard Geister)
@@ -790,6 +791,7 @@
         streckeId: e.streckeId, welt: e.welt, variante: e.variante, jahreszeit: e.jahreszeit, wetter: e.wetter, windStaerke: e.windStaerke,
         windRichtung: e.windRichtung, tageszeit: e.tageszeit, hindernisMenge: e.hindernisMenge, tempoKlasse: e.tempoKlasse, runden: e.runden, gegner: e.gegner,
         spass: e.spass === true,    // S1: Trampolin/Kanone wie im Server (fehlt = aus)
+        zauber: e.zauber === true,  // S6: Fahr-Zauber wie im Server (fehlt = aus)
         wetterSeed: m.wetterSeed,   // v22: Megastrecke – gleicher Seed wie der Server → gleiche Zonen
         schaden: false, tiere: e.tiere === true, polizei: e.polizei === true, geisterfahrer: e.geisterfahrer === true, krankenwagen: R.Verkehr.ausEinstellung(e).krankenwagen, abschleppwagen: R.Verkehr.ausEinstellung(e).abschleppwagen, verkehr: e.krankenwagen === true || e.abschleppwagen === true || e.verkehr === 'wenig' || e.verkehr === 'viel' ? 'wenig' : 'aus', rempeln: 'sanft', modus: 'solo', spielart: 'rennen',
       });

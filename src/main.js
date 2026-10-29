@@ -348,7 +348,8 @@
       // Z1: Zufällige Strecke – Seed nur im Rennen (streckeAufbauen/online setzt _zufallSeed; Menühintergrund: keiner), wird hier verbraucht
       const zufallOpt = R.ZufallSpiel ? R.ZufallSpiel.opt(this, daten) : undefined;
       const sOpt = zufallOpt ? { welt, variante, hindernisMenge: e.hindernisMenge, zufall: zufallOpt } : { welt, variante, hindernisMenge: e.hindernisMenge };
-      if (e.spass !== false && R.Spass) sOpt.spass = true;      // S1: Trampolin/Kanone (Menü „Spaß-Elemente“, Standard an; aus = keine Option = bitgleich wie vorher)
+      if (e.spass !== false && R.Spass) { sOpt.spass = true; if (R.SpassZauber && R.SpassZauber.an()) sOpt.zauber = true; }   // S6: Fahr-Zauber (Menü „✨ Fahr-Zauber“, Standard an)
+      // S1: Trampolin/Kanone (Menü „Spaß-Elemente“, Standard an; aus = keine Option = bitgleich wie vorher)
       const strecke = new R.Strecke(daten, sOpt);
       this.strecke = strecke;
       strecke.tempoKlasse = e.tempoKlasse || this.tempoKlasse;   // 14.10. (v20): Kurvenschilder (world/schilder.js) beschriften je Tempo-Klasse

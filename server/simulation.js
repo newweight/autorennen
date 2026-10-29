@@ -31,6 +31,7 @@ const MODULE = [
   'src/world/themenS5.js',      // S5: Themen Mond/Ozean/Regenbogen (nach themes/wetter)
   'src/main.js', 'src/spass/spassPhysik.js',      // S1: Trampolin/Kanone (Add-on, nach main.js)
   'src/spass/spassWelten.js',                     // S5: Hüpfer, Teleport-Tore, Grip je Strecke (Add-on, nach spassPhysik)
+  'src/spass/spassZauber.js',                     // S6: Magnet-Röhre, Schlucht-Gleiten, Grinden/Wallride, Halfpipe, Riese/Mini (Add-on, nach spassWelten)
 ];
 
 /** Kleiner Ersatz für document.createElement('canvas') (Texturen der Deko werden im Server nie gezeichnet). */
@@ -102,7 +103,7 @@ let RM = null;
 function ladenMoto() {
   if (RM) return RM;
   const bisMega = MODULE.indexOf('src/world/themenS5.js');   // S5: Themen-Add-on gehört dazu
-  const liste = MODULE.slice(0, bisMega + 1).concat(MOTO_VOR, ['src/main.js', 'src/spass/spassPhysik.js', 'src/spass/spassWelten.js'], MOTO_NACH);
+  const liste = MODULE.slice(0, bisMega + 1).concat(MOTO_VOR, ['src/main.js', 'src/spass/spassPhysik.js', 'src/spass/spassWelten.js', 'src/spass/spassZauber.js'], MOTO_NACH);
   RM = kontextLaden(liste, { MOTORRAD: true });
   return kollisionsHuelle(RM);
 }
@@ -152,6 +153,8 @@ function einstellungenPruefen(roh, spielerAnzahl, moto) {
     zufall: r.zufall === true,
     // S1 (additiv): Spaß-Elemente (Trampolin/Kanone, src/spass); nur ein echtes true schaltet ein (alter Browser sendet das Feld nicht → feste alte Strecke)
     spass: r.spass === true,
+    // S6 (additiv): Fahr-Zauber (src/spass/spassZauber.js: Magnet-Röhre, Schlucht, Schienen/Wände, Halfpipe, Riese/Mini); nur ein echtes true schaltet ein (setzt spass voraus)
+    zauber: r.zauber === true,
     // S2 (additiv): Tuning mit Goldstücken (src/spass/spassTuning.js) wirkt nur, wenn der Raum es erlaubt (Lobby-Schalter, Standard AUS = fair); nur ein echtes true schaltet ein
     tuning: r.tuning === true,
     // 12.10. Hindernis-Menge: nur 'normal' | 'viele' | 'sehrViele' (unbekannt, Zahl, null … → 'normal'); alle Browser bauen dieselbe Strecke
@@ -186,7 +189,7 @@ class Simulation {
     this.zufallSeed = e.zufall === true && R.Zufall ? R.Zufall.hash32(seed, 0x5a31, 1, 7) : null;
     const sOpt = { welt, variante: e.variante, hindernisMenge: e.hindernisMenge };
     if (this.zufallSeed !== null) sOpt.zufall = { seed: this.zufallSeed };
-    if (e.spass === true) sOpt.spass = true;
+    if (e.spass === true) { sOpt.spass = true; if (e.zauber === true) sOpt.zauber = true; }
     const strecke = new R.Strecke(daten, sOpt);
     // Wetter auflösen (Zufall nur hier, mit Seed) → konkrete Werte gehen an alle Browser (gleiche Umwelt-Physik)
     const wa = R.Wetter.aufloesen({ jahreszeit: e.jahreszeit, wetter: e.wetter, wind: { staerke: e.windStaerke, richtung: 'zufall' },
