@@ -158,6 +158,7 @@
     start(spiel) {
       const st = spiel.strecke, r = spiel.rennen, sp = spielName(), id = (st.daten && st.daten.id) || st.id;
       r.runden = 99;
+      if (typeof document !== 'undefined') { M.stil(); document.body.classList.add('s4-frei'); }   // S5 (Teil A): „Runde 1/99“ im HUD ausblenden
       const liste = plan(st);
       const texFrage = textur('❓', '#ffcf3a', '#e07b00'), texHaken = textur('✔', '#49d36b', '#1c8a3e');
       const gruppe = new THREE.Group(); gruppe.name = 'S4Frei';
@@ -239,6 +240,7 @@
       M.hud(`🗺️ <b>Freie Fahrt</b> · ❓ Gefunden <b>${gef}/${z.liste.length}</b> · 🪙 ${z.gesamtGold} verdient${zeile}`);
     },
     aufraeumen(spiel) {
+      if (typeof document !== 'undefined') document.body.classList.remove('s4-frei');
       const z = spiel.s4 && spiel.s4.frei;
       if (!z) return;
       aufgabeWeg(z);

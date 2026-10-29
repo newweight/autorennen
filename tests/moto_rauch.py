@@ -2,7 +2,7 @@
 """Browser-Rauchtest Motorrad-Modus (Stufe M1).
 Aufruf: python3 tests/moto_rauch.py
 Startet einen kleinen lokalen http-Server (Repo-Wurzel), lädt Motorrad.html und prüft:
-  - Menü: nur Crossmaschinen wählbar, keine Online-Karte, Zeilen Schaden/Verkehr ausgeblendet, Fahrzeugwahl-Bild
+  - Menü: alle 8 Motorräder wählbar (4 Crossmaschinen + Superbike/Roller/Chopper/Quad seit M3), Online-Karte vorhanden (seit M4), Zeilen Schaden/Verkehr ausgeblendet, Fahrzeugwahl-Bild
   - Rennen Solo mit 3 KI auf der Wiese (Spieler per Autopilot), ~15 s Echtzeit: keine JS-Fehler, keine NaN,
     Schräglage folgt der Kurvenrichtung (Vorzeichen), Bild „Kurve von hinten“
   - erzwungener Purzelbaum (Bild), danach wieder aufrecht
@@ -42,7 +42,9 @@ try:
           ids: R.spiel.einstellungen.autoIds, schaden: R.spiel.einstellungen.schaden, kr: R.spiel.einstellungen.krankenwagen,
           ab: R.spiel.einstellungen.abschleppwagen, gf: R.spiel.einstellungen.geisterfahrer }; }''')
         pruefe('Motorrad-Modus aktiv, Titel „Motorrad-Rennen“', info['moto'] and info['titel'] == 'Motorrad-Rennen')
-        pruefe('nur 4 Crossmaschinen wählbar', len(info['wb']) == 4 and all(i.startswith('crossmaschine') for i in info['wb']), ','.join(info['wb']))
+        # M3 (28.10.): Superbike/Roller/Chopper/Quad dazu → 8 Motorräder, alle Motorrad-Typen, keine Autos
+        MOTOS = ['crossmaschine', 'crossmaschine-rot', 'crossmaschine-blau', 'crossmaschine-gruen', 'superbike', 'roller', 'chopper', 'quad']
+        pruefe('8 Motorräder wählbar (4 Cross + Superbike, Roller, Chopper, Quad), keine Autos', sorted(info['wb']) == sorted(MOTOS), ','.join(info['wb']))
         pruefe('Haken gesetzt (R.dach.frame, Spiel.physikSchritt)', info['haken'] == ['R.dach.frame', 'Spiel.physikSchritt'], info['haken'])
         pruefe('Voreinstellungen: Schaden, Krankenwagen, Abschleppwagen, Geisterfahrer aus', not (info['schaden'] or info['kr'] or info['ab'] or info['gf']))
         pruefe('Autowahl zeigt auf Crossmaschinen (nicht mehr Standard-Autos)', all(i.startswith('crossmaschine') for i in info['ids']), info['ids'])
@@ -51,7 +53,7 @@ try:
         # Menü: Modus-Schritt (Online-Karte weg), Fahrzeugwahl-Schritt (Bild)
         page.evaluate('() => Rennspiel.spiel.menue.zeigen(0)'); page.wait_for_timeout(500)
         online = page.evaluate("() => !!document.querySelector('.online-karte')")
-        pruefe('Menü: Online-Karte ausgeblendet', not online)
+        pruefe('Menü: Online-Karte vorhanden (seit M4: Motorrad-Räume)', online)
         page.evaluate('() => Rennspiel.spiel.menue.zeigen(4)'); page.wait_for_timeout(500)
         sichtbar = page.evaluate('''() => ['schaden', 'geister', 'krankenwagen', 'abschleppwagen'].map(k => { const e = document.querySelector('[data-a^="wert:' + k + ':"]'); return e ? !!e.offsetParent : false; })''')
         pruefe('Menü: Zeilen Schaden und Verkehr (Geister/Kranken-/Abschleppwagen) ausgeblendet', not any(sichtbar), sichtbar)

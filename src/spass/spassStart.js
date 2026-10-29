@@ -47,7 +47,7 @@
     s.id = 'spass-stil';
     s.textContent = '.spass-toast{position:fixed;left:50%;top:14%;transform:translateX(-50%) scale(.6);z-index:300;pointer-events:none;opacity:0;background:linear-gradient(#fff6c8,#ffd23a);color:#2a2f6b;' +
       'border:.18em solid #fff;border-radius:1.2em;padding:.5em 1.1em;text-align:center;font:900 clamp(18px,3.2vh,32px)/1.15 Arial,sans-serif;box-shadow:0 .3em 1em rgba(0,0,0,.45);transition:all .35s cubic-bezier(.2,1.6,.4,1)}' +
-      '.spass-toast.an{opacity:1;transform:translateX(-50%) scale(1)}.spass-toast b{display:block;font-size:2.4em;line-height:1.1}.spass-toast small{display:block;font-weight:800;opacity:.8}';
+      '.spass-toast.an{opacity:1;transform:translateX(-50%) scale(1)}.spass-toast.unten{top:auto;bottom:2.5%;font-size:clamp(12px,2vh,20px)}.spass-toast.unten b{font-size:1.5em}.spass-toast b{display:block;font-size:2.4em;line-height:1.1}.spass-toast small{display:block;font-weight:800;opacity:.8}';
     document.head.appendChild(s);
   }
   function toastZeigen(st) {
@@ -58,7 +58,9 @@
       const n = toasts.shift();
       if (!n) { toastLaeuft = false; return; }
       const d = document.createElement('div');
-      d.className = 'spass-toast';
+      // S5 (Teil A): liegt gerade die Ergebnis-/Pause-Karte in der Mitte, kommt der Hinweis klein nach unten (überdeckte sie vorher)
+      const karteDa = Array.prototype.some.call(document.querySelectorAll('.ergebnis,.pause-karte'), (x) => x.getClientRects().length > 0 && getComputedStyle(x).visibility !== 'hidden');
+      d.className = 'spass-toast' + (karteDa ? ' unten' : '');
       d.innerHTML = `<small>Neuer Sticker! 🎉</small><b>${n.emoji}</b>${n.name}`;
       document.body.appendChild(d);
       setTimeout(() => d.classList.add('an'), 30);

@@ -37,6 +37,7 @@
     s.textContent =
       '#s4-hud{position:fixed;left:50%;top:1.2vh;transform:translateX(-50%);z-index:120;pointer-events:none;text-align:center;font:900 clamp(15px,2.5vh,26px)/1.2 Arial,sans-serif;color:#fff;' +
       'background:rgba(14,24,58,.72);border:.12em solid rgba(255,255,255,.5);border-radius:1em;padding:.2em .8em;text-shadow:0 .08em .15em rgba(0,0,0,.6);max-width:92vw;white-space:nowrap;display:none}' +
+      '.s4-frei .hud-runde{display:none!important}' +
       '#s4-hud small{display:block;font-size:.72em;font-weight:800;opacity:.92}#s4-hud b{color:#ffd23a}#s4-hud .gut{color:#7dff9a}#s4-hud .rot{color:#ff9a8a}' +
       '.s4-fenster{position:fixed;inset:0;z-index:260;display:flex;align-items:center;justify-content:center;background:rgba(10,20,50,.74);color:#fff;font:800 clamp(15px,2.4vh,26px)/1.25 Arial,sans-serif;padding:2vh 3vw;box-sizing:border-box}' +
       '.s4-karte{background:linear-gradient(#27346e,#18214a);border:.15em solid #fff;border-radius:1.2em;padding:.9em 1.4em;text-align:center;max-width:min(94vw,44em);max-height:94vh;overflow:auto;box-shadow:0 .4em 1.4em rgba(0,0,0,.55)}' +
