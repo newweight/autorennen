@@ -318,9 +318,10 @@
   function stil() {
     if (document.getElementById('g1-stil')) return;
     const s = document.createElement('style'); s.id = 'g1-stil';
-    s.textContent = '.knopf.g1-gross{flex:0 0 auto;white-space:nowrap;background:var(--gelb,#ffd23a);color:#1a2550;border:.15em solid #fff;font-size:1em;padding:.35em 1em;box-shadow:0 .15em .5em rgba(0,0,0,.5);pointer-events:auto;cursor:pointer}' +
+    s.textContent = '.knopf.g1-gross{flex:0 0 auto;white-space:nowrap;background:var(--gelb,#ffd23a);color:#1a2550;border:.15em solid #fff;font-size:.8em;padding:.3em .75em;box-shadow:0 .15em .5em rgba(0,0,0,.5);pointer-events:auto;cursor:pointer}' +
       '.knopf.g1-gross:hover{background:#fff}' +
-      '.m-fuss{flex-wrap:wrap}.m-fuss .m-hinweis{flex:1 1 auto}' +
+      '.m-fuss{flex-wrap:wrap}.m-fuss .m-hinweis{flex:0 1 auto;font-size:.75em}' +
+      '@media (max-width:1200px){.m-fuss .m-hinweis{display:none}}' +
       '@media (max-width:900px),(max-height:520px){.knopf.g1-gross{font-size:max(15px,.85em);padding:.4em .9em}}';
     document.head.appendChild(s);
   }
