@@ -276,7 +276,7 @@
     } else {
       const box = u.zBox || new THREE.Box3(new THREE.Vector3(-0.9, 0, -2.2), new THREE.Vector3(0.9, 1.4, 2.2));
       if (w.pet) {
-        const kb = add(korbGruppe(box)); const tm = new THREE.Group(); const tmesh = tierMesh(w.pet).clone(); tm.add(tmesh); tm.scale.setScalar(0.8); tm.position.copy(kb.position).add(kb.userData.sitz.clone().multiplyScalar(1)); add(tm);
+        const kb = add(korbGruppe(box)); kb.scale.setScalar(1.4); const tm = new THREE.Group(); const tmesh = tierMesh(w.pet).clone(); tm.add(tmesh); tm.scale.setScalar(1.25); tm.position.copy(kb.position).add(kb.userData.sitz.clone().multiplyScalar(1.4)); add(tm);   // S8: Tier und Korb größer (vorher 0,8 / 1,0)
         F.pet = tm; F.petBasis = tm.position.y;
       }
       if (w.kost) {

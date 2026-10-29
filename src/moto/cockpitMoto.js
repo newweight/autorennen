@@ -55,7 +55,7 @@ window.Rennspiel = window.Rennspiel || {};
       spiegelX: 0.115,                // Spiegel-Mitte: Abstand vom Lenker-Bildrand (Anteil Bildbreite)
       spiegelOben: 0.08,              // Spiegel-Mitte liegt so viel (Anteil Bildhöhe) ÜBER der Oberkante des Lenker-Bildes
       spiegelB: 0.205, spiegelH: 0.44, // Spiegelgröße (Anteil Lenker-Bildbreite / -höhe) – oval
-      spiegelXZwei: 0.165, spiegelBZwei: 0.31, spiegelHZwei: 0.60,   // Zweispieler (halbe Bildbreite): Spiegel größer und etwas weiter innen, damit man die Gegner erkennt
+      spiegelXZwei: 0.21, spiegelBZwei: 0.29, spiegelHZwei: 0.60,   // Zweispieler (halbe Bildbreite): Spiegel größer und etwas weiter innen, damit man die Gegner erkennt
     },
     spiegel: {
       winkel: 26,                     // Grad: so weit schaut jeder Spiegel von „genau hinten“ nach außen

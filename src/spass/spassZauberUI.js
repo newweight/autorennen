@@ -426,6 +426,24 @@
     } catch (err) { if (!R._zauberKamFehler) { R._zauberKamFehler = 1; console.error('Zauber UI (Kamera):', err); } }
   };
 
+  // S8: Mini-Modus – das Fahrzeug ist klein (Maßstab < 1), also rückt auch die Kamera heran (Abstand und Höhe über dem Fahrzeug im selben Maßstab, Blick tiefer)
+  if (R.FahrzeugKamera && R.FahrzeugKamera.prototype.update && !R.FahrzeugKamera.prototype._s8Mini) {
+    const kUpdate = R.FahrzeugKamera.prototype.update;
+    R.FahrzeugKamera.prototype._s8Mini = true;
+    R.FahrzeugKamera.prototype.update = function (dt) {
+      const r = kUpdate.apply(this, arguments);
+      try {
+        const f = this.quelle || this.ziel, sp = R.spiel, fz = f && sp && sp._fahrzeugVon ? sp._fahrzeugVon(this.ziel) : null, s = fz && fz._zSk;
+        if (s !== undefined && s < 0.999 && !(fz._zPose)) {
+          const kp = this.kamera.position, ty = f.y;
+          kp.x = f.x + (kp.x - f.x) * s; kp.y = ty + (kp.y - ty) * s; kp.z = f.z + (kp.z - f.z) * s;
+          if (this.modus !== 'cockpit') this.kamera.lookAt(this.blick.x, ty + (this.blick.y - ty) * s, this.blick.z);
+        }
+      } catch (err) { if (!R._zauberKamFehler) { R._zauberKamFehler = 1; console.error('Zauber UI (Mini-Kamera):', err); } }
+      return r;
+    };
+  }
+
   // ------------------------------------------------------------------ Ereignisse
   const spassEreignis = P.spassEreignis;
   P.spassEreignis = function (i, name) {

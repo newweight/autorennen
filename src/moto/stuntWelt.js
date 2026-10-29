@@ -265,6 +265,8 @@ window.Rennspiel = window.Rennspiel || {};
   /** Feuerring: Torus + 2 Flammenringe (Kegel nach außen) + Ständer. */
   function ringBauen(r, gruppe) {
     const rc = r.radius - 0.25, rg = new THREE.Group();
+    // S8: die Flammen drehen sich um den Ring – auch die unteren dürfen nie in die Fahrbahn ragen: längste Flamme höchstens bis 0,1 m über dem Boden (Alpen: kleiner Ring tief überm Hang)
+    const hKappe = typeof r.boden === 'number' ? (r.y - r.boden) - 0.1 - (rc + 0.15) : 99, hFaktor = Math.min(1, Math.max(0.3, hKappe / 1.5));
     rg.position.set(r.x, r.y, r.z);
     rg.rotation.y = headingY(r.tx, r.tz);                  // Lochachse (lokal z) entlang der Strecke
     const torus = new THREE.Mesh(new THREE.TorusGeometry(rc, 0.25, 8, 36), new THREE.MeshBasicMaterial({ color: 0xff5a10 }));
@@ -272,7 +274,7 @@ window.Rennspiel = window.Rennspiel || {};
     const flammen = (n, hMin, hMax, versatz, hex, opa) => {
       const s = sammler(), kegel = new THREE.ConeGeometry(0.2, 1, 5);
       for (let i = 0; i < n; i++) {
-        const w = versatz + i / n * Math.PI * 2, h = hMin + (hMax - hMin) * (0.5 + 0.5 * Math.sin(i * 2.3 + versatz * 5));
+        const w = versatz + i / n * Math.PI * 2, h = (hMin + (hMax - hMin) * (0.5 + 0.5 * Math.sin(i * 2.3 + versatz * 5))) * hFaktor;
         s.add(kegel, mat(Math.cos(w) * (rc + 0.15 + h / 2), Math.sin(w) * (rc + 0.15 + h / 2), 0, 0, 1, h, 1, 0, w - Math.PI / 2), hex);
       }
       kegel.dispose();
