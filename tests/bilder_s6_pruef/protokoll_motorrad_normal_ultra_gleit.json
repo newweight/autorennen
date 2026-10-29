@@ -1,0 +1,314 @@
+{
+ "motorrad_normal_gleit": {
+  "dateien": [
+   "motorrad_normal_gleit_1_vor.png",
+   "motorrad_normal_gleit_2_ab.png",
+   "motorrad_normal_gleit_3_flug.png",
+   "motorrad_normal_gleit_4_flug2.png",
+   "motorrad_normal_gleit_5_land.png"
+  ],
+  "log": [
+   {
+    "name": "vor",
+    "i": 30,
+    "s": 1775.02,
+    "q": -0.04,
+    "v": 30.0,
+    "y": 0.73,
+    "vy": 0,
+    "x": 738.08,
+    "z": 75.8,
+    "grind": false,
+    "wand": false,
+    "gleit": false,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "ab",
+    "i": 95,
+    "s": 1806.92,
+    "q": -0.27,
+    "v": 28.85,
+    "y": 1.41,
+    "vy": 7.87,
+    "x": 706.68,
+    "z": 75.9,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "flug",
+    "i": 121,
+    "s": 1819.42,
+    "q": -0.95,
+    "v": 28.85,
+    "y": 3.75,
+    "vy": 3.1,
+    "x": 694.3,
+    "z": 77.29,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "flug2",
+    "i": 146,
+    "s": 1826.64,
+    "q": -1.37,
+    "v": 28.85,
+    "y": 4.16,
+    "vy": 0.35,
+    "x": 687.4,
+    "z": 78.86,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "land",
+    "i": 181,
+    "s": 1834.82,
+    "q": -1.77,
+    "v": 28.85,
+    "y": 3.79,
+    "vy": -2.76,
+    "x": 679.84,
+    "z": 81.46,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   }
+  ],
+  "erst": {
+   "gleit": 91
+  },
+  "farbe": [
+   [
+    "vor",
+    0.0,
+    0.002
+   ],
+   [
+    "ab",
+    0.0,
+    0.149
+   ],
+   [
+    "flug",
+    0.0,
+    0.002
+   ],
+   [
+    "flug2",
+    0.002,
+    0.005
+   ],
+   [
+    "land",
+    0.002,
+    0.008
+   ]
+  ]
+ },
+ "motorrad_ultra_gleit": {
+  "dateien": [
+   "motorrad_ultra_gleit_1_vor.png",
+   "motorrad_ultra_gleit_2_ab.png",
+   "motorrad_ultra_gleit_3_flug.png",
+   "motorrad_ultra_gleit_4_flug2.png",
+   "motorrad_ultra_gleit_5_land.png"
+  ],
+  "log": [
+   {
+    "name": "vor",
+    "i": 30,
+    "s": 1775.02,
+    "q": -0.04,
+    "v": 30.0,
+    "y": 0.73,
+    "vy": 0,
+    "x": 738.08,
+    "z": 75.8,
+    "grind": false,
+    "wand": false,
+    "gleit": false,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "ab",
+    "i": 95,
+    "s": 1806.92,
+    "q": -0.27,
+    "v": 28.85,
+    "y": 1.41,
+    "vy": 7.87,
+    "x": 706.68,
+    "z": 75.9,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "flug",
+    "i": 121,
+    "s": 1819.42,
+    "q": -0.95,
+    "v": 28.85,
+    "y": 3.75,
+    "vy": 3.1,
+    "x": 694.3,
+    "z": 77.29,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "flug2",
+    "i": 146,
+    "s": 1826.64,
+    "q": -1.37,
+    "v": 28.85,
+    "y": 4.16,
+    "vy": 0.35,
+    "x": 687.4,
+    "z": 78.86,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "land",
+    "i": 181,
+    "s": 1834.82,
+    "q": -1.77,
+    "v": 28.85,
+    "y": 3.79,
+    "vy": -2.76,
+    "x": 679.84,
+    "z": 81.46,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   }
+  ],
+  "erst": {
+   "gleit": 91
+  },
+  "farbe": [
+   [
+    "vor",
+    0.0,
+    0.0
+   ],
+   [
+    "ab",
+    0.007,
+    0.0
+   ],
+   [
+    "flug",
+    0.0,
+    0.0
+   ],
+   [
+    "flug2",
+    0.002,
+    0.0
+   ],
+   [
+    "land",
+    0.004,
+    0.0
+   ]
+  ]
+ }
+}

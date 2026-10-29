@@ -1,0 +1,314 @@
+{
+ "autorennen_normal_gleit": {
+  "dateien": [
+   "autorennen_normal_gleit_1_vor.png",
+   "autorennen_normal_gleit_2_ab.png",
+   "autorennen_normal_gleit_3_flug.png",
+   "autorennen_normal_gleit_4_flug2.png",
+   "autorennen_normal_gleit_5_land.png"
+  ],
+  "log": [
+   {
+    "name": "vor",
+    "i": 30,
+    "s": 2735.03,
+    "q": 0,
+    "v": 30.06,
+    "y": -1.99,
+    "vy": 0,
+    "x": 40.04,
+    "z": 171.1,
+    "grind": false,
+    "wand": false,
+    "gleit": false,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "ab",
+    "i": 94,
+    "s": 2767.0,
+    "q": 0,
+    "v": 30.05,
+    "y": -1.42,
+    "vy": 8.22,
+    "x": 8.57,
+    "z": 171.1,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "flug",
+    "i": 120,
+    "s": 2780.02,
+    "q": -0.0,
+    "v": 30.05,
+    "y": 0.98,
+    "vy": 3.05,
+    "x": -4.45,
+    "z": 171.1,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "flug2",
+    "i": 145,
+    "s": 2787.54,
+    "q": -0.01,
+    "v": 30.05,
+    "y": 1.34,
+    "vy": 0.06,
+    "x": -11.96,
+    "z": 171.11,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "land",
+    "i": 180,
+    "s": 2796.05,
+    "q": -0.04,
+    "v": 30.05,
+    "y": 0.85,
+    "vy": -3.32,
+    "x": -20.47,
+    "z": 171.14,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   }
+  ],
+  "erst": {
+   "gleit": 90
+  },
+  "farbe": [
+   [
+    "vor",
+    0.0,
+    0.002
+   ],
+   [
+    "ab",
+    0.0,
+    0.028
+   ],
+   [
+    "flug",
+    0.0,
+    0.0
+   ],
+   [
+    "flug2",
+    0.001,
+    0.003
+   ],
+   [
+    "land",
+    0.001,
+    0.006
+   ]
+  ]
+ },
+ "autorennen_ultra_gleit": {
+  "dateien": [
+   "autorennen_ultra_gleit_1_vor.png",
+   "autorennen_ultra_gleit_2_ab.png",
+   "autorennen_ultra_gleit_3_flug.png",
+   "autorennen_ultra_gleit_4_flug2.png",
+   "autorennen_ultra_gleit_5_land.png"
+  ],
+  "log": [
+   {
+    "name": "vor",
+    "i": 30,
+    "s": 2735.03,
+    "q": 0,
+    "v": 30.06,
+    "y": -1.99,
+    "vy": 0,
+    "x": 40.04,
+    "z": 171.1,
+    "grind": false,
+    "wand": false,
+    "gleit": false,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "ab",
+    "i": 94,
+    "s": 2767.0,
+    "q": 0,
+    "v": 30.05,
+    "y": -1.42,
+    "vy": 8.22,
+    "x": 8.57,
+    "z": 171.1,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "flug",
+    "i": 120,
+    "s": 2780.02,
+    "q": -0.0,
+    "v": 30.05,
+    "y": 0.98,
+    "vy": 3.05,
+    "x": -4.45,
+    "z": 171.1,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "flug2",
+    "i": 145,
+    "s": 2787.54,
+    "q": -0.01,
+    "v": 30.05,
+    "y": 1.34,
+    "vy": 0.06,
+    "x": -11.96,
+    "z": 171.11,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   },
+   {
+    "name": "land",
+    "i": 180,
+    "s": 2796.05,
+    "q": -0.04,
+    "v": 30.05,
+    "y": 0.85,
+    "vy": -3.32,
+    "x": -20.47,
+    "z": 171.14,
+    "grind": false,
+    "wand": false,
+    "gleit": true,
+    "pipe": false,
+    "mag": false,
+    "luft": false,
+    "fall": false,
+    "riese": false,
+    "mini": false,
+    "groesse": 1,
+    "punkte": 0,
+    "hoch": 0
+   }
+  ],
+  "erst": {
+   "gleit": 90
+  },
+  "farbe": [
+   [
+    "vor",
+    0.001,
+    0.0
+   ],
+   [
+    "ab",
+    0.004,
+    0.0
+   ],
+   [
+    "flug",
+    0.0,
+    0.0
+   ],
+   [
+    "flug2",
+    0.001,
+    0.0
+   ],
+   [
+    "land",
+    0.003,
+    0.0
+   ]
+  ]
+ }
+}

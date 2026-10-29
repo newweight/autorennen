@@ -175,10 +175,13 @@
         for (let i = 0; i < NS; i++) { const a = b0 + i * W + NK, b = a + 2 > b0 + i * W + NK + 2 ? a + 1 : a + 1, c = a + W, d = c + 1; idx.push(a, b, c, b, d, c); }
       });
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
-      mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), 'HalfpipeBanken');
+      mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), 'HalfpipeBanken');   // S6-Prüfung: Offset – sonst überdeckt das gröbere Straßennetz die grauen Banken (Pipe sah wie schwarzer Hügel aus)
       const p0 = sp.punktBei(e.s0 - 6), y0 = grund(p0);
       const sm = new THREE.Mesh(new THREE.PlaneGeometry(9, 2.25), new THREE.MeshBasicMaterial({ map: schildTextur('HALFPIPE', '#ff6a10', '#fff', 66), side: THREE.DoubleSide }));
       sm.position.set(p0.x, y0 + 5.4, p0.z); sm.rotation.y = kopfwinkel(p0) + Math.PI; sm.name = 'HalfpipeSchild'; gruppe.add(sm);
+      // S6-Prüfung: zwei Pfosten, damit das Schild nicht in der Luft schwebt
+      const pm = new THREE.MeshLambertMaterial({ color: 0x555a63 });
+      [-1, 1].forEach((sg) => { const pf = new THREE.Mesh(new THREE.BoxGeometry(0.25, 5.4, 0.25), pm); pf.position.set(p0.x + p0.nx * sg * 4.3, y0 + 2.7, p0.z + p0.nz * sg * 4.3); pf.name = 'HalfpipePfosten'; gruppe.add(pf); });
     }
     // ---- Zauberkristalle
     gruppe.userData.extras = [];
@@ -266,7 +269,7 @@
   function fluegelNeu(mesh) {
     const gr = new THREE.Group(); gr.name = 'zFluegel'; gr.visible = false;
     const box = mesh.userData.zBox, hoehe = box ? box.max.y : 1.4, breit = box ? (box.max.x - box.min.x) : 1.9, lang = box ? (box.max.z - box.min.z) : 4.4;
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });   // S6-Prüfung: Basic statt Lambert – von unten gesehen war der Schirm sonst dunkelgrün/schwarz
     if (moto()) {
       const teile = [], N = 14, span = 7.5, chord = 2.4, hh = 4.6, farben = [0xe0262b, 0xffffff, 0x2a8bff, 0xffffff];
       const pos = [], col = [], idx = [], c = new THREE.Color();
@@ -286,9 +289,9 @@
     } else {
       const teile = [];
       [-1, 1].forEach((sg) => {
-        const w = new THREE.BoxGeometry(2.4, 0.07, 1.0); w.translate(sg * (breit / 2 + 1.2), hoehe * 0.75, lang * 0.02); w.rotateZ(0); teile.push({ geo: w, farbe: 0xffc21a });
-        const st = new THREE.BoxGeometry(2.4, 0.08, 0.25); st.translate(sg * (breit / 2 + 1.2), hoehe * 0.75 + 0.03, lang * 0.02 - 0.28); teile.push({ geo: st, farbe: 0xe0262b });
-        const tip = new THREE.BoxGeometry(0.1, 0.35, 1.0); tip.translate(sg * (breit / 2 + 2.4), hoehe * 0.75 + 0.15, lang * 0.02); teile.push({ geo: tip, farbe: 0xffffff });
+        const w = new THREE.BoxGeometry(2.4, 0.07, 1.0); w.translate(sg * (breit / 2 + 0.8), hoehe * 0.75, lang * 0.02); w.rotateZ(0); teile.push({ geo: w, farbe: 0xffc21a });
+        const st = new THREE.BoxGeometry(2.4, 0.08, 0.25); st.translate(sg * (breit / 2 + 0.8), hoehe * 0.75 + 0.03, lang * 0.02 - 0.28); teile.push({ geo: st, farbe: 0xe0262b });
+        const tip = new THREE.BoxGeometry(0.1, 0.35, 1.0); tip.translate(sg * (breit / 2 + 2.0), hoehe * 0.75 + 0.15, lang * 0.02); teile.push({ geo: tip, farbe: 0xffffff });
       });
       const fin = new THREE.BoxGeometry(0.08, 0.5, 0.7); fin.translate(0, hoehe + 0.2, -lang * 0.42); teile.push({ geo: fin, farbe: 0xe0262b });
       const mm = new THREE.Mesh(H.vereinen(teile), new THREE.MeshLambertMaterial({ vertexColors: true })); mm.frustumCulled = false; gr.add(mm);
