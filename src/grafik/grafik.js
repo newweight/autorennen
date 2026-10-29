@@ -313,27 +313,59 @@
   // ---------- Menü: kleiner Knopf neben „Ton“ ----------
   const M = R.Menue.prototype, mZeichnen = M.zeichnen;
   const knopfText = () => '✨ Grafik: ' + NAMEN[G.stufe];
+  // FIX2: zusätzlich großer gelber Knopf in der Fußleiste (in JEDEM Menü-Schritt sichtbar) und Knopf in der Pause (Esc).
+  const TITEL = 'Normal = wie bisher · Schön = Lack-Spiegelung, weiche Schatten · Ultra = zusätzlich Klarlack und Glühen (braucht eine schnelle Grafikkarte)';
+  function stil() {
+    if (document.getElementById('g1-stil')) return;
+    const s = document.createElement('style'); s.id = 'g1-stil';
+    s.textContent = '.knopf.g1-gross{flex:0 0 auto;white-space:nowrap;background:var(--gelb,#ffd23a);color:#1a2550;border:.15em solid #fff;font-size:1em;padding:.35em 1em;box-shadow:0 .15em .5em rgba(0,0,0,.5);pointer-events:auto;cursor:pointer}' +
+      '.knopf.g1-gross:hover{background:#fff}' +
+      '.m-fuss{flex-wrap:wrap}.m-fuss .m-hinweis{flex:1 1 auto}' +
+      '@media (max-width:900px),(max-height:520px){.knopf.g1-gross{font-size:max(15px,.85em);padding:.4em .9em}}';
+    document.head.appendChild(s);
+  }
+  function knopfBauen(klasse) {
+    const d = document.createElement('div');
+    d.className = klasse; d.setAttribute('data-g1', '1'); d.textContent = knopfText(); d.title = TITEL;
+    return d;
+  }
+  function klickBinden(wurzel) {
+    if (wurzel._g1Klick) return;
+    wurzel._g1Klick = true;
+    wurzel.addEventListener('click', (ev) => {
+      const t = ev.target.closest && ev.target.closest('[data-g1]');
+      if (!t) return;
+      ev.stopPropagation();
+      G.weiter();
+      document.querySelectorAll('[data-g1]').forEach((e) => { e.textContent = knopfText(); });
+    }, true);
+  }
   M.zeichnen = function () {
     const erg = mZeichnen.apply(this, arguments);
     try {
+      stil();
       const akt = this.wurzel.querySelector('.m-aktionen');
-      if (akt && !akt.querySelector('[data-g1]')) {
-        const d = document.createElement('div');
-        d.className = 'knopf klein ton'; d.setAttribute('data-g1', '1'); d.textContent = knopfText();
-        d.title = 'Normal = wie bisher · Schön = Lack-Spiegelung, weiche Schatten · Ultra = zusätzlich Klarlack und Glühen (braucht eine schnelle Grafikkarte)';
-        akt.appendChild(d);
+      if (akt && !akt.querySelector('[data-g1]')) akt.appendChild(knopfBauen('knopf klein ton'));
+      const fuss = this.wurzel.querySelector('.m-fuss');
+      if (fuss && !fuss.querySelector('[data-g1]')) {
+        const nav = fuss.querySelector('.m-nav');
+        fuss.insertBefore(knopfBauen('knopf g1-gross'), nav ? nav.nextSibling : fuss.firstChild);
       }
-      if (!this.wurzel._g1Klick) {
-        this.wurzel._g1Klick = true;
-        this.wurzel.addEventListener('click', (ev) => {
-          const t = ev.target.closest && ev.target.closest('[data-g1]');
-          if (!t) return;
-          ev.stopPropagation();
-          G.weiter();
-          this.wurzel.querySelectorAll('[data-g1]').forEach((e) => { e.textContent = knopfText(); });
-        }, true);
-      }
+      klickBinden(this.wurzel);
     } catch (e) { /* nur Optik */ }
     return erg;
   };
+  if (R.PauseAnzeige) {
+    const P = R.PauseAnzeige.prototype, pZeichnen = P.zeichnen;
+    P.zeichnen = function () {
+      const erg = pZeichnen.apply(this, arguments);
+      try {
+        stil();
+        const karte = this.wurzel.querySelector('.pause-karte');
+        if (karte && !karte.querySelector('[data-g1]')) karte.appendChild(knopfBauen('knopf blau'));
+        klickBinden(this.wurzel);
+      } catch (e) { /* nur Optik */ }
+      return erg;
+    };
+  }
 })();
