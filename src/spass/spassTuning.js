@@ -278,9 +278,9 @@
       }
       if (sb.bremsen) { // Heckspoiler: sitzt auf der Karosserie am Heck (Lage je Modell aus dem Heckprofil), Flügel auf zwei Stützen, rot (Stufe 5: gold)
         const fl = s.bremsen >= C().max ? FARBE.gold : FARBE.rot, z0 = zMax - 0.17, hp = heckProfil(mesh, inv, z0) || { y: yMax * 0.72, halb: breite * 0.4 };
-        const yf = hp.y, breiteF = Math.max(0.7, Math.min(hp.halb * 2 * 0.92, breite * 0.8)), yw = yf + 0.15;
+        const yf = hp.y, breiteF = Math.max(0.7, Math.min(hp.halb * 2 * 0.92, breite * 0.8)), yw = yf + 0.10;
         teile.push(kasten(breiteF, 0.045, 0.30, mat4(0, yw, z0 + 0.01, -0.12), fl));                        // Flügel (hinten leicht hoch)
-        [-1, 1].forEach((sg) => teile.push(kasten(0.05, 0.19, 0.08, mat4(sg * breiteF * 0.34, yf + 0.065, z0 - 0.03), fl)));
+        [-1, 1].forEach((sg) => teile.push(kasten(0.05, 0.14, 0.08, mat4(sg * breiteF * 0.34, yf + 0.04, z0 - 0.03), fl)));
         if (s.bremsen >= 4) [-1, 1].forEach((sg) => teile.push(kasten(0.03, 0.12, 0.32, mat4(sg * (breiteF / 2 + 0.01), yw + 0.03, z0 + 0.01), fl)));
       }
     }

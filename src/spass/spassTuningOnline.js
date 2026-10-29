@@ -23,6 +23,22 @@
     return w;
   };
 
+  // S3: Zeile „Tuning“ auch per Tastatur (↑↓ Zeile, ←→ Wert): hinten an die Host-Zeilen angehängt (bestehende Fokus-Nummern bleiben)
+  const zeilen = B.zeilen;
+  B.zeilen = function () {
+    const z = zeilen.apply(this, arguments);
+    if (this.istHost && z.indexOf('tuning') < 0) z.push('tuning');
+    return z;
+  };
+  const werte = B.werte;
+  B.werte = function (zeile) {
+    if (zeile === 'tuning') {
+      const an = !!(this.lobby && this.lobby.einstellungen && this.lobby.einstellungen.tuning === true);
+      return { wert: an ? 'an' : 'aus', liste: [{ k: 'aus', text: 'Aus' }, { k: 'an', text: '🔧 An' }] };
+    }
+    return werte.apply(this, arguments);
+  };
+
   const wertSetzen = B.wertSetzen;
   B.wertSetzen = function (zeile, k) {
     if (zeile === 'tuning') {
@@ -39,7 +55,8 @@
     try {
       const an = !!(this.lobby && this.lobby.einstellungen && this.lobby.einstellungen.tuning === true);
       if (this.istHost) {
-        const zeile = `<div class="on-zeile"><div class="on-label">🔧 Tuning</div><div class="on-werte">` +
+        const fi = this.zeilen().indexOf('tuning');
+        const zeile = `<div class="on-zeile${fi === this.fokus ? ' fokus' : ''}" data-a="fokus:${fi}"><div class="on-label">🔧 Tuning</div><div class="on-werte">` +
           `<span class="pille${an ? '' : ' aktiv'}" data-a="wert:tuning:aus" title="Aus: alle fahren mit denselben Werten (fair)">Aus</span>` +
           `<span class="pille${an ? ' aktiv' : ''}" data-a="wert:tuning:an" title="An: das Tuning aus der Garage zählt, auch für die Computer-Gegner">🔧 An</span></div></div>`;
         h = h.replace('<div class="on-fest">', zeile + '<div class="on-fest">');
