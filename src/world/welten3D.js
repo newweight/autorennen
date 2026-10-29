@@ -13,6 +13,8 @@
   const stufe = () => (R.Grafik && R.Grafik.stufe) || 'normal';
   const je = (a, b, c) => (stufe() === 'ultra' ? c : stufe() === 'schoen' ? b : a);
   const jetzt = () => performance.now() / 1000;
+  /** Das eigene Fahrzeug (online: nicht unbedingt Nr. 0). */
+  const ich = (sp) => (sp.fahrzeuge && (sp.fahrzeuge.find((f) => f && f.istSpieler) || sp.fahrzeuge[0])) || null;
 
   function loesen(g) {
     if (!g) return;
@@ -78,12 +80,12 @@
     // Erde
     const dir = new THREE.Vector3(0.55, 0.36, -0.75).normalize();
     const erde = new THREE.Mesh(new THREE.SphereGeometry(60, je(20, 28, 40), je(14, 20, 28)),
-      new THREE.MeshBasicMaterial({ map: erdeTextur(rnd, je(128, 256, 512)), fog: false, depthWrite: false }));
+      new THREE.MeshBasicMaterial({ map: erdeTextur(rnd, je(128, 256, 512)), color: 0xd8d8d8, fog: false, depthWrite: false, toneMapped: false }));
     erde.position.copy(dir).multiplyScalar(620); erde.rotation.set(0.35, 1.2, 0.4); erde.renderOrder = -2; erde.name = 'MondErde';
     erde.frustumCulled = false;
     kuppel.add(erde);
     if (stufe() === 'ultra') {
-      const sch = new THREE.Sprite(new THREE.SpriteMaterial({ map: scheinTextur(), blending: THREE.AdditiveBlending, fog: false, depthWrite: false, transparent: true }));
+      const sch = new THREE.Sprite(new THREE.SpriteMaterial({ map: scheinTextur(), blending: THREE.AdditiveBlending, fog: false, depthWrite: false, transparent: true, toneMapped: false, opacity: 0.6 }));
       sch.scale.set(210, 210, 1); sch.position.copy(erde.position); sch.renderOrder = -2.5; sch.name = 'MondErdeSchein';
       kuppel.add(sch);
     }
@@ -108,7 +110,7 @@
     };
     st.staub = staubStoss;
     st.update.push((dt, sp) => {
-      const f0 = sp.fahrzeuge && sp.fahrzeuge[0], vh = f0 && f0.vehicle;
+      const f0 = ich(sp), vh = f0 && f0.vehicle;
       if (vh) {
         kuppel.position.set(vh.x, vh.y, vh.z);
         // Fahrtstaub: bei Tempo am Boden ein paar Teilchen hinter dem Fahrzeug (nur eigenes Fahrzeug)
@@ -286,7 +288,7 @@
     m.frustumCulled = false; m.name = 'Blasen'; w.add(m);
     let erst = true;
     st.update.push((dt, sp) => {
-      const f0 = sp.fahrzeuge && sp.fahrzeuge[0], v = f0 && f0.vehicle; if (!v) return;
+      const f0 = ich(sp), v = f0 && f0.vehicle; if (!v) return;
       for (let i = 0; i < N; i++) {
         let y = pp[3 * i + 1] + tempo[i] * dt, dx = pp[3 * i] - v.x, dz = pp[3 * i + 2] - v.z;
         if (erst || y > v.y + 18 || dx * dx + dz * dz > 2500) {

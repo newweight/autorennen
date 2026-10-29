@@ -26,6 +26,7 @@ ANSICHTEN = {
     'unterwasser': [('draussen', 150, 25), ('tunnel', 620, 30), ('tunnel2', 1600, 30)],
     'regenbogenland': [('fahrt', 300, 30), ('tor', 'tor', 25)],
     'dino': [('begleiter', 500, 35)],
+    'wiese': [('spur', 600, 32)],
 }
 SEED = "(() => { let a = 123456789; Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; })();"
 
@@ -74,10 +75,10 @@ def lauf(p, spiel, strecke, stufe, ansichten, extra=''):
 
 with sync_playwright() as p:
     for spiel in SPIELE:
-        for strecke in ['mond', 'unterwasser', 'regenbogenland', 'dino']:
+        for strecke in ['mond', 'unterwasser', 'regenbogenland', 'dino'] + (['wiese'] if nur == 'wiese' else []):
             if nur and strecke != nur: continue
             for stufe in STUFEN:
-                extra = "localStorage.setItem('rennspiel.spass.welten." + ('motorrad' if spiel == 'Motorrad' else 'auto') + "', JSON.stringify({spur:" + ('true' if stufe == 'ultra' else 'false') + ",dino:'dino'}));" if True else ''
+                extra = "localStorage.setItem('rennspiel.spass.welten." + ('motorrad' if spiel == 'Motorrad' else 'auto') + "', JSON.stringify({spur:" + ('true' if stufe == 'ultra' or strecke == 'wiese' else 'false') + ",dino:'dino'}));" if True else ''
                 info, erg, fehler = lauf(p, spiel, strecke, stufe, ANSICHTEN[strecke], extra)
                 tag = f'{spiel} {strecke} {stufe}'
                 pruefe(f'{tag}: keine Konsolenfehler', not fehler, fehler[:3])

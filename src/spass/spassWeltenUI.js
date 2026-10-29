@@ -201,7 +201,7 @@
   }
   const dinoAktivFuer = (strecke) => { const m = einst().dino; return m === 'immer' || (m === 'dino' && strecke && strecke.id === 'dino'); };
   function dinoSchritt(sp, D, dt) {
-    const f = sp.fahrzeuge[0], v = f && f.vehicle, st = sp.strecke;
+    const f = (sp.fahrzeuge.find((x) => x && x.istSpieler) || sp.fahrzeuge[0]), v = f && f.vehicle, st = sp.strecke;
     const laeuft = !!(v && st && (sp.zustand === 'rennen' || sp.zustand === 'ergebnis'));
     if (!laeuft) { D.gruppe.visible = false; D.beine.visible = false; return; }
     const spl = st.spline, sNah = f.nah && f.nah.s !== undefined ? f.nah.s : spl.naechster(v.x, v.z).s;
