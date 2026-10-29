@@ -164,7 +164,7 @@
    */
   function flugSchritt(fz, vehicle, strecke, steuerung, dt) {
     if (!fz || !fz.aktiv) return null;
-    const c = C(), s = steuerung || {}, g = wert(c.g, 9.81);
+    const c = C(), s = steuerung || {}, gk = strecke && strecke.katalog && strecke.katalog.schwerkraft, g = gk > 0 ? wert(c.g, 9.81) * gk : wert(c.g, 9.81);   // S5: Schwerkraft je Strecke (Mond 0,35); ohne Feld unverändert
     fz.t += dt; fz.yVorher = fz.y; fz.nickenVorher = fz.nicken;
     // Lenkung (gedrosselt): Lenkwert glätten wie vehicle.js, Drehrate × flugLenkung
     const zielL = klemme(s.lenkung || 0, -1, 1);

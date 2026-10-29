@@ -75,6 +75,7 @@
     const kat = st.katalog || st.daten || {};
     (kat.meteoriten || []).forEach((e) => punkt(e.s, 70, 50));
     (kat.motoZonen || []).forEach((e) => zone(e.s0, e.s1, 25, 25));
+    (kat.glasTunnel || []).forEach((e) => zone(e.s0, e.s1, 30, 30));      // S5: Unterwasser-Glastunnel (zu niedrig für Trampolin/Kanone/Tore)
     if (kat.boxen && typeof kat.boxen.s0 === 'number') zone(Math.min(kat.boxen.s0, kat.boxen.s1), Math.max(kat.boxen.s0, kat.boxen.s1), 30, 30);
     // feste Katalog-Hindernisse nur bei „Zufällige Strecke: aus“ (mit Z1 räumt track/zufall.js ohnehin um die Elemente herum: festeZonen)
     if (mitHindernissen) {
@@ -173,7 +174,8 @@
   function trampolinStart(fz, v, st, nah, e) {
     const c = C().trampolin;
     fz.index = nah.index;
-    fz.vy = c.vy; fz.y = st.hoeheAn(v.x, v.z, fz.index); fz.yVorher = fz.y; fz.t = 0; fz.aktiv = true; fz.rampe = null; fz.rampenH = 0;
+    fz.vy = c.vy * ((st.katalog && st.katalog.trampolinFaktor) || 1);   // S5: Mond – weniger Anfangsgeschwindigkeit (Flugzeit bleibt landesicher)
+    fz.y = st.hoeheAn(v.x, v.z, fz.index); fz.yVorher = fz.y; fz.t = 0; fz.aktiv = true; fz.rampe = null; fz.rampenH = 0;
     fz.startX = v.x; fz.startZ = v.z; fz.sprungGemeldet = false; fz.fluege++; fz.nicken = 0; fz.nickenVorher = 0;
     if (v.vLaengs > c.vMax) v.vLaengs = c.vMax;
     v.imFlug = true;
