@@ -244,7 +244,10 @@ with sync_playwright() as p:
     for _ in range(24):
         if zustand() != 'menue': break
         taste('Enter'); page.wait_for_timeout(100)
-    page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=120000)
+    try:
+        page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=120000)
+    except Exception:
+        print('DIAG Start hängt:', page.evaluate('({z: Rennspiel.spiel.zustand, schritt: Rennspiel.spiel.menue && Rennspiel.spiel.menue.schritt, fokus: Rennspiel.spiel.menue && Rennspiel.spiel.menue.fokus, fehler: Rennspiel.spiel._fehler && Rennspiel.spiel._fehler.gesamt})'), flush=True); raise
     pruefe('Rennen gestartet (zwei Spieler + 2 Computer)', page.evaluate('Rennspiel.spiel.fahrzeuge.length') == 4)
     hudnamen = page.evaluate("Array.from(document.querySelectorAll('.hud-name')).map(e => e.textContent)")
     pruefe('HUD-Kopf zeigt Fahrernamen', len(hudnamen) == 2 and 'Senna' in hudnamen[0] and 'Verstappen' in hudnamen[1], hudnamen)
