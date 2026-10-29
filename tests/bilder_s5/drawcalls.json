@@ -1,0 +1,266 @@
+{
+ "Autorennen wiese": {
+  "mittel": 82.0,
+  "max": 110,
+  "werte": [
+   110,
+   76,
+   66,
+   79,
+   79
+  ],
+  "fehler": []
+ },
+ "Autorennen wald": {
+  "mittel": 104.4,
+  "max": 133,
+  "werte": [
+   133,
+   97,
+   101,
+   99,
+   92
+  ],
+  "fehler": []
+ },
+ "Autorennen wueste": {
+  "mittel": 89.4,
+  "max": 104,
+  "werte": [
+   83,
+   83,
+   104,
+   78,
+   99
+  ],
+  "fehler": []
+ },
+ "Autorennen fantasie": {
+  "mittel": 97.6,
+  "max": 122,
+  "werte": [
+   122,
+   82,
+   107,
+   84,
+   93
+  ],
+  "fehler": []
+ },
+ "Autorennen dino": {
+  "mittel": 122.6,
+  "max": 131,
+  "werte": [
+   130,
+   124,
+   101,
+   131,
+   127
+  ],
+  "fehler": []
+ },
+ "Autorennen alpen": {
+  "mittel": 100.8,
+  "max": 144,
+  "werte": [
+   144,
+   97,
+   93,
+   96,
+   74
+  ],
+  "fehler": []
+ },
+ "Autorennen formel1": {
+  "mittel": 64.6,
+  "max": 67,
+  "werte": [
+   64,
+   67,
+   62,
+   67,
+   63
+  ],
+  "fehler": []
+ },
+ "Autorennen mega": {
+  "mittel": 131.0,
+  "max": 142,
+  "werte": [
+   99,
+   137,
+   135,
+   142,
+   142
+  ],
+  "fehler": []
+ },
+ "Autorennen mond": {
+  "mittel": 65.8,
+  "max": 93,
+  "werte": [
+   66,
+   56,
+   56,
+   58,
+   93
+  ],
+  "fehler": []
+ },
+ "Autorennen unterwasser": {
+  "mittel": 70.0,
+  "max": 95,
+  "werte": [
+   95,
+   62,
+   64,
+   62,
+   67
+  ],
+  "fehler": []
+ },
+ "Autorennen regenbogenland": {
+  "mittel": 62.4,
+  "max": 90,
+  "werte": [
+   90,
+   51,
+   58,
+   55,
+   58
+  ],
+  "fehler": []
+ },
+ "Motorrad wiese": {
+  "mittel": 59.0,
+  "max": 132,
+  "werte": [
+   132,
+   43,
+   32,
+   43,
+   45
+  ],
+  "fehler": []
+ },
+ "Motorrad wald": {
+  "mittel": 82.2,
+  "max": 182,
+  "werte": [
+   47,
+   70,
+   41,
+   182,
+   71
+  ],
+  "fehler": []
+ },
+ "Motorrad wueste": {
+  "mittel": 97.8,
+  "max": 153,
+  "werte": [
+   153,
+   50,
+   148,
+   57,
+   81
+  ],
+  "fehler": []
+ },
+ "Motorrad fantasie": {
+  "mittel": 64.6,
+  "max": 111,
+  "werte": [
+   111,
+   59,
+   67,
+   44,
+   42
+  ],
+  "fehler": []
+ },
+ "Motorrad dino": {
+  "mittel": 83.6,
+  "max": 168,
+  "werte": [
+   59,
+   168,
+   51,
+   66,
+   74
+  ],
+  "fehler": []
+ },
+ "Motorrad alpen": {
+  "mittel": 179.6,
+  "max": 278,
+  "werte": [
+   268,
+   278,
+   167,
+   146,
+   39
+  ],
+  "fehler": []
+ },
+ "Motorrad formel1": {
+  "mittel": 62.6,
+  "max": 113,
+  "werte": [
+   113,
+   40,
+   60,
+   61,
+   39
+  ],
+  "fehler": []
+ },
+ "Motorrad mega": {
+  "mittel": 92.2,
+  "max": 110,
+  "werte": [
+   75,
+   105,
+   83,
+   110,
+   88
+  ],
+  "fehler": []
+ },
+ "Motorrad mond": {
+  "mittel": 82.0,
+  "max": 190,
+  "werte": [
+   28,
+   137,
+   29,
+   26,
+   190
+  ],
+  "fehler": []
+ },
+ "Motorrad unterwasser": {
+  "mittel": 31.2,
+  "max": 35,
+  "werte": [
+   30,
+   31,
+   30,
+   30,
+   35
+  ],
+  "fehler": []
+ },
+ "Motorrad regenbogenland": {
+  "mittel": 83.0,
+  "max": 189,
+  "werte": [
+   26,
+   31,
+   142,
+   27,
+   189
+  ],
+  "fehler": []
+ }
+}
