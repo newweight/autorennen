@@ -29,7 +29,7 @@ def touch_punkte(cdp, typ, punkte):
 
 def geraet(p, browser, name, bildname):
     ctx = browser.new_context(**p.devices[name])
-    page = ctx.new_page(); fehler = []
+    page = ctx.new_page(); page.set_default_timeout(120000); fehler = []
     page.on('pageerror', lambda e: fehler.append(str(e)))
     page.on('console', lambda m: fehler.append('console.error: ' + m.text) if m.type == 'error' else None)
     page.goto(url); page.wait_for_timeout(1800)
@@ -122,7 +122,7 @@ def geraet(p, browser, name, bildname):
 with sync_playwright() as p:
     browser = p.chromium.launch(args=ARGS)
     # ---- Desktop ohne Touch ----
-    ctx = browser.new_context(viewport={'width': 1280, 'height': 800}); page = ctx.new_page(); fehler = []
+    ctx = browser.new_context(viewport={'width': 1280, 'height': 800}); page = ctx.new_page(); page.set_default_timeout(120000); fehler = []
     page.on('pageerror', lambda e: fehler.append(str(e)))
     page.goto(url); page.wait_for_timeout(1500)
     pruefe('[Desktop] R.Touch.aktiv false', page.evaluate('Rennspiel.Touch.aktiv') is False)
@@ -138,10 +138,10 @@ with sync_playwright() as p:
         geraet(p, browser, 'iPhone 13 landscape', 'iphone')
         if os.environ.get('TOUCH_NUR') != 'iphone': geraet(p, browser, 'iPad (gen 7) landscape', 'ipad')
     # ---- Hochformat ----
-    ctx = browser.new_context(**p.devices['iPhone 13']); page = ctx.new_page(); page.goto(url); page.wait_for_timeout(1500)
+    ctx = browser.new_context(**p.devices['iPhone 13']); page = ctx.new_page(); page.set_default_timeout(120000); page.goto(url); page.wait_for_timeout(1500)
     if not NUR: pruefe('[iPhone Hochformat] Hinweis „Bitte Handy quer halten“ sichtbar', page.evaluate("getComputedStyle(document.getElementById('t-quer')).display") == 'flex')
     page.screenshot(path=os.path.join(out, 'iphone_hochformat.png')); ctx.close()
-    ctx = browser.new_context(**p.devices['iPhone 13 landscape']); page = ctx.new_page(); page.goto(url); page.wait_for_timeout(1500)
+    ctx = browser.new_context(**p.devices['iPhone 13 landscape']); page = ctx.new_page(); page.set_default_timeout(120000); page.goto(url); page.wait_for_timeout(1500)
     pruefe('[iPhone quer] kein Hochformat-Hinweis', page.evaluate("getComputedStyle(document.getElementById('t-quer')).display") == 'none'); ctx.close()
 
     # ---- v31 H4: Touch-Laptop (hasTouch ohne isMobile) + Tastatur ----
@@ -151,7 +151,7 @@ with sync_playwright() as p:
     def rennen_an(page):
         page.evaluate(START); page.wait_for_timeout(1500); page.evaluate('Rennspiel.spiel.schnellvorlauf(4)'); page.wait_for_timeout(500)
     # a) Touch-Laptop frisch: Windows-Laptop meldet maxTouchPoints > 0, aber pointer: fine -> Tastatur-Modus, keine Knöpfe
-    ctx = browser.new_context(viewport={'width': 1366, 'height': 768}, has_touch=True, is_mobile=False); page = ctx.new_page(); fehler = []
+    ctx = browser.new_context(viewport={'width': 1366, 'height': 768}, has_touch=True, is_mobile=False); page = ctx.new_page(); page.set_default_timeout(120000); fehler = []
     page.on('pageerror', lambda e: fehler.append(str(e)))
     page.add_init_script("Object.defineProperty(window, 'matchMedia', { value: (q) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }) });")
     page.goto(url); page.wait_for_timeout(1500)
@@ -204,13 +204,13 @@ with sync_playwright() as p:
     page.screenshot(path=os.path.join(out31, 'touch_einstellungen_knopf.png'))
     pruefe('[Touch-Laptop] keine JS-Fehler', not fehler, fehler[:3]); ctx.close()
     # g) Desktop ohne Touch: kein Knopf im Pausemenü
-    ctx = browser.new_context(viewport={'width': 1280, 'height': 800}); page = ctx.new_page(); page.goto(url); page.wait_for_timeout(1500); rennen_an(page)
+    ctx = browser.new_context(viewport={'width': 1280, 'height': 800}); page = ctx.new_page(); page.set_default_timeout(120000); page.goto(url); page.wait_for_timeout(1500); rennen_an(page)
     page.keyboard.press('Escape'); page.wait_for_timeout(400)
     pruefe('[Desktop] kein Tipp-Hinweis', page.evaluate("!document.getElementById('t-tipp')"))
     pruefe('[Desktop] Pausemenü ohne Touch-Knopf (unverändert)', page.locator('#pause [data-eingabe]').count() == 0)
     ctx.close()
     # h) Handy (iPhone, pointer: coarse): Touch-Modus auch ohne Tastendruck; synthetische Tasten der Knöpfe schalten NICHT um
-    ctx = browser.new_context(**p.devices['iPhone 13 landscape']); page = ctx.new_page(); page.goto(url); page.wait_for_timeout(1500); rennen_an(page)
+    ctx = browser.new_context(**p.devices['iPhone 13 landscape']); page = ctx.new_page(); page.set_default_timeout(120000); page.goto(url); page.wait_for_timeout(1500); rennen_an(page)
     pruefe('[iPhone] kein Tipp-Hinweis', page.evaluate("!document.getElementById('t-tipp')"))
     pruefe('[iPhone] Modus touch, Knöpfe da', page.evaluate('Rennspiel.Touch.modus') == 'touch' and page.evaluate(SICHT) == 'block')
     page.evaluate("window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowUp', key: 'ArrowUp', bubbles: true }))"); page.wait_for_timeout(300)

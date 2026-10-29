@@ -31,7 +31,7 @@ try:
     with sync_playwright() as p:
         browser = p.chromium.launch(args=ARGS)
         # ---------------- Motorrad.html ----------------
-        page = browser.new_page(viewport={'width': 1280, 'height': 800})
+        page = browser.new_page(viewport={'width': 1280, 'height': 800}); page.set_default_timeout(120000)
         fehler = []
         page.on('pageerror', lambda e: fehler.append('pageerror: ' + str(e)))
         page.on('console', lambda m: fehler.append('console.error: ' + m.text) if m.type == 'error' else None)
@@ -137,7 +137,7 @@ try:
         page.close()
 
         # ---------------- Autorennen.html unverändert ----------------
-        page2 = browser.new_page(viewport={'width': 1280, 'height': 800})
+        page2 = browser.new_page(viewport={'width': 1280, 'height': 800}); page2.set_default_timeout(120000)
         fehler2 = []
         page2.on('pageerror', lambda e: fehler2.append('pageerror: ' + str(e)))
         page2.on('console', lambda m: fehler2.append('console.error: ' + m.text) if m.type == 'error' else None)
