@@ -455,7 +455,7 @@
     Object.assign(gemeinsam(), {
       id: 'unterwasser', name: 'Unterwasser', emoji: '🐋', thema: 'ozean',
       beschreibung: 'Am Meeresgrund durch den Glastunnel: Wale, Fische und Rochen schwimmen draußen vorbei, Blasen steigen auf.',
-      schwierigkeit: 'spass', breite: 13, zaunAbstand: 9, zielRundenzeit: 78,
+      schwierigkeit: 'spass', breite: 13, zaunAbstand: 14, zielRundenzeit: 78,
       keineWolken: true, keineSonne: true,
       glasTunnel: [{ s0: 300, s1: 1000 }, { s0: 1380, s1: 2020 }],
       huegel: DATEN.unterwasser.huegel, punkte: DATEN.unterwasser.punkte,
