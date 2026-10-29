@@ -100,7 +100,7 @@
         const J = R.config.garage.upgradeJeStufe || {}, ud = R.Garage.autoDaten(g.fahrer, g.autoId), tj = R.config.spass.tuning.jeStufe, an = !(g.e && g.e.upgradesZaehlen === false);
         const zeile = (k, wortU, jeU, jeT) => {
           const u = an ? Math.round((J[k] !== undefined ? J[k] : jeU) * 100 * ud[k] * 10) / 10 : 0, t = Math.round(jeT * 100 * s[k] * 10) / 10;
-          return `<div class="g-text klein">${A[k].emoji} ${A[k].name}: Upgrades +${u} % + Tuning +${t} % = <b>gesamt +${Math.round((u + t) * 10) / 10} %</b></div>`;
+          return `<div class="g-text">${A[k].emoji} ${A[k].name}: Upgrades +${u} % + Tuning +${t} % = <b>gesamt +${Math.round((u + t) * 10) / 10} %</b></div>`;
         };
         gesamtHtml = `<div class="g-zeile gesamt"><div class="g-label">➕ Gesamt</div><div class="g-wert" style="flex-direction:column;align-items:flex-start;gap:.1em">` +
           zeile('motor', '', 0.04, tj.vMax) + zeile('reifen', '', 0.04, tj.grip) + zeile('bremsen', '', 0.06, tj.bremsen) +
