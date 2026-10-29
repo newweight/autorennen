@@ -89,7 +89,7 @@ if (NP && NP.interpolieren) {
 const m3 = fs.readFileSync(__dirname + '/../src/moto/motoM3Start.js', 'utf8');
 pruefe('D Online-Effekte (Quad-Wackeln, Knall, Funken) für fremde Fahrer aus Zustandsdaten (nur Anzeige, keine Physik)', /onlineEffekte/.test(m3) && /quadDrop/.test(m3) && /rutschFunken/.test(m3) && /spiel\.online/.test(m3) && !/physikSchritt/.test(m3.slice(m3.indexOf('function onlineEffekte'), m3.indexOf('function onlineEffekte') + 3000)));
 const tui = fs.readFileSync(__dirname + '/../src/spass/spassTuningUI.js', 'utf8');
-pruefe('D Garage: Tuning-Schritt zeigt „Upgrades + Tuning = gesamt“, alte Upgrades bleiben (R.Garage.upgradeKaufen da)', /Upgrades \+\d/.test(tui) && /gesamt \+/.test(tui));
+pruefe('D Garage: Tuning-Schritt zeigt „Upgrades + Tuning = gesamt“, alte Upgrades bleiben (R.Garage.upgradeKaufen da)', /Upgrades \+\$\{u\}/.test(tui) && /gesamt \+/.test(tui));
 const gar = fs.readFileSync(__dirname + '/../src/ui/garage.js', 'utf8');
 pruefe('D alte Garage-Upgrades nicht entfernt', /upgradeKaufen/.test(gar) && /upgradePreise/.test(fs.readFileSync(__dirname + '/../src/config.js', 'utf8')));
 
