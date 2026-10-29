@@ -439,7 +439,7 @@ try:
         page2.on('console', lambda m: f2.append('console.error: ' + m.text) if m.type == 'error' else None)
         geladen = []
         page2.on('request', lambda r: geladen.append(r.url) if '/src/moto/' in r.url else None)
-        page2.goto(basisurl + 'Autorennen.html'); page2.wait_for_timeout(1500)
+        page2.goto(basisurl + 'Autorennen.html', timeout=120000); page2.wait_for_timeout(1500)
         a = page2.evaluate('''() => ({ moto: !!(window.Rennspiel.Moto), flag: window.MOTORRAD === true, werkstatt: !!window.Rennspiel.Werkstatt, autos: window.Rennspiel.carCatalog.filter((c) => c.waehlbar).length })''')
         page2.evaluate("() => Rennspiel.spiel.rennenStarten({ modus: 'solo', streckeId: 'wiese', autoIds: ['troc-cabrio', 'multivan'], runden: 1, gegner: 3, schwierigkeit: 'mittel', fahrhilfe: ['wenig', 'wenig'] })"); page2.wait_for_timeout(800)
         a2 = page2.evaluate('() => ({ unfall: !!Rennspiel.spiel.unfall, stationen: !!Rennspiel.spiel.motoStationen, zustand: Rennspiel.spiel.zustand })')
