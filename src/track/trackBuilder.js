@@ -492,6 +492,9 @@
       this.kleber = (sicht.kleber || []).map(e => ({ s0: this.spline.wrapS(e.s0), s1: this.spline.wrapS(e.s1), seite: e.seite || 0 }));
       // Z1 (Zufall, src/track/zufall.js): Lage der Hindernisse/Wracks/Strohballen/Dinos aus dem Rennseed – NUR mit optionen.zufall = { seed }.
       // Ohne diese Option (Tests, „Zufällige Strecke: aus“, alte Clients) bleibt alles bitgleich wie im Katalog.
+      // S1 (Spaß-Paket, src/spass/spassKern.js): feste Trampoline/Kanonen – NUR mit optionen.spass === true (sonst strecke.spass = null, alles bitgleich wie vorher);
+      // VOR Z1, damit „Zufällige Strecke“ um sie herumlegt (festeZonen)
+      this.spass = opt.spass === true && R.Spass ? R.Spass.plan(this, sicht, !!opt.zufall) : null;
       this.zufall = null;
       this.zufallVersion = 0;
       if (opt.zufall && R.Zufall) R.Zufall.start(this, opt.zufall, sicht);

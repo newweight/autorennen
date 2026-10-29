@@ -150,6 +150,7 @@
     (st.spuren || []).forEach((e) => { if (e.breite < st.breite) zone(e.s0, e.s1, ZR.spuren, ZR.spuren); });
     (st.schanzen || []).forEach((e) => zone(e.s, e.s + (e.laenge || 10), (e.anlauf || 0) + ZR.schanzeVor, ZR.schanzeNach));
     (st.boostFelder || []).forEach((e) => zone(e.s, e.s + (e.laenge || 12), ZR.boost, ZR.boost));
+    ((st.spass && st.spass.zonen) || []).forEach((e) => zone(e.s0, e.s1, 10, 10));      // S1: Trampolin/Kanone samt gerader Strecke dahinter bleiben frei
     (st.schilde || []).forEach((e) => punkt(e.s, ZR.schild, ZR.schild));
     (sicht.baelle || []).forEach((e) => punkt(e.s, ZR.ball, ZR.ball));
     (sicht.wasserstrahlen || []).forEach((e) => punkt(e.s, ZR.wasser, ZR.wasser));
