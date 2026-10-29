@@ -195,8 +195,17 @@ Im Menü, Schritt 5 (Los!), unten: **🎪 Spaß-Elemente** (An/Aus, Standard An)
 - **🤸 Trampolin:** bunte Matte auf der Geraden – drüberfahren (ab Schritttempo) schleudert dich ca. 4 m hoch (knapp 2 s), im Flug richtet das Spiel dich Richtung Straße aus.
 - **💥 Kanone:** rot-gelbe Röhre mit blauem Ring. Du wirst eingezogen, es zählt **3 – 2 – 1**, dann **RUMMS** – du fliegst mit Konfetti ein Stück die Strecke entlang und landest sicher auf der Straße.
 - **👻 Geist:** dein bester Lauf je Strecke und Fahrzeug fährt als durchsichtiges Geisterauto mit (nur allein, ohne Zusammenstoß, nur offline).
-- **📒 Sticker-Album:** Auto 18, Motorrad 22 Sticker (Sieg, Münzen, Trampolin, Kanone, Geist geschlagen, Hupe, Stimme, Stunts …). Neue Sticker melden sich mit „Neuer Sticker!“, das Album ist im Menü.
+- **📒 Sticker-Album:** Auto 20, Motorrad 24 Sticker (Sieg, Münzen, Trampolin, Kanone, Geist geschlagen, Hupe, Stimme, Stunts …). Neue Sticker melden sich mit „Neuer Sticker!“, das Album ist im Menü.
 - Online: Trampolin und Kanone rechnet der Server genauso wie du (ein Schalter „Spaß-Elemente“ im Raum folgt); Geist, Sticker und Stimmen sind nur auf deinem Gerät.
+
+## 🔧 Tuning mit Goldstücken (S2, Auto und Motorrad)
+- **Garage → Werkstatt → „🔧 Tuning öffnen“** (links unter dem Fahrzeug). Je Fahrzeug **Motor 🚀, Reifen 🛞, Bremsen 🛑** (Motorrad: Federung) – je **0 bis 5 Stufen**, bezahlt mit gesammelten Goldstücken (🪙 10 · 25 · 45 · 70 · 100 je Art; die erste Stufe gibt es schon nach einem Rennen).
+- Wirkung klein und fair: höchstens **+8 % Tempo und Anzug**, **+8 % Grip**, **+10 % Bremskraft**. Ab **Stufe 3** sieht man Teile am Fahrzeug: Auspuff-Endrohre, breite Reifen, Heck-Spoiler (Motorrad: Auspuff, breiter Hinterreifen, Gold-Gabel); Stufe 5 glänzt golden.
+- **↩ Stufe zurückgeben** und **Alles zurücksetzen** geben alle Goldstücke zurück. Tasten: ↑↓ Zeile · → oder Enter kaufen · ← Stufe zurück · Esc zurück.
+- Die Computer-Gegner fahren mit gleichwertigem Tuning (je nach Schwierigkeit 40 % bis 100 % deiner Stufen); hast du nichts getunt, haben sie auch nichts. Im Menü (Schritt 5, bei den Spaß-Schaltern) gibt es **🔧 Tuning An/Aus** (Standard An; Aus = alles wie früher).
+- Sticker: **Erstes Tuning** und **Voll getunt** (alle drei Arten auf Stufe 5).
+- **Online:** Tuning zählt nur, wenn der Host in der Lobby **🔧 Tuning: An** schaltet (Standard Aus = alle gleich). Dann rechnet der Server mit den Stufen aller Spieler.
+- Die älteren Garage-Upgrades (Stufen 0–3, „Upgrades zählen im Rennen“) bleiben unverändert daneben bestehen.
 
 ## Tempo
 Neu: Schritt 5 hat die **Tempo-Klasse**. **Normal** (Standard) ist gemütlich: ca. **154–196 km/h** Höchsttempo (Formel-Renner 196), mit weniger Beschleunigung und Bremse. **Schnell** nutzt die vollen Katalogwerte unten.

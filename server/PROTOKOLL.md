@@ -346,3 +346,10 @@ Autostart: Server mit `--host 127.0.0.1` (nur über `tailscale serve`/Funnel err
 ## S1 Spaß-Paket (additiv, abwärtskompatibel)
 - Raum-Einstellung `spass` (true = Trampolin/Kanone auf der Strecke; fehlt/false = Strecke wie früher). Server baut `strecke.spass` aus Strecke + Seed deterministisch (src/spass/spassKern.js), Client ebenso.
 - `ich.sz.f[8]` = 1, wenn der aktuelle Flug ein Trampolin-Sprung ist; `ich.sz.sp` = 1, solange das Fahrzeug in der Kanone steckt (Server rechnet allein, Vorhersage folgt ihm). Alte Clients ignorieren beides.
+
+## S2 Tuning mit Goldstücken (additiv, abwärtskompatibel)
+- Raum-Einstellung `tuning` (nur ein echtes `true` schaltet ein; Standard AUS = fair, alle fahren mit den Katalogwerten). Nur der Host setzt sie (`einstellungen`).
+- Spieler senden ihre Stufen als Liste `tuning: [Motor, Reifen, Bremsen]` (ganze Zahlen 0..5) in `raumErstellen`, `raumBeitreten` und `wahl`; der Server klemmt sie (ungültig → kein Tuning) und meldet sie in `lobby.spieler[].tuning` nur bei eingeschaltetem Raum-Schalter.
+- Wirkung (src/spass/spassTuning.js, Server und Browser rechnen gleich): Motor +1,6 % Tempo und Anzug je Stufe, Reifen +1,6 % Grip, Bremsen/Federung +2 % Bremskraft (Stufe 5: +8 / +8 / +10 %). Die Faktoren werden einmal in `vehicle.daten` eingerechnet.
+- Computer-Gegner bekommen gleichwertiges Tuning: Mittel der Menschen je Art × Anteil der Schwierigkeit (leicht 0,4 · mittel 0,6 · schwer 0,8 · ab profi 1), gerundet; hat kein Mensch Tuning, haben auch sie keins.
+- `start.teilnehmer[i].tuning` = `[m, r, b]` (fehlt = ohne Tuning, auch für alte Clients); `start.einstellungen.tuning` zeigt den Raum-Schalter. Der Browser wendet es auf `f.vehicle`, `f.schatten` und die Vorhersage an und hängt ab Stufe 3 die Tuning-Teile an das Modell.
