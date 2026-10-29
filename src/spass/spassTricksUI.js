@@ -137,7 +137,7 @@
     s.id = 'spass-tricks-stil';
     s.textContent = '#touch .tricks-touch{right:calc(var(--rand)*2 + var(--tb)*1.9);bottom:calc(var(--rand)*2 + var(--tb)*.2);width:calc(var(--tb)*.85);height:calc(var(--tb)*.85);font-size:calc(var(--tb)*.4);background:rgba(120,200,255,.45);border-color:#fff}' +
       '#touch .tricks-touch.an{background:rgba(255,138,26,.85)}' +
-      '.m-spass{gap:.25em .5em!important;font-size:.78em!important}.m-spass .gr{padding:.1em .3em!important;gap:.2em!important}';
+      '.m-spass{gap:.25em .5em!important;font-size:.7em!important}.m-spass .gr{padding:.1em .3em!important;gap:.2em!important}';
     document.head.appendChild(s);
   }
   if (R.Menue) {
