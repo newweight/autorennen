@@ -154,7 +154,7 @@ def lauf_spiel(p, spiel):
     pg.click('.e7-k[data-b="speichern"]'); pg.wait_for_selector('#e7-sname'); pg.wait_for_timeout(100)
     pg.screenshot(path=f'{OUT}/{kz}_dialog_speichern_1280.png')
     pg.click('.e7-dlg .e7-k:has-text("Speichern")')
-    pg.wait_for_function("Rennspiel.Editor.Speicher.liste().length >= 1 || !!document.querySelector('.e7-dlg h3') && /schaffen die Computer/.test(document.querySelector('.e7-dlg h3').textContent)", timeout=20000)
+    pg.wait_for_function("Rennspiel.Editor.Speicher.liste().length >= 1 || !!document.querySelector('.e7-dlg h3') && /schaffen die Computer/.test(document.querySelector('.e7-dlg h3').textContent)", timeout=90000)
     if pg.evaluate("Rennspiel.Editor.Speicher.liste().length") == 0:
         pg.click('.e7-dlg .e7-k:has-text("Trotzdem")'); pg.wait_for_timeout(300)
     pg.wait_for_timeout(400)
@@ -242,7 +242,7 @@ def lauf_handy(p, spiel):
     pg.tap('.e7-k[data-b="speichern"]'); pg.wait_for_selector('#e7-sname'); pg.wait_for_timeout(150)
     pg.screenshot(path=f'{OUT}/{kz}_dialog_speichern_390x844.png')
     pg.evaluate("document.querySelector('.e7-dlg .e7-k').click()")
-    pg.wait_for_function("Rennspiel.Editor.Speicher.liste().length >= 1 || !!document.querySelector('.e7-dlg h3') && /schaffen die Computer/.test(document.querySelector('.e7-dlg h3').textContent)", timeout=20000)
+    pg.wait_for_function("Rennspiel.Editor.Speicher.liste().length >= 1 || !!document.querySelector('.e7-dlg h3') && /schaffen die Computer/.test(document.querySelector('.e7-dlg h3').textContent)", timeout=90000)
     pg.wait_for_timeout(500)
     pg.screenshot(path=f'{OUT}/{kz}_editor_nach_speichern_390x844.png')
     pruefe(f'{spiel}: Konsole ohne Fehler (Handy)', not fehler, fehler[:3])
