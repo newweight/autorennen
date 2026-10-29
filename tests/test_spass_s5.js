@@ -173,6 +173,57 @@ for (const moto of [false, true]) for (const id of NEU) {
   }
 }
 
+// ---------------------------------------------------------------- H) Dino-Freund: Goldstücke werfen + Wettrennen (FIX1, Rechenteil R.SpassWelten.dino)
+for (const [sp, R] of SPIELE) {
+  const moto = sp === 'motorrad', DN = R.SpassWelten.dino;
+  const fahrt = (id, vSoll, opt) => {
+    opt = opt || {};
+    const sim = new Simulation({ einstellungen: { streckeId: id, gegner: 0, runden: 3, spass: true, zufall: false, unfall: moto ? 'aus' : undefined, schwierigkeit: opt.schw || 'mittel' }, spieler: [{ fahrer: 'Jonas', auto: moto ? 'crossmaschine' : 'porsche-911', hilfe: 'wenig' }], seed: 5, moto });
+    const S = sim.sim, st = S.strecke, f = S.fahrzeuge[0], v = f.vehicle, spl = st.spline, D = DN.neu(st), dt = R.config.physik.schritt;
+    const r = { ev: [], h: 2166136261, gold: 0, sammeln: 0, vMax: v.daten.vMax, st, D };
+    { const p0 = spl.punktBei(200); v.setzen(p0.x, p0.z, R.headingAus(p0.tx, p0.tz)); v.vLaengs = 15; f.index = -1; S.rennen.verfolgungSetzen(S.rennen.teilnehmer[0], v.x, v.z, 200); }   // gleich hinter den Start (Moto-Start hängt im Pilot-Test an den Kisten)
+    for (let i = 0; i < 60 * (opt.sek || 150); i++) {
+      const n = f.nah || st.abfrage(v.x, v.z, f.index), vl = Math.max(3, v.vLaengs), L = Math.max(9, Math.min(50, 0.55 * vl + 8));
+      let qZiel = 0;
+      const g = opt.folgen ? D.gold.find((x) => x.alter >= x.flug && spl.differenzS(x.s, n.s) > 6) : null;
+      if (g) qZiel = g.q;
+      const pt = spl.punktBei(n.s + L), zx = pt.x + pt.nx * qZiel, zz = pt.z + pt.nz * qZiel;
+      let diff = R.headingAus(zx - v.x, zz - v.z) - v.heading;
+      while (diff > Math.PI) diff -= 2 * Math.PI; while (diff < -Math.PI) diff += 2 * Math.PI;
+      const lenkung = Math.max(-1, Math.min(1, -(2 * vl * Math.sin(diff) / Math.hypot(zx - v.x, zz - v.z)) / v.drehrateMax(vl)));
+      const soll = typeof vSoll === 'function' ? vSoll(st, n) : vSoll;
+      sim.eingabeSetzen(0, { gas: v.vLaengs < soll ? 1 : 0, bremse: v.vLaengs > soll + 3 ? 0.5 : 0, lenkung }); sim.schritt();
+      if (!S.rennen.gasErlaubt || !f.nah) continue;
+      const K = { s: f.nah.s, x: v.x, z: v.z, v: Math.abs(v.vLaengs), vMax: v.daten.vMax, schw: opt.schw || 'mittel', bereit: !v.imFlug && !v.imLooping && !(f.flug && f.flug.aktiv) };
+      DN.schritt(D, st, K, dt);
+      while (D.ereig.length) {
+        const e = D.ereig.shift(); r.ev.push(Object.assign({ i }, e));
+        if (e.name === 'gold') r.gold += e.muenzen.length;
+        if (e.name === 'sammeln') r.sammeln++;
+        r.h = hash(r.h, i); r.h = hash(r.h, e.zeit || e.n || 0);
+      }
+    }
+    return r;
+  };
+  // Gold: kommt regelmäßig, liegt vor dem Spieler auf der Fahrbahn (nicht in Sonderelementen), folgt man ihm, wird eingesammelt; zwei Läufe bitgleich
+  const idH = moto ? 'regenbogenland' : 'wiese', g1 = fahrt(idH, 18, { folgen: true, sek: 150 }), g2 = fahrt(idH, 18, { folgen: true, sek: 150 });
+  const wurf = g1.ev.filter((e) => e.name === 'gold');
+  const vorn = wurf.every((e) => e.muenzen.every((m) => Math.abs(m.q) <= g1.st.breite / 2 && DN.frei(g1.st, m.s)));
+  pruefe(`H ${sp}: Dino wirft Gold (3 Stück je Wurf, ≥ 3 Würfe in 150 s, auf der Fahrbahn, nie im Sonderelement)`, wurf.length >= 3 && g1.gold === wurf.length * 3 && vorn, `${wurf.length} Würfe, ${g1.sammeln} eingesammelt`);
+  pruefe(`H ${sp}: Gold einsammeln – wer der Spur folgt, bekommt die meisten (≥ 60 %), Zähler = Ereignisse`, g1.sammeln >= g1.gold * 0.6 && g1.D.gesammelt === g1.sammeln, `${g1.sammeln}/${g1.gold}`);
+  pruefe(`H ${sp}: Dino-Aufgaben deterministisch (zwei Läufe: gleiche Ereignisse)`, g1.h === g2.h && g1.ev.length === g2.ev.length, `${g1.h} ${g2.h}`);
+  // Wettrennen: schneller Spieler gewinnt, langsamer verliert – Dino-Tempo steigt mit der Schwierigkeit
+  const wi = fahrt(idH, 200, { sek: 200 }), la = fahrt(idH, 9, { sek: 400 });
+  const wr = wi.ev.find((e) => e.name === 'wettrennen'), sieg = wi.ev.find((e) => e.name === 'sieg'), verl = la.ev.find((e) => e.name === 'verloren');
+  pruefe(`H ${sp}: Wettrennen – ruft nach ~40 s, 300 m; Vollgas gewinnt (Sieger-Ereignis mit Zeit), Schleichen verliert`, wr && wr.weg >= 300 && sieg && sieg.zeit > 5 && sieg.zeit < 40 && verl && !la.ev.some((e) => e.name === 'sieg'), `Ruf ${wr && wr.vD.toFixed(1)} m/s, Sieg ${sieg && sieg.zeit.toFixed(1)} s, Niederlage ${verl && verl.zeit.toFixed(1)} s`);
+  const ts = ['leicht', 'mittel', 'schwer', 'profi', 'legende', 'unschlagbar'].map((s) => DN.tempo(wi.st, 500, 300, wi.vMax, s));
+  pruefe(`H ${sp}: Dino-Tempo nach Schwierigkeit (leicht < mittel < schwer < … < unschlagbar, ≤ Fahrzeug-Tempo)`, ts.every((x, k) => k === 0 || x > ts[k - 1]) && ts[5] <= wi.vMax + 1e-9 && ts[0] >= 10, ts.map((x) => (x * 3.6).toFixed(0) + ' km/h').join(' < '));
+  // Keine Aufgaben im Flug/Looping (bereit = false): Zähler laufen nicht
+  const st0 = wi.st, D0 = DN.neu(st0);
+  for (let i = 0; i < 60 * 120; i++) DN.schritt(D0, st0, { s: 300, x: 0, z: 0, v: 20, vMax: 28, schw: 'mittel', bereit: false }, 1 / 60);
+  pruefe(`H ${sp}: nicht bereit (Flug/Looping) → kein Wurf, kein Wettrennen`, D0.ereig.length === 0 && D0.n === 0 && !D0.rennen);
+}
+
 // ---------------------------------------------------------------- G) Sticker, Spaß aus, alte Strecken
 {
   const { ladeModule } = require('./lade');
@@ -186,6 +237,7 @@ for (const moto of [false, true]) for (const id of NEU) {
     const r1 = g('ziel', { platz: 2, streckeId: 'mond' }), r2 = g('ziel', { platz: 2, streckeId: 'unterwasser' }), r3 = g('ziel', { platz: 2, streckeId: 'regenbogenland' });
     pruefe(`G ${spiel}: Ziel auf Mond / Unterwasser / Regenbogenland gibt je einen Sticker`, r1.includes('mond') && r2.includes('tiefsee') && r3.includes('regenbogen'), [r1, r2, r3].join(' | '));
     pruefe(`G ${spiel}: Hüpfer erst ab 10, Teleport, Dino-Brüllen`, g('huepfer', { n: 9 }).length === 0 && g('huepfer', { n: 10 }).includes('mondHupf') && g('teleport').includes('teleport') && g('dino').includes('dinofreund'));
+    pruefe(`G ${spiel}: Sticker „Dino geschlagen“ (FIX1) im Katalog und per Ereignis dinoSieg`, kat.includes('dinoSieg') && g('dinoSieg').includes('dinoSieg') && g('dinoSieg').length === 0);
     SK.zurueck(spiel);
   }
 }
