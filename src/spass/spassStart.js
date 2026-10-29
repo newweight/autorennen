@@ -294,5 +294,27 @@
     };
   }
 
+  // ---------- Kanone: Kamera außen (im Cockpit sah man nur das dunkle Rohr) ----------
+  // Solange das eigene Fahrzeug in der Kanone steckt (Einziehen, Countdown, Schuss), zeigt eine Cockpit-Kamera kurz die Verfolger-Ansicht; danach wieder Cockpit.
+  const KAM = R.FahrzeugKamera && R.FahrzeugKamera.prototype;
+  if (KAM && !KAM._spassKanoneKamera) {
+    KAM._spassKanoneKamera = true;
+    const kamUpdate = KAM.update;
+    KAM.update = function (dt) {
+      try {
+        const sp = R.spiel, idx = R.config.kamera.modi.indexOf('verfolger');
+        let aussen = false;
+        if (idx >= 0 && sp && sp.fahrzeuge && this.ziel && (this._spassAlt !== undefined || this.modus === 'cockpit')) {
+          const f = sp.fahrzeuge.find((x) => x.vehicle === this.ziel);
+          aussen = !!(f && f.flug && f.flug.kanone);
+        }
+        // Moduswechsel echt (nicht nur im Update), damit Cockpit-Anzeigen, Lenker und Spiegel zur Ansicht passen
+        if (aussen && this._spassAlt === undefined) { this._spassAlt = this.modusIndex; this.modusIndex = idx; this._erstesMal = true; }
+        else if (!aussen && this._spassAlt !== undefined) { this.modusIndex = this._spassAlt; this._spassAlt = undefined; this._erstesMal = true; }
+      } catch (e) { /* Kamera darf nie ausfallen */ }
+      return kamUpdate.apply(this, arguments);
+    };
+  }
+
   R.SpassStart = { spassSchritt, bild, hupeTaste, geistMesh, toastZeigen, toastStil };
 })();
