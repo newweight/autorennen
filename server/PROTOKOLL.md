@@ -244,7 +244,7 @@ Spielordner = Elternordner von `server/`). Aus: `hallo` ohne `moto`, `raumErstel
 
 **Simulation** (`server/motoSim.js`, `server/simulation.js` `opt.moto`): zweiter vm-Kontext mit denselben Modulen wie `Motorrad.html` (Katalog, M3-Typen, Strecken-Anpassungen, Schräglage/Sturz, Stunts, Unfälle); der Autorennen-Kontext bleibt unberührt.
 Zufall: keine `Math.random` – Folge nach Sturz und KI-Tricks deterministisch (Saat aus Strecke + Fahrer-Nr.). Das Quad wird nach jedem Schritt entschärft (kein Überschlag, kein Sturz-Ereignis).
-Bewusst **nicht** im Server (nur Grafik/Ton): Quad-Wackeln, Auspuffknall, Funken; Schlamm/Wasser/Kisten/Steilwand gibt es nur im Stunt-Park (nur offline).
+Quad-Wackeln, Auspuffknall und Funken rechnet der Server nicht: der Browser leitet sie bei fremden Fahrern aus den Zustandsdaten ab (S8, `R.Moto.m3start.onlineEffekte`, nur Anzeige). Schlamm/Wasser/Kisten gibt es ab S8 auch auf normalen Motorrad-Strecken (siehe unten), die Steilwand nur im Stunt-Park.
 Tests: `node tests/test_moto_netz.js` (Server + Clients über WebSocket, Determinismus Server ↔ Vorhersage, Räume getrennt, alter Client), `python3 tests/moto_netz_browser.py` (zwei echte Browser).
 
 **Stuntpunkte → Portal-Bestenliste:** Der Client meldet nach dem Rennen seine eigenen Stuntpunkte an das Portal (`POST {MOTORRAD_PORTAL}/api/bestenliste`, Body `{spiel:'motorrad', modus:'stunt-online'|'stuntrennen-online', name, punkte}`),
@@ -354,3 +354,9 @@ Autostart: Server mit `--host 127.0.0.1` (nur über `tailscale serve`/Funnel err
 - Wirkung (src/spass/spassTuning.js, Server und Browser rechnen gleich): Motor +1,6 % Tempo und Anzug je Stufe, Reifen +1,6 % Grip, Bremsen/Federung +2 % Bremskraft (Stufe 5: +8 / +8 / +10 %). Die Faktoren werden einmal in `vehicle.daten` eingerechnet.
 - Computer-Gegner bekommen gleichwertiges Tuning: Mittel der Menschen je Art × Anteil der Schwierigkeit (leicht 0,4 · mittel 0,6 · schwer 0,8 · ab profi 1), gerundet; hat kein Mensch Tuning, haben auch sie keins.
 - `start.teilnehmer[i].tuning` = `[m, r, b]` (fehlt = ohne Tuning, auch für alte Clients); `start.einstellungen.tuning` zeigt den Raum-Schalter. Der Browser wendet es auf `f.vehicle`, `f.schatten` und die Vorhersage an und hängt ab Stufe 3 die Tuning-Teile an das Modell.
+
+## S8 Reste (additiv, abwärtskompatibel)
+- **KI-Motorräder gemischt**: `gegnerAutos(…, {schwierigkeit})` zieht (nur Motorrad) aus Crossmaschine, Superbike, Roller, Chopper, Quad nach Gewicht je Schwierigkeit (leicht: viele Roller/Quad, profi: Superbikes), ohne Zurücklegen, aus dem Seed `strecke|Anzahl|Spieler` → Server und Browser gleich. Quad kippt nie. `config.motoGegnerGemischt = false` = nur Cross (alter Stand).
+- **Schlamm/Wasser/Kisten** (src/moto/motoS8Welt.js): Plan `strecke.spass.s8 = {felder:[{art,s0,laenge,q0,q1}], kisten:[{s,q}]}` aus Strecke + Seed (Sperrzonen wie Z1/S1, nicht im Stunt-Park/auf eigenen Strecken), Wirkung im Server (`physikSchritt`-Umhüllung, nur bei `spass`). Neues Ereignis `{art:'kiste', nr, k}` (Kiste k von Fahrer nr getroffen; alte Clients ignorieren es).
+- **Lobby**: Host-Schalter `spass`, `zauber` (S6) in `einstellungen`; neue Nachricht `{t:'strecke', i, n, d}` (nur Host, Lobby/Ergebnis): Streckencode (R.Editor.code) in n ≤ 6 Teilen à ≤ 3200 Zeichen; der Server setzt zusammen, prüft mit `R.Editor.ausCode/pruefen` (Fehler `streckeFalsch`) und trägt die Strecke ein (id `eigen-<Hash der Punkte>`, höchstens 16 gleichzeitig). `einstellungen.eigen` = Code (fehlt = normale Streckenwahl; `eigen:''` löscht). Gäste bekommen den Code in `lobby/start.einstellungen.eigen` und bauen dieselbe Strecke.
+- **Teleport**: der Browser interpoliert nicht über Ortssprünge > 50 m zwischen zwei Zuständen (Teleport-Tore) – kein Gleiten mehr.
