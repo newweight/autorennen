@@ -24,10 +24,10 @@
     const s = document.createElement('style');
     s.id = 'spass-tuning-stil';
     s.textContent =
-      '.g-tuning h3{margin:.1em 0 .35em;font-size:1.05em}.g-tuning .g-balken i{width:1.15em}.g-tuning .g-balken i.voll.gold{background:#ffc21a}' +
-      '.g-tuning .g-zeile .knopf.klein,.g-tuning .g-knopf{cursor:pointer}.g-tuning .g-ruck{margin-left:.3em;padding:.12em .5em;border-radius:.7em;background:rgba(255,255,255,.18);cursor:pointer;font-size:.85em}' +
-      '.g-tuning .g-ruck.aus{opacity:.3;cursor:default}.g-tuning .teile{font-size:.78em;opacity:.9;margin:.25em 0}' +
-      '.g-tuning .g-zeile.reset .g-wert{gap:.5em}.g-tuningzeile .g-wert .knopf{cursor:pointer}';
+      '.g-tuningpanel h3{margin:.1em 0 .35em;font-size:1.05em}.g-tuningpanel .g-balken i{width:1.15em}.g-tuningpanel .g-balken i.voll.gold{background:#ffc21a}' +
+      '.g-tuningpanel .g-zeile .knopf.klein,.g-tuningpanel .g-knopf{cursor:pointer}.g-tuningpanel .g-ruck{margin-left:.3em;padding:.12em .5em;border-radius:.7em;background:rgba(255,255,255,.18);cursor:pointer;font-size:.85em}' +
+      '.g-tuningpanel .g-ruck.aus{opacity:.3;cursor:default}.g-tuningknopf{margin-top:.4em;text-align:center}' +
+      '.g-tuningpanel .g-zeile.reset .g-wert{gap:.5em}';
     document.head.appendChild(s);
   }
 
@@ -95,7 +95,7 @@
         `<div class="g-knopf${rueck ? '' : ' aus'}" data-g="tuning:reset">${rueck ? `Zurücksetzen <small>🪙 +${rueck}</small>` : 'nichts getunt'}</div>` +
         `<span class="g-text klein">Bis Stufe 5; ab Stufe ${R.config.spass.tuning.teileAb} siehst du Teile am Fahrzeug</span></div></div>`;
       const msg = g.nachricht ? `<div class="g-nachricht ${g.nachrichtArt}">${g.nachricht}</div>` : '<div class="g-nachricht leer">&nbsp;</div>';
-      return `<div class="g-tuning"><h3>🔧 Tuning mit Goldstücken <span class="g-text">· 🪙 ${konto}</span></h3>${zeilen}${reset}${msg}</div>`;
+      return `<div class="g-tuningpanel"><h3>🔧 Tuning mit Goldstücken <span class="g-text">· 🪙 ${konto}</span></h3>${zeilen}${reset}${msg}</div>`;
     }
 
     // Bühne nur neu bauen, wenn sich die Tuning-Teile ändern
@@ -132,9 +132,8 @@
       try {
         if (this.sichtbar && this.phase === 'werkstatt') {
           stil();
-          const s = T.stufen(this.fahrer, this.autoId), n = prozentGesamt(s), rechts = this.wurzel.querySelector('.g-rechts'), nach = rechts && rechts.querySelector('.g-nachricht');
-          if (nach) nach.insertAdjacentHTML('beforebegin', `<div class="g-zeile g-tuningzeile"><div class="g-label">🔧 Tuning</div><div class="g-wert"><span class="g-text">${n ? `${n} von ${ARTEN.length * R.config.spass.tuning.max} Stufen` : 'noch nichts'}</span>` +
-            `<div class="knopf klein gelb" data-g="tuning:oeffnen">🔧 Tuning öffnen</div></div></div>`);
+          const s = T.stufen(this.fahrer, this.autoId), n = prozentGesamt(s), links = this.wurzel.querySelector('.g-links');
+          if (links) links.insertAdjacentHTML('beforeend', `<div class="g-tuningknopf"><div class="knopf klein gelb" data-g="tuning:oeffnen">🔧 Tuning öffnen${n ? ` (${n}/${ARTEN.length * R.config.spass.tuning.max})` : ''}</div></div>`);
         }
       } catch (e) { console.error('Spaß (Tuning-Zeile):', e); }
       return r;
