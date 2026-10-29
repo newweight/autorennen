@@ -616,7 +616,7 @@
     const nein = (g) => { pruefen.letzterGrund = g; return null; };
     if (!x || typeof x !== 'object' || !Array.isArray(x.pkt)) return nein('Keine Strecke');
     if (x.pkt.length < 40 || x.pkt.length > 800) return nein('Punktzahl');
-    const H = K.welt / 2 + 20, pkt = [];
+    const H = K.welt + 100, pkt = [];
     for (const p of x.pkt) {
       if (!Array.isArray(p) || typeof p[0] !== 'number' || typeof p[1] !== 'number' || !isFinite(p[0]) || !isFinite(p[1])) return nein('Punkt');
       pkt.push([rund(klemme(p[0], -H, H)), rund(klemme(p[1], -H, H))]);

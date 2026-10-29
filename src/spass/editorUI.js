@@ -602,7 +602,7 @@
           const vor = {}; E.Speicher.liste().forEach((x) => { vor[x.daten.id] = x.vorschau; });
           eig.forEach((c) => {
             r2.appendChild(c);
-            const id = c.dataset.a.slice(9), bild = c.querySelector('.strecken-bild');
+            const id = c.dataset.a.slice(8), bild = c.querySelector('.strecken-bild');
             if (bild && vor[id]) { bild.classList.add('e7-bild'); bild.style.backgroundImage = 'url(' + vor[id] + ')'; }
           });
           reihe.parentNode.insertBefore(kopf, reihe.nextSibling); reihe.parentNode.insertBefore(r2, kopf.nextSibling);
