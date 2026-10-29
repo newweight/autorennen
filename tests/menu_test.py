@@ -149,7 +149,7 @@ with sync_playwright() as p:
     LAGE = """(() => { const k = Array.from(document.querySelectorAll('.karte.strecke')), r = k.map(e => e.getBoundingClientRect());
       return { gleicheReihe: new Set(k.map(e => e.offsetTop)).size === 1,
         ok: r.every(a => a.left >= 0 && a.right <= innerWidth) &&
-        r.every((a, i) => r.every((b, j) => i === j || a.right <= b.left + 1 || b.right <= a.left + 1)),
+        r.every((a, i) => r.every((b, j) => i === j || a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1)),   // 11 Karten wrapen auf 2 Reihen: Überlappung nur bei gleicher Höhe
         pillen: k.map(e => !!e.querySelector('.s-pille')), pilleText: k.map(e => e.querySelector('.s-pille') && e.querySelector('.s-pille').textContent),
         hinweis: (k[3].querySelector('.strecken-hinweis') || {}).textContent || '',
         farbe3: getComputedStyle(k[3]).backgroundColor, farbe0: getComputedStyle(k[0]).backgroundColor,

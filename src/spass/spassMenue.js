@@ -17,7 +17,7 @@
       '.m-inhalt.m-scroll>:first-child{margin-top:auto}.m-inhalt.m-scroll>.m-start,.m-inhalt.m-scroll>.garage-reihe{margin-bottom:auto;flex:0 0 auto}' +
       '.m-aktionen.m-fest{flex:0 0 auto;padding:.3em .8em;margin:.2em 0;border-radius:1em;background:rgba(14,24,58,.88);align-self:center}' +
       '.m-inhalt.m-scroll h1{flex:0 0 auto}.m-inhalt{position:relative}' +
-      '.m-inhalt.s-kompakt .karte.strecke .karten-sub{display:none}.m-inhalt.s-kompakt2 .karte.strecke .strecken-hinweis{display:none}.m-inhalt.s-kompakt2 .karte.strecke{padding-bottom:.4em}' +
+      '.m-inhalt.s-kompakt .karte.strecke .karten-sub{display:none}.m-inhalt.s-kompakt2 .karte.strecke .strecken-hinweis{display:none}.m-inhalt.s-kompakt2 .karte.strecke{padding-bottom:.4em}.m-inhalt.s-kompakt2 h1{font-size:1.5em;margin-bottom:.2em}' +
       '.m-mehr{position:absolute;right:.6em;bottom:.2em;z-index:5;padding:.1em .8em;border-radius:1em;background:var(--gelb,#ffd23a);color:#1a2550;font-size:.75em;font-weight:900;cursor:pointer;box-shadow:0 .1em .4em rgba(0,0,0,.5)}' +
       '.m-aktionen.m-fest{flex-wrap:nowrap;gap:.5em}.m-aktionen.m-fest .start-knopf{font-size:1.15em;padding:.25em .8em;min-width:0;flex:1 1 auto;white-space:nowrap}' +
       '.m-aktionen.m-fest .knopf.klein{font-size:.78em;padding:.25em .6em;white-space:nowrap}.m-aktionen.m-fest .knopf kbd{display:none}' +
