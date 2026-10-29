@@ -100,8 +100,8 @@
       V.push({ a: P(a, sg * (r + 0.1), 0), b: P(a + 1.2, sg * (r + 0.1), 0), c: P(a + 1.2, sg * (r + 0.1), 1.2), d: P(a, sg * (r + 0.1), 1.2), farbe: 0x2b2f3a });
     }));
     // Stern oben auf der Röhre (gelb) und Fähnchen
-    kugel(D, P(L * 0.5, 0, r + 0.9), 0.9, 0xff3b6b);
-    kugel(D, P(L * 0.5 + 1.2, 0, r + 0.6), 0.55, 0xffe14a);
+    kugel(D, P(L * 0.5, 0, r + 0.7), 0.6, 0xff3b6b);
+    kugel(D, P(L * 0.5 + 1.1, 0, r + 0.5), 0.4, 0xffe14a);
     // Einfahrt: bunte Querstreifen auf der Fahrbahn (zeigen: hier hinein!), Breite wie die Auslösezone
     const hb = e.halb + 0.8;
     for (let i = 0; i < 7; i++) {

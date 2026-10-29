@@ -20,6 +20,19 @@ def pruefe(name, gut, info=''):
 def schritte(page, n):
     page.evaluate("(n) => { const S = Rennspiel.spiel; for (let i = 0; i < n; i++) S.physikSchritt(1 / 60); }", n)
 
+def standbild(page, bedingung, name, extra=0):
+    """Physik von Hand bis `bedingung` (+extra Schritte) rechnen, Pause, Kamera von Hand nachziehen, Bild. Gibt Höhe über der Straße zurück."""
+    page.wait_for_timeout(700)   # ein paar echte Frames: Auto-Mesh und Kamera springen an die neue Stelle
+    h = page.evaluate("""([b, extra]) => { const S = Rennspiel.spiel, fz = S.fahrzeuge[0].flug; const f = new Function('S', 'fz', 'return ' + b);
+      for (let i = 0; i < 900 && !f(S, fz); i++) S.physikSchritt(1 / 60);
+      for (let i = 0; i < extra; i++) S.physikSchritt(1 / 60);
+      S.pausiert = true; for (let k = 0; k < 240; k++) for (const c of S.kameras) c.update(1 / 60);
+      const v = S.fahrzeuge[0].vehicle; return v.y - S.strecke.hoeheAn(v.x, v.z, S.fahrzeuge[0].index); }""", [bedingung, extra])
+    page.wait_for_timeout(400)
+    page.screenshot(path=os.path.join(bild, name))
+    page.evaluate("Rennspiel.spiel.pausiert = false; Rennspiel.spiel.uhr.rest = 0")
+    return h
+
 def vor_element(page, art, abstand=25, tempo=40):
     """Fahrer 1 stellt sich abstand m vor das Element (Mitte der Straße, Tempo), Rest fährt normal weiter."""
     return page.evaluate("""([art, ab, v0]) => {
@@ -83,29 +96,22 @@ with sync_playwright() as p:
         page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=120000)
         pruefe(tag + ' Strecke hat Trampolin und Kanone', page.evaluate("Rennspiel.spiel.strecke.spass && Rennspiel.spiel.strecke.spass.liste.map(e => e.art).join(',')"))
         page.evaluate("Rennspiel.spiel.autopilot(0, true)")
-        info = vor_element(page, 'trampolin', 25, 40)
+        # Standbilder: Physik von Hand, Kamera von Hand nachgezogen
+        info = vor_element(page, 'trampolin', 40, 40)
         pruefe(tag + ' Trampolin gefunden', info is not None, info)
-        # bis zum Absprung rechnen, dann Standbild in der Luft
-        page.evaluate("""() => { const S = Rennspiel.spiel, fz = S.fahrzeuge[0].flug; for (let i = 0; i < 600 && !fz.aktiv; i++) S.physikSchritt(1 / 60); for (let i = 0; i < 25; i++) S.physikSchritt(1 / 60); const f = S.fahrzeuge[0]; window.__hoehe = f.vehicle.y - S.strecke.hoeheAn(f.vehicle.x, f.vehicle.z, f.index); }""")
-        page.wait_for_timeout(250)   # Kamera folgt nur ohne Pause: kurz live weiterlaufen lassen
-        page.screenshot(path=os.path.join(bild, tag + '_07_trampolin_luft.png'))
-        hoehe = page.evaluate("window.__hoehe")
+        hoehe = standbild(page, "fz.aktiv", tag + "_07_trampolin_luft.png", 28)
         pruefe(tag + ' Trampolin: Fahrzeug in der Luft (> 2 m)', hoehe > 2, round(hoehe, 2))
-        page.evaluate("() => { const S = Rennspiel.spiel; for (let i = 0; i < 150; i++) S.physikSchritt(1 / 60); }")
+        page.evaluate("() => { const S = Rennspiel.spiel; for (let i = 0; i < 200 && S.fahrzeuge[0].flug.aktiv; i++) S.physikSchritt(1 / 60); }")
         pruefe(tag + ' Trampolin: gelandet', page.evaluate("!Rennspiel.spiel.fahrzeuge[0].flug.aktiv && Rennspiel.spiel.fahrzeuge[0].flug.landungen >= 1"))
         pruefe(tag + ' Sticker Trampolin-Hüpfer', page.evaluate("Rennspiel.SpassSticker.hat('%s', 'trampolin')" % ('motorrad' if sp == 'moto' else 'auto')))
         page.wait_for_timeout(300)
         page.screenshot(path=os.path.join(bild, tag + '_08_sticker_toast.png'))
         # ---- Kanone
-        info = vor_element(page, 'kanone', 25, 40)
+        info = vor_element(page, 'kanone', 40, 40)
         pruefe(tag + ' Kanone gefunden', info is not None, info)
-        page.evaluate("""() => { const S = Rennspiel.spiel, fz = S.fahrzeuge[0].flug; for (let i = 0; i < 600 && !(fz.kanone && fz.kanone.t > 0.4 + 0.4); i++) S.physikSchritt(1 / 60); window.__steht = S.fahrzeuge[0].vehicle.vLaengs === 0 && !!fz.kanone; }""")
-        page.wait_for_timeout(120)
-        page.screenshot(path=os.path.join(bild, tag + '_09_kanone_countdown.png'))
-        pruefe(tag + ' Kanone: Countdown (Fahrzeug steht in der Röhre)', page.evaluate("window.__steht"))
-        page.evaluate("""() => { const S = Rennspiel.spiel, fz = S.fahrzeuge[0].flug; for (let i = 0; i < 600 && !(fz.kanone && fz.kanone.t > 1.6 + 0.7); i++) S.physikSchritt(1 / 60); }""")
-        page.wait_for_timeout(200)
-        page.screenshot(path=os.path.join(bild, tag + '_10_kanone_flug_konfetti.png'))
+        standbild(page, "fz.kanone && fz.kanone.t > 0.8", tag + '_09_kanone_countdown.png')
+        pruefe(tag + ' Kanone: Countdown (Fahrzeug steht in der Röhre)', page.evaluate("Rennspiel.spiel.fahrzeuge[0].vehicle.vLaengs === 0 && !!Rennspiel.spiel.fahrzeuge[0].flug.kanone"))
+        standbild(page, "fz.kanone && fz.kanone.t > 1.85", tag + '_10_kanone_flug_konfetti.png')
         page.evaluate("() => { const S = Rennspiel.spiel; for (let i = 0; i < 400 && S.fahrzeuge[0].flug.aktiv; i++) S.physikSchritt(1 / 60); }")
         land = page.evaluate("(() => { const S = Rennspiel.spiel, f = S.fahrzeuge[0], n = S.strecke.abfrage(f.vehicle.x, f.vehicle.z, f.index); return { aktiv: f.flug.aktiv, q: n.seitenabstand, halb: S.strecke.breite / 2 }; })()")
         pruefe(tag + ' Kanone: Landung auf der Fahrbahn', (not land['aktiv']) and abs(land['q']) < land['halb'], land)
