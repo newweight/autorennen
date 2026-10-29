@@ -460,11 +460,11 @@
    * Pose eines Autos aus zwei Zustandsreihen (a, b: Arrays aus der Zustand-Nachricht) interpolieren → in v schreiben.
    * Rückgabe: Looping-Daten [idx, winkel, qEin] (interpoliert) oder null.
    */
-  const TELEPORT_SPRUNG = 20;     // m (Betragssumme x+z); ein Auto schafft zwischen zwei Zuständen höchstens ein paar Meter
+  const TELEPORT_SPRUNG = 50;     // m (Betragssumme x+z); ein Auto schafft zwischen zwei Zuständen höchstens ein paar Meter
   function interpolieren(a, b, t, v) {
     if (!a || !b) return null;
     if (a[13] !== b[13]) { a = b; t = 0; }       // Reset dazwischen: nicht durch die Landschaft gleiten
-    else if (Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]) > TELEPORT_SPRUNG) { a = b; t = 0; }   // S8: Teleport-Tor o. Ä. (Ortssprung > 20 m zwischen zwei Zuständen): nicht 128 m durch die Landschaft gleiten, sofort am Ziel zeigen
+    else if (Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]) > TELEPORT_SPRUNG) { a = b; t = 0; }   // S8: Teleport-Tor o. Ä. (Ortssprung > 50 m zwischen zwei Zuständen): nicht 128 m durch die Landschaft gleiten, sofort am Ziel zeigen
     const L = (i) => a[i] + (b[i] - a[i]) * t;
     v.x = L(0); v.z = L(1); v.y = L(2);
     v.heading = a[3] + R.Vehicle.winkelDiff(b[3], a[3]) * t;
