@@ -241,7 +241,7 @@ with sync_playwright() as p:
     taste('ArrowDown'); taste('ArrowRight')   # Schwierigkeit
     snap('menu_4_einstellungen.png')
     # Start: bis zur Start-Zeile mit Enter, dann Enter
-    for _ in range(24):
+    for _ in range(80):        # seit S1–S8 hat die Einstellungs-Seite viel mehr Zeilen (Spaß, Tuning, Zauber …)
         if zustand() != 'menue': break
         taste('Enter'); page.wait_for_timeout(100)
     try:
