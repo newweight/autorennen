@@ -1,10 +1,76 @@
 {
  "draw_calls": {
+  "Autorennen mond normal": {
+   "start": 44,
+   "huepfer": 53,
+   "krater": 35,
+   "tor": 58
+  },
+  "Autorennen mond ultra": {
+   "start": 65,
+   "huepfer": 60,
+   "krater": 40,
+   "tor": 64
+  },
+  "Autorennen unterwasser normal": {
+   "draussen": 36,
+   "tunnel": 62,
+   "tunnel2": 37
+  },
+  "Autorennen unterwasser ultra": {
+   "draussen": 41,
+   "tunnel": 68,
+   "tunnel2": 42
+  },
+  "Autorennen regenbogenland normal": {
+   "fahrt": 33,
+   "tor": 92
+  },
+  "Autorennen regenbogenland ultra": {
+   "fahrt": 36,
+   "tor": 91
+  },
   "Autorennen dino normal": {
    "begleiter": 72
   },
   "Autorennen dino ultra": {
    "begleiter": 79
+  },
+  "Motorrad mond normal": {
+   "start": 215,
+   "huepfer": 25,
+   "krater": 160,
+   "tor": 93
+  },
+  "Motorrad mond ultra": {
+   "start": 251,
+   "huepfer": 36,
+   "krater": 171,
+   "tor": 103
+  },
+  "Motorrad unterwasser normal": {
+   "draussen": 117,
+   "tunnel": 31,
+   "tunnel2": 55
+  },
+  "Motorrad unterwasser ultra": {
+   "draussen": 125,
+   "tunnel": 41,
+   "tunnel2": 66
+  },
+  "Motorrad regenbogenland normal": {
+   "fahrt": 49,
+   "tor": 101
+  },
+  "Motorrad regenbogenland ultra": {
+   "fahrt": 56,
+   "tor": 106
+  },
+  "Motorrad dino normal": {
+   "begleiter": 125
+  },
+  "Motorrad dino ultra": {
+   "begleiter": 145
   }
  },
  "fehler": []
