@@ -341,3 +341,8 @@ alle Internet-Gäste: 30 Fehlversuche je Minute → 60 s kein Beitritt aus dem I
 strengen Prüfung wie `/ws` (Origin = Host/X-Forwarded-Host/`--oeffentlich`); Tailnet-Verbindungen von anderen erlaubten Seiten (eigene Radwelt `localhost:10100`, andere
 Tailnet-Geräte) bekommen `schalter {recht:false, grund:'seite', funnel, rest, miniSeite}` – geschaltet wird dann auf der Mac-mini-Seite (`/rad/Radwelt.html?schalter=1`).
 Autostart: Server mit `--host 127.0.0.1` (nur über `tailscale serve`/Funnel erreichbar, nicht mehr im LAN).
+
+
+## S1 Spaß-Paket (additiv, abwärtskompatibel)
+- Raum-Einstellung `spass` (true = Trampolin/Kanone auf der Strecke; fehlt/false = Strecke wie früher). Server baut `strecke.spass` aus Strecke + Seed deterministisch (src/spass/spassKern.js), Client ebenso.
+- `ich.sz.f[8]` = 1, wenn der aktuelle Flug ein Trampolin-Sprung ist; `ich.sz.sp` = 1, solange das Fahrzeug in der Kanone steckt (Server rechnet allein, Vorhersage folgt ihm). Alte Clients ignorieren beides.

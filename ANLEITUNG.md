@@ -188,6 +188,16 @@ Gäste öffnen den Einladungs-Link (oder den QR-Code aus der Online-Lobby) im Br
 - **Umschalten:** Der erste Druck auf Pfeile oder W/A/S/D blendet die Bildschirm-Tasten aus (wird gemerkt, auch nach Neuladen). Wer wieder Touch will: im Rennen den unteren Bildschirm berühren, oder **🎮 Touch-Steuerung: an/aus** im Pausemenü (Esc) bzw. in den Einstellungen (neben „Ton“) – das merkt sich das Spiel ebenfalls.
 - Tastatur und Maus funktionieren immer weiter. `?touch=0` an die Adresse hängen schaltet die Bildschirm-Tasten ganz ab, `?touch=1` erzwingt sie.
 
+## 🎪 Spaß-Paket S1 (Auto und Motorrad)
+Im Menü, Schritt 5 (Los!), unten: **🎪 Spaß-Elemente** (An/Aus, Standard An), **👻 Geist** (An/Aus, Standard An) und **📒 Sticker-Album**.
+- **📯 Stimmen-Hupe und Jubel:** In der **Garage** (erster Schritt) kannst du Hupe und Jubel selbst einsprechen (höchstens 2 Sekunden), anhören und löschen. Taste **U** = Hupe aufnehmen, **I** = Jubel aufnehmen (nochmal drücken = fertig). Ohne Aufnahme hupt das Spiel mit dem Standardklang. Wenn das Mikrofon nicht erlaubt ist, erscheint ein freundlicher Hinweis. Die Aufnahmen bleiben nur auf deinem Gerät (je Spiel getrennt) und werden online nicht gesendet.
+  - Hupen im Rennen: Spieler 1 **-** (Taste neben dem rechten Umschalter, „Slash“; allein auch **Q**), Spieler 2 **Q**, am Handy der Knopf **📯**. Jubel gibt es im Ziel, bei einem Sieg und nach einem großen Stunt.
+- **🤸 Trampolin:** bunte Matte auf der Geraden – drüberfahren (ab Schritttempo) schleudert dich ca. 4 m hoch (knapp 2 s), im Flug richtet das Spiel dich Richtung Straße aus.
+- **💥 Kanone:** rot-gelbe Röhre mit blauem Ring. Du wirst eingezogen, es zählt **3 – 2 – 1**, dann **RUMMS** – du fliegst mit Konfetti ein Stück die Strecke entlang und landest sicher auf der Straße.
+- **👻 Geist:** dein bester Lauf je Strecke und Fahrzeug fährt als durchsichtiges Geisterauto mit (nur allein, ohne Zusammenstoß, nur offline).
+- **📒 Sticker-Album:** Auto 18, Motorrad 22 Sticker (Sieg, Münzen, Trampolin, Kanone, Geist geschlagen, Hupe, Stimme, Stunts …). Neue Sticker melden sich mit „Neuer Sticker!“, das Album ist im Menü.
+- Online: Trampolin und Kanone rechnet der Server genauso wie du (ein Schalter „Spaß-Elemente“ im Raum folgt); Geist, Sticker und Stimmen sind nur auf deinem Gerät.
+
 ## Tempo
 Neu: Schritt 5 hat die **Tempo-Klasse**. **Normal** (Standard) ist gemütlich: ca. **154–196 km/h** Höchsttempo (Formel-Renner 196), mit weniger Beschleunigung und Bremse. **Schnell** nutzt die vollen Katalogwerte unten.
 In **Schnell** fahren die Autos **220 bis 270 km/h** (Multivan 220 … Porsche 270, Formel-Renner 280). Runden dauern auf den langen Strecken ca. 2 Minuten (Fantasie kürzer). Bergauf bremst, bergab beschleunigt das Auto.
