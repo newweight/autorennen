@@ -16,7 +16,8 @@
       '.m-inhalt.m-scroll{overflow-y:auto;overflow-x:hidden;justify-content:flex-start;scrollbar-width:thin;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}' +
       '.m-inhalt.m-scroll>.m-start{margin:auto 0;flex:0 0 auto}' +
       '.m-aktionen.m-fest{flex:0 0 auto;padding:.3em .8em;margin:.2em 0;border-radius:1em;background:rgba(14,24,58,.88);align-self:center}' +
-      '.m-inhalt.m-scroll h1{flex:0 0 auto}' +
+      '.m-inhalt.m-scroll h1{flex:0 0 auto}.m-inhalt{position:relative}' +
+      '.m-mehr{position:absolute;left:50%;bottom:.2em;transform:translateX(-50%);z-index:5;padding:.1em .8em;border-radius:1em;background:var(--gelb,#ffd23a);color:#1a2550;font-size:.75em;font-weight:900;cursor:pointer;box-shadow:0 .1em .4em rgba(0,0,0,.5)}' +
       '.m-aktionen.m-fest{flex-wrap:nowrap;gap:.5em}.m-aktionen.m-fest .start-knopf{font-size:1.15em;padding:.25em .8em;min-width:0;flex:1 1 auto;white-space:nowrap}' +
       '.m-aktionen.m-fest .knopf.klein{font-size:.78em;padding:.25em .6em;white-space:nowrap}.m-aktionen.m-fest .knopf kbd{display:none}' +
       '@media (max-height:720px){.m-inhalt.m-scroll h1{font-size:1.3em;margin-bottom:.2em}.m-inhalt.m-scroll .m-start{font-size:.86em}}';
@@ -39,7 +40,12 @@
         const ak = inh.querySelector('.m-aktionen');      // Start-Knopf/Ton/Steuerung/Grafik: fest zwischen Inhalt und Fußleiste (scrollt nie weg)
         if (ak) { ak.classList.add('m-fest'); inh.parentNode.insertBefore(ak, inh.nextSibling); }
         if (war) inh.scrollTop = top;
-        const f = inh.querySelector('.fokus, .start-knopf.fokus');
+        const f = inh.querySelector('.fokus');
+        const mehr = document.createElement('div'); mehr.className = 'm-mehr'; mehr.textContent = '▼ weitere Schalter'; mehr.style.display = 'none';
+        mehr.addEventListener('click', (ev) => { ev.stopPropagation(); inh.scrollTo({ top: inh.scrollHeight, behavior: 'smooth' }); });
+        inh.appendChild(mehr);
+        const hinweis = () => { mehr.style.display = inh.scrollHeight > inh.clientHeight + 6 && inh.scrollTop + inh.clientHeight < inh.scrollHeight - 6 ? '' : 'none'; };
+        inh.addEventListener('scroll', hinweis, { passive: true }); setTimeout(hinweis, 0); setTimeout(hinweis, 400);
         if (f) {                                        // Fokus-Zeile sichtbar halten (sticky Start-Knopf unten freilassen)
           const a = inh.getBoundingClientRect(), b = f.getBoundingClientRect(), frei = 6;
           if (b.top < a.top + 4) inh.scrollTop -= (a.top + 4 - b.top);
