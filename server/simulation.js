@@ -32,6 +32,7 @@ const MODULE = [
   'src/main.js', 'src/spass/spassPhysik.js',      // S1: Trampolin/Kanone (Add-on, nach main.js)
   'src/spass/spassWelten.js',                     // S5: Hüpfer, Teleport-Tore, Grip je Strecke (Add-on, nach spassPhysik)
   'src/spass/spassZauber.js',                     // S6: Magnet-Röhre, Schlucht-Gleiten, Grinden/Wallride, Halfpipe, Riese/Mini (Add-on, nach spassWelten)
+  'src/spass/editorKern.js',                      // S7: Strecken-Editor (eigene Strecken 'eigen-…', Haken in R.Spass.plan – nach spassZauber)
 ];
 
 /** Kleiner Ersatz für document.createElement('canvas') (Texturen der Deko werden im Server nie gezeichnet). */
@@ -103,7 +104,7 @@ let RM = null;
 function ladenMoto() {
   if (RM) return RM;
   const bisMega = MODULE.indexOf('src/world/themenS5.js');   // S5: Themen-Add-on gehört dazu
-  const liste = MODULE.slice(0, bisMega + 1).concat(MOTO_VOR, ['src/main.js', 'src/spass/spassPhysik.js', 'src/spass/spassWelten.js', 'src/spass/spassZauber.js'], MOTO_NACH);
+  const liste = MODULE.slice(0, bisMega + 1).concat(MOTO_VOR, ['src/main.js', 'src/spass/spassPhysik.js', 'src/spass/spassWelten.js', 'src/spass/spassZauber.js', 'src/spass/editorKern.js'], MOTO_NACH);
   RM = kontextLaden(liste, { MOTORRAD: true });
   return kollisionsHuelle(RM);
 }

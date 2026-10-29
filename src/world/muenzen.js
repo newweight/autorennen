@@ -67,6 +67,12 @@
 
   /** Münz-Positionen [{ s, q, reihe }] für eine Strecke (rein, deterministisch). */
   function platzieren(strecke) {
+    // S7 (Strecken-Editor): eigene Strecke mit vom Kind gesetzten Goldstück-Reihen (katalog.eigeneMuenzen = [{ s, q }]) – nur dann, sonst unverändert
+    if (strecke.katalog && strecke.katalog.eigen && Array.isArray(strecke.katalog.eigeneMuenzen)) {
+      const hb = (strecke.breite || 12) / 2, rr = wert(C().reihe, 5), ab = wert(C().reiheAbstand, 6), l = [];
+      strecke.katalog.eigeneMuenzen.forEach((m, k) => { for (let j = 0; j < rr; j++) l.push({ s: strecke.spline.wrapS(m.s + j * ab), q: (m.q || 0) * hb * 2, reihe: 100 + k }); });
+      return l;
+    }
     const c = C(), sp = strecke.spline, L = sp.laenge;
     const nMin = wert(c.anzahlMin, 20), nMax = wert(c.anzahlMax, 40), reihe = wert(c.reihe, 5), ra = wert(c.reiheAbstand, 6);
     const startFrei = wert(c.startFrei, 70), zielFrei = wert(c.zielFrei, 25);
@@ -145,7 +151,7 @@
       this.zeit = 0;
       // Z1 (Zufall): Lage für Runde 1 aus dem Rennseed (nur wenn die Strecke mit optionen.zufall gebaut wurde; sonst bleibt es bei der festen Lage)
       this._gruppen = null;
-      if (strecke.zufall && R.Zufall) { strecke.zufall.muenzen = this; this._zufallStart(strecke.zufall); }
+      if (strecke.zufall && R.Zufall && !(strecke.katalog && strecke.katalog.eigeneMuenzen)) { strecke.zufall.muenzen = this; this._zufallStart(strecke.zufall); }   // S7: eigene Goldstück-Reihen bleiben liegen
     }
 
     /** Münze k aus { s, q, reihe }: Weltposition und Zustand. */
