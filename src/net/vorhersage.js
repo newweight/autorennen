@@ -74,7 +74,7 @@
       const st0 = opt.strecke || {};
       this.kz = sv.kleber && R.Kleber && st0.kleber && st0.kleber.length ? R.Kleber.zustand() : null;
       this.az = sv.anlauf && R.Anlauf && ((st0.loopings && st0.loopings.length) || (st0.schanzen && st0.schanzen.length)) ? R.Anlauf.zustand() : null;
-      this.fz = sv.flug && R.Schanzen && st0.schanzen && st0.schanzen.length ? R.Schanzen.zustand() : null;
+      this.fz = sv.flug && R.Schanzen && ((st0.schanzen && st0.schanzen.length) || (st0.spass && st0.spass.liste.length)) ? R.Schanzen.zustand() : null;
       this.lp = sv.looping && R.Looping && st0.loopings && st0.loopings.length ? R.Looping.zustand() : null;
       this.svAn = !!(this.kz || this.az || this.fz || this.lp);
       if (this.az) R.Anlauf.stellen(opt.strecke);           // Anlauf-Stellen einmal vorab berechnen (Mindest-Anlauf, ein paar ms) – nicht erst mitten im Rennen
@@ -175,6 +175,8 @@
       if (kz) R.Kleber.nachSchritt(kz, v, st, n, dt);
       if (az && az.bremst && v.vLaengs > 0.5) this.bremst = true;
       if (fz) R.Schanzen.nachSchritt(fz, v, st, n, xAlt, zAlt, dt);
+      // S1: Trampolin/Kanone (src/spass/spassKern.js, wie im Server); Einfahrt in die Kanone → Server rechnet allein, Anzeige folgt ihm
+      if (fz && st.spass && R.Spass && !fz.aktiv && R.Spass.nachSchritt(fz, v, st, n, xAlt, zAlt, dt) === 'kanone') this.sonder = true;
       if (lp) {
         const pt = st.spline.punktBei(n.s), dx = v.x - xAlt, dz = v.z - zAlt;
         this._loopingErgebnis(R.Looping.einfahrt(lp, v, st, n.s, n.s + dx * pt.tx + dz * pt.tz, n.seitenabstand + dx * pt.nx + dz * pt.nz));
@@ -271,8 +273,10 @@
         const f = sz && sz.f;
         if (f) {
           fz.aktiv = !!f[0]; fz.rampe = f[1] >= 0 ? R.Schanzen.liste(st)[f[1]] || null : null;
-          fz.rampenH = f[2]; fz.vy = f[3]; fz.t = f[4]; fz.y = fz.yVorher = f[5]; fz.nicken = fz.nickenVorher = f[6]; fz.index = f[7] < 0 ? undefined : f[7];
-        } else { fz.aktiv = false; fz.rampe = null; fz.rampenH = 0; fz.vy = 0; fz.t = 0; fz.nicken = fz.nickenVorher = 0; }
+          fz.rampenH = f[2]; fz.vy = f[3]; fz.t = f[4]; fz.y = fz.yVorher = f[5]; fz.nicken = fz.nickenVorher = f[6]; fz.index = f[7] < 0 ? undefined : f[7]; fz.trampolin = f[8] ? 1 : 0;
+        } else { fz.aktiv = false; fz.rampe = null; fz.rampenH = 0; fz.vy = 0; fz.t = 0; fz.nicken = fz.nickenVorher = 0; fz.trampolin = 0; }
+        fz.kanone = null;
+        if (sz && sz.sp) fremd = true;       // S1: Kanone
       } else if (sz && sz.f && (sz.f[0] || sz.f[1] >= 0)) fremd = true;
       if (lp) {
         const l = sz && sz.l;
@@ -320,7 +324,7 @@
         v._kollAlt = { x: v.x, z: v.z, h: v.heading };   // Sweep ab der Server-Pose (nicht ab einer Pose aus der Zukunft)
       }
       if (this.sonder) return;                 // Server rechnet allein – Anzeige folgt dem Puffer
-      for (const e of this.offen) { this._rechnen(e); st.replays++; }
+      for (const e of this.offen) { if (this.sonder) break; this._rechnen(e); st.replays++; }      // S1: Einfahrt in die Kanone im Replay → Rest rechnet der Server
       // Looping: Anzeigewinkel weich angleichen (wie die Position); anderer Looping/neu eingefahren → kein Übergang
       this.korr.w = 0;
       if (lpAlt && this.lp.aktiv && this.lp.looping === lpAlt.L) {

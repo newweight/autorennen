@@ -24,10 +24,10 @@ const MODULE = [
   'vendor/three.min.js',
   'src/config.js', 'src/physics/vehicle.js', 'src/physics/collisions.js', 'src/physics/schaden.js', 'src/cars/carCatalog.js', 'src/cars/dachregel.js',
   'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/zufall.js', 'src/track/looping.js', 'src/track/schanze.js',
-  'src/track/anlauf.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/tribuenen.js', 'src/world/formel1.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
+  'src/track/anlauf.js', 'src/spass/spassKern.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/tribuenen.js', 'src/world/formel1.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
   'src/world/kleber.js', 'src/world/polizei.js', 'src/world/verkehr.js', 'src/world/tiere.js', 'src/race/raceManager.js', 'src/race/startBoost.js', 'src/ai/driver.js', 'src/net/protokoll.js',
   'src/track/megastrecke.js',   // v22: Megastrecke (Add-on, nach Wetter/Themen/Strecke geladen)
-  'src/main.js',
+  'src/main.js', 'src/spass/spassPhysik.js',      // S1: Trampolin/Kanone (Add-on, nach main.js)
 ];
 
 /** Kleiner Ersatz für document.createElement('canvas') (Texturen der Deko werden im Server nie gezeichnet). */
@@ -99,7 +99,7 @@ let RM = null;
 function ladenMoto() {
   if (RM) return RM;
   const bisMega = MODULE.indexOf('src/track/megastrecke.js');
-  const liste = MODULE.slice(0, bisMega + 1).concat(MOTO_VOR, ['src/main.js'], MOTO_NACH);
+  const liste = MODULE.slice(0, bisMega + 1).concat(MOTO_VOR, ['src/main.js', 'src/spass/spassPhysik.js'], MOTO_NACH);
   RM = kontextLaden(liste, { MOTORRAD: true });
   return kollisionsHuelle(RM);
 }
@@ -147,6 +147,8 @@ function einstellungenPruefen(roh, spielerAnzahl, moto) {
     // Z1 (additiv): Zufällige Strecke – Münzen/Hindernisse jede Runde neu (track/zufall.js); nur ein echtes true schaltet ein (ein alter Browser sendet das Feld nicht
     // und kennt das Ereignis `zufall` nicht → bekommt die feste Strecke); der neue Browser sendet `zufall` (Standard true) in raumErstellen/einstellungen
     zufall: r.zufall === true,
+    // S1 (additiv): Spaß-Elemente (Trampolin/Kanone, src/spass); nur ein echtes true schaltet ein (alter Browser sendet das Feld nicht → feste alte Strecke)
+    spass: r.spass === true,
     // 12.10. Hindernis-Menge: nur 'normal' | 'viele' | 'sehrViele' (unbekannt, Zahl, null … → 'normal'); alle Browser bauen dieselbe Strecke
     hindernisMenge: c.hindernisMenge && c.hindernisMenge.stufen && typeof r.hindernisMenge === 'string' &&
       Object.prototype.hasOwnProperty.call(c.hindernisMenge.stufen, r.hindernisMenge) ? r.hindernisMenge : ((c.hindernisMenge && c.hindernisMenge.standard) || 'normal'),
@@ -177,8 +179,10 @@ class Simulation {
     const welt = R.Strecke.weltName ? R.Strecke.weltName(daten, e.welt) : (daten.weltStandard || undefined);
     // Z1: Rennseed der Zufalls-Strecke aus dem Raum-Seed (Ganzzahl-Hash, bitgleich im Browser); null = feste Strecke wie bisher
     this.zufallSeed = e.zufall === true && R.Zufall ? R.Zufall.hash32(seed, 0x5a31, 1, 7) : null;
-    const strecke = new R.Strecke(daten, this.zufallSeed === null ? { welt, variante: e.variante, hindernisMenge: e.hindernisMenge }
-      : { welt, variante: e.variante, hindernisMenge: e.hindernisMenge, zufall: { seed: this.zufallSeed } });
+    const sOpt = { welt, variante: e.variante, hindernisMenge: e.hindernisMenge };
+    if (this.zufallSeed !== null) sOpt.zufall = { seed: this.zufallSeed };
+    if (e.spass === true) sOpt.spass = true;
+    const strecke = new R.Strecke(daten, sOpt);
     // Wetter auflösen (Zufall nur hier, mit Seed) → konkrete Werte gehen an alle Browser (gleiche Umwelt-Physik)
     const wa = R.Wetter.aufloesen({ jahreszeit: e.jahreszeit, wetter: e.wetter, wind: { staerke: e.windStaerke, richtung: 'zufall' },
       thema: daten.thema, seed });
@@ -513,8 +517,9 @@ class Simulation {
     const fz = f.flug;
     if (fz && (fz.aktiv || fz.rampe || Math.abs(fz.nicken) > 1e-3)) {
       z.f = [fz.aktiv ? 1 : 0, fz.rampe ? R.Schanzen.liste(st).indexOf(fz.rampe) : -1, fz.rampenH, fz.vy, fz.t, fz.y,
-        fz.nicken, fz.index === undefined ? -1 : fz.index]; any = true;
+        fz.nicken, fz.index === undefined ? -1 : fz.index, fz.trampolin ? 1 : 0]; any = true;
     }
+    if (fz && fz.kanone) { z.sp = 1; any = true; }      // S1: in der Kanone rechnet der Server allein (Anzeige folgt ihm)
     const lp = f.looping;
     if (lp && (lp.aktiv || lp.fallen)) {
       z.l = [lp.aktiv ? 1 : 0, lp.fallen ? 1 : 0, st.loopings.indexOf(lp.looping), lp.winkel, lp.winkelVorher, lp.v, lp.qEin || 0,
