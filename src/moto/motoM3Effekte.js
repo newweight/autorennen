@@ -19,7 +19,8 @@ window.Rennspiel = window.Rennspiel || {};
   const CFG = {
     knall: { gasVor: 0.6, gasNach: 0.1, rpmMin: 0.55, pause: 1.4, pegel: 0.09, max: 3 },
     funken: { rutschTempo: 3, rutschProSek: 70, aufsetzMin: 3, aufsetzMax: 24, leben: 0.55, schwerkraft: 9.81 },
-    maxFunken: 96, maxSpritzer: 64,
+    maxFunken: 96, maxSpritzer: 64, spritzGroesse: 0.55,   // FIX3: Spritzer größer (0,34 → 0,55 m), damit Wasser/Schlamm im Bild auffallen
+   
   };
   const klemme = (x, a, b) => Math.max(a, Math.min(b, x));
 
@@ -132,7 +133,7 @@ window.Rennspiel = window.Rennspiel || {};
       const pts = new THREE.Points(geo, m); pts.frustumCulled = false; pts.visible = false; g.add(pts);
       return { pts, pos, farb, pool, additiv };
     };
-    const a = system(partikelNeu(CFG.maxFunken), 0.32, true), b = system(partikelNeu(CFG.maxSpritzer), 0.34, false);
+    const a = system(partikelNeu(CFG.maxFunken), 0.32, true), b = system(partikelNeu(CFG.maxSpritzer), CFG.spritzGroesse, false);
     const fuellen = (s) => {
       const p = s.pool; let any = false;
       for (let i = 0; i < p.n; i++) {

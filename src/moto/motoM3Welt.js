@@ -25,7 +25,7 @@ window.Rennspiel = window.Rennspiel || {};
 
   R.config.motoM3 = {
     park: { id: 'stuntpark', breite: 40, gerade: 360, radius: 100, runden: 999 },
-    feld: { schlamm: { bremse: 1.15, spritz: 26 }, wasser: { bremse: 0.4, spritz: 30 } },        // bremse = Tempoverlust je Sekunde (Exponent), spritz = Tropfen je Sekunde
+    feld: { schlamm: { bremse: 1.15, spritz: 26 }, wasser: { bremse: 0.4, spritz: 80 } },        // FIX3: Wasser spritzt kräftig (80 statt 30 Tropfen je s); bremse = Tempoverlust je Sekunde (Exponent), spritz = Tropfen je Sekunde
     kisten: { radius: 1.6, minTempo: 3, punkte: 150, erneuerung: 8, flugzeit: 1.8, proStapel: 6, seite: 0.7 },
     steilwand: { winkel: 28, laenge: 6 },
   };
@@ -151,6 +151,58 @@ window.Rennspiel = window.Rennspiel || {};
   // Grafik (nur mit THREE)
   // ============================================================
   const ANIM = { t: 0 };
+  // FIX3: Wasser-Optik (Konfig): große glitzernde Fläche mit Wellen, Gischt-Rand, Hinweisschild davor
+  R.config.motoM3.wasserBild = {
+    hoehe: 0.09,               // m über der Fahrbahn
+    deckkraft: 0.93, kachel: 6, fliess: 0.16,        // Deckkraft, Kachelgröße der Textur (m), Wellen-Geschwindigkeit
+    gischtBreite: 0.7,         // m Schaumrand an beiden Seiten
+    glitzerDichte: 0.12, glitzerGroesse: 0.85,       // Glitzer-Sterne je m², Größe (m)
+    schild: true, schildAbstand: 28, schildB: 6.5, schildH: 1.7, schildHoehe: 3.3,   // Schild „WASSER“/„SCHLAMM“ 28 m vor dem Feld, beidseitig
+  };
+  /** Seamless-Textur: Wasserfläche (Verlauf, Wellenlinien, Glitzer) bzw. weißer Schaum (schaum = true). Nur im Browser. */
+  function wasserTextur(schaum) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d');
+    if (schaum) {
+      g.clearRect(0, 0, 256, 256);
+      const gr = g.createLinearGradient(0, 0, 256, 0); gr.addColorStop(0, 'rgba(255,255,255,0.15)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.95)'); gr.addColorStop(1, 'rgba(255,255,255,0.15)');
+      g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 40; i++) { g.fillStyle = 'rgba(190,225,255,0.35)'; g.beginPath(); g.arc((i * 97) % 256, (i * 61) % 256, 5 + (i % 4) * 3, 0, 6.2832); g.fill(); }
+    } else {
+      const gr = g.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, '#1f8fe8'); gr.addColorStop(0.5, '#3fb4ff'); gr.addColorStop(1, '#1f8fe8');
+      g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+      g.lineCap = 'round';
+      for (let r = 0; r < 8; r++) {        // Wellenlinien (Periode teilt 256 → nahtlos)
+        const y0 = r * 32 + 8, ph = r * 1.7, hell = r % 2 ? 'rgba(255,255,255,0.75)' : 'rgba(210,240,255,0.55)';
+        g.strokeStyle = hell; g.lineWidth = r % 2 ? 5 : 3; g.beginPath();
+        for (let x = 0; x <= 256; x += 4) { const y = y0 + 5 * Math.sin(x / 256 * 6.2832 * 2 + ph); if (x === 0) g.moveTo(x, y); else g.lineTo(x, y); }
+        g.stroke();
+      }
+      for (let i = 0; i < 26; i++) {       // helle Glanzpunkte
+        const x = (i * 151) % 256, y = (i * 83 + 17) % 256, rr = 3 + (i % 3) * 2; g.fillStyle = 'rgba(255,255,255,0.9)'; g.beginPath(); g.arc(x, y, rr, 0, 6.2832); g.fill();
+      }
+    }
+    const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; if (THREE.SRGBColorSpace) t.colorSpace = THREE.SRGBColorSpace; return t;
+  }
+  /** Vierzackiger Glitzerstern (für die Punkte). */
+  function sternTextur() {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d');
+    const rd = g.createRadialGradient(32, 32, 0, 32, 32, 14); rd.addColorStop(0, 'rgba(255,255,255,1)'); rd.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = rd; g.fillRect(0, 0, 64, 64);
+    g.fillStyle = '#fff'; g.beginPath(); g.moveTo(32, 2); g.lineTo(36, 28); g.lineTo(62, 32); g.lineTo(36, 36); g.lineTo(32, 62); g.lineTo(28, 36); g.lineTo(2, 32); g.lineTo(28, 28); g.closePath(); g.fill();
+    return new THREE.CanvasTexture(cv);
+  }
+  /** Hinweisschild: „WASSER“ (blau, Tropfen) bzw. „SCHLAMM“ (braun). */
+  function schildTextur(art) {
+    const cv = document.createElement('canvas'); cv.width = 512; cv.height = 136; const g = cv.getContext('2d');
+    const wasser = art === 'wasser';
+    g.fillStyle = wasser ? '#0c6fd6' : '#7a4a22'; g.fillRect(0, 0, 512, 136); g.strokeStyle = '#fff'; g.lineWidth = 10; g.strokeRect(8, 8, 496, 120);
+    if (wasser) {     // Tropfen (wie 💧, gezeichnet – braucht keine Emoji-Schrift)
+      const tropf = (cx, cy, k) => { g.fillStyle = '#bfe8ff'; g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.moveTo(cx, cy - 34 * k); g.bezierCurveTo(cx + 8 * k, cy - 14 * k, cx + 26 * k, cy + 2 * k, cx + 26 * k, cy + 16 * k);
+        g.bezierCurveTo(cx + 26 * k, cy + 34 * k, cx - 26 * k, cy + 34 * k, cx - 26 * k, cy + 16 * k); g.bezierCurveTo(cx - 26 * k, cy + 2 * k, cx - 8 * k, cy - 14 * k, cx, cy - 34 * k); g.closePath(); g.fill(); g.stroke(); };
+      tropf(62, 68, 1.1); tropf(450, 68, 1.1);
+    }
+    g.fillStyle = '#fff'; g.font = 'bold 76px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(wasser ? 'WASSER' : 'SCHLAMM', 256, 72);
+    const t = new THREE.CanvasTexture(cv); if (THREE.SRGBColorSpace) t.colorSpace = THREE.SRGBColorSpace; return t;
+  }
   function bauen(strecke) {
     if (typeof THREE === 'undefined') return null;
     const gruppe = new THREE.Group(); gruppe.name = 'MotoPark'; gruppe.userData.anim = [];
@@ -170,20 +222,74 @@ window.Rennspiel = window.Rennspiel || {};
     const kopf = (tx, tz) => Math.atan2(tx, tz);
 
     // Felder: Streifen aus kleinen Vierecken entlang der Strecke (folgt der Kurve)
-    const fl = felder(strecke), schl = sammler(), wass = sammler();
+    const fl = felder(strecke), schl = sammler();
+    const wGeo = { pos: [], uv: [] }, gGeo = { pos: [], uv: [] }, glitzer = [], feldSchilder = [];   // FIX3: Wasser = eigene Fläche mit Wellen-Textur + Gischt-Rand + Glitzer + Hinweisschild
+    const WC = C().wasserBild;
+    const quad4 = (G, a0, a1, b0, b1, y, u0, u1, v0, v1) => {      // Viereck zwischen Querschnitt a (q a0..a1) und b (q b0..b1); Punkte p1/p2 = Querschnitte
+      G.pos.push(a0.x, a0.y, a0.z, a1.x, a1.y, a1.z, b1.x, b1.y, b1.z, a0.x, a0.y, a0.z, b1.x, b1.y, b1.z, b0.x, b0.y, b0.z);
+      G.uv.push(u0, v0, u1, v0, u1, v1, u0, v0, u1, v1, u0, v1);
+    };
     fl.forEach((f) => {
-      const ziel = f.art === 'wasser' ? wass : schl, n = Math.max(1, Math.ceil(f.laenge / 3)), h = f.laenge / n;
-      for (let i = 0; i < n; i++) {
-        const p = sp.punktBei(f.s0 + (i + 0.5) * h), qm = (f.q0 + f.q1) / 2, br = f.q1 - f.q0, y = strecke.hoeheAn(p.x + p.nx * qm, p.z + p.nz * qm) + 0.07;
-        const grund = f.art === 'wasser' ? (i % 2 ? 0x3a9cf0 : 0x4fb0ff) : (i % 2 ? 0x6b4423 : 0x7a5230);
-        ziel.add(quad, mat(p.x + p.nx * qm, y, p.z + p.nz * qm, kopf(p.tx, p.tz), br, h * 1.02, 1, -Math.PI / 2), grund);
-        if (f.art === 'schlamm' && i % 3 === 1) ziel.add(quad, mat(p.x + p.nx * (qm + 3), y + 0.004, p.z + p.nz * (qm + 3), kopf(p.tx, p.tz) + 0.4, 4.5, 2.2, 1, -Math.PI / 2), 0x5a381c);    // dunkle Pfützen
-        if (f.art === 'wasser' && i % 2 === 0) ziel.add(quad, mat(p.x + p.nx * (qm - 2), y + 0.004, p.z + p.nz * (qm - 2), kopf(p.tx, p.tz), 5, 0.5, 1, -Math.PI / 2), 0xdff3ff);          // helle Wellenstriche
+      const n = Math.max(1, Math.ceil(f.laenge / 3)), h = f.laenge / n;
+      if (f.art === 'wasser') {
+        const rand = WC.gischtBreite, punkt = (s, q) => { const p = sp.punktBei(s), x = p.x + p.nx * q, z = p.z + p.nz * q; return { x, y: strecke.hoeheAn(x, z) + WC.hoehe, z }; };
+        for (let i = 0; i < n; i++) {
+          const sa = f.s0 + i * h, sb = sa + h * 1.02, va = (i * h) / WC.kachel, vb = ((i + 1) * h) / WC.kachel, ua = 0, ub = (f.q1 - f.q0) / WC.kachel;
+          quad4(wGeo, punkt(sa, f.q0), punkt(sa, f.q1), punkt(sb, f.q0), punkt(sb, f.q1), 0, ua, ub, va, vb);
+          const y2 = (P) => { P.y += 0.012; return P; };      // Gischt knapp über dem Wasser
+          quad4(gGeo, y2(punkt(sa, f.q0)), y2(punkt(sa, f.q0 + rand)), y2(punkt(sb, f.q0)), y2(punkt(sb, f.q0 + rand)), 0, 0, 1, va, vb);
+          quad4(gGeo, y2(punkt(sa, f.q1 - rand)), y2(punkt(sa, f.q1)), y2(punkt(sb, f.q1 - rand)), y2(punkt(sb, f.q1)), 0, 0, 1, va, vb);
+        }
+        // Glitzer-Sterne: feste Plätze (kein Zufall im Spiel: einfache Zahlenfolge), blinken in zwei Gruppen
+        const anz = Math.round(f.laenge * (f.q1 - f.q0) * WC.glitzerDichte);
+        for (let k = 0; k < anz; k++) {
+          const u1 = ((k * 0.6180339887) % 1), u2 = ((k * 0.7548776662 + 0.31) % 1), p = sp.punktBei(f.s0 + u1 * f.laenge), q = f.q0 + 0.4 + u2 * (f.q1 - f.q0 - 0.8), x = p.x + p.nx * q, z = p.z + p.nz * q;
+          glitzer.push({ x, y: strecke.hoeheAn(x, z) + WC.hoehe + 0.18, z, g: k % 2 });
+        }
+      } else {
+        const ziel = schl;
+        for (let i = 0; i < n; i++) {
+          const p = sp.punktBei(f.s0 + (i + 0.5) * h), qm = (f.q0 + f.q1) / 2, br = f.q1 - f.q0, y = strecke.hoeheAn(p.x + p.nx * qm, p.z + p.nz * qm) + 0.07;
+          const grund = i % 2 ? 0x6b4423 : 0x7a5230;
+          ziel.add(quad, mat(p.x + p.nx * qm, y, p.z + p.nz * qm, kopf(p.tx, p.tz), br, h * 1.02, 1, -Math.PI / 2), grund);
+          if (i % 3 === 1) ziel.add(quad, mat(p.x + p.nx * (qm + 3), y + 0.004, p.z + p.nz * (qm + 3), kopf(p.tx, p.tz) + 0.4, 4.5, 2.2, 1, -Math.PI / 2), 0x5a381c);    // dunkle Pfützen
+        }
       }
+      // Hinweisschild davor (beidseitig der Fahrbahn), FIX3
+      if (WC.schild) { const ps = sp.punktBei(f.s0 - WC.schildAbstand); feldSchilder.push({ art: f.art, x: ps.x, z: ps.z, nx: ps.nx, nz: ps.nz, tx: ps.tx, tz: ps.tz, g: strecke.hoeheAn(ps.x, ps.z) }); }
     });
     const flaechenMat = (opa) => new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: opa < 1, opacity: opa, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, depthWrite: opa >= 1 });
     if (!schl.leer()) { const m = new THREE.Mesh(schl.geo(), flaechenMat(1)); m.name = 'Schlamm'; gruppe.add(m); }
-    if (!wass.leer()) { const wm = flaechenMat(0.78), m = new THREE.Mesh(wass.geo(), wm); m.name = 'Wasser'; gruppe.add(m); gruppe.userData.anim.push((t) => { wm.opacity = 0.74 + 0.06 * Math.sin(t * 2.2); }); }
+    if (wGeo.pos.length && typeof document !== 'undefined') {
+      const geoNeu = (G) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(G.pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(G.uv, 2)); return g; };
+      const tex = wasserTextur(), gt = wasserTextur(true);
+      const wm = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true, opacity: WC.deckkraft, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, depthWrite: false });
+      const m = new THREE.Mesh(geoNeu(wGeo), wm); m.name = 'Wasser'; m.renderOrder = 2; gruppe.add(m);
+      const gm = new THREE.MeshBasicMaterial({ map: gt, side: THREE.DoubleSide, transparent: true, opacity: 0.95, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, depthWrite: false });
+      const gmesh = new THREE.Mesh(geoNeu(gGeo), gm); gmesh.name = 'Gischt'; gmesh.renderOrder = 3; gruppe.add(gmesh);
+      gruppe.userData.anim.push((t) => { tex.offset.y = -t * WC.fliess; tex.offset.x = 0.06 * Math.sin(t * 0.9); gt.offset.y = -t * WC.fliess * 1.6; wm.opacity = WC.deckkraft - 0.05 + 0.05 * Math.sin(t * 2.2); });
+      if (glitzer.length) {
+        const sterne = [0, 1].map((g) => {
+          const pos = []; glitzer.forEach((e) => { if (e.g === g) pos.push(e.x, e.y, e.z); });
+          const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+          const pm = new THREE.PointsMaterial({ size: WC.glitzerGroesse, map: sternTextur(), color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, opacity: 1 });
+          const pts = new THREE.Points(geo, pm); pts.frustumCulled = false; pts.name = 'Glitzer'; pts.renderOrder = 4; gruppe.add(pts); return pm;
+        });
+        gruppe.userData.anim.push((t) => { sterne[0].opacity = 0.15 + 0.85 * Math.max(0, Math.sin(t * 4.1)); sterne[1].opacity = 0.15 + 0.85 * Math.max(0, Math.sin(t * 4.1 + 3.14)); });
+      }
+    }
+    if (feldSchilder.length && typeof document !== 'undefined') {
+      const tafeln = {}, geoS = new THREE.PlaneGeometry(WC.schildB, WC.schildH), pfostenMat = new THREE.MeshLambertMaterial({ color: 0x55565e }), halb = (strecke.breite || 12) / 2;
+      feldSchilder.forEach((sc) => {
+        const tm = tafeln[sc.art] || (tafeln[sc.art] = new THREE.MeshBasicMaterial({ map: schildTextur(sc.art), side: THREE.DoubleSide }));
+        [-1, 1].forEach((sg) => {
+          const q = sg * (halb + 1.6), x = sc.x + sc.nx * q, z = sc.z + sc.nz * q, ry = kopf(sc.tx, sc.tz) + Math.PI, y0 = strecke.hoeheAn(x, z);
+          const m = new THREE.Mesh(geoS, tm); m.position.set(x, y0 + WC.schildHoehe, z); m.rotation.y = ry; gruppe.add(m);
+          [-1, 1].forEach((pk) => { const po = new THREE.Mesh(box, pfostenMat); po.scale.set(0.2, WC.schildHoehe, 0.2); po.position.set(x + sc.nx * pk * WC.schildB * 0.4, y0 + WC.schildHoehe / 2, z + sc.nz * pk * WC.schildB * 0.4); po.rotation.y = ry; gruppe.add(po); });
+        });
+      });
+      gruppe.userData.schilder = feldSchilder.length;
+    }
 
     // Steilwand: Seitenwände (Dreiecksprismen an den Fahrbahnrändern) + Bogen mit Schild
     const sw = sammler(), schilder = [];
