@@ -64,8 +64,15 @@ with sync_playwright() as p:
         page.wait_for_timeout(800)
         gewuenscht = ['superman', 'handstand', 'backflip'] if tag == 'moto' else ['fassrolle', 'schraube']
         gesehen = {}
+        erzwingen = [a for a in os.environ.get('R3_ERZWINGEN', '').split(',') if a] if tag == 'moto' else []
+        # Trampolin-Flug (1,8 s) ist für Superman/Handstand der KI meist zu kurz (Regel: Dauer + Reserve + 0,3 s) → für die Bilder wird der Plan mit früher Startzeit vorgegeben
+        RICHT = {'superman': ('hoch', 1), 'handstand': ('rechts', 1), 'backflip': ('runter', 1)}
         for versuch in range(40):
-            if all(a in gesehen for a in gewuenscht[:2 if tag == 'moto' else 2]): break
+            if erzwingen:
+                a = erzwingen.pop(0); rc, dr = RICHT[a]
+                page.evaluate("([a, rc, dr]) => { const f = Rennspiel.spiel.fahrzeuge[1]; f._r3 = { nr: f.flug.fluege + 1, plan: { art: a, richtung: rc, dir: dr, startT: 0.1 }, getan: false }; }", [a, rc, dr])
+            elif os.environ.get('R3_ERZWINGEN') is not None and os.environ.get('R3_ERZWINGEN') != '' and tag == 'moto': break
+            elif all(a in gesehen for a in gewuenscht[:2 if tag == 'moto' else 2]): break
             nr = sprung_ki(page)
             plan = page.evaluate("(() => { const f = Rennspiel.spiel.fahrzeuge[1]; return f._r3 && f._r3.nr === f.flug.fluege ? f._r3.plan : (Rennspiel.SpassTricks._intern.kiPlanFlug(Rennspiel.spiel, 1, f, f.flug.fluege)); })()")
             if not plan or plan['art'] in gesehen:
@@ -92,7 +99,7 @@ with sync_playwright() as p:
             z = page.evaluate("(() => { const S = Rennspiel.spiel; S.pausiert = false; for (let i = 0; i < 500 && S.fahrzeuge[1].flug.aktiv; i++) S.physikSchritt(1 / 60); for (let i = 0; i < 6; i++) S.physikSchritt(1 / 60); S.pausiert = true; S.uhr.rest = 0; const z = S._t3.fz[1]; return { stat: z.stat, wackel: !!z.wackel, fehl: z.landeFehler, v: S.fahrzeuge[1].vehicle.vLaengs }; })()")
             gesehen[art] = True
             pruefe(tag + ' KI ' + art + ': fertig gezählt, kein Wackeln/Fehltrick', z['stat'][art] >= 1 and not z['wackel'] and not z['fehl'], z['stat'])
-        for a in gewuenscht[:2]:
+        for a in (gewuenscht[:2] if not os.environ.get('R3_ERZWINGEN') else os.environ['R3_ERZWINGEN'].split(',')):
             pruefe(tag + ' KI zeigt ' + a, a in gesehen)
         # Schalter aus: kein Trick-Zustand der KI
         page.evaluate("Rennspiel.SpassTricks.anSetzen('ki', false)")
