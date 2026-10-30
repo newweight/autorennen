@@ -179,7 +179,7 @@
     st.streifen = ebene('g4-streifen', 2); streifenZeichnen(st.streifen);
     st.tropf = ebene('g4-tropfen', 3); st.tropf.width = 480; st.tropf.height = 270;
     par.insertBefore(st.streifen, el.nextSibling); par.insertBefore(st.tropf, st.streifen.nextSibling);
-    st.tr = []; st.trT = 0; st.winkelT = 0;
+    st.tr = []; st.trT = 0; st.winkelT = 0; st.luftF = 1;
   }
   function tropfenSchritt(sp, st, dt, cockpit, tempo, regen) {
     const c = st.tropf, g = c.getContext('2d'), W = c.width, H = c.height, P = st.P;
@@ -346,11 +346,18 @@
       schritt(st.add, dt); schritt(st.norm, dt);
     }
     // Tempo-Streifen
-    const tA = klemme(kam._tempoAnteil || 0, 0, 1), blur = zwei || pause ? 0 : st.P.blur * klemme((tA - 0.55) / 0.4, 0, 1) * (cockpit ? 0.5 : 1);
+    // FIX3 (nur Motorrad): im Flug (Schanze, Kanone, Trampolin, Gleitschirm …) keine Tempo-Streifen – sie wackeln/drehen/vergrößern das Bild und wirken wie Verzerrung;
+    // weich aus (0,1 s) und nach der Landung weich wieder ein (0,4 s)
+    if (MOTO) {
+      const fz = (sp.fahrzeuge || []).find((f) => f.vehicle === kam.ziel), fl = fz && fz.flug, luft = !!(fl && (fl.aktiv || fl.gleit));
+      st.luftF += ((luft ? 0 : 1) - st.luftF) * (1 - Math.exp(-(luft ? 20 : 2.5) * dt));
+    }
+    const tA = klemme(kam._tempoAnteil || 0, 0, 1), blur = zwei || pause ? 0 : st.P.blur * klemme((tA - 0.55) / 0.4, 0, 1) * (cockpit ? 0.5 : 1) * (MOTO ? st.luftF : 1);
     if (st.streifen) {
       const an = blur > 0.01;
+      if (MOTO && st.luftF < 0.98 && st.streifen.style.transform) st.streifen.style.transform = '';      // FIX3: kein Dreh/Zoom-Zittern mehr beim Aus-/Einblenden
       st.streifen.style.display = an ? 'block' : 'none'; st.streifen.style.opacity = an ? blur.toFixed(3) : '0';
-      if (an) { st.winkelT += dt; if (st.winkelT > 0.07) { st.winkelT = 0; st.streifen.style.transform = 'rotate(' + ((Math.floor(rnd() * 5) - 2) * 0.9).toFixed(1) + 'deg) scale(' + (1.04 + rnd() * 0.04).toFixed(3) + ')'; } }
+      if (an && !(MOTO && st.luftF < 0.98)) { st.winkelT += dt; if (st.winkelT > 0.07) { st.winkelT = 0; st.streifen.style.transform = 'rotate(' + ((Math.floor(rnd() * 5) - 2) * 0.9).toFixed(1) + 'deg) scale(' + (1.04 + rnd() * 0.04).toFixed(3) + ')'; } }
     }
     // Tropfen
     if (st.tropf) {
