@@ -198,9 +198,9 @@ window.Rennspiel = window.Rennspiel || {};
     if (wasser) {     // Tropfen (wie 💧, gezeichnet – braucht keine Emoji-Schrift)
       const tropf = (cx, cy, k) => { g.fillStyle = '#bfe8ff'; g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.moveTo(cx, cy - 34 * k); g.bezierCurveTo(cx + 8 * k, cy - 14 * k, cx + 26 * k, cy + 2 * k, cx + 26 * k, cy + 16 * k);
         g.bezierCurveTo(cx + 26 * k, cy + 34 * k, cx - 26 * k, cy + 34 * k, cx - 26 * k, cy + 16 * k); g.bezierCurveTo(cx - 26 * k, cy + 2 * k, cx - 8 * k, cy - 14 * k, cx, cy - 34 * k); g.closePath(); g.fill(); g.stroke(); };
-      tropf(62, 68, 1.1); tropf(450, 68, 1.1);
+      tropf(52, 68, 1.0); tropf(460, 68, 1.0);
     }
-    g.fillStyle = '#fff'; g.font = 'bold 76px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(wasser ? 'WASSER' : 'SCHLAMM', 256, 72);
+    g.fillStyle = '#fff'; g.font = 'bold 66px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(wasser ? 'WASSER' : 'SCHLAMM', 256, 72);
     const t = new THREE.CanvasTexture(cv); if (THREE.SRGBColorSpace) t.colorSpace = THREE.SRGBColorSpace; return t;
   }
   function bauen(strecke) {

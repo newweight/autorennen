@@ -32,7 +32,7 @@ with sync_playwright() as p:
         if not plan1 or not plan1['felder']: print('keine Felder auf', sid); continue
         for fd in plan1['felder'][:2]:
             for modus in ('verfolger', 'cockpit'):
-                for tag2, off, frames in (('vor', -22, 40), ('im', 8, 25)):
+                for tag2, off, frames in (('vor', -48, 40), ('im', 8, 25)):
                     d = pg.evaluate("""([sB, q, modus, frames]) => { const R = Rennspiel, s = R.spiel, z0 = s.zeichnen, st = s.strecke, f = s.fahrzeuge[0], v = f.vehicle; s.zeichnen = function () {};
                       const pt = st.spline.punktBei(sB), x = pt.x + pt.nx * q, zz = pt.z + pt.nz * q; v.setzen(x, zz, R.headingAus(pt.tx, pt.tz)); v.y = st.hoeheAn(x, zz); f.index = -1; v.vLaengs = 16;
                       s.kameras.forEach((k) => { k.modusIndex = R.config.kamera.modi.indexOf(modus); k._erstesMal = true; }); s.autopilot(0, true); s.pausiert = false;
