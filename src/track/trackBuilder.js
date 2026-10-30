@@ -2188,6 +2188,8 @@
       banner.position.set(p.x, this.hoeheAn(p.x, p.z) + 7.4, p.z);
       banner.rotation.y = headingAus(p.tx, p.tz);
       g.add(banner);
+      // STARTFEHLER: Lage des Banners für die Kamera (cameras.js _bogenAusweichen): Weit-/Verfolger-Ansicht flog sonst durch das Banner
+      this.startbogen = { x: p.x, z: p.z, tx: p.tx, tz: p.tz, nx: p.nx, nz: p.nz, halb: weite, yUnten: banner.position.y - bannerH / 2, yOben: banner.position.y + bannerH / 2 };
       const schild = this._startZielSchild(bannerB, bannerH);
       if (schild) { schild.position.copy(banner.position); schild.rotation.y = banner.rotation.y; g.add(schild); }
       return g;

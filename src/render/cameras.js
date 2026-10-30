@@ -87,7 +87,32 @@
       this.kamera.updateProjectionMatrix();
     }
 
+    /**
+     * STARTFEHLER: Die Kamera darf nicht durch den Startbogen fliegen. Das Banner hängt 6,2–8,6 m über der Straße; die Weit-Ansicht
+     * (Höhe 7–7,8 m, 16–18 m hinter dem Fahrzeug) schnitt es bei jeder Durchfahrt der Startlinie, der Verfolger (3,6–4,6 m) und das Cockpit
+     * (1,15 m) fliegen darunter durch. Nur Optik: Liegt die Kamera in Bogennähe (Längs ≤ 9 m, Quer innerhalb der Masten) nicht klar
+     * unter dem Banner, hebt sie sich weich bis 1 m über die Oberkante und blickt weiter auf ihr Ziel. Sonst bleibt alles wie vorher.
+     */
+    _bogenAusweichen() {
+      const sp = R.spiel, st = sp && sp.strecke, b = st && st.startbogen;
+      if (!b || this.modus === 'cockpit') return;
+      const p = this.kamera.position, dx = p.x - b.x, dz = p.z - b.z;
+      const laengs = Math.abs(dx * b.tx + dz * b.tz), quer = Math.abs(dx * b.nx + dz * b.nz);
+      if (laengs >= 9 || quer >= b.halb + 4 || p.y <= b.yUnten - 0.9) return;
+      const sm = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+      const w = sm((9 - laengs) / 6) * (1 - sm((quer - b.halb - 1) / 3));
+      const yZiel = b.yOben + 1.0;
+      if (w <= 0 || p.y >= yZiel) return;
+      p.y += (yZiel - p.y) * w;
+      this.kamera.lookAt(this.blick);
+    }
+
     update(dt) {
+      this._updateKern(dt);
+      this._bogenAusweichen();
+    }
+
+    _updateKern(dt) {
       const f = this.quelle || this.ziel; if (!f) return;
       const k = R.config.kamera;
       const r = f.richtung();

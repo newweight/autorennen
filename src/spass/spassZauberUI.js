@@ -455,7 +455,7 @@
     R.FahrzeugKamera.prototype.update = function (dt) {
       const r = kUpdate.apply(this, arguments);
       try {
-        const f = this.quelle || this.ziel, sp = R.spiel, fz = f && sp && sp._fahrzeugVon ? sp._fahrzeugVon(this.ziel) : null, s = fz && fz._zSk;
+        const f = this.quelle || this.ziel, sp = R.spiel, fz = f && sp && sp._fahrzeugVon ? sp._fahrzeugVon(this.ziel) : null, s = fz ? fz._zSk : undefined;      // STARTFEHLER: Kamera ohne bekanntes Fahrzeug (null) → kein Mini-Maßstab (vorher: null < 0.999 → TypeError)
         if (s !== undefined && s < 0.999 && !(fz._zPose)) {
           const kp = this.kamera.position, ty = f.y;
           kp.x = f.x + (kp.x - f.x) * s; kp.y = ty + (kp.y - ty) * s; kp.z = f.z + (kp.z - f.z) * s;
