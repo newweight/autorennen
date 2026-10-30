@@ -179,6 +179,8 @@ JS_AUSNAHME_TEXT = """() => (window.__mx ? window.__mx.fehler.slice(0, 4) : [])"
 
 
 # ------------------------------------------------------------------------------------------------ Hilfen
+KLICK_TIMEOUT = int(__import__("os").environ.get("MX_KLICK_MS", "90000"))   # echter Klick (Sichtbarkeit/Überdeckung wird geprüft); Zeit großzügig wegen SwiftShader
+
 def freier_port():
     s = socket.socket(); s.bind(('127.0.0.1', 0)); p = s.getsockname()[1]; s.close(); return p
 
@@ -280,12 +282,12 @@ def offline_kombi(page, spiel, strecke, modus, grafik, sekunden, nr, bildordner=
             try:
                 page.evaluate("() => { const S = Rennspiel.spiel; S.pauseSetzen(true); S.pauseAnzeige.zeigen(); }")
                 for k in range(3):
-                    page.click('#pause [data-g1]', timeout=30000)
+                    page.click('#pause [data-g1]', timeout=KLICK_TIMEOUT)
                     page.evaluate('() => window.__mx.frame(4)')
                     gewechselt.append(page.evaluate('() => Rennspiel.Grafik.stufe'))
                 page.evaluate("() => { const S = Rennspiel.spiel; S.pauseAnzeige.verstecken(); S.pauseSetzen(false); window.__mx.frame(4); }")
             except Exception as e:
-                return False, 'Grafikwechsel im Pause-Menü: ' + str(e)[:200], info
+                return False, 'Grafikwechsel im Pause-Menü: ' + str(e)[:1800], info
             s3 = page.evaluate('() => window.__mx.status()'); f = alle_fehler(page, s3)
             if f: return False, 'Fehler nach Grafikwechsel im Pause-Menü: ' + ' | '.join(f[:3]), info
     info['vmax'] = [round(x, 1) for x in vmax]
