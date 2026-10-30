@@ -2,7 +2,7 @@
 // A) KI-Motorräder gemischt (Schwierigkeit, Quad, Server=Client, Schalter „aus“ = nur Cross)
 // B) Schlamm/Wasser/Kisten auf normalen Motorrad-Strecken (Plan, Sperrzonen, deterministisch, Lauf)
 // C) eigene Strecke online (Server prüft Code, baut deterministisch; Müll abgelehnt; alter Stand ohne Feld)
-// D) Teleport-Interpolation (kein Gleiten), Online-Effekte (Quad-Wackeln/Knall/Funken aus Zustandsdaten), Garage „Upgrades + Tuning = gesamt“
+// D) Teleport-Interpolation (kein Gleiten), Online-Effekte (Quad-Wackeln/Knall/Funken aus Zustandsdaten), Garage (R1: reines Tuning)
 const fs = require('fs');
 const S = require('../server/simulation');
 let fehler = 0, anzahl = 0;
@@ -89,9 +89,9 @@ if (NP && NP.interpolieren) {
 const m3 = fs.readFileSync(__dirname + '/../src/moto/motoM3Start.js', 'utf8');
 pruefe('D Online-Effekte (Quad-Wackeln, Knall, Funken) für fremde Fahrer aus Zustandsdaten (nur Anzeige, keine Physik)', /onlineEffekte/.test(m3) && /quadDrop/.test(m3) && /rutschFunken/.test(m3) && /spiel\.online/.test(m3) && !/physikSchritt/.test(m3.slice(m3.indexOf('function onlineEffekte'), m3.indexOf('function onlineEffekte') + 3000)));
 const tui = fs.readFileSync(__dirname + '/../src/spass/spassTuningUI.js', 'utf8');
-pruefe('D Garage: Tuning-Schritt zeigt „Upgrades + Tuning = gesamt“, alte Upgrades bleiben (R.Garage.upgradeKaufen da)', /Upgrades \+\$\{u\}/.test(tui) && /gesamt \+/.test(tui));
+pruefe('D/R1 Garage: Tuning-Schritt zeigt reines Tuning (kein „Upgrades + Tuning“ mehr)', !/Upgrades \+\$\{u\}/.test(tui) && /Tuning <b>\+/.test(tui) && /gesamt/i.test(tui));
 const gar = fs.readFileSync(__dirname + '/../src/ui/garage.js', 'utf8');
-pruefe('D alte Garage-Upgrades nicht entfernt', /upgradeKaufen/.test(gar) && /upgradePreise/.test(fs.readFileSync(__dirname + '/../src/config.js', 'utf8')));
+pruefe('D/R1 alte Garage-Upgrades entfernt (kein upgradeKaufen, kein upgradePreise in config)', !/upgradeKaufen\s*\(/.test(gar) && !/upgradePreise/.test(fs.readFileSync(__dirname + '/../src/config.js', 'utf8')));
 
 console.log(`\n${anzahl - fehler}/${anzahl} Prüfungen bestanden`);
 process.exit(fehler ? 1 : 0);

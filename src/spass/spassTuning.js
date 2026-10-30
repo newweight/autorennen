@@ -12,7 +12,7 @@
 //   R.SpassTuning.teileAnbauen(mesh, auto, stufen)   Spoiler / breite Reifen / Auspuff (Motorrad: Goldgabel) ab Stufe 3, ein Mesh je Fahrzeug
 //   R.SpassTuning.an() / anSetzen(bool)              Menü-Schalter „Tuning: an/aus“ (Standard an; eigener Speicher)
 // Wirkung (klein und fair, config.spass.tuning): Motor je Stufe +1,6 % Tempo UND Beschleunigung (Stufe 5: +8 %), Reifen +1,6 % Grip (+8 %),
-// Bremsen bzw. Federung +2 % Bremsverzögerung (+10 %). Die bisherigen Garage-Upgrades (R.Garage, Stufen 0–3) bleiben unverändert daneben bestehen.
+// Bremsen bzw. Federung +2 % Bremsverzögerung (+10 %). Die alten Garage-Upgrades (Stufen 0–3) gibt es seit R1 nicht mehr (in Goldstücke erstattet) – Tuning ist der einzige Weg.
 // Aus (Schalter, online: Raum erlaubt es nicht) oder alle Stufen 0 → es wird nichts verändert: bitgleich der alte Stand.
 // ============================================================
 (function () {

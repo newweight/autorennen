@@ -56,7 +56,7 @@ with sync_playwright() as p:
       pg = neu({'width': 1280, 'height': 800})
       pg.evaluate('localStorage.clear()')
       pg.evaluate("""(() => { const G = Rennspiel.Garage; G.gutschreiben('Jonas', 500); G.gutschreiben('Emmy', 500);
-        G.upgradeKaufen('Jonas', 'passat', 'motor'); const o = G.laden(); o.Jonas.autos.passat.rest = 40; o.Emmy.autos.multivan = Object.assign(o.Emmy.autos.multivan || {}, { rest: 35 }); G.speichern(o); })()""")
+        const o = G.laden(); o.Jonas.autos.passat.rest = 40; o.Emmy.autos.multivan = Object.assign(o.Emmy.autos.multivan || {}, { rest: 35 }); G.speichern(o); })()""")
       pruefe('Altstand: Rest 40 % im Speicher wird beim Laden verworfen (100)', pg.evaluate("Rennspiel.Garage.autoDaten('Jonas','passat').rest") == 100)
       for modus in ('solo', 'zwei'):
           pg.evaluate(START, modus); pg.wait_for_timeout(600)

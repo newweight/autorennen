@@ -43,8 +43,6 @@
       hindernisMenge: (c.hindernisMenge && c.hindernisMenge.standard) || 'normal',
       // Runde 6 (W3-F): Spielart 'rennen' (Einzelrennen, wie bisher) | 'pokal' (D1) | 'elimination' (D7); Pokal-Größe 3/4/5
       spielart: 'rennen', pokalGroesse: (c.pokal && c.pokal.groesseStandard) || 3,
-      // Runde 6 (W3-G): Garage-Upgrades im Rennen anwenden (aus = Faktoren 1, Lackfarben bleiben)
-      upgradesZaehlen: true,
       // 17.10. (v29, F3): Modus „Nur Rennautos“ (alle Gegner fahren den Formel-Renner in eigener Farbe): null = Standard der Strecke
       // (an bei der Formel-1-Strecke, sonst aus) | true | false; autoVorFormel = Autowahl vor dem Vorschlag „Formel-Renner“ (Wiederherstellen beim Streckenwechsel)
       nurRennautos: null, autoVorFormel: null,
@@ -100,7 +98,6 @@
         ? r.hindernisMenge : std.hindernisMenge,          // 12.10.
       spielart: r.spielart === 'pokal' || r.spielart === 'elimination' ? r.spielart : 'rennen',     // W3-F
       pokalGroesse: ((c.pokal && c.pokal.groessen) || [3, 4, 5]).includes(+r.pokalGroesse) ? +r.pokalGroesse : std.pokalGroesse,
-      upgradesZaehlen: r.upgradesZaehlen !== false,      // W3-G
       nurRennautos: typeof r.nurRennautos === 'boolean' ? r.nurRennautos : null,      // v29 F3
       autoVorFormel: Array.isArray(r.autoVorFormel) && r.autoVorFormel.length === 2 && r.autoVorFormel.every(x => autoOk(x, null)) ? r.autoVorFormel.slice() : null,
       zufall: typeof r.zufall === 'boolean' ? r.zufall : std.zufall,      // Z1: alte Speicherstände ohne das Feld → Standard (an)
@@ -493,7 +490,6 @@
         nurRennautos: !elim && R.carCatalog.nurRennautos(e, R.trackCatalog.find(t => t.id === e.streckeId)),      // v29 (F3): alle Gegner fahren den Formel-Renner (eigene Farben)
         geisterfahrer: e.geisterfahrer === true && !elim, krankenwagen: !elim && !!(R.Verkehr && R.Verkehr.ausEinstellung(e).krankenwagen), abschleppwagen: !elim && !!(R.Verkehr && R.Verkehr.ausEinstellung(e).abschleppwagen),    // 15.10. (v25), v28 W1: je einzeln
         elimination: elim ? { zuschauerSekunden: CE.zuschauerSekunden === undefined ? 6 : CE.zuschauerSekunden } : null,   // W3-F
-        upgradesZaehlen: e.upgradesZaehlen !== false,      // W3-G
         nochmal: !!(opt && opt.nochmal),      // v30 (G1): „Nochmal“ von der Ergebnistafel → Schaden-Rest nicht übernehmen (alle starten bei 100 %)
         zufall: e.zufall !== false,      // Z1: Zufällige Strecke (Standard an)
       });
@@ -757,7 +753,7 @@
       if (opt.nurRennautos === true && R.carCatalog.formelFeld) {
         const spA = spielerIds.map(id => katalog.find(a => a.id === id) || katalog[0]);
         const ff = R.carCatalog.formelFeld({ spieler: spA, gegner: opt.gegner, seed: opt.gegnerSeed !== undefined ? opt.gegnerSeed : [trackId, opt.gegner, spielerIds.join('+')].join('|'),
-          belegt: spA.map((a, i) => { const g = R.Garage ? R.Garage.fahrzeugWerte(spielerNamen[i], a.id, opt.upgradesZaehlen !== false) : null; return g && g.farbe !== null && g.farbe !== undefined ? g.farbe : null; }) });
+          belegt: spA.map((a, i) => { const g = R.Garage ? R.Garage.fahrzeugWerte(spielerNamen[i], a.id) : null; return g && g.farbe !== null && g.farbe !== undefined ? g.farbe : null; }) });
         gegnerAutos = ff.gegner; spielerAutos = ff.spieler;
       }
       const teilnehmer = plaetze.map((p, i) => {
@@ -765,8 +761,8 @@
         const auto = istSpieler
           ? (spielerAutos ? spielerAutos[i] : (katalog.find(a => a.id === spielerIds[i]) || katalog[0]))
           : (gegnerAutos[i - opt.spieler] || katalog[0]);
-        // Runde 6 (W3-G): Garage-Werte (Lack, Upgrade-Faktoren) nur für Spieler – die KI nie
-        const gw = istSpieler && R.Garage ? R.Garage.fahrzeugWerte(spielerNamen[i], auto.id, opt.upgradesZaehlen !== false) : null;
+        // Runde 6 (W3-G): Garage-Werte (Lack; R1: keine Upgrade-Faktoren mehr) nur für Spieler – die KI nie
+        const gw = istSpieler && R.Garage ? R.Garage.fahrzeugWerte(spielerNamen[i], auto.id) : null;
         const f = this.fahrzeugHinzufuegen(auto, p.x, p.z, p.heading, gw);
         if (R.SpassTuning) R.SpassTuning.fuerTeilnehmer(this, f, i, istSpieler, opt, spielerNamen, auto);   // S2: Tuning (Goldstücke), aus/0 Stufen = nichts
         f.vehicle.y = strecke.hoeheAn(p.x, p.z);
@@ -899,7 +895,7 @@
     fahrzeugHinzufuegen(auto, x, z, heading, garage) {
       // Runde 5: Tempo-Klasse (normal/schnell) VOR jeder Schaden-Kopie (datenBasis) einrechnen
       const vehicle = new R.Vehicle(auto.fahrwerte, { tempoKlasse: this.tempoKlasse || R.config.tempoKlasseStandard || 'normal' });
-      // Runde 6 (W3-G): Garage-Upgrades (nur Spieler) ebenfalls direkt in daten – vor der Schaden-Kopie, Turbo bleibt multiplikativ
+      // Runde 6 (W3-G): Garage-Werte (nur Spieler) direkt in daten – vor der Schaden-Kopie, Turbo bleibt multiplikativ (R1: Faktoren sind immer 1)
       if (garage) {
         vehicle.daten.vMax *= garage.vMax || 1; vehicle.daten.grip *= garage.grip || 1; vehicle.daten.bremsen *= garage.bremsen || 1;
         vehicle.garage = garage;
