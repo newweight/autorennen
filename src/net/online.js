@@ -807,7 +807,7 @@
       if (R.ZufallSpiel) R.ZufallSpiel.seedWaehlen(spiel, { zufall: e.zufall === true && Number.isFinite(m.zufallSeed), zufallSeed: m.zufallSeed });
       const strecke = spiel.streckeSzeneBauen(e.streckeId);
       const katalog = R.carCatalog.waehlbare();
-      const plaetze = strecke.startpositionen(m.teilnehmer.length);
+      const plaetze = R.SpassR2 && e.modus ? R.SpassR2.plaetze(strecke, e, m.teilnehmer.length) : strecke.startpositionen(m.teilnehmer.length);      // R2: Kurz-Level startet nebeneinander am Level-Start (Server rechnet dasselbe)
       const tl = [];
       this.geisterMat = [];
       m.teilnehmer.forEach((t, i) => {

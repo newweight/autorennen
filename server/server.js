@@ -435,7 +435,7 @@ function starten(opt) {
     const raum = c.raum;
     switch (m.t) {
       case 'hallo':
-        senden(c.ws, motorradAn() ? { t: 'hallo', v: N.VERSION, id: c.id, moto: true } : { t: 'hallo', v: N.VERSION, id: c.id });     // M4: `moto: true` nur mit eingeschaltetem Schalter
+        senden(c.ws, motorradAn() ? { t: 'hallo', v: N.VERSION, id: c.id, moto: true, r2: true } : { t: 'hallo', v: N.VERSION, id: c.id, r2: true });     // R2: `r2: true` = Kurz-Level/K.-o./Freie Fahrt/Geist/Dino online verfügbar     // M4: `moto: true` nur mit eingeschaltetem Schalter
         return;
       case 'ping':
         senden(c.ws, { t: 'pong', z: typeof m.z === 'number' ? m.z : 0, k: raum && raum.sim ? raum.sim.tick : 0 });
@@ -455,7 +455,7 @@ function starten(opt) {
         const code = zufallsCode(new Set(raeume.keys()));
         const art = m.moto === true ? 'moto' : 'auto';
         if (art === 'moto') { try { idsFuer({ art }); } catch (e) { console.error('Motorrad-Kontext:', e && e.stack); return fehler(c.ws, 'keinMotorrad', 'Motorrad-Teil des Servers konnte nicht geladen werden'); } }   // Review 28.10.: vor raeume.set, sonst Geisterraum
-        const neu = { code, host: c, spieler: [c], zustand: 'lobby', art, einstellungen: einstellungenPruefen(m.einstellungen || {}, 1, art === 'moto'), sim: null };
+        const neu = { code, host: c, spieler: [c], zustand: 'lobby', art, einstellungen: einstellungenPruefen(Object.assign({}, m.einstellungen || {}, { r2b: undefined }), 1, art === 'moto'), sim: null };
         raeume.set(code, neu);
         c.raum = neu; c.bereit = true;
         c.fahrer = fahrerNamen.includes(m.fahrer) ? m.fahrer : fahrerNamen[0];
@@ -524,7 +524,7 @@ function starten(opt) {
       case 'einstellungen':
         if (c !== raum.host) return fehler(c.ws, 'nurHost', 'Nur der Host darf das ändern');
         if (raum.zustand !== 'lobby' && raum.zustand !== 'ergebnis') return;
-        raum.einstellungen = einstellungenPruefen(Object.assign({}, raum.einstellungen, m.einstellungen || {}), raum.spieler.length, raum.art === 'moto');
+        raum.einstellungen = einstellungenPruefen(Object.assign({}, raum.einstellungen, m.einstellungen || {}, { r2b: raum.einstellungen && raum.einstellungen.r2b }), raum.spieler.length, raum.art === 'moto');     // R2: r2b (gesicherte Werte) kommt nie vom Client
         lobbySenden(raum);
         return;
       case 'strecke': {      // S8: eigene Strecke online – Streckencode in Teilen { i, n, d } (eine Nachricht darf höchstens 4096 Byte haben)

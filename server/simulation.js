@@ -17,8 +17,11 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const MotoSim = require('./motoSim');     // M4: Motorrad-Zusatz der Simulation (nur in Motorrad-Räumen benutzt)
+const R2Sim = require('./r2Sim');         // R2: Kurz-Level, K.-o.-Rallye, Freie Fahrt, Dino-Aufgaben online (nur bei gesetzter R2-Wahl benutzt)
 
 const WURZEL = path.join(__dirname, '..');
+// R2: Rechenteile von Kurz-Level (spassKurz.js) und Freier Fahrt (spassFrei.js) – ohne R.SpassModi laden sie nur den Rechenteil (kein DOM); dann der gemeinsame R2-Kern
+const R2_MODULE = ['src/spass/spassKurz.js', 'src/spass/spassFrei.js', 'src/spass/spassR2Kern.js'];
 // Reihenfolge wie in Autorennen.html (ohne Ton, Eingabe, Autos-Grafik, Kameras, HUD, Menü)
 const MODULE = [
   'vendor/three.min.js',
@@ -26,13 +29,14 @@ const MODULE = [
   'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/zufall.js', 'src/track/looping.js', 'src/track/schanze.js',
   'src/track/trackWelten.js',   // S5: neue Strecken (Mond, Unterwasser, Regenbogenland)
   'src/track/anlauf.js', 'src/spass/spassKern.js', 'src/spass/spassTuning.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/tribuenen.js', 'src/world/formel1.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
-  'src/world/kleber.js', 'src/world/polizei.js', 'src/world/verkehr.js', 'src/world/tiere.js', 'src/race/raceManager.js', 'src/race/startBoost.js', 'src/ai/driver.js', 'src/net/protokoll.js',
+  'src/world/kleber.js', 'src/world/polizei.js', 'src/world/verkehr.js', 'src/world/tiere.js', 'src/race/raceManager.js', 'src/spass/spassKO.js', 'src/race/startBoost.js', 'src/ai/driver.js', 'src/net/protokoll.js',
   'src/track/megastrecke.js',   // v22: Megastrecke (Add-on, nach Wetter/Themen/Strecke geladen)
   'src/world/themenS5.js',      // S5: Themen Mond/Ozean/Regenbogen (nach themes/wetter)
   'src/main.js', 'src/spass/spassPhysik.js',      // S1: Trampolin/Kanone (Add-on, nach main.js)
   'src/spass/spassWelten.js',                     // S5: Hüpfer, Teleport-Tore, Grip je Strecke (Add-on, nach spassPhysik)
   'src/spass/spassZauber.js',                     // S6: Magnet-Röhre, Schlucht-Gleiten, Grinden/Wallride, Halfpipe, Riese/Mini (Add-on, nach spassWelten)
   'src/spass/editorKern.js',                      // S7: Strecken-Editor (eigene Strecken 'eigen-…', Haken in R.Spass.plan – nach spassZauber)
+  ...R2_MODULE,                                   // R2: Kurz-Level/Freie Fahrt (nur Rechenteil) + R2-Kern – nach editorKern
 ];
 
 /** Kleiner Ersatz für document.createElement('canvas') (Texturen der Deko werden im Server nie gezeichnet). */
@@ -104,7 +108,7 @@ let RM = null;
 function ladenMoto() {
   if (RM) return RM;
   const bisMega = MODULE.indexOf('src/world/themenS5.js');   // S5: Themen-Add-on gehört dazu
-  const liste = MODULE.slice(0, bisMega + 1).concat(MOTO_VOR, ['src/main.js', 'src/spass/spassPhysik.js', 'src/spass/spassWelten.js', 'src/spass/spassZauber.js', 'src/spass/editorKern.js'], MOTO_NACH);
+  const liste = MODULE.slice(0, bisMega + 1).concat(MOTO_VOR, ['src/main.js', 'src/spass/spassPhysik.js', 'src/spass/spassWelten.js', 'src/spass/spassZauber.js', 'src/spass/editorKern.js'], R2_MODULE, MOTO_NACH);
   RM = kontextLaden(liste, { MOTORRAD: true });
   return kollisionsHuelle(RM);
 }
@@ -143,7 +147,8 @@ function eigenRegistrieren(code, moto) {
 function eigenPruefen(code) { const R = laden(); if (!R.Editor || typeof code !== 'string' || code.length > EIGEN_CODE_MAX) return null; const d = R.Editor.ausCode(code); return d ? { name: d.name } : null; }
 
 function einstellungenPruefen(roh, spielerAnzahl, moto) {
-  const R = laden(), c = R.config, r0 = roh || {}, N = R.Netz;
+  const R = laden(), c = R.config, N = R.Netz;
+  const r00 = roh || {}, r0 = R.SpassR2 ? R.SpassR2.rohVorher(r00) : r00;     // R2: Wechsel zurück auf „Rennen“ holt die gesicherten Werte zurück
   const eigenId = typeof r0.eigen === 'string' && r0.eigen ? eigenRegistrieren(r0.eigen, moto === true) : null;       // S8: eigene Strecke (fehlt/ungültig → normale Wahl)
   const r = eigenId ? Object.assign({}, r0, { streckeId: eigenId, welt: '', variante: '' }) : r0;
   const zahl = (v, lo, hi, d) => (Number.isFinite(+v) && v !== null && v !== '' ? Math.max(lo, Math.min(hi, Math.round(+v))) : d);
@@ -197,7 +202,8 @@ function einstellungenPruefen(roh, spielerAnzahl, moto) {
     Object.assign(erg, { polizei: false, geisterfahrer: false, krankenwagen: false, abschleppwagen: false, verkehr: 'aus', nurRennautos: false,
       moto: true, unfall: MOTO_UNFALL.includes(r.unfall) ? r.unfall : 'sanft', stuntrennen: r.stuntrennen === true });
   }
-  return erg;
+  // R2 (additiv): Modus-Wahl (Kurz-Level, K.-o., Freie Fahrt), Geist, Dino – ohne R2-Wahl kommt `erg` unverändert zurück (bitgleich wie vorher)
+  return R.SpassR2 ? R.SpassR2.einstellungen(erg, R.SpassR2.rohVorher(r00), moto === true ? 'motorrad' : 'auto', spielerAnzahl) : erg;
 }
 
 class Simulation {
@@ -274,7 +280,7 @@ class Simulation {
     const spielerNamen = spieler.map(s => s.fahrer);
     const computerNamen = R.fahrerComputerNamen(spielerNamen, G);
     const spielerIds = spieler.map(s => s.auto);
-    const plaetze = strecke.startpositionen(P + G);
+    const plaetze = e.modus && R.SpassR2 ? R.SpassR2.plaetze(strecke, e, P + G) : strecke.startpositionen(P + G);     // R2: Kurz-Level startet nebeneinander am Level-Start
     // 14.10. (v20): Computer-Füller wie im Einzelspiel nur aus Passat, Multivan, 911, T-Roc (gemischter Lack, T-Roc Dach/Lack); deterministisch je Rennen
     let gegnerAutos = R.carCatalog.gegnerAutos(G, { seed: [e.streckeId, G, spielerIds.join('+')].join('|'), spielerIds, schwierigkeit: e.schwierigkeit });   // S8: schwierigkeit nur für das Motorrad-Feld
     // v29 (F3): Modus „Nur Rennautos“ – Gegner = Formel-Renner in eigenen Farben (wie main.js streckeAufbauen)
@@ -305,7 +311,7 @@ class Simulation {
     });
     this.teilnehmerInfo = teilnehmer.map((t, i) => ({ nr: i, name: t.name, autoId: sim.fahrzeuge[i].auto.id, optionen: !t.istSpieler && sim.fahrzeuge[i].auto.optionen ? sim.fahrzeuge[i].auto.optionen : undefined, mensch: t.istSpieler,
       hilfe: sim.fahrzeuge[i].fahrhilfe, tuning: tuStufen[i] || undefined }));
-    const rennen = new R.RaceManager(strecke, teilnehmer, { runden: e.runden });
+    const rennen = new R.RaceManager(strecke, teilnehmer, e.modus === 'ko' ? { runden: e.runden, elimination: { zuschauerSekunden: R.config.spass.ko.zuschauerSekunden, ko: true } } : { runden: e.runden });     // R2: K.-o.-Rallye = „Letzter fliegt raus“ mit Wertungen (spassKO.js)
     sim.rennen = rennen;
     sim.startBoost = R.StartBoost && rennen.countdownDauer > 0 ? new R.StartBoost(teilnehmer.length) : null;
     rennen.bei('runde', (t, zeit) => { strecke.pylonenZurueck(t.nr); this.ereignisse.push({ an: null, art: 'runde', nr: t.nr, runde: t.runde, zeit }); });
@@ -355,6 +361,8 @@ class Simulation {
     this.nachZielZeit = 0;
     // M4: Motorrad-Zusatz (Stunts, Sturz, Unfälle, Stationen) – nur in Motorrad-Räumen; Autorennen-Räume laufen ohne diese Zeile
     if (moto) this.moto = MotoSim.einbauen(this, R, e);
+    // R2: Kurz-Level, K.-o.-Rallye, Freie Fahrt, Dino-Aufgaben – nur bei gesetzter R2-Wahl (Raum-Einstellungen modus/dino); sonst bleibt this.r2 null und nichts ändert sich
+    this.r2 = R.SpassR2 && (e.modus || e.dino) ? R2Sim.einbauen(this, R, e, seed) : null;
   }
 
   /** Steuerung für Spieler nr setzen (bereits dekodiert: { gas, bremse, lenkung }). */
@@ -398,6 +406,7 @@ class Simulation {
     try {
       this.sim.physikSchritt(dt);
       if (this.moto) this.moto.nachSchritt(dt);       // M4: Sturz-Purzelbaum weiterzählen, Quad entschärfen, Stunt-/Sturz-/Unfall-Ereignisse
+      if (this.r2) this.r2.nachSchritt(dt);           // R2: Kurz-Wertung, K.-o.-Ereignisse, Freie-Fahrt-Kisten, Dino-Aufgaben
       this.zufallSchritt(dt);                         // Z1: Zufällige Strecke – Rundenwechsel des Führenden / Nachzügler → Neuverteilung + Ereignis `zufall`
     } finally { aktuell = null; }
     this.tick++;
@@ -439,6 +448,7 @@ class Simulation {
     f.driver.zurueckgesetzt(f.index);
     this.teilnehmerInfo[i].mensch = false;
     this.teilnehmerInfo[i].weg = true;
+    if (this.r2) this.r2.weg(nr, i);            // R2: laufende Aufgabe/Kiste freigeben, Ergebnis „weg“
     // sind keine Menschen mehr im Rennen, endet es sofort (Raum geht danach zurück in die Lobby)
     if (!sim.rennen.teilnehmer.some(x => x.istSpieler)) this.fertig = true;
   }
@@ -533,6 +543,7 @@ class Simulation {
     if (dl) erg.dz = [dl.ziel, dl.rest, dl.nass ? 1 : 0, dl.uhr, dl.gesund];
     // M4 (nur Motorrad-Räume, additiv): mu = [Motorrad %, Fahrer %, Haltebremse 0/1] des eigenen Fahrers (ungerundet) – die Vorhersage rechnet Tempo-Wirkung und Haltebremse wie der Server
     if (this.moto) { const mu = this.moto.ich(i); if (mu) erg.mu = mu; }
+    if (this.r2) { const r2 = this.r2.ich(i); if (r2) erg.r2 = r2; }       // R2: eigener Zähler (Kurz-Level)
     // v4: Rest der Polizei-Anhaltung (ungerundet: die Vorhersage zählt ihn im selben Takt herunter und ersetzt die Eingabe durch Bremsen)
     if (sim.polizei) { const rest = sim.polizei.logik.rest(i); if (rest > 0) erg.ps = rest; }
     return erg;
@@ -582,6 +593,7 @@ class Simulation {
       wetterSeed: this.wetterInfo.seed,
       zufallSeed: this.zufallSeed === null ? undefined : this.zufallSeed,       // Z1 (additiv): Rennseed der Zufalls-Strecke (fehlt = feste Strecke)
       stationen: this.moto ? this.moto.stationenInfo() : undefined,        // M4: Bogenlänge der Werkstatt/Krankenstation (Gegenprobe im Browser)
+      r2: this.r2 ? this.r2.startInfo() : undefined,                       // R2 (additiv): Gegenprobe/Daten des Modus (fehlt ohne R2-Wahl)
       teilnehmer: this.teilnehmerInfo,
       countdown: this.sim.rennen.countdownDauer,
     };
@@ -590,7 +602,7 @@ class Simulation {
   /** Ergebnisliste (wie main.js rennenFertig, ohne Sterne/Preisgeld). */
   ergebnis() {
     const r = this.sim.rennen;
-    return {
+    const erg = {
       runden: r.runden,
       zeilen: r.rangliste.map((t, i) => ({
         platz: i + 1, nr: t.nr, name: t.name, mensch: !!this.teilnehmerInfo[t.nr].mensch || !!this.teilnehmerInfo[t.nr].weg,
@@ -600,6 +612,7 @@ class Simulation {
       })),
       ...(this.moto ? { stuntrennen: this.einstellungen.stuntrennen === true } : {}),
     };
+    return this.r2 ? this.r2.ergebnis(erg) : erg;       // R2: Kurz-/Frei-/K.-o.-Zusatzfelder und Reihenfolge
   }
 }
 
