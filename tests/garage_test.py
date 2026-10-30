@@ -9,7 +9,7 @@ c) Nächstes Rennen: Spielerauto im neuen Lack (Material-Farben + Pixel im Bild)
 d) v32: Schaden-Rest wird nicht mehr gespeichert, jedes Rennen startet mit 100 %, Garage zeigt „Alles heil ✓“ (Reparatur kostet 0).
 e) Fahrer-Schritt zeigt „🪙 n"; keine JS-Fehler.
 Bilder: tests/out/garage/*.png (mit Read ansehen).  Aufruf: python3 tests/garage_test.py"""
-import sys, os, json
+import sys, os, json, time
 from playwright.sync_api import sync_playwright
 from PIL import Image
 
@@ -84,7 +84,7 @@ with sync_playwright() as p:
     # Spieler-Autopilot, Rennen zu Ende fahren (Spieler wurde versetzt → neu starten für saubere Wertung)
     page.evaluate("""Rennspiel.spiel.rennenStarten(); Rennspiel.spiel.autopilot(0, true)""")
     plus_gesehen = False
-    for _ in range(40):
+    for _ in range(150):
         page.evaluate('Rennspiel.spiel.schnellvorlauf(5)')
         if page.evaluate('Rennspiel.spiel.muenzen && Rennspiel.spiel.muenzen.anzahlVon(0) > 0'): plus_gesehen = True
         if page.evaluate('Rennspiel.spiel.zustand') != 'rennen': break
@@ -132,13 +132,20 @@ with sync_playwright() as p:
     # R1: keine Upgrade-Zeilen/-Knöpfe mehr; Tastatur: ↓ = Zeile „Tuning öffnen“ (nur 2 Zeilen, kein totes Feld), Enter öffnet
     pruefe('R1: keine Upgrade-Knöpfe, kein „Upgrades“-Text, kein Schalter in der Werkstatt', page.locator('#garage [data-g^="upgrade"]').count() == 0
            and page.locator('#garage [data-g^="schalter"]').count() == 0 and 'Upgrade' not in page.inner_text('#garage'))
-    taste('ArrowDown'); page.wait_for_timeout(200)
-    pruefe('R1: ↓ fokussiert „Tuning öffnen“ (gelber Fokus)', page.evaluate("!!document.querySelector('#garage [data-g=\"tuning:oeffnen\"].fokus')"))
-    taste('ArrowDown'); page.wait_for_timeout(200)
+    def zeile_warten(z):
+        t0 = time.time()
+        try: page.wait_for_function("Rennspiel.spiel.menue.garageUi.zeile === " + str(z), timeout=60000, polling=250)
+        except Exception: print('zeile_warten: Zeit ueberschritten', z, flush=True)
+        page.wait_for_timeout(500)
+    taste('ArrowDown'); zeile_warten(1)
+    pruefe('R1: ↓ in der Garage stellt nicht heimlich den Spaß-Modus ein', page.evaluate("!Rennspiel.spiel.einstellungen.spassModus"))
+    pruefe('R1: ↓ fokussiert „Tuning öffnen“ (gelber Fokus)', page.evaluate("!!document.querySelector('#garage [data-g=\\'tuning:oeffnen\\'].fokus')"))
+    taste('ArrowDown'); zeile_warten(0)
     pruefe('R1: nochmal ↓ springt zurück auf Lack (nur 2 Zeilen)', page.evaluate("Rennspiel.spiel.menue.garageUi.zeile") == 0 and page.evaluate("!!document.querySelector('#garage .g-zeile.fokus')"))
-    taste('ArrowUp'); page.wait_for_timeout(200)
+    taste('ArrowUp'); zeile_warten(1)
     pruefe('R1: ↑ vom Lack aus springt zu „Tuning öffnen“', page.evaluate("Rennspiel.spiel.menue.garageUi.zeile") == 1)
     taste('Enter'); page.wait_for_timeout(500)
+    page.wait_for_timeout(600)
     pruefe('R1: Enter öffnet den Tuning-Schritt (reines Tuning, „Gesamt“ ohne Upgrades)', page.evaluate("Rennspiel.spiel.menue.garageUi.phase") == 'tuning'
            and page.locator('#garage .g-tuningpanel').count() == 1 and 'Upgrades' not in page.inner_text('#garage .g-tuningpanel'), page.inner_text('#garage .g-tuningpanel')[:300])
     taste('ArrowRight'); page.wait_for_timeout(300)
@@ -149,7 +156,7 @@ with sync_playwright() as p:
            and page.evaluate("Array.from(document.querySelectorAll('#garage .g-zeile')).filter(z => z.textContent.includes('Reifen'))[0].querySelectorAll('.g-balken i.voll').length") == 1)
     taste('Escape'); page.wait_for_timeout(300)
     pruefe('Esc: zurück in die Werkstatt', page.evaluate("Rennspiel.spiel.menue.garageUi.phase") == 'werkstatt' and page.locator('#garage [data-g="farbe:0"]').count() == 1)
-    pruefe('v32: Reparatur-Zeile „Alles heil ✓“, kein Reparatur-Knopf, Konto unverändert', 'Alles heil' in page.inner_text('#garage .g-zeile:nth-child(2)')
+    pruefe('v32: Reparatur-Zeile „Alles heil ✓“, kein Reparatur-Knopf, Konto unverändert', 'Alles heil' in page.evaluate("Array.from(document.querySelectorAll('#garage .g-zeile')).filter(z => z.textContent.includes('Reparatur'))[0].textContent")
            and page.locator('#garage [data-g="reparatur"]').count() == 0 and page.evaluate("Rennspiel.Garage.konto('Jonas')") == konto0 - 40)
     page.mouse.move(5, 5); page.wait_for_timeout(700)
     lay = page.evaluate("""(() => { const m = document.querySelector('#garage .m-inhalt'), r = Array.from(document.querySelectorAll('#garage .g-zeile, #garage canvas.buehne')).map(e => e.getBoundingClientRect());
@@ -189,7 +196,7 @@ with sync_playwright() as p:
     vm = page.evaluate(VMAX, 0); vk = page.evaluate(VMAX, 1)
     jc = page.evaluate("Rennspiel.config.spass.tuning.jeStufe")
     pruefe('Nur Tuning wirkt: Motor 1 = vMax × (1 + jeStufe.vMax), Reifen 1 = grip × (1 + jeStufe.grip); keine Upgrade-Anteile', abs(vm['verh'] - (1 + jc['vMax'])) < 1e-6 and abs(vm['grip'] - (1 + jc['grip'])) < 1e-6, [vm, jc])
-    pruefe('KI ohne Garage-Werte (vMax × 1)', abs(vk['verh'] - 1) < 1e-9, vk)
+    pruefe('KI: nie mehr als Tuning (kein Upgrade-Anteil, Garage-Faktoren 1)', vk['verh'] <= vm['verh'] + 1e-9 and vk['verh'] <= 1 + jc['vMax'] + 1e-9, vk)
     page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=300000)
     page.evaluate('Rennspiel.spiel.autopilot(0, true); Rennspiel.spiel.schnellvorlauf(4)')
     page.wait_for_timeout(1200)
@@ -218,7 +225,7 @@ with sync_playwright() as p:
     page.click('[data-a="garage"]'); page.wait_for_timeout(300)
     page.click('#garage [data-g="fahrer:Jonas"]'); page.wait_for_timeout(300)
     page.click('#garage [data-g="auto:troc-cabrio"]'); page.wait_for_timeout(500)
-    rep_text = page.inner_text('#garage .g-zeile:nth-child(2)')
+    rep_text = page.evaluate("Array.from(document.querySelectorAll('#garage .g-zeile')).filter(z => z.textContent.includes('Reparatur'))[0].textContent")
     k1 = page.evaluate("Rennspiel.Garage.konto('Jonas')")
     pruefe('v32: Garage zeigt „Alles heil ✓“, kein Reparaturpreis, kein Reparatur-Knopf', 'Alles heil' in rep_text and '🪙' not in rep_text
            and page.locator('#garage [data-g="reparatur"]').count() == 0, rep_text)

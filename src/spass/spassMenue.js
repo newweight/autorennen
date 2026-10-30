@@ -153,7 +153,7 @@
   const taste = M.taste;
   M.taste = function (code) {
     try {
-      if (this.schritt === 0 && !R.SpassModi.offen()) {
+      if (this.schritt === 0 && !R.SpassModi.offen() && !(this.garageUi && this.garageUi.sichtbar) && !(this.onlineUi && this.onlineUi.sichtbar)) {   // R1: nicht, solange Garage/Online offen sind (sonst schluckt ↓ die erste Taste und stellt unbemerkt „Kurz-Level“ ein)
         const T = R.config.tasten, sp = T.spieler, art = this.e.spassModus || '';
         const links = code === sp[0].links || code === sp[1].links, rechts = code === sp[0].rechts || code === sp[1].rechts;
         const runter = code === sp[0].bremse || code === sp[1].bremse, hoch = code === sp[0].gas || code === sp[1].gas;
