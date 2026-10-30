@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """R3 – Browser-Prüfung der KI-Tricks (Playwright, SwiftShader): KI-Auto Fassrolle/Schraube, KI-Motorrad Superman/Handstand/Backflip, Schalter aus = kein Trick.
-Bilder nach tests/bilder_r3/. Aufruf: python3 tests/r3_tricks_browser.py [Motorrad|Autorennen|beide]"""
-import os, sys
+Bilder nach tests/bilder_r3/. Aufruf: python3 tests/r3_tricks_browser.py [Motorrad|Autorennen|beide]
+R3 online (Teil C-H): python3 tests/r3_tricks_browser.py online        Auto-Raum mit 2 echten Seiten (Host + Gast): Lobby-Zeile 🤸 Tricks, Fassrolle per Umschalt-Taste (Server rechnet), Pose bei beiden Seiten, Meldung, Raum ohne tricks unverändert
+                                                      python3 tests/r3_tricks_browser.py online-moto   Motorrad-Raum mit tricks (Server mit --motorrad): Lobby-Zeile, Start, Computer-Tricks-Anzeige ohne Fehler"""
+import os, sys, socket, subprocess, time
 from playwright.sync_api import sync_playwright
 from PIL import Image
 basis = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 bild = os.path.join(basis, 'tests', 'bilder_r3'); os.makedirs(bild, exist_ok=True)
 wahl = sys.argv[1] if len(sys.argv) > 1 else 'beide'
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
-spiele = [('Autorennen.html', 'passat', 'auto')] if wahl == 'Autorennen' else [('Motorrad.html', 'crossmaschine', 'moto')] if wahl == 'Motorrad' else [('Motorrad.html', 'crossmaschine', 'moto'), ('Autorennen.html', 'passat', 'auto')]
+online = wahl in ('online', 'online-moto')
+spiele = [] if online else [('Autorennen.html', 'passat', 'auto')] if wahl == 'Autorennen' else [('Motorrad.html', 'crossmaschine', 'moto')] if wahl == 'Motorrad' else [('Motorrad.html', 'crossmaschine', 'moto'), ('Autorennen.html', 'passat', 'auto')]
 ok = 0; fail = 0
 def pruefe(name, gut, info=''):
     global ok, fail
@@ -112,5 +115,148 @@ with sync_playwright() as p:
         pruefe(tag + ' keine Seitenfehler', not fehlerliste, fehlerliste[:3])
         ctx.close()
     b.close()
+
+# ================================================================ R3 online (zwei echte Seiten gegen einen echten Server)
+def freier_port():
+    s = socket.socket(); s.bind(('127.0.0.1', 0)); p = s.getsockname()[1]; s.close(); return p
+
+LANGSAM = "window.__rafMs = 1500; (() => { const o = window.requestAnimationFrame.bind(window); window.requestAnimationFrame = (f) => (window.__rafMs > 0 ? setTimeout(() => f(performance.now()), window.__rafMs) : o(f)); })();"
+AUTOPILOT = """() => { const s = Rennspiel.spiel, o = s.online, R = Rennspiel;
+  if (!s._origSteuerung) s._origSteuerung = s.input.steuerung.bind(s.input);
+  const d = new R.Driver(o.vorhersage.vp, s.strecke, { schwierigkeit: 'mittel', seed: 77 + o.du, name: 'Test' });
+  if (d.hindernisseSetzen) d.hindernisseSetzen(s.strecke.hindernisse);
+  s.input.steuerung = (nr) => {
+    if (nr !== 0) return { gas: 0, bremse: 0, lenkung: 0 };
+    const t = s.rennen.teilnehmer[o.du];
+    const st = d.steuerung(1 / 60, { andere: [], spielerFortschrittMax: null, eigenerFortschritt: t.fortschritt, laeuft: s.rennen.gasErlaubt });
+    const v = o.vorhersage.vp;
+    return R.Anlauf ? R.Anlauf.kiHilfe({}, v, s.strecke, s.strecke.spline.naechster(v.x, v.z), st) : st;
+  };
+  return true; }"""
+STAND = """(() => { const s = Rennspiel.spiel, o = s.online; if (!o || !s.rennen) return null; const K = o._r3 || null, V = o.vorhersage;
+  const pose = (i) => { const z = s._t3 && s._t3.fz && s._t3.fz[i]; return z ? { art: z.pose.art, p: +(+z.pose.p).toFixed(2), rolle: +(+z.pose.rolle).toFixed(2), schraube: +(+z.pose.schraube).toFixed(2) } : null; };
+  return { phase: o.phase, rz: s.rennen.zustand, zeit: Math.round(s.rennen.zeit), du: o.du, r3: !!K, t3: !!s._t3, flug: !!(V && V.fz && V.fz.aktiv), flugT: V && V.fz ? V.fz.t : 0,
+    pose0: pose(0), pose1: pose(1), meld: Array.from(document.querySelectorAll('.hud-meldung, .meldung, #hud-meldung')).map(e => e.innerText).join('|'),
+    mo: s.stunt ? s.stunt.fz.map(z => z && z.neuPoseZiel ? z.neuPoseZiel.art : null) : null }; })()"""
+
+def online_test(moto):
+    SEITE = 'Motorrad.html' if moto else 'Autorennen.html'
+    sfx = '_moto' if moto else ''
+    port = freier_port()
+    args = ['node', os.path.join(basis, 'server', 'server.js'), '--port', str(port), '--host', '127.0.0.1'] + (['--motorrad'] if moto else [])
+    server = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    for _ in range(100):
+        try: socket.create_connection(('127.0.0.1', port), timeout=0.2).close(); break
+        except OSError: time.sleep(0.1)
+    url = 'http://127.0.0.1:%d/' % port
+    fehlerliste = []
+    try:
+        with sync_playwright() as p:
+            b = p.chromium.launch(args=ARGS)
+            def seite(name, init=None):
+                ctx = b.new_context(viewport={'width': 1100, 'height': 700})
+                if init: ctx.add_init_script(init)
+                pg = ctx.new_page(); pg.set_default_timeout(120000)
+                pg.on('pageerror', lambda e: fehlerliste.append(name + ': ' + str(e)))
+                pg.on('console', lambda m: fehlerliste.append(name + ' console.error: ' + m.text) if m.type == 'error' and 'WebGL' not in m.text and 'GPU stall' not in m.text and '405' not in m.text else None)
+                return pg
+            def laden(pg, pfad):
+                pg.goto(pfad, wait_until='domcontentloaded', timeout=300000)
+                pg.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=300000, polling=300)
+                pg.wait_for_timeout(700)
+            def ui(pg, js): return pg.evaluate("(() => { const u = Rennspiel.spiel.menue.onlineUi; " + js + " })()")
+            def raum():
+                host = seite('Host', LANGSAM); laden(host, url + SEITE)
+                host.evaluate("(() => { Rennspiel.spiel.menue.onlineOeffnen(); Rennspiel.spiel.menue.onlineUi.erstellen(); })()")
+                host.wait_for_function("(() => { const u = Rennspiel.spiel.menue.onlineUi; return u && u.lobby && u.ansicht === 'lobby'; })()", timeout=30000, polling=200)
+                code = ui(host, "return u.lobby.code")
+                gast = seite('Gast', LANGSAM); laden(gast, url + SEITE + '?raum=' + code.lower())
+                gast.wait_for_function("(() => { const u = Rennspiel.spiel.menue.onlineUi; return u && u.ansicht === 'code'; })()", timeout=60000, polling=200)
+                gast.keyboard.press('Enter')
+                gast.wait_for_function("(() => { const u = Rennspiel.spiel.menue.onlineUi; return u && u.lobby && u.ansicht === 'lobby'; })()", timeout=30000, polling=200)
+                host.evaluate('window.__rafMs = 0'); gast.evaluate('window.__rafMs = 0')
+                return host, gast
+            def labels(pg): return pg.evaluate("Array.from(document.querySelectorAll('#online .on-zeile .on-label')).map(e => e.textContent.trim())")
+            def senden(host, einst): host.evaluate("(e) => Rennspiel.spiel.menue.onlineUi.verb.senden({ t: 'einstellungen', einstellungen: e })", einst); host.wait_for_timeout(500)
+            def starten(host, gast):
+                gast.evaluate("Rennspiel.spiel.menue.onlineUi.aktion('bereit')")
+                host.wait_for_function("Rennspiel.spiel.menue.onlineUi.alleBereit()", timeout=15000, polling=200)
+                host.evaluate("Rennspiel.spiel.menue.onlineUi.aktion('start')")
+                for pg in (host, gast):
+                    pg.wait_for_function("(() => { const o = Rennspiel.spiel.online; return o && o.phase === 'rennen' && o.vorhersage; })()", timeout=180000, polling=300)
+            def stand(pg): return pg.evaluate(STAND)
+            def bild(pg, name):
+                try: pg.screenshot(path=os.path.join(bild_ordner, name + '.png'), timeout=120000)
+                except Exception as e: print('Bild fehlgeschlagen', name, e)
+
+            # ---------------- Raum MIT Tricks
+            host, gast = raum()
+            pruefe('online%s Lobby (Host): Zeile 🤸 Tricks vorhanden (Server meldet hallo.r3)' % sfx, '🤸 Tricks' in labels(host), labels(host))
+            pruefe('online%s Lobby (Gast): keine Host-Zeilen, aber Raum noch ohne Tricks' % sfx, '🤸 Tricks' not in labels(gast))
+            senden(host, {'streckeId': 'formel1' if moto else 'wiese', 'spass': True, 'gegner': 2, 'runden': 2})
+            host.evaluate("Rennspiel.spiel.menue.onlineUi.wertSetzen('r3tricks', 'an')"); host.wait_for_timeout(700)
+            pruefe('online%s Lobby: Wahl 🤸 An → Raum-Einstellung tricks = true bei Host und Gast' % sfx, host.evaluate("Rennspiel.spiel.menue.onlineUi.lobby.einstellungen.tricks === true") and gast.evaluate("Rennspiel.spiel.menue.onlineUi.lobby.einstellungen.tricks === true"))
+            bild(host, 'online%s_lobby_tricks' % sfx)
+            pruefe('online%s Lobby (Gast): Text "🤸 Tricks: an"' % sfx, gast.evaluate("document.querySelector('#online').innerText.indexOf('Tricks') >= 0"))
+            starten(host, gast)
+            sh, sg = stand(host), stand(gast)
+            if not moto:
+                pruefe('online Rennstart: Auto-Raum mit tricks baut den Trick-Zustand auf (_r3, spiel._t3) bei beiden Seiten', sh['r3'] and sh['t3'] and sg['r3'] and sg['t3'], [sh['r3'], sh['t3'], sg['r3'], sg['t3']])
+                host.wait_for_function("Rennspiel.spiel.rennen && Rennspiel.spiel.rennen.zustand === 'laeuft'", timeout=60000, polling=300)
+                host.evaluate(AUTOPILOT)
+                # bis zum ersten Flug (Trampolin) fahren lassen
+                ende = time.time() + 420; s = None
+                while time.time() < ende:
+                    s = stand(host)
+                    if s and s['flug'] and s['flugT'] > 0.05: break
+                    host.wait_for_timeout(150)
+                pruefe('online Auto: Host kommt in die Luft (Trampolin, Vorhersage-Flug)', bool(s and s['flug']), s and (s['zeit'], s['flugT']))
+                host.keyboard.press('ShiftRight')           # Trick-Taste allein = Fassrolle (nach 0,12 s); Eingabe-Bit k geht zum Server
+                gesehen, gastGesehen, meld, namen = [], False, '', []
+                for k in range(14):
+                    sh, sg = stand(host), stand(gast)
+                    if sh['pose0'] and sh['pose0']['art']: gesehen.append(sh['pose0'])
+                    if sg['pose0'] and sg['pose0']['art']: gastGesehen = True
+                    if 'Fassrolle' in sh['meld']: meld = sh['meld']
+                    if k in (2, 5, 8): bild(host, 'online_auto_fassrolle_host_%d' % k); namen.append(k)
+                    if k == 5: bild(gast, 'online_auto_fassrolle_gast')
+                    host.wait_for_timeout(120)
+                pruefe('online Auto: Taste in der Luft → der SERVER startet Fassrolle: Host-Pose fassrolle mit Winkel', len(gesehen) >= 2 and any(abs(x['rolle']) > 0.3 for x in gesehen), gesehen[:4])
+                pruefe('online Auto: der Gast sieht die Fassrolle des Hosts (Pose bei der anderen Seite)', gastGesehen)
+                pruefe('online Auto: Meldung "Fassrolle! +300" beim Host', 'Fassrolle' in meld, meld[:80])
+                # kein zweiter Raum nötig für „aus“: Pose danach wieder neutral
+                host.wait_for_timeout(1500)
+                s = stand(host)
+                pruefe('online Auto: nach dem Trick Pose wieder neutral', not (s['pose0'] and s['pose0']['art']), s['pose0'])
+            else:
+                pruefe('online Motorrad: Raum mit tricks startet, Motorrad-Online-Zustand da (kein Auto-Trickzustand)', sh['phase'] == 'rennen' and not sh['r3'] and sh['mo'] is not None, [sh['phase'], sh['r3'], sh['mo']])
+                host.wait_for_function("Rennspiel.spiel.rennen && Rennspiel.spiel.rennen.zustand === 'laeuft'", timeout=60000, polling=300)
+                host.wait_for_timeout(8000)
+                bild(host, 'online_moto_rennen')
+            for pg in (host, gast):
+                try: pg.context.close()
+                except Exception: pass
+            # ---------------- Raum OHNE Tricks (Standard): keine Zeile aktiv, kein Trick-Zustand
+            host, gast = raum()
+            senden(host, {'streckeId': 'formel1' if moto else 'wiese', 'spass': True, 'gegner': 1, 'runden': 1})
+            pruefe('online%s Raum ohne Tricks: Schalter steht auf aus (Standard)' % sfx, host.evaluate("Rennspiel.spiel.menue.onlineUi.lobby.einstellungen.tricks !== true"))
+            starten(host, gast)
+            sh = stand(host)
+            pruefe('online%s Raum ohne Tricks: kein Trick-Zustand (_r3, spiel._t3), Rennen läuft wie bisher' % sfx, sh['phase'] == 'rennen' and not sh['r3'] and (moto or not sh['t3']), [sh['r3'], sh['t3']])
+            host.wait_for_timeout(2500)
+            host.keyboard.press('ShiftRight')
+            host.wait_for_timeout(500)
+            pruefe('online%s Raum ohne Tricks: Umschalt-Taste bewirkt nichts (keine Pose)' % sfx, not stand(host)['pose0'] or not stand(host)['pose0']['art'])
+            for pg in (host, gast):
+                try: pg.context.close()
+                except Exception: pass
+            b.close()
+    finally:
+        server.terminate()
+    pruefe('online%s keine JS-Fehler auf beiden Seiten' % sfx, not fehlerliste, fehlerliste[:3])
+
+bild_ordner = bild
+if online:
+    online_test(wahl == 'online-moto')
 print('\n%d OK, %d FEHL' % (ok, fail))
 sys.exit(1 if fail else 0)
