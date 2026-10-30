@@ -537,7 +537,7 @@
     const htmlStrecke = M.htmlStrecke;
     M.htmlStrecke = function () {
       const h = htmlStrecke.apply(this, arguments);
-      try { if (SZ.loopMag()) return h.replace(/(\d+) Loopings/g, (m, n) => n + (n === '1' ? ' Magnet-Röhre' : ' Magnet-Röhren')); } catch (err) { console.error('R4 (Streckentext):', err); }
+      try { if (SZ.loopMag()) return h.replace(/(\d+) Loopings/g, (m, n) => n + (n === '1' ? ' Magnet-Röhre' : ' Magnet-Röhren')).replace(/zwei Loopings \(Vollgas!\)/g, 'zwei Magnet-Röhren (kopfüber an der Decke)'); } catch (err) { console.error('R4 (Streckentext):', err); }
       return h;
     };
     const htmlStart = M.htmlStart;
