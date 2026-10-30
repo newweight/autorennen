@@ -356,7 +356,7 @@ for (const daten of R.trackCatalog) {
     for (const d of R.trackCatalog) for (const welt of Object.keys(d.welten)) for (const v of [''].concat(Object.keys(d.varianten || {}))) {
       if (d.id === 'formel1') continue;   // v29: Formel 1 hat keine Hindernis-Welt – Fingerabdruck bleibt der alte
       const st = new R.Strecke(d, { welt, variante: v }); mitWracks(st);
-      alles += JSON.stringify([st.hindernisse, st.wracks, st.strohballen, st.daten.hindernisse]); n++;
+      alles += JSON.stringify([st.hindernisse.map(h => { const { quelle, ...r } = h; return r; }), st.wracks, st.strohballen, st.daten.hindernisse]); n++;   // 30.10.: internes Feld quelle (Z1) ausgeblendet
       const s2 = new R.Strecke(d, { welt, variante: v, hindernisMenge: 'normal' }); mitWracks(s2);
       const s3 = new R.Strecke(d, { welt, variante: v, hindernisMenge: 'Quatsch' }); mitWracks(s3);
       if (JSON.stringify([s2.hindernisse, s2.wracks, s2.strohballen]) !== JSON.stringify([st.hindernisse, st.wracks, st.strohballen]) ||
@@ -366,6 +366,7 @@ for (const daten of R.trackCatalog) {
     // → 2982b25d (14.10. v18: gewollte Katalog-Verschiebungen der Gabelung, nur wiese + wueste; Rest unverändert, je Strecke gemessen).
     // → 52661751 (16.10. P4: Gabelung Dino (v25, gewollt). Je-Eintrag-Vergleich gegen tests/sicherung_v25_gabel_alt/trackBuilder.js+trackCatalog.js: es unterscheiden sich NUR die 8 Dino-Einträge
     //   (dino × hindernisse/stunt/verrueckt/alles × normal/xl); alle übrigen 48 Fingerabdrücke je Strecke identisch. (Der Gesamtwert der Sicherungsdateien ist 2ceca225, nicht 2982b25d – andere Quelle nicht rekonstruierbar, daher nur der Je-Eintrag-Vergleich.))
+    // 30.10.: Feld quelle (Z1) ausgeblendet, Wert unverändert 52661751
     pruefe('Menge normal: bitgleich zum Stand vor der Funktion (' + n + ' Strecken × Welten × Varianten, Fingerabdruck)', fnv(alles) === '52661751', fnv(alles));
     pruefe('Menge: ohne Option = „normal“ = unbekannter Wert (→ Standard)', gleichOpt);
     pruefe('Menge: Gültigkeit (unbekannt, Zahl, null, Objekt → normal; die drei Namen bleiben)', R.Strecke.hindernisMengeGueltig('viele') === 'viele' && R.Strecke.hindernisMengeGueltig('sehrViele') === 'sehrViele' &&
