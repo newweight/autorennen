@@ -435,7 +435,7 @@ function starten(opt) {
     const raum = c.raum;
     switch (m.t) {
       case 'hallo':
-        senden(c.ws, motorradAn() ? { t: 'hallo', v: N.VERSION, id: c.id, moto: true, r2: true } : { t: 'hallo', v: N.VERSION, id: c.id, r2: true });     // R2: `r2: true` = Kurz-Level/K.-o./Freie Fahrt/Geist/Dino online verfügbar     // M4: `moto: true` nur mit eingeschaltetem Schalter
+        senden(c.ws, motorradAn() ? { t: 'hallo', v: N.VERSION, id: c.id, moto: true, r2: true, r3: true } : { t: 'hallo', v: N.VERSION, id: c.id, r2: true, r3: true });     // R2: `r2: true` = Kurz-Level/K.-o./Freie Fahrt/Geist/Dino online verfügbar     // M4: `moto: true` nur mit eingeschaltetem Schalter
         return;
       case 'ping':
         senden(c.ws, { t: 'pong', z: typeof m.z === 'number' ? m.z : 0, k: raum && raum.sim ? raum.sim.tick : 0 });
@@ -644,7 +644,7 @@ function starten(opt) {
   // --- Eingaben je Tick ---
   const flankenAnwenden = (sim, c, e) => { if (e.r) sim.reset(c.simNr); if (e.i) sim.item(c.simNr); if (e.f) sim.freikaufen(c.simNr); if (e.d) sim.dachGeste(c.simNr); if (e.k) c.trickTipp = true; };
   /** M4: Trick-Taste dieses Ticks (nur Motorrad-Räume): gehalten ODER in einer verworfenen/ausgelassenen Eingabe angetippt (Tipp geht nicht verloren). */
-  const trickAnwenden = (sim, c, e) => { if (sim.moto) { sim.trickSetzen(c.simNr, e.k === true || c.trickTipp === true); c.trickTipp = false; } };
+  const trickAnwenden = (sim, c, e) => { if (sim.moto || sim.r3) { sim.trickSetzen(c.simNr, e.k === true || c.trickTipp === true); c.trickTipp = false; } };
 
   /**
    * v23 (Online-Ruckeln): Eingabe nach INDEX statt „eine Eingabe je Tick aus der Warteschlange“.
@@ -698,7 +698,7 @@ function starten(opt) {
       c.warLeer = true;
       // Tab im Hintergrund: nach 0,7 s ohne Eingabe rollt das Auto ohne Gas (v22b: 0,3 s – ein Netz-Aussetzer von 0,3 s riss dann Lenkung und Gas weg:
       // Auto in der Kurve geradeaus, Abweichung 3–4 m = harte Korrektur). Neue Browser schicken im Hintergrund selbst neutrale Eingaben.
-      if (jetzt - c.letzteEingabe > 700) { sim.eingabeSetzen(c.simNr, { gas: 0, bremse: 0, lenkung: 0 }); if (sim.moto) sim.trickSetzen(c.simNr, false); }
+      if (jetzt - c.letzteEingabe > 700) { sim.eingabeSetzen(c.simNr, { gas: 0, bremse: 0, lenkung: 0 }); if (sim.moto || sim.r3) sim.trickSetzen(c.simNr, false); }
     }
     c.ack = c.erw;                                             // dieser Tick deckt die Eingabe `erw` ab (echt oder gehalten)
     c.erw++;

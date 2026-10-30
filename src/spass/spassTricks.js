@@ -321,10 +321,12 @@
     window.addEventListener('keydown', (ev) => { if (!ev.repeat) ZAEHL[ev.code] = (ZAEHL[ev.code] || 0) + 1; }, true);
   }
   lauschen();
-  const tastenCode = (nr) => (moto() ? ((R.config.motoStunts && R.config.motoStunts.taste) || [])[nr] : C().taste[nr]);
+  // R3 (online): im Server-Raum mit Raum-Schalter `tricks` (spiel.tricksRaum === true) hat jeder Teilnehmer seine eigene Trick-Taste 'Trick<Nr>' (server/r3Sim.js, Eingabe-Bit k)
+  const tastenCode = (nr, spiel) => (moto() ? ((R.config.motoStunts && R.config.motoStunts.taste) || [])[nr] : (spiel && spiel.tricksRaum === true ? 'Trick' + nr : C().taste[nr]));
 
   // ---- R3: KI-Tricks (nur offline im Browser; Server/Online-Clients haben kein spiel.szene bzw. spiel.online) ----
-  const kiAktiv = (spiel) => !!(spiel && spiel.szene && !spiel.online && spiel.zustand !== 'online' && an('ki'));
+  // R3 online: im Server-Raum mit Raum-Schalter `tricks` (spiel.tricksRaum === true, kopflos) machen die Computer Tricks – unabhängig vom Menü-Schalter; sonst nur offline mit Szene und Schalter
+  const kiAktiv = (spiel) => !!(spiel && ((spiel.tricksRaum === true && !spiel.szene) || (spiel.szene && !spiel.online && spiel.zustand !== 'online' && an('ki'))));
   const kiFahrerOk = (f) => !!(f && !f.istSpieler && !f.ausgeschieden && !f.polizei && !f.polizeiFahrer && !(f.looping && (f.looping.aktiv || f.looping.fallen)) && !(f.flug && f.flug.kanone));
   /** Plan der KI für den laufenden Flug (einmal je Flug, im Fahrzeug gemerkt). null = kein Trick. */
   function kiPlanFlug(spiel, i, f, flugNr) {
@@ -351,9 +353,10 @@
   function schrittSpiel(spiel, dt) {
     const rennen = spiel.rennen, strecke = spiel.strecke, input = spiel.input, sz = spiel.stunt;
     const istMoto = moto();
+    if (spiel.tricksRaum !== undefined && spiel.tricksRaum !== true && !istMoto) return;      // R3 online: Auto-Raum ohne Raum-Schalter `tricks` → sofort zurück (bitgleich wie ohne dieses Modul)
     if (!rennen || !strecke || !input || spiel.zustand !== 'rennen' || spiel.pausiert || !(dt > 0) || !spiel.fahrzeuge) return;
     if (istMoto && (!sz || !sz.fz)) return;
-    if (!istMoto && !an('auto')) { if (spiel._t3) spiel._t3 = null; return; }
+    if (!istMoto && spiel.tricksRaum !== true && !an('auto')) { if (spiel._t3) spiel._t3 = null; return; }
     const kiAn = kiAktiv(spiel);
     const S = z3Holen(spiel), T = R.config.tasten && R.config.tasten.spieler;
     const jetzt = istMoto ? sz.zeit : (spiel._t3.zeit = (spiel._t3.zeit || 0) + dt);
@@ -371,7 +374,7 @@
       const dir = {};
       const luft = !!fl.aktiv, abflug = fl.fluege > (z3.fluegeGesehen || 0);
       if (!ki) {
-        const code = tastenCode(nr), tc = T && T[nr];
+        const code = tastenCode(nr, spiel), tc = T && T[nr];
         const st = input.steuerung ? input.steuerung(nr) : { gas: 0, bremse: 0, lenkung: 0 };
         halten = !!(code && input.istGedrueckt && input.istGedrueckt(code));
         const kante = (c, h, vor) => { const n = ZAEHL[c] || 0, neu = c !== undefined && n > (z3.cnt[c] || 0); if (c !== undefined) z3.cnt[c] = n; return neu || (h && !vor); };

@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const MotoSim = require('./motoSim');     // M4: Motorrad-Zusatz der Simulation (nur in Motorrad-Räumen benutzt)
+const R3Sim = require('./r3Sim');         // R3: Auto-Tricks online (Raum-Schalter `tricks`; Motorrad-Räume: nur Computer-Tricks über spassTricks.js)
 const R2Sim = require('./r2Sim');         // R2: Kurz-Level, K.-o.-Rallye, Freie Fahrt, Dino-Aufgaben online (nur bei gesetzter R2-Wahl benutzt)
 
 const WURZEL = path.join(__dirname, '..');
@@ -37,6 +38,7 @@ const MODULE = [
   'src/spass/spassZauber.js',                     // S6: Magnet-Röhre, Schlucht-Gleiten, Grinden/Wallride, Halfpipe, Riese/Mini (Add-on, nach spassWelten)
   'src/spass/editorKern.js',                      // S7: Strecken-Editor (eigene Strecken 'eigen-…', Haken in R.Spass.plan – nach spassZauber)
   ...R2_MODULE,                                   // R2: Kurz-Level/Freie Fahrt (nur Rechenteil) + R2-Kern – nach editorKern
+  'src/spass/spassTricks.js',                     // R3: Auto-Tricks online (Fassrolle/Schraube + Computer-Tricks); die Umhüllung kehrt ohne Raum-Schalter `tricks` sofort zurück
 ];
 
 /** Kleiner Ersatz für document.createElement('canvas') (Texturen der Deko werden im Server nie gezeichnet). */
@@ -202,6 +204,8 @@ function einstellungenPruefen(roh, spielerAnzahl, moto) {
     Object.assign(erg, { polizei: false, geisterfahrer: false, krankenwagen: false, abschleppwagen: false, verkehr: 'aus', nurRennautos: false,
       moto: true, unfall: MOTO_UNFALL.includes(r.unfall) ? r.unfall : 'sanft', stuntrennen: r.stuntrennen === true });
   }
+  // R3 (additiv): Raum-Schalter Tricks (Auto: Fassrolle/Schraube der Menschen + Computer-Tricks, Motorrad: Computer-Tricks); nur ein echtes true trägt den Schlüssel ein (sonst bitgleich wie vorher)
+  if (r.tricks === true) erg.tricks = true;
   // R2 (additiv): Modus-Wahl (Kurz-Level, K.-o., Freie Fahrt), Geist, Dino – ohne R2-Wahl kommt `erg` unverändert zurück (bitgleich wie vorher)
   return R.SpassR2 ? R.SpassR2.einstellungen(erg, R.SpassR2.rohVorher(r00), moto === true ? 'motorrad' : 'auto', spielerAnzahl) : erg;
 }
@@ -266,6 +270,7 @@ class Simulation {
       huds: [], pausiert: false, zustand: 'rennen', netzKonto: spieler.map(() => 0),
     });
     this.sim = sim;
+    sim.tricksRaum = e.tricks === true;       // R3: spassTricks.js (Auto: kehrt bei false sofort zurück; Motorrad: nur die Computer-Tricks hängen daran)
     this.eingaben = spieler.map(() => ({ gas: 0, bremse: 0, lenkung: 0 }));
     sim.input = { steuerung: (nr) => this.eingaben[nr] || { gas: 0, bremse: 0, lenkung: 0 } };
     this.ereignisse = [];                    // [{ an: nr|null, ... }] seit dem letzten abholen()
@@ -363,13 +368,15 @@ class Simulation {
     if (moto) this.moto = MotoSim.einbauen(this, R, e);
     // R2: Kurz-Level, K.-o.-Rallye, Freie Fahrt, Dino-Aufgaben – nur bei gesetzter R2-Wahl (Raum-Einstellungen modus/dino); sonst bleibt this.r2 null und nichts ändert sich
     this.r2 = R.SpassR2 && (e.modus || e.dino) ? R2Sim.einbauen(this, R, e, seed) : null;
+    // R3: Auto-Tricks online – nur in Auto-Räumen mit Raum-Schalter `tricks`; sonst bleibt this.r3 null und nichts ändert sich
+    this.r3 = !moto && e.tricks === true && R.SpassTricks ? R3Sim.einbauen(this, R, e) : null;
   }
 
   /** Steuerung für Spieler nr setzen (bereits dekodiert: { gas, bremse, lenkung }). */
   eingabeSetzen(nr, s) { const z = this.eingaben[nr]; if (z) { z.gas = s.gas; z.bremse = s.bremse; z.lenkung = s.lenkung; } }
 
   /** M4 (nur Motorrad-Räume): Trick-Taste von Spieler nr in diesem Schritt gehalten? (Eingabe-Bit k; tippen = kurz halten.) */
-  trickSetzen(nr, an) { if (this.moto) this.moto.trick[nr] = !!an; }
+  trickSetzen(nr, an) { if (this.moto) this.moto.trick[nr] = !!an; else if (this.r3) this.r3.trick[nr] = !!an; }
 
   /** v22 (additiv, Protokoll-Version bleibt 4): vom Browser gemeldetes Münzen-Guthaben von Spieler nr (für das Freikaufen bei der Polizei). */
   kontoSetzen(nr, k) { if (this.sim.netzKonto && nr >= 0 && nr < this.sim.netzKonto.length) this.sim.netzKonto[nr] = k; }
@@ -406,6 +413,7 @@ class Simulation {
     try {
       this.sim.physikSchritt(dt);
       if (this.moto) this.moto.nachSchritt(dt);       // M4: Sturz-Purzelbaum weiterzählen, Quad entschärfen, Stunt-/Sturz-/Unfall-Ereignisse
+      if (this.r3) this.r3.nachSchritt(dt);           // R3: Trick-Ereignisse der Auto-Räume sammeln
       if (this.r2) this.r2.nachSchritt(dt);           // R2: Kurz-Wertung, K.-o.-Ereignisse, Freie-Fahrt-Kisten, Dino-Aufgaben
       this.zufallSchritt(dt);                         // Z1: Zufällige Strecke – Rundenwechsel des Führenden / Nachzügler → Neuverteilung + Ereignis `zufall`
     } finally { aktuell = null; }
@@ -487,6 +495,8 @@ class Simulation {
     if (dz.length) z.dz = dz;
     // M4 (nur Motorrad-Räume, additiv): mo[i] = Motorrad-Zustand von Teilnehmer i (Sturz, Stunts, Unfall, Pose) – Format in server/PROTOKOLL.md
     if (this.moto) z.mo = this.moto.zustand();
+    // R3 (nur Auto-Räume mit Raum-Schalter `tricks`, additiv): at[i] = [Code 0 keiner · 4 Fassrolle · 5 Schraube, Fortschritt 0..1, Richtung ±1] je Teilnehmer
+    if (this.r3) z.at = this.r3.zustand();
     // v4 (14.10.): Polizei. po[k] = Streifenwagen k im Format von `a` (x, z, y, richtung, tempo, lenkung, flags, nicken, neigung, 0, 0, 0, 0, resetZaehler),
     // ps = [[Teilnehmer-Nr, Rest der Anhaltung in s]] (nur wer gerade angehalten ist), pz = Ziel (Teilnehmer-Nr oder −1) je Streifenwagen
     const po = sim.polizei;
