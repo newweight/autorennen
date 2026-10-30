@@ -113,9 +113,9 @@ Der Modus-Schritt hat vier Karten: Allein, Zu zweit, **🏆 Pokal** und **🚪 L
 - Nach dem Rennen gibt es **Preisgeld**: Platz 1 = 30, Platz 2 = 20, Platz 3 = 15, sonst 5 Münzen. Die **Ergebnistafel** zeigt es in der Spalte „🪙 Preisgeld“ (bei den Computer-Gegnern „–“), dazu in Klammern die im Rennen gesammelten Münzen.
 - **Garage** (Karte im Modus-Schritt oder Taste **G**; Fahrer → Auto → Werkstatt, Esc = zurück). Jeder Fahrer hat sein eigenes Konto und je Auto eigene Werte:
   - **Lack**: 4 Farben je Auto, je 20 Münzen, einmal kaufen und danach gratis wechseln; „Original“ bleibt immer.
-  - **Upgrades**: Motor, Reifen, Bremsen, je 3 Stufen (30 / 60 / 100 Münzen) – schneller, mehr Grip, kürzere Bremswege.
+  - **Tuning**: Motor, Reifen, Bremsen (siehe unten). Die früheren Upgrades (Stufe 0–3) gibt es nicht mehr: wer schon welche gekauft hatte, bekam die bezahlten Goldstücke einmalig zurück („Deine alten Upgrades wurden in X Goldstücke getauscht“).
   - **Reparatur** (10 Münzen, nur bei **Schaden an**): Das Auto startet das nächste Rennen mit 100 %. Ohne Reparatur startet es mit dem Rest aus dem letzten Rennen (mindestens 30 %).
-  - **Schalter „Upgrades zählen“**: aus = alle fahren gleich schnell, nur die Farben bleiben. Die Computer-Gegner bekommen nie Upgrades.
+  - Tastatur in der Werkstatt: ↑↓ wählt „Lack“ oder „Tuning öffnen“, ←→ Farbe ansehen, Enter kauft/öffnet.
 
 ### Ölfalle (Welt Verrückt und Alles)
 **Ölfässer** (schwarz mit gelben Ringen) stehen auf der Gegenseite hinter den Schutzschild-Kugeln und kommen nach 10 s wieder. Einsammeln gibt ein Item (🛢️ im HUD). Mit **Space** (Spieler 1) bzw. **E** (Spieler 2) legst du 8 m hinter dem Auto einen **Ölfleck** (20 s, höchstens 6 gleichzeitig). Wer hineinfährt, schlingert wie auf Öl („Öl!“). Das eigene Auto ist 1 s immun, ein Schutzschild fängt den Fleck ab. Die Computer-Gegner sammeln Fässer und legen auch selbst Öl, weichen den Flecken aber nicht aus.
