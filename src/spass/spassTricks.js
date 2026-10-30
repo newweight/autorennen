@@ -47,6 +47,16 @@
       },
     };
   }
+  if (!R.config.spass.tricks.ki) {
+    // R3 (KI-Tricks offline): Chance je Flug nach Schwierigkeit; Auto: Anteil Schraube (Rest Fassrolle); Motorrad: Anteile [Superman, Backflip, Handstand];
+    // startMin/startSpanne: Zeit nach dem Absprung (s), zusatz: so viel Restflugzeit über Trickdauer + Reserve muss übrig sein (sonst macht die KI gar keinen Trick – nie ein Fehltrick)
+    const mo = { leicht: [1, 0, 0], mittel: [0.7, 0.3, 0], schwer: [0.4, 0.4, 0.2], profi: [0.2, 0.4, 0.4], meister: [0.1, 0.4, 0.5], legende: [0.1, 0.4, 0.5], unschlagbar: [0.1, 0.4, 0.5] };
+    R.config.spass.tricks.ki = {
+      chance: { leicht: 0.10, mittel: 0.25, schwer: 0.40, profi: 0.55, meister: 0.65, legende: 0.75, unschlagbar: 0.85 },
+      schraube: { leicht: 0, mittel: 0.2, schwer: 0.35, profi: 0.5, meister: 0.55, legende: 0.6, unschlagbar: 0.6 },
+      moto: mo, startMin: 0.25, startSpanne: 0.2, zusatz: 0.3, standard: 'mittel',
+    };
+  }
   const C = () => R.config.spass.tricks;
   const ARTEN_MOTO = ['superman', 'handstand', 'backflip'];
   const ARTEN_AUTO = ['fassrolle', 'schraube'];
@@ -147,6 +157,38 @@
     const cr = Math.cos(pose.rho), sr = Math.sin(pose.rho), x1 = x0 * cr - y0 * sr, y1 = x0 * sr + y0 * cr, z1 = z0;
     const ct = Math.cos(pose.theta), st = Math.sin(pose.theta), y2 = y1 * ct - z1 * st, z2 = y1 * st + z1 * ct;
     return [pose.A[0] + x1, pose.A[1] + y2, pose.A[2] + z2];
+  }
+
+  // ---------------------------------------------------------------- R3: KI-Tricks (offline), reine Logik
+  function hash(text) { let h = 0x811c9dc5; for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; }
+  function zufall(seed) {
+    let a = seed >>> 0;
+    return function () { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  /**
+   * Trick-Plan der KI für EINEN Flug (deterministisch, einmal je Flug beim Abflug). saat = 'streckenId|variante', nr = Fahrzeugnummer, flugNr = laufende Flugnummer,
+   * schwierigkeit = 'leicht'…'unschlagbar' (unbekannt → mittel), spielart 'auto' | 'moto'.
+   * → null (kein Trick) | { art, richtung ('hoch'|'runter'|'links'|'rechts' – die „gedrückte“ Richtung), dir (±1), startT (s nach dem Absprung) }
+   */
+  function kiPlanNeu(saat, nr, flugNr, schwierigkeit, spielart, cfg) {
+    const k = (cfg || C()).ki, sw = k.chance[schwierigkeit] !== undefined ? schwierigkeit : k.standard;
+    const r = zufall(hash('r3|' + saat + '|' + nr + '|' + flugNr));
+    const wurf = r(), wahl = r(), start = r(), seite = r();
+    if (wurf >= k.chance[sw]) return null;
+    const startT = k.startMin + k.startSpanne * start;
+    if (spielart === 'moto') {
+      const a = k.moto[sw];
+      if (wahl < a[0]) return { art: 'superman', richtung: 'hoch', dir: 1, startT };
+      if (wahl < a[0] + a[1]) return { art: 'backflip', richtung: 'runter', dir: 1, startT };
+      return seite < 0.5 ? { art: 'handstand', richtung: 'links', dir: -1, startT } : { art: 'handstand', richtung: 'rechts', dir: 1, startT };
+    }
+    if (wahl < k.schraube[sw]) return seite < 0.5 ? { art: 'schraube', richtung: 'hoch', dir: 1, startT } : { art: 'schraube', richtung: 'runter', dir: -1, startT };
+    return seite < 0.5 ? { art: 'fassrolle', richtung: 'links', dir: -1, startT } : { art: 'fassrolle', richtung: 'rechts', dir: 1, startT };
+  }
+  /** Genug Restflugzeit, damit die KI den Trick sicher fertig bekommt (Dauer + Reserve + Zusatz)? */
+  function kiGenugZeit(rest, art, cfg) {
+    const k = cfg || C();
+    return rest !== null && rest !== undefined && rest >= k.zeit[art].dauer + k.reserve + k.ki.zusatz;
   }
 
   function comboNeu() { return { zaehler: 0, letzter: -Infinity, max: 0 }; }
@@ -262,7 +304,7 @@
   /** Wackel-Zustand starten (Auto): wird vom Aufrufer nach landeFehler gesetzt. */
   function wackelStarten(z3, cfg) { const w = (cfg || C()).wackeln; z3.wackel = { t: 0, dauer: w.dauer, amp: w.amp }; }
 
-  R.SpassTricks = Object.assign(R.SpassTricks || {}, { config: C, plan, gewicht, anzeige, schritt, zNeu, restFlug, comboStunt, comboNeu, an, anSetzen, wackelStarten, FAHRER, fahrerPose, ausKoerper,
+  R.SpassTricks = Object.assign(R.SpassTricks || {}, { config: C, kiPlanNeu, kiGenugZeit, hash, zufall, plan, gewicht, anzeige, schritt, zNeu, restFlug, comboStunt, comboNeu, an, anSetzen, wackelStarten, FAHRER, fahrerPose, ausKoerper,
     ARTEN_MOTO, ARTEN_AUTO, NAMEN, CODE, RICHTUNGEN, glatt });
 
   // ================================================================ Verdrahtung (Browser und Server)
