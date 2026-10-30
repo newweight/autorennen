@@ -51,6 +51,7 @@ VMAX = """(nr) => { const s = Rennspiel.spiel, f = s.fahrzeuge[nr], b = new Renn
 with sync_playwright() as p:
     browser = p.chromium.launch(args=ARGS)
     page = browser.new_page(viewport={'width': 1280, 'height': 800})
+    page.set_default_timeout(180000)      # R1: großzügig (nur 2 CPU-Kerne, zweiter Agent läuft mit)
     page.on('pageerror', lambda e: fehler.append(str(e)))
     page.on('console', lambda m: fehler.append('console.error: ' + m.text) if m.type == 'error' else None)
     page.goto(url)
@@ -123,7 +124,7 @@ with sync_playwright() as p:
     lack_vorschau = page.evaluate('Rennspiel.AutoVorschau.lack(0)')
     pruefe('Pfeil → Pink: Live-Vorschau auf der Bühne (noch nicht gekauft)', lack_vorschau == PINK and lack0 != PINK
            and page.evaluate("Rennspiel.Garage.lackFarbe('Jonas', 'troc-cabrio')") is None and page.evaluate("Rennspiel.Garage.konto('Jonas')") == konto0, [lack0, lack_vorschau])
-    winkel0 = page.evaluate('Rennspiel.AutoVorschau.winkel(0)'); taste('Period'); page.wait_for_timeout(900)
+    winkel0 = page.evaluate('Rennspiel.AutoVorschau.winkel(0)'); taste('Period'); page.wait_for_timeout(2500)
     pruefe('Bühne dreht mit . (90°)', page.evaluate('Rennspiel.AutoVorschau.winkel(0)') - winkel0 < -25)
     taste('Enter'); page.wait_for_timeout(500)
     pruefe('Enter kauft Pink: −20, Lack gespeichert', page.evaluate("Rennspiel.Garage.lackFarbe('Jonas', 'troc-cabrio')") == PINK
@@ -261,7 +262,7 @@ with sync_playwright() as p:
     pruefe('R1: nach Neuladen kein zweiter Hinweis und keine zweite Gutschrift', page.locator('#garage-hinweis').count() == 0 and page.evaluate("Rennspiel.Garage.konto('Jonas')") == k_nach)
     page.click('[data-a="garage"]'); page.wait_for_timeout(300)
     pruefe('R1: auch in der Garage kein erneuter Hinweis', page.locator('#garage-hinweis').count() == 0)
-    page.click('#garage [data-g="schliessen"]'); page.wait_for_timeout(200)
+    page.click('#garage [data-g="zurueck"]'); page.wait_for_timeout(200)
 
     pruefe('Keine JS-Fehler', not fehler, fehler)
     print(json.dumps({'ok': all(x['ok'] for x in pruefungen), 'fehler': fehler}, ensure_ascii=False))
