@@ -116,10 +116,10 @@
         try {
           const c = C().zeitlupe.schwenk, u = klemme((jetztMs() - SW.t0) / 1000 / SW.dauer, 0, 1), g = glatt(u / 0.3) * glatt((1 - u) / 0.35);
           if (g > 0.001) {
-            const v = f.vehicle, cam = this.kamera, ang = c.winkel * g * SW.seite;
+            const MF = moto() && R.config.motoFlug, v = f.vehicle, cam = this.kamera, ang = (MF ? MF.schwenkWinkel : c.winkel) * g * SW.seite;      // FIX3: Motorrad: flacherer, weiterer Schwenk (R.config.motoFlug)
             let dx = cam.position.x - v.x, dz = cam.position.z - v.z;
             const len = Math.hypot(dx, dz) || 1, ca = Math.cos(ang), sa = Math.sin(ang);
-            const nx = dx * ca - dz * sa, nz = dx * sa + dz * ca, L = len + (c.abstand - len) * g;
+            const nx = dx * ca - dz * sa, nz = dx * sa + dz * ca, L = len + ((MF ? MF.schwenkAbstand : c.abstand) - len) * g;
             cam.position.x = v.x + nx / len * L; cam.position.z = v.z + nz / len * L;
             cam.position.y += (v.y + c.hoehe - cam.position.y) * g;
             cam.lookAt(v.x, v.y + 0.8, v.z);

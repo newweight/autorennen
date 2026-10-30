@@ -346,11 +346,22 @@
       schritt(st.add, dt); schritt(st.norm, dt);
     }
     // Tempo-Streifen
-    const tA = klemme(kam._tempoAnteil || 0, 0, 1), blur = zwei || pause ? 0 : st.P.blur * klemme((tA - 0.55) / 0.4, 0, 1) * (cockpit ? 0.5 : 1);
+    const tA = klemme(kam._tempoAnteil || 0, 0, 1);
+    let blur = zwei || pause ? 0 : st.P.blur * klemme((tA - 0.55) / 0.4, 0, 1) * (cockpit ? 0.5 : 1);
+    // FIX3 (nur Motorrad): in der Luft keine Tempo-Streifen/Vignette (sie verzerrten das Bild beim Fliegen) und kein Drehen/Zoomen der Ebene; weich ein-/ausgeblendet
+    const MF = MOTO && R.config.motoFlug;
+    if (MF) {
+      let luft = false;
+      try { const f = sp._fahrzeugVon && sp._fahrzeugVon(kam.ziel); luft = !MF.streifenInLuft && !!(f && R.Moto && R.Moto.imFlug && R.Moto.imFlug(f)); } catch (e) { luft = false; }
+      const ziel = luft ? 1 : 0, w = MF.streifenWeich > 0 ? Math.min(1, dt / MF.streifenWeich) : 1;
+      st.luftF = (st.luftF || 0) + (ziel - (st.luftF || 0)) * w;
+      blur *= 1 - st.luftF;
+    }
     if (st.streifen) {
       const an = blur > 0.01;
       st.streifen.style.display = an ? 'block' : 'none'; st.streifen.style.opacity = an ? blur.toFixed(3) : '0';
-      if (an) { st.winkelT += dt; if (st.winkelT > 0.07) { st.winkelT = 0; st.streifen.style.transform = 'rotate(' + ((Math.floor(rnd() * 5) - 2) * 0.9).toFixed(1) + 'deg) scale(' + (1.04 + rnd() * 0.04).toFixed(3) + ')'; } }
+      if (an && !(MF && !MF.streifenRuettel)) { st.winkelT += dt; if (st.winkelT > 0.07) { st.winkelT = 0; st.streifen.style.transform = 'rotate(' + ((Math.floor(rnd() * 5) - 2) * 0.9).toFixed(1) + 'deg) scale(' + (1.04 + rnd() * 0.04).toFixed(3) + ')'; } }
+      else if (an && MF && st.streifen.style.transform) st.streifen.style.transform = '';
     }
     // Tropfen
     if (st.tropf) {

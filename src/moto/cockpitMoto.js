@@ -75,6 +75,39 @@ window.Rennspiel = window.Rennspiel || {};
   };
   const CFG = () => R.config.motoCockpit;
 
+  // ---------- FIX3: keine Verzerrung im Flug (Konfig) ----------
+  // Ursachen (gemessen, tests/fix3_flug.py): (1) Tempo-Streifen/Vignette (Schön/Ultra) blieben in der Luft an und ruckelten (Drehen ±1,8°, Zoom 4–8 %) → in der Luft aus, kein Ruckeln;
+  // (2) die Cockpit-Kamera kippte im Flug bis 23° mit (Schräglage-Anteil) → Obergrenze in der Luft; (3) sehr breite Fenster ergaben ein waagerechtes Sichtfeld > 100° (Fischauge am Rand,
+  // Fahrer wirkt gestreckt) → Obergrenze; (4) Kamera-Schwenk der Zeitlupe stand sehr dicht und weit herumgeschwenkt → flacher/weiter. Das Sichtfeld wird nirgends im Flug geweitet (Obergrenze als Schutz).
+  R.config.motoFlug = {
+    fovZuschlagMax: 0,           // Grad: Sichtfeld im Flug höchstens Grundsichtfeld + diesen Wert (0 = keine Weitung)
+    hFovMax: 96,                 // Grad: waagerechtes Sichtfeld höchstens (Verfolger/Weit/Cockpit); greift nur bei sehr breiten Fenstern (ab Seitenverhältnis ≈ 1,9; 16:9 hat 93°)
+    streifenInLuft: false,       // Tempo-Streifen + Vignette (Schön/Ultra) in der Luft: false = aus
+    streifenWeich: 0.2,          // s: weich aus-/einblenden
+    streifenRuettel: false,      // false = die Streifen-Ebene wird nicht gedreht/gezoomt (Normal: gibt es sie nicht)
+    rollMaxLuft: 0.08,           // rad (≈ 4,6°): Cockpit-Kamera kippt in der Luft höchstens so weit
+    schwenkWinkel: 0.5,          // rad: Kamera-Schwenk bei großen Sprüngen (vorher 1,05)
+    schwenkAbstand: 10.5,        // m: Abstand beim Schwenk (vorher 7,5)
+  };
+  /** Fliegt das Fahrzeug gerade (Schanze, Trampolin, Kanone, Gleitschirm, Schiene/Pipe)? f = Eintrag aus spiel.fahrzeuge. */
+  function imFlug(f) {
+    if (!f) return false;
+    const fl = f.flug, v = f.vehicle;
+    return !!((fl && (fl.aktiv || fl.gleit || fl.kanone || fl.schiene || fl.pipe)) || (v && v.imFlug));
+  }
+  R.Moto.imFlug = imFlug;
+  /** Sichtfeld je Ansicht: waagerecht höchstens hFovMax (breite Fenster); gemerkt als Grundsichtfeld, über das es im Flug nie hinausgeht. */
+  if (R.FahrzeugKamera && R.FahrzeugKamera.prototype.groesseSetzen) {
+    const gAlt = R.FahrzeugKamera.prototype.groesseSetzen;
+    R.FahrzeugKamera.prototype.groesseSetzen = function (aspect, fov) {
+      const MF = R.config.motoFlug;
+      if (MF && fov && aspect > 0 && MF.hFovMax > 0) fov = Math.min(fov, 2 * Math.atan(Math.tan(MF.hFovMax * Math.PI / 360) / aspect) * 180 / Math.PI);
+      if (fov) this._fovBasis = fov;
+      return gAlt.call(this, aspect, fov);
+    };
+  }
+
+
   const TAU = Math.PI * 2, klemme = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
   // ---------- reine Funktionen ----------
@@ -212,6 +245,12 @@ window.Rennspiel = window.Rennspiel || {};
     }
     const erst = this._erstesMal;
     const r = kUpdate.apply(this, arguments);
+    try {      // FIX3: das Sichtfeld wird im Flug nie geweitet (Obergrenze Grundsichtfeld + fovZuschlagMax); sonst nichts zu tun
+      const MF0 = R.config.motoFlug, sp0 = R.spiel;
+      if (MF0 && this._fovBasis && this.kamera.fov > this._fovBasis + MF0.fovZuschlagMax + 1e-6 && this.ziel && sp0 && sp0._fahrzeugVon && imFlug(sp0._fahrzeugVon(this.ziel))) {
+        this.kamera.fov = this._fovBasis + MF0.fovZuschlagMax; this.kamera.updateProjectionMatrix();
+      }
+    } catch (e) { /* nur Optik */ }
     try {
       if (this.modus === 'cockpit' && !CFG().aus && this.ziel) {
         const sp = R.spiel, f = sp && sp._fahrzeugVon ? sp._fahrzeugVon(this.ziel) : null, z = f && f.motoZ;
@@ -227,6 +266,9 @@ window.Rennspiel = window.Rennspiel || {};
         if (erst || this._motoRoll === undefined) this._motoRoll = ziel;
         else this._motoRoll += (ziel - this._motoRoll) * (1 - Math.exp(-CFG().rollWeichheit * Math.max(0, dt || 0)));
         this.kamera.rotation.z += this._motoRoll;
+        // FIX3: in der Luft kippt die Cockpit-Kamera nur wenig (kein schiefer Horizont/Lenker beim Fliegen); Zauber-Posen (Wand/Pipe) bleiben wie sie sind
+        const MF = R.config.motoFlug;
+        if (MF && f && !f._zPose && imFlug(f)) { const m = MF.rollMaxLuft; this.kamera.rotation.z = Math.max(-m, Math.min(m, this.kamera.rotation.z)); }
       } else this._motoRoll = undefined;
     } catch (e) { console.error('Motorrad-Cockpit (Kamera):', e); }
     return r;
