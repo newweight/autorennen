@@ -39,6 +39,8 @@
     if (modusNeu === roh.r2b.m) return roh;                          // gleicher Modus wie beim Sichern: nichts zurückholen
     const r = Object.assign({}, roh);                                // Modus gewechselt (auch Kurz → K.-o.): die gesicherten Werte wieder einsetzen (nur die Felder dieses Modus)
     (UEBERSCHRIEBEN[roh.r2b.m] || []).forEach((k) => { if (Object.prototype.hasOwnProperty.call(roh.r2b, k)) r[k] = roh.r2b[k]; });
+    if (roh.r2b.g === true && r.geist === undefined) r.geist = true;                  // R2-FIX: Lobby-Wahl Geist/Dino überlebt jeden Moduswechsel (wirkt nur im Rennen)
+    if (typeof roh.r2b.d === 'string' && r.dino === undefined) r.dino = roh.r2b.d;
     delete r.r2b;
     return r;
   }
@@ -82,6 +84,8 @@
       const z = FREI_ZEITEN.indexOf(+r0.freiZeit) >= 0 ? +r0.freiZeit : STD.freiZeit;
       if (z !== STD.freiZeit) o.freiZeit = z;
     }
+    if (geist || (bisher && bisher.g === true)) sicher.g = true;      // R2-FIX: Geist/Dino merken (im Modus selbst nicht erlaubt, beim Zurück auf „Rennen“ wieder da)
+    if (dino !== 'aus') sicher.d = dino; else if (bisher && typeof bisher.d === 'string') sicher.d = bisher.d;
     o.r2b = sicher;
     return o;
   }
