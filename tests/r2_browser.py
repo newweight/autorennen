@@ -33,7 +33,8 @@ for _ in range(100):
     except OSError: time.sleep(0.1)
 url = 'http://127.0.0.1:%d/' % port
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
-LANGSAM = "window.requestAnimationFrame = (f) => setTimeout(() => f(performance.now()), 250);"
+# Seiten, die gerade nicht gebraucht werden, rendern gedrosselt (window.__rafMs > 0); window.__rafMs = 0 schaltet auf normal zurück
+LANGSAM = "window.__rafMs = 1500; (() => { const o = window.requestAnimationFrame.bind(window); window.requestAnimationFrame = (f) => (window.__rafMs > 0 ? setTimeout(() => f(performance.now()), window.__rafMs) : o(f)); })();"
 
 # Autopilot für die eigene Eingabe (reine Verfolgung wie der Computerfahrer)
 AUTOPILOT = """(art) => { const s = Rennspiel.spiel, o = s.online, R = Rennspiel;
@@ -70,8 +71,8 @@ def main(szenarien):
             return pg
 
         def laden(pg, pfad):
-            pg.goto(pfad, wait_until='domcontentloaded', timeout=120000)
-            pg.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=120000, polling=200)
+            pg.goto(pfad, wait_until='domcontentloaded', timeout=300000)
+            pg.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=300000, polling=300)
             pg.wait_for_timeout(700)
 
         def ui(pg, js):
@@ -79,7 +80,7 @@ def main(szenarien):
 
         def raum(modus_zeilen):
             """Host erstellt den Raum, Gast tritt bei; Rückgabe (host, gast)"""
-            host = seite('Host'); laden(host, url + SEITE)
+            host = seite('Host', LANGSAM); laden(host, url + SEITE)
             host.evaluate("(() => { Rennspiel.spiel.menue.onlineOeffnen(); Rennspiel.spiel.menue.onlineUi.erstellen(); })()")
             host.wait_for_function("(() => { const u = Rennspiel.spiel.menue.onlineUi; return u && u.lobby && u.ansicht === 'lobby'; })()", timeout=30000, polling=200)
             code = ui(host, "return u.lobby.code")
@@ -87,6 +88,7 @@ def main(szenarien):
             gast.wait_for_function("(() => { const u = Rennspiel.spiel.menue.onlineUi; return u && u.ansicht === 'code'; })()", timeout=60000, polling=200)
             gast.keyboard.press('Enter')
             gast.wait_for_function("(() => { const u = Rennspiel.spiel.menue.onlineUi; return u && u.lobby && u.ansicht === 'lobby'; })()", timeout=30000, polling=200)
+            host.evaluate('window.__rafMs = 0'); gast.evaluate('window.__rafMs = 0')
             return host, gast
 
         def starten(host, gast):
@@ -115,7 +117,7 @@ def main(szenarien):
             return pg.evaluate(STAND)
 
         def bild(pg, name):
-            try: pg.screenshot(path=os.path.join(out, name + SUFFIX + '.png'))
+            try: pg.screenshot(path=os.path.join(out, name + SUFFIX + '.png'), timeout=120000)
             except Exception as e: print('Bild fehlgeschlagen', name, e)
 
         def schluss(*pgs):
@@ -148,14 +150,14 @@ def main(szenarien):
         # ============================================================ kurz
         if 'kurz' in szenarien:
             host, gast = raum(None)
-            lvl = 'm03' if MOTO else 'a02'
+            lvl = 'm01' if MOTO else 'a01'      # Ziel-Level: der Autopilot schafft es; Münzen/Sprung/Kanone prüft test_r2_online.js (Teleport auf die Münzpunkte)
             einstellen(host, 'r2modus', 'kurz'); einstellen(host, 'r2level', lvl)
             starten(host, gast)
             for pg in (host, gast): laeuft(pg)
             host.evaluate(AUTOPILOT, 'an'); gast.evaluate(AUTOPILOT, 'an')
-            s = warte(host, lambda s: s['zaehl'] and s['zaehl'] > 0, 90, 1.5)
+            s = warte(host, lambda s: 'Level' in s['hud'] and s['rz'] == 'laeuft', 90, 1.5)
             bild(host, 'kurz_muenzen_host')
-            pruefe('Kurz (%s): HUD „Level“ zeigt Aufgabe, Münzen werden gezählt (Server-Ereignis)' % lvl, 'Level' in s['hud'] and (s['zaehl'] or 0) > 0, [s['hud'][:80], s['zaehl']])
+            pruefe('Kurz (%s): HUD „Level“ zeigt Aufgabe, Zeit und Rest-Weg' % lvl, 'Level' in s['hud'] and 'bis zum Ziel' in s['hud'], [s['hud'][:80], s['zaehl']])
             s2 = warte(host, lambda s: s['phase'] == 'ergebnis' or s['fertig'], 150, 2)
             bild(host, 'kurz_fertig_host')
             pruefe('Kurz: eigenes Ergebnis (geschafft / Zeit um) kommt vom Server', bool(s2['fertig']) or s2['phase'] == 'ergebnis', [s2['fertig'], s2['hud'][:80]])
