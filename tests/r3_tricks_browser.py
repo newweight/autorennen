@@ -139,6 +139,22 @@ STAND = """(() => { const s = Rennspiel.spiel, o = s.online; if (!o || !s.rennen
     pose0: pose(0), pose1: pose(1), meld: Array.from(document.querySelectorAll('.hud-meldung, .meldung, #hud-meldung')).map(e => e.innerText).join('|'),
     mo: s.stunt ? s.stunt.fz.map(z => z && z.neuPoseZiel ? z.neuPoseZiel.art : null) : null }; })()"""
 
+WATCH = """(auto) => {
+  window.__rec = { poses: [], meld: [], gedr: 0, druck: false, fremd: [], flug: 0 };
+  const s = Rennspiel.spiel;
+  setInterval(() => { try {
+    const o = s.online; if (!o || o.phase !== 'rennen') return;
+    const fz = o.vorhersage && o.vorhersage.fz, R_ = window.__rec;
+    const z = s._t3 && s._t3.fz && s._t3.fz[o.du]; if (z && z.pose.art) R_.poses.push({ art: z.pose.art, p: +z.pose.p.toFixed(2), rolle: +z.pose.rolle.toFixed(2) });
+    const z0 = s._t3 && s._t3.fz && s._t3.fz[0]; if (o.du !== 0 && z0 && z0.pose.art) R_.fremd.push({ art: z0.pose.art, p: +z0.pose.p.toFixed(2), rolle: +z0.pose.rolle.toFixed(2) });
+    const h = s.huds && s.huds[0]; if (h && /Fassrolle/.test(h.meldungText || '')) R_.meld.push(h.meldungText);
+    if (fz && fz.aktiv) R_.flug++;
+    if (auto && fz && fz.aktiv && fz.t >= 0.25 && !R_.druck) { R_.druck = true; R_.gedr++;
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ShiftRight', key: 'Shift', bubbles: true }));
+      setTimeout(() => window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ShiftRight', key: 'Shift', bubbles: true })), 120); }
+    if (!(fz && fz.aktiv)) R_.druck = false;
+  } catch (e) { } }, 25); return true; }"""
+
 def online_test(moto):
     SEITE = 'Motorrad.html' if moto else 'Autorennen.html'
     sfx = '_moto' if moto else ''
@@ -183,7 +199,10 @@ def online_test(moto):
                 host.wait_for_function("Rennspiel.spiel.menue.onlineUi.alleBereit()", timeout=15000, polling=200)
                 host.evaluate("Rennspiel.spiel.menue.onlineUi.aktion('start')")
                 for pg in (host, gast):
-                    pg.wait_for_function("(() => { const o = Rennspiel.spiel.online; return o && o.phase === 'rennen' && o.vorhersage; })()", timeout=180000, polling=300)
+                    try: pg.wait_for_function("(() => { const o = Rennspiel.spiel.online; return o && o.phase === 'rennen' && o.vorhersage; })()", timeout=240000, polling=300)
+                    except Exception as e:
+                        print('Start-Zeitüberschreitung:', pg.evaluate("(() => { const u = Rennspiel.spiel.menue.onlineUi, o = Rennspiel.spiel.online; return JSON.stringify({ ansicht: u && u.ansicht, hinweis: u && u.hinweis, phase: o && o.phase, zustand: Rennspiel.spiel.zustand }); })()"), fehlerliste[:3])
+                        raise
             def stand(pg): return pg.evaluate(STAND)
             def bild(pg, name):
                 try: pg.screenshot(path=os.path.join(bild_ordner, name + '.png'), timeout=120000)
@@ -196,6 +215,7 @@ def online_test(moto):
             senden(host, {'streckeId': 'formel1' if moto else 'wiese', 'spass': True, 'gegner': 2, 'runden': 2})
             host.evaluate("Rennspiel.spiel.menue.onlineUi.wertSetzen('r3tricks', 'an')"); host.wait_for_timeout(700)
             pruefe('online%s Lobby: Wahl 🤸 An → Raum-Einstellung tricks = true bei Host und Gast' % sfx, host.evaluate("Rennspiel.spiel.menue.onlineUi.lobby.einstellungen.tricks === true") and gast.evaluate("Rennspiel.spiel.menue.onlineUi.lobby.einstellungen.tricks === true"))
+            host.evaluate("(() => { const z = Array.from(document.querySelectorAll('#online .on-zeile')).find(e => e.innerText.indexOf('Tricks') >= 0); if (z) z.scrollIntoView({ block: 'center' }); })()"); host.wait_for_timeout(500)
             bild(host, 'online%s_lobby_tricks' % sfx)
             pruefe('online%s Lobby (Gast): Text "🤸 Tricks: an"' % sfx, gast.evaluate("document.querySelector('#online').innerText.indexOf('Tricks') >= 0"))
             starten(host, gast)
@@ -204,27 +224,22 @@ def online_test(moto):
                 pruefe('online Rennstart: Auto-Raum mit tricks baut den Trick-Zustand auf (_r3, spiel._t3) bei beiden Seiten', sh['r3'] and sh['t3'] and sg['r3'] and sg['t3'], [sh['r3'], sh['t3'], sg['r3'], sg['t3']])
                 host.wait_for_function("Rennspiel.spiel.rennen && Rennspiel.spiel.rennen.zustand === 'laeuft'", timeout=60000, polling=300)
                 host.evaluate(AUTOPILOT)
-                # bis zum ersten Flug (Trampolin) fahren lassen
-                ende = time.time() + 420; s = None
+                host.evaluate(WATCH, True); gast.evaluate(WATCH, False)      # Beobachter: drückt die Umschalt-Taste 0,25 s nach dem Absprung (echtes keydown), zeichnet Posen und Meldung auf
+                ende = time.time() + 480; rec = None; nb = 0
                 while time.time() < ende:
-                    s = stand(host)
-                    if s and s['flug'] and s['flugT'] > 0.05: break
-                    host.wait_for_timeout(150)
-                pruefe('online Auto: Host kommt in die Luft (Trampolin, Vorhersage-Flug)', bool(s and s['flug']), s and (s['zeit'], s['flugT']))
-                host.keyboard.press('ShiftRight')           # Trick-Taste allein = Fassrolle (nach 0,12 s); Eingabe-Bit k geht zum Server
-                gesehen, gastGesehen, meld, namen = [], False, '', []
-                for k in range(14):
-                    sh, sg = stand(host), stand(gast)
-                    if sh['pose0'] and sh['pose0']['art']: gesehen.append(sh['pose0'])
-                    if sg['pose0'] and sg['pose0']['art']: gastGesehen = True
-                    if 'Fassrolle' in sh['meld']: meld = sh['meld']
-                    if k in (2, 5, 8): bild(host, 'online_auto_fassrolle_host_%d' % k); namen.append(k)
-                    if k == 5: bild(gast, 'online_auto_fassrolle_gast')
-                    host.wait_for_timeout(120)
-                pruefe('online Auto: Taste in der Luft → der SERVER startet Fassrolle: Host-Pose fassrolle mit Winkel', len(gesehen) >= 2 and any(abs(x['rolle']) > 0.3 for x in gesehen), gesehen[:4])
-                pruefe('online Auto: der Gast sieht die Fassrolle des Hosts (Pose bei der anderen Seite)', gastGesehen)
-                pruefe('online Auto: Meldung "Fassrolle! +300" beim Host', 'Fassrolle' in meld, meld[:80])
-                # kein zweiter Raum nötig für „aus“: Pose danach wieder neutral
+                    rec = host.evaluate("window.__rec")
+                    if rec and rec['gedr'] >= 1 and nb < 6 and rec['druck']:        # solange die Fassrolle läuft: Bilder (Host und Gast)
+                        bild(host, 'online_auto_trick_host_%d' % nb)
+                        if nb in (1, 3): bild(gast, 'online_auto_trick_gast_%d' % nb)
+                        nb += 1; continue
+                    if rec and rec['gedr'] >= 1 and len(rec['poses']) >= 3 and rec['druck'] is False: break
+                    host.wait_for_timeout(500)
+                pruefe('online Auto: Host kommt in die Luft (Trampolin) und die Taste wurde in der Luft gedrückt', bool(rec and rec['gedr'] >= 1), rec and (rec['gedr'], rec['flug']))
+                rec = host.evaluate("window.__rec")
+                pruefe('online Auto: der SERVER startet die Fassrolle: Host-Pose fassrolle mit wachsendem Winkel', bool(rec) and len(rec['poses']) >= 3 and all(x['art'] == 'fassrolle' for x in rec['poses']) and max(abs(x['rolle']) for x in rec['poses']) > 1.0, rec and (len(rec['poses']), rec['poses'][:3], rec['poses'][-2:]))
+                pruefe('online Auto: Meldung "Fassrolle! +300" beim Host', bool(rec) and len(rec['meld']) >= 1, rec and rec['meld'][:1])
+                grec = gast.evaluate("window.__rec")
+                pruefe('online Auto: der Gast sieht die Fassrolle des Hosts (Pose von Fahrzeug 0 bei der anderen Seite)', bool(grec) and len(grec['fremd']) >= 1 and all(x['art'] == 'fassrolle' for x in grec['fremd']), grec and (len(grec['fremd']), grec['fremd'][:2]))
                 host.wait_for_timeout(1500)
                 s = stand(host)
                 pruefe('online Auto: nach dem Trick Pose wieder neutral', not (s['pose0'] and s['pose0']['art']), s['pose0'])

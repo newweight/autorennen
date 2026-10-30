@@ -8,12 +8,12 @@
 //     Trick + ↑ (Gas)         Superman   (Fahrer streckt sich nach hinten, Hände am Lenker)
 //     Trick + ← oder →        Handstand  (Fahrer im Handstand auf dem Lenker)
 //   Trick allein = Drehung / zweimal = Salto bleibt unverändert (stunts.js). Ein Richtungs-Trick ersetzt eine gerade begonnene Drehung.
-// Auto (neu, Schalter „🤸 Auto-Tricks“, Standard an, nur offline): in der Luft Trick-Taste (rechte Umschalt; Spieler 2: linke Umschalt – im Autorennen frei):
+// Auto (neu, Schalter „🤸 Auto-Tricks“, Standard an offline; online mit dem Raum-Schalter `tricks`, siehe server/r3Sim.js): in der Luft Trick-Taste (rechte Umschalt; Spieler 2: linke Umschalt – im Autorennen frei):
 //     Taste allein oder + ← / →   Fassrolle (Drehung um die Längsachse, Richtung nach Pfeil)
 //     Taste + ↑ / ↓               Schraube   (Drehung um die Hochachse)
 //   Landung mit unfertigem Trick (oder schiefe Landung nach einem Trick): kurzes Wackeln + Abbremsen, Schaden nur bei eingeschaltetem Schaden-Modus.
 // Punkte, Combo (gleiche Combo wie die alten Stunts), Vielfalt: jeder weitere VERSCHIEDENE Trick in derselben Combo-Kette gibt +25 % (höchstens +100 %).
-// Online (Motorrad-Räume): der Server rechnet dieselben Tricks (Richtung aus der übertragenen Eingabe), Punkte als normale Stunt-Ereignisse; zustand.mo[i] bekommt
+// Online (Motorrad-Räume immer, Auto-Räume mit Raum-Schalter `tricks`, R3): der Server rechnet dieselben Tricks (Richtung aus der übertragenen Eingabe), Punkte als normale Stunt-Ereignisse; zustand.mo[i] bekommt
 //   [13] Trick-Code (0 keiner · 1 Superman · 2 Handstand · 3 Backflip) und [14] Fortschritt 0..1. Der Backflip läuft zusätzlich über salto (mo[8]).
 //
 //   R.SpassTricks.config / plan / gewicht / anzeige / schritt / zNeu     reine Logik (Node-Test tests/test_spass_s3.js)

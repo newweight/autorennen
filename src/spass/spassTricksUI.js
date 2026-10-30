@@ -169,7 +169,7 @@
         };
         let teil = '';
         if (!moto()) teil += gr('autoTricks', 'auto', '🤸 Auto-Tricks', 'In der Luft Fassrolle und Schraube (Umschalt-Taste) – Aus: Autos fliegen wie früher');
-        teil += gr('kiTricks', 'ki', '🤖 KI-Tricks', 'Computer-Gegner machen in der Luft auch Tricks (nur offline) – Aus: wie früher');
+        teil += gr('kiTricks', 'ki', '🤖 KI-Tricks', 'Computer-Gegner machen in der Luft auch Tricks (offline; online entscheidet der Host mit „🤸 Tricks“ in der Lobby) – Aus: wie früher');
         teil += gr('zeitlupe', 'zeit', '🎬 Zeitlupe', 'Bei großen Sprüngen kurz Zeitlupe und Kamera-Schwenk – Aus: wie früher');
         h = h.replace('<span class="knopf klein" data-a="album"', teil + '<span class="knopf klein" data-a="album"');
         const tz = moto()
