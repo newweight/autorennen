@@ -38,6 +38,8 @@ with sync_playwright() as pw:
             pg.screenshot(path=os.path.join(OUT, f'menue_start_{tag}_unten.png'))
             pruefe(f'{tag}: nach Scrollen sichtbar im Bild und nicht verdeckt', bool(m1 and m1['imBild'] and m1['imInhalt'] and m1['treffer']), m1)
             # 2) Klick schaltet um
+            pg.evaluate("() => Rennspiel.SpassTricks.anSetzen('ki', false)"); pg.evaluate("() => { Rennspiel.spiel.menue.zeichnen(); const i = document.querySelector('.m-inhalt'); if (i) i.scrollTop = i.scrollHeight; }"); pg.wait_for_timeout(400)
+            m1 = pg.evaluate(MESS) or m1
             vor = pg.evaluate("() => Rennspiel.SpassTricks.an('ki')")
             if m1 and m1['imBild']:
                 pg.mouse.click(m1['x'] + m1['b'] / 2, m1['y'] + m1['h'] / 2); pg.wait_for_timeout(300)

@@ -66,9 +66,11 @@ def menue(p):
     pruefe('Menü 1100×650: Arena-Karte ohne Scrollen ganz im sichtbaren Bereich (R4-FIX: flachere Modus-Karten)', bool(sichtbar and sichtbar['ganz']), sichtbar)
     # Normalstrecke: Schalter Fahr-Zauber / Loopings (Schritt „Los!“)
     pg.evaluate("() => { const m = Rennspiel.spiel.menue; m.e.spassModus = ''; m.schritt = 4; m.fokus = 0; m.zeichnen(); }"); pg.wait_for_timeout(600)
-    shot(pg, 'menue_start_1100x650.png')
+    shot(pg, 'menue_start_1100x650_oben.png')       # PRUEF-FIX 3: Kopf des Schritts „Los!“ (die Spaß-Schalter liegen darunter und erscheinen erst nach dem Scrollen/↓)
     pg.evaluate("() => { const i = document.querySelector('.m-inhalt'); if (i) i.scrollTop = i.scrollHeight; }"); pg.wait_for_timeout(300)
+    shot(pg, 'menue_start_1100x650.png')            # Hauptbild jetzt MIT der Schalterzeile (Spaß-Elemente … 🤖 KI-Tricks … Fahr-Zauber, Loopings)
     shot(pg, 'menue_start_1100x650_unten.png')
+    pruefe('Menü: Schalter „🤖 KI-Tricks“ auf dem Hauptbild sichtbar', 'KI-Tricks' in pg.evaluate("() => document.body.innerText"))
     txt = pg.evaluate("() => document.body.innerText")
     pruefe('Menü: Zeile „🌀 Loopings“ mit Klassisch / Magnet-Röhre neben Fahr-Zauber', 'Loopings' in txt and 'Magnet-Röhre' in txt and 'Klassisch' in txt and 'Fahr-Zauber' in txt)
     # Schalter setzen / Standard
