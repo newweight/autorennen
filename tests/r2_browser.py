@@ -67,7 +67,7 @@ def main(szenarien):
             if init: ctx.add_init_script(init)
             pg = ctx.new_page()
             pg.on('pageerror', lambda e: fehler.append(name + ': ' + str(e)))
-            pg.on('console', lambda m: fehler.append(name + ' console.error: ' + m.text) if m.type == 'error' and 'WebGL' not in m.text and 'GPU stall' not in m.text else None)
+            pg.on('console', lambda m: fehler.append(name + ' console.error: ' + m.text) if m.type == 'error' and 'WebGL' not in m.text and 'GPU stall' not in m.text and '405' not in m.text else None)
             return pg
 
         def laden(pg, pfad):

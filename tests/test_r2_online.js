@@ -16,7 +16,7 @@ const { starten } = require('../server/server');
 const { Simulation, laden, ladenMoto, einstellungenPruefen } = require('../server/simulation');
 
 let fehler = 0, ok = 0;
-setTimeout(() => { console.log('FEHL Wächter: Test hängt (> 300 s) – Abbruch'); process.exit(3); }, 300000).unref();
+setTimeout(() => { console.log('FEHL Wächter: Test hängt (> 900 s) – Abbruch'); process.exit(3); }, 900000).unref();
 function pruefe(name, gut, info) { console.log((gut ? 'OK   ' : 'FEHL ') + name + (info !== undefined ? '  (' + info + ')' : '')); if (gut) ok++; else fehler++; }
 const warte = (ms) => new Promise(r => setTimeout(r, ms));
 const R = laden(), RM = ladenMoto();
@@ -439,6 +439,62 @@ const teil = (k) => !nurTeil || nurTeil === k;
         pruefe('F Dino: Münze einsammeln → dinoSammeln {id} an den Besitzer (Client schreibt +1 Gold gut)', sam.length >= 1 && sam[0].id === g.id && sam[0].an === 0, json(sam));
       }
     }
+  }
+  // ================================================================== G) echter Server, zwei WebSocket-Clients: Lobby, Start, Zeitlimit-Ergebnis; alter Client; H) kaputte Nachrichten
+  {
+    const srv = await starten({ port: 0, host: '127.0.0.1', leise: true, tempo: 6, ladenMaxMs: 8000 });
+    class Client {
+      constructor(port) {
+        this.ws = new WebSocket('ws://127.0.0.1:' + port + '/ws'); this.alle = []; this.warter = []; this.ereignisse = [];
+        this.offen = new Promise((f, n) => { this.ws.on('open', f); this.ws.on('error', n); });
+        this.ws.on('message', (d) => {
+          let m; try { m = JSON.parse(d); } catch (e) { return; }
+          if (m.t !== 'zustand') { this.alle.push(m); if (m.t === 'ereignis') this.ereignisse.push(m); }
+          this.warter = this.warter.filter((w) => { if (w.t === m.t && w.f(m)) { clearTimeout(w.zeit); w.ok(m); return false; } return true; });
+        });
+      }
+      senden(o) { if (this.ws.readyState === 1) this.ws.send(typeof o === 'string' ? o : JSON.stringify(o)); }
+      auf(t, f, ms) { return new Promise((fertig) => { const w = { t, f: f || (() => true), ok: fertig, zeit: setTimeout(() => { this.warter = this.warter.filter((x) => x !== w); fertig(null); }, ms || 4000) }; this.warter.push(w); }); }
+      zu() { this.ws.terminate(); }
+    }
+    const h = new Client(srv.port); await h.offen;
+    h.senden({ t: 'hallo', v: R.Netz.VERSION }); const hallo = await h.auf('hallo');
+    pruefe('G hallo meldet r2: true', !!hallo && hallo.r2 === true);
+    // alter Client: raumErstellen ohne R2-Felder → Einstellungen ohne R2-Schlüssel
+    h.senden({ t: 'raumErstellen', fahrer: 'Jonas', auto: 'porsche-911', einstellungen: { streckeId: 'wiese', gegner: 2 } });
+    const [raum, lob] = await Promise.all([h.auf('raum'), h.auf('lobby')]);
+    const ke = lob && lob.einstellungen;
+    pruefe('G alter Client: Raum ohne R2-Wahl hat keine R2-Schlüssel (modus/level/freiZeit/geist/dino/r2b)', !!ke && ['modus', 'level', 'freiZeit', 'geist', 'dino', 'r2b'].every((k) => ke[k] === undefined), json(Object.keys(ke || {})));
+    // Host-Wahl Kurz-Level, r2b kann der Client nicht setzen
+    h.senden({ t: 'einstellungen', einstellungen: { modus: 'kurz', level: 'a01', r2b: { m: 'kurz', x: 1 } } });
+    const l2 = await h.auf('lobby', (m) => m.einstellungen && m.einstellungen.modus === 'kurz');
+    pruefe('G Lobby-Wahl Kurz-Level: Strecke/Gegner vom Server überschrieben, r2b kommt nur vom Server (nicht der Client-Wert)', !!l2 && l2.einstellungen.gegner === 0 && l2.einstellungen.level === 'a01' && !(l2.einstellungen.r2b && l2.einstellungen.r2b.x === 1), json(l2 && l2.einstellungen.r2b));
+    const g = new Client(srv.port); await g.offen;
+    g.senden({ t: 'hallo', v: R.Netz.VERSION }); await g.auf('hallo');
+    g.senden({ t: 'raumBeitreten', code: raum.code, fahrer: 'Emmy', auto: 'multivan' }); await g.auf('lobby', (m) => m.spieler.length === 2);
+    g.senden({ t: 'bereit', an: true }); await h.auf('lobby', (m) => m.spieler[1] && m.spieler[1].bereit);
+    h.senden({ t: 'start' });
+    const [s1, s2] = await Promise.all([h.auf('start', null, 8000), g.auf('start', null, 8000)]);
+    pruefe('G Start: beide bekommen start.r2.kurz (Level, Zeiten) und die Einstellungen mit modus', !!s1 && !!s2 && s1.r2 && s1.r2.kurz && s1.r2.kurz.level === 'a01' && s2.r2 && s2.r2.kurz.limit > 0 && s1.einstellungen.modus === 'kurz', json(s1 && s1.r2));
+    h.senden({ t: 'geladen' }); g.senden({ t: 'geladen' });
+    // keiner fährt → Zeit um (Limit 120 s, Zeitraffer ×6 = ~20 s)
+    const [e1, e2] = await Promise.all([h.auf('ergebnis', null, 240000), g.auf('ergebnis', null, 240000)]);
+    pruefe('G Kurz ohne Fahren: Ergebnis kommt bei BEIDEN (Zeit um, 0 Sterne), identisch', !!e1 && !!e2 && json(e1) === json(e2) && e1.zeilen.every((z) => z.kurz && z.kurz.status === 'zeitUm' && z.kurz.sterne === 0), json(e1 && e1.zeilen.map((z) => z.kurz)));
+    const kev = h.ereignisse.filter((x) => x.art === 'kurz');
+    pruefe('G Ereignis kurz {nr,status,sterne,zeit} für jeden Menschen genau einmal', kev.length === 2 && kev.every((x) => x.status === 'zeitUm'), json(kev.map((x) => [x.nr, x.status])));
+    // H) kaputte Nachrichten
+    h.senden({ t: 'einstellungen', einstellungen: { modus: 'quatsch', level: 5, freiZeit: 99, geist: 'ja', dino: {} } });
+    h.senden('{kaputt'); h.senden({ t: 'einstellungen', einstellungen: null }); h.senden({ t: 'einstellungen' });
+    await warte(300);
+    pruefe('H kaputte R2-Werte/Nachrichten: Server lebt noch und antwortet auf hallo', await (async () => { h.senden({ t: 'ping', z: 1 }); const p = await h.auf('pong', null, 2000); return !!p; })());
+    h.zu(); g.zu();
+    // H2) Standard-Raum + Einstellungen mit Unsinn → Standardwerte, keine R2-Schlüssel
+    const a = new Client(srv.port); await a.offen; a.senden({ t: 'hallo', v: R.Netz.VERSION }); await a.auf('hallo');
+    a.senden({ t: 'raumErstellen', fahrer: 'Jonas', auto: 'porsche-911', einstellungen: { streckeId: 'wiese', modus: 'quatsch', level: 5, freiZeit: 99, geist: 'ja', dino: {} } });
+    const lq = await a.auf('lobby');
+    pruefe('H Unsinn in R2-Feldern → Standard (keine R2-Schlüssel im Raum)', !!lq && ['modus', 'level', 'freiZeit', 'geist', 'dino'].every((k) => lq.einstellungen[k] === undefined), json(lq && Object.keys(lq.einstellungen)));
+    a.zu();
+    await srv.schliessen();
   }
   if (typeof globalThis.__r2Weiter === 'function') await globalThis.__r2Weiter();
   console.log('\n' + ok + ' OK, ' + fehler + ' FEHL');
