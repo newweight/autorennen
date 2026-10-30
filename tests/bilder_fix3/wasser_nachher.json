@@ -22,10 +22,18 @@
   ],
   "kisten": 4
  },
- "fantasie": null,
+ "fantasie": {
+  "laenge": 1420,
+  "felder": [
+   "wasser@472+30 q-4.1..6.4"
+  ],
+  "kisten": 0
+ },
  "dino": {
   "laenge": 2753,
-  "felder": [],
+  "felder": [
+   "wasser@1820+30 q-5.9..3.85"
+  ],
   "kisten": 4
  },
  "alpen": {
@@ -53,7 +61,9 @@
  },
  "unterwasser": {
   "laenge": 2469,
-  "felder": [],
+  "felder": [
+   "wasser@215+30 q-3.85..5.9"
+  ],
   "kisten": 2
  },
  "regenbogenland": {
