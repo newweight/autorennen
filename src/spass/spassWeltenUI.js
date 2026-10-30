@@ -206,7 +206,7 @@
   const dinoAktivFuer = (strecke) => { const m = einst().dino; return m === 'immer' || (m === 'dino' && strecke && strecke.id === 'dino'); };
   function dinoSchritt(sp, D, dt) {
     const f = (sp.fahrzeuge.find((x) => x && x.istSpieler) || sp.fahrzeuge[0]), v = f && f.vehicle, st = sp.strecke;
-    const laeuft = !!(v && st && (sp.zustand === 'rennen' || sp.zustand === 'ergebnis'));
+    const laeuft = !!(v && st && (sp.zustand === 'rennen' || sp.zustand === 'ergebnis' || (sp.dinoExtern && sp.zustand === 'online')));      // R2: online (Server-Aufgaben) läuft der Dino im Zustand 'online'
     if (!laeuft) { D.gruppe.visible = false; D.beine.visible = false; return; }
     const spl = st.spline, sNah = f.nah && f.nah.s !== undefined ? f.nah.s : spl.naechster(v.x, v.z).s;
     // Immer ein Stück VOR dem Fahrzeug, direkt aus dessen s (keine Glättung der Position: die ließ den Dino bei Tempo zurückfallen, hinter die Kamera;
@@ -330,7 +330,8 @@
   /** Ein Bild der Dino-Aufgaben (Rechenteil, Anzeige, Einsammeln, Wettrennen). Nur normale Offline-Rennen mit Dino. */
   function aufgabenSchritt(sp, Dn, dt) {
     const st = sp.strecke, rn = sp.rennen, f = sp.fahrzeuge.find((x) => x && x.istSpieler);
-    const aktiv = !!(f && rn && st && sp.zustand === 'rennen' && rn.gasErlaubt && !(sp.einstellungen && sp.einstellungen.spassModus));
+    const ext = sp.dinoExtern;      // R2: online rechnet der SERVER die Aufgaben (Ereignisse dinoGold/-Sammeln/-Wett/-Ende), hier nur Anzeige
+    const aktiv = ext ? !!(f && rn && st && sp.zustand === 'online' && rn.zustand === 'laeuft') : !!(f && rn && st && sp.zustand === 'rennen' && rn.gasErlaubt && !(sp.einstellungen && sp.einstellungen.spassModus));
     if (!aktiv) {
       const B = sp.dinoAuf;
       if (B) { B.tor.visible = false; B.an.forEach((m, id) => aufFrei(B, id)); if (B.wett) B.wett.style.display = 'none'; }
@@ -343,7 +344,7 @@
     const d = sp.pausiert ? 0 : Math.min(dt || 0.016, 0.05);
     const K = { s: f.nah.s, x: v.x, z: v.z, v: Math.abs(v.vLaengs || 0), vMax: v.daten && v.daten.vMax, schw: sp._dinoSchw || 'mittel',
       bereit: !v.imFlug && !v.imLooping && !(f.flug && f.flug.aktiv) && !v.verkehr };
-    R.SpassWelten.dino.schritt(Lg, st, K, d);
+    if (ext) ext.schritt(Lg, d); else R.SpassWelten.dino.schritt(Lg, st, K, d);
     const sk = moto() ? 0.8 : 1.0;
     while (Lg.ereig.length) {
       const e = Lg.ereig.shift();
@@ -422,7 +423,7 @@
   // Dino und Spur je nach aktuellem Schalter (auch mitten im Menü-/Rennwechsel) anlegen
   function begleiterAbgleichen(sp) {
     if (!sp.szene || !sp.strecke) return;
-    const dinoSoll = dinoAktivFuer(sp.strecke) && sp.fahrzeuge && sp.fahrzeuge.length && sp.zustand !== 'menue';
+    const dinoSoll = (sp.dinoExtern ? sp.dinoExtern.aktiv : dinoAktivFuer(sp.strecke)) && sp.fahrzeuge && sp.fahrzeuge.length && sp.zustand !== 'menue';
     if (dinoSoll && !sp.dinoBegleiter) sp.dinoBegleiter = dinoBauen(sp);
     else if (!dinoSoll && sp.dinoBegleiter) dinoAbbauen(sp);
     const spurSoll = einst().spur && sp.fahrzeuge && sp.zustand !== 'menue';
