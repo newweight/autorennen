@@ -17,7 +17,7 @@ STRECKE = {'schanze': 'alpen', 'kanone': 'wiese', 'trampolin': 'wiese', 'gleit':
 fehler = []; messung = {}
 
 def start(p, qual, strecke, zauber):
-    b = p.chromium.launch(args=ARGS); pg = b.new_context(viewport={'width': 900, 'height': 520}).new_page()
+    b = p.chromium.launch(args=ARGS); pg = b.new_context(viewport={'width': 800, 'height': 450}).new_page()
     pg.on('pageerror', lambda e: fehler.append('pageerror: ' + str(e)))
     pg.on('console', lambda m: fehler.append('console.error: ' + m.text) if m.type == 'error' and 'GPU stall' not in m.text and 'WebGL' not in m.text and 'favicon' not in m.text else None)
     pg.goto('file://' + os.path.join(BASIS, 'Motorrad.html'), timeout=120000); pg.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=120000); pg.wait_for_timeout(1000)
@@ -41,7 +41,7 @@ SETZEN = """([sB, tempo, modus]) => { const R = Rennspiel, s = R.spiel, st = s.s
   s.kameras.forEach((k) => { k.modusIndex = R.config.kamera.modi.indexOf(modus); k._erstesMal = true; });
   s.autopilot(0, true); s.pausiert = false; document.getElementById('ui').style.display = 'none'; }"""
 SCHRITT = """([n]) => { const R = Rennspiel, s = R.spiel, f = s.fahrzeuge[0], k = s.kameras[0], e = (n2) => document.getElementById(n2);
-  for (let i = 0; i < n; i++) { window.__t += 1000 / 60; s._frameRumpf(window.__t); }
+  const z0 = s.zeichnen; for (let i = 0; i < n; i++) { window.__t += 1000 / 60; if (i < n - 1) s.zeichnen = function () {}; else s.zeichnen = z0; s._frameRumpf(window.__t); } s.zeichnen = z0;      // nur das letzte Bild wirklich zeichnen (schneller)
   const fl = f.flug || {}, v = f.vehicle, str = e('g4-streifen'), st = s.strecke;
   return { luft: !!(fl.aktiv || fl.gleit), hoch: +(v.y - st.hoeheAn(v.x, v.z)).toFixed(2), fov: +k.kamera.fov.toFixed(2), aspect: +k.kamera.aspect.toFixed(3), roll: +k.kamera.rotation.z.toFixed(3),
     tA: +(k._tempoAnteil || 0).toFixed(2), blur: str ? (str.style.display === 'none' ? 0 : +str.style.opacity) : -1, streifenT: str ? str.style.transform : '', tempo: Math.round(v.vLaengs), zl: +(s.zeitlupe || (s._zeitlupe && s._zeitlupe.faktor) || 1) }; }"""
