@@ -226,7 +226,11 @@ window.Rennspiel = window.Rennspiel || {};
         }
         if (erst || this._motoRoll === undefined) this._motoRoll = ziel;
         else this._motoRoll += (ziel - this._motoRoll) * (1 - Math.exp(-CFG().rollWeichheit * Math.max(0, dt || 0)));
-        this.kamera.rotation.z += this._motoRoll;
+        // FIX3: im Flug (Schanze, Kanone, Gleitschirm) die Schräglage-Kippung dämpfen und auf ca. 8° begrenzen (kein schief hängendes Bild); Sturz-Purzel bleibt wie vorher
+        const lw = this._luftW || 0, pur = !!(z && z.purzel && z.purzel.aktiv);
+        let rz = this._motoRoll;
+        if (lw > 0.001 && !pur) { rz *= 1 - 0.75 * lw; const m = 0.14; if (Math.abs(rz) > m) rz = rz < 0 ? -m : m; }
+        this.kamera.rotation.z += rz;
       } else this._motoRoll = undefined;
     } catch (e) { console.error('Motorrad-Cockpit (Kamera):', e); }
     return r;

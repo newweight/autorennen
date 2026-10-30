@@ -111,7 +111,9 @@
           this._luftW = (this._luftW === undefined ? 0 : this._luftW) + ((luft ? 1 : 0) - (this._luftW || 0)) * (1 - Math.exp(-(luft ? 7 : 2) * dt));
           rollF = 1 - 0.75 * this._luftW;
         }
-        this.kamera.rotation.z = f.neigung * 0.5 * rollF;
+        let roll = f.neigung * 0.5 * rollF;
+        if (rollF < 1) { const m = 0.12 + 0.88 * (1 - this._luftW) * 1, ab = Math.abs(roll); if (ab > m) roll = roll < 0 ? -m : m; }      // in der Luft nie mehr als ca. 7° Schieflage
+        this.kamera.rotation.z = roll;
         this._wackelnAnwenden(dt);
         return;
       }
