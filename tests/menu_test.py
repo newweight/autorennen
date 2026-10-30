@@ -467,7 +467,7 @@ with sync_playwright() as p:
     # Einstellungen-Schritt (solo)
     page.click('[data-a="schritt:4"]'); page.wait_for_timeout(300)
     zl = page.evaluate('Rennspiel.spiel.menue.zeilen()')
-    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'tageszeit', 'jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'rempeln', 'geister', 'krankenwagen', 'abschleppwagen', 'tiere', 'rennautos', 'zufall', 'spass', 'geist', 'tuning', 'autoTricks', 'zeitlupe', 'regenbogen', 'dino', 'zauber', 'start'], zl)   # seit Z1/S1–S8 mit Zufall- und Spaß-Zeilen
+    pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'tageszeit', 'jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'rempeln', 'geister', 'krankenwagen', 'abschleppwagen', 'tiere', 'rennautos', 'zufall', 'spass', 'geist', 'tuning', 'autoTricks', 'kiTricks', 'zeitlupe', 'regenbogen', 'dino', 'zauber', 'start'], zl)   # seit Z1/S1–S8 mit Zufall- und Spaß-Zeilen
     pj = texte('[data-a="fokus:5"] .pille')
     pruefe('Jahreszeit-Pillen (Wiese): Frühling, Sommer, Herbst, Winter, Zufall; Sommer aktiv', len(pj) == 5 and 'Sommer' in pj[1] and 'Zufall' in pj[4]
            and 'Sommer' in texte('[data-a="fokus:5"] .pille.aktiv')[0], pj)

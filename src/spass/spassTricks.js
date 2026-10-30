@@ -323,6 +323,25 @@
   lauschen();
   const tastenCode = (nr) => (moto() ? ((R.config.motoStunts && R.config.motoStunts.taste) || [])[nr] : C().taste[nr]);
 
+  // ---- R3: KI-Tricks (nur offline im Browser; Server/Online-Clients haben kein spiel.szene bzw. spiel.online) ----
+  const kiAktiv = (spiel) => !!(spiel && spiel.szene && !spiel.online && spiel.zustand !== 'online' && an('ki'));
+  const kiFahrerOk = (f) => !!(f && !f.istSpieler && !f.ausgeschieden && !f.polizei && !f.polizeiFahrer && !(f.looping && (f.looping.aktiv || f.looping.fallen)) && !(f.flug && f.flug.kanone));
+  /** Plan der KI für den laufenden Flug (einmal je Flug, im Fahrzeug gemerkt). null = kein Trick. */
+  function kiPlanFlug(spiel, i, f, flugNr) {
+    if (f._r3 && f._r3.nr === flugNr) return f._r3.plan;
+    const st = spiel.strecke, saat = (st ? st.id : '') + '|' + (st ? st.variante : '');
+    const plan = R.SpassTricks.kiPlanNeu(saat, i, flugNr, f.driver && f.driver.schwierigkeit, moto() ? 'moto' : 'auto');
+    f._r3 = { nr: flugNr, plan, getan: false };
+    return plan;
+  }
+  /** Haken für src/moto/stuntStart.js: alter KI-Plan (Drehung/Salto). Schalter aus = wie bisher; an = neuer Trick ersetzt ihn, sonst seltener (0,6·(1−Chance)). */
+  function kiAlt(spiel, i, f, saat, flugNr, St) {
+    if (!kiAktiv(spiel) || !kiFahrerOk(f)) return St.kiPlan(saat, i, flugNr);
+    if (kiPlanFlug(spiel, i, f, flugNr)) return null;
+    const k = R.config.motoStunts, sw = f.driver && f.driver.schwierigkeit, c = C().ki.chance[C().ki.chance[sw] !== undefined ? sw : C().ki.standard];
+    return St.kiPlan(saat, i, flugNr, Object.assign({}, k, { ki: Object.assign({}, k.ki, { trickChance: k.ki.trickChance * (1 - c) }) }));
+  }
+
   function z3Holen(spiel) {
     const s = spiel._t3;
     if (s && s.rennen === spiel.rennen && s.fz.length === spiel.fahrzeuge.length) return s;
@@ -335,26 +354,33 @@
     if (!rennen || !strecke || !input || spiel.zustand !== 'rennen' || spiel.pausiert || !(dt > 0) || !spiel.fahrzeuge) return;
     if (istMoto && (!sz || !sz.fz)) return;
     if (!istMoto && !an('auto')) { if (spiel._t3) spiel._t3 = null; return; }
+    const kiAn = kiAktiv(spiel);
     const S = z3Holen(spiel), T = R.config.tasten && R.config.tasten.spieler;
     const jetzt = istMoto ? sz.zeit : (spiel._t3.zeit = (spiel._t3.zeit || 0) + dt);
     for (let i = 0; i < spiel.fahrzeuge.length; i++) {
       const f = spiel.fahrzeuge[i], fl = f && f.flug;
-      if (!f || !fl || f.ausgeschieden || !f.istSpieler || !(f.spielerNr >= 0)) continue;
+      if (!f || !fl || f.ausgeschieden) continue;
+      const ki = !f.istSpieler;                                             // R3: KI nur mit Schalter „KI-Tricks“ (kiAktiv), sonst wie bisher übersprungen
+      if (ki ? !(kiAn && kiFahrerOk(f)) : !(f.spielerNr >= 0)) continue;
       const z = istMoto ? sz.fz[i] : null;
       if (istMoto && !z) continue;
       const z3 = S.fz[i] || (S.fz[i] = zNeu());
-      const nr = f.spielerNr, v = f.vehicle, code = tastenCode(nr), tc = T && T[nr];
-      // --- Eingaben ---
-      const st = input.steuerung ? input.steuerung(nr) : { gas: 0, bremse: 0, lenkung: 0 };
-      const halten = !!(code && input.istGedrueckt && input.istGedrueckt(code));
-      const kante = (c, h, vor) => { const n = ZAEHL[c] || 0, neu = c !== undefined && n > (z3.cnt[c] || 0); if (c !== undefined) z3.cnt[c] = n; return neu || (h && !vor); };
-      const taste = kante(code, halten, z3.tastePrev); z3.tastePrev = halten;
-      const hold = { hoch: st.gas > 0.5, runter: st.bremse > 0.5, links: st.lenkung < -0.5, rechts: st.lenkung > 0.5 };
-      const codeVon = { hoch: tc && tc.gas, runter: tc && tc.bremse, links: tc && tc.links, rechts: tc && tc.rechts };
+      const nr = f.spielerNr, v = f.vehicle;
+      // --- Eingaben (Mensch: Tasten; KI: Plan, aber dieselbe Eingabe-Schnittstelle wie ein Mensch) ---
+      let taste = false, halten = false;
       const dir = {};
-      RICHTUNGEN.forEach((d) => { dir[d] = kante(codeVon[d], hold[d], z3.dirPrev[d]); z3.dirPrev[d] = hold[d]; });
-      // --- Flug ---
       const luft = !!fl.aktiv, abflug = fl.fluege > (z3.fluegeGesehen || 0);
+      if (!ki) {
+        const code = tastenCode(nr), tc = T && T[nr];
+        const st = input.steuerung ? input.steuerung(nr) : { gas: 0, bremse: 0, lenkung: 0 };
+        halten = !!(code && input.istGedrueckt && input.istGedrueckt(code));
+        const kante = (c, h, vor) => { const n = ZAEHL[c] || 0, neu = c !== undefined && n > (z3.cnt[c] || 0); if (c !== undefined) z3.cnt[c] = n; return neu || (h && !vor); };
+        taste = kante(code, halten, z3.tastePrev); z3.tastePrev = halten;
+        const hold = { hoch: st.gas > 0.5, runter: st.bremse > 0.5, links: st.lenkung < -0.5, rechts: st.lenkung > 0.5 };
+        const codeVon = { hoch: tc && tc.gas, runter: tc && tc.bremse, links: tc && tc.links, rechts: tc && tc.rechts };
+        RICHTUNGEN.forEach((d) => { dir[d] = kante(codeVon[d], hold[d], z3.dirPrev[d]); z3.dirPrev[d] = hold[d]; });
+      } else RICHTUNGEN.forEach((d) => { dir[d] = false; });
+      // --- Flug ---
       if (abflug) { z3.fluegeGesehen = fl.fluege; z3.rest0 = 0; z3.t0 = 0; z3.zlGetan = false; z3.gross = false; }
       const boden = strecke.hoeheAn(v.x, v.z, f.index);
       const rest = luft ? restFlug(fl, boden) : null;
@@ -362,9 +388,16 @@
       // große Sprünge (Zeitlupe/Kamera-Schwenk): einmal je Flug, wenn die Flugzeit ab dem ersten Moment mit Tricks (Kanone: ab dem Schuss) lang genug ist
       if (luft && rest !== null && !z3.rest0) { z3.rest0 = rest; z3.t0 = 0; }
       if (luft && z3.rest0) z3.t0 += dt;
-      if (luft && !z3.zlGetan && z3.rest0 >= C().zeitlupe.minFlug && z3.t0 >= C().zeitlupe.start * z3.rest0) {
+      if (!ki && luft && !z3.zlGetan && z3.rest0 >= C().zeitlupe.minFlug && z3.t0 >= C().zeitlupe.start * z3.rest0) {
         z3.zlGetan = true; z3.gross = true;
         if (typeof spiel.spassGrosserSprung === 'function') spiel.spassGrosserSprung(i, z3.rest0);
+      }
+      if (ki && luft) {                                                      // KI: einmal je Flug zum Startzeitpunkt, nur mit sicherer Restflugzeit (kein Fehltrick)
+        const plan = kiPlanFlug(spiel, i, f, fl.fluege), g = f._r3;
+        if (plan && !g.getan && !z3.trick && fl.t >= plan.startT) {
+          g.getan = true;
+          if (kiGenugZeit(rest, plan.art)) { taste = true; dir[plan.richtung] = true; }
+        }
       }
       const e = {
         dt, jetzt, luft, abflug, landung, flugT: fl.t, rest, art: istMoto ? 'moto' : 'auto', taste, halten, dir,
@@ -389,15 +422,18 @@
             const x = Object.assign({}, ev, { gesamt: z.punkte });
             sz.alle.push(Object.assign({ fahrzeug: i, zeit: sz.zeit }, x));
             if (R.Moto.stuntHud && f.istSpieler) R.Moto.stuntHud.ereignis(spiel, i, x);
+          } else if (ki) {
+            z3.punkte += ev.punkte;                                           // KI-Auto: nur zählen, keine Anzeige
           } else {
             z3.punkte += ev.punkte;
             if (typeof spiel.spassTrickEreignis === 'function') spiel.spassTrickEreignis(i, Object.assign({}, ev, { gesamt: z3.punkte }));
           }
-          if (typeof spiel.spassTrickSticker === 'function') spiel.spassTrickSticker(i, ev.art);
+          if (!ki && typeof spiel.spassTrickSticker === 'function') spiel.spassTrickSticker(i, ev.art);
         }
         z3.ereignisse.length = 0;
       }
       // --- Auto: unfertige Landung → Wackeln, Abbremsen, Schaden nur mit Schaden-Modus ---
+      if (!istMoto && z3.landeFehler && ki) z3.landeFehler = false;       // KI: nie Wackeln/Abbremsen
       if (!istMoto && z3.landeFehler) {
         z3.landeFehler = false;
         autoLandeFehler(spiel, i, f, z3);
@@ -433,7 +469,7 @@
     P._flugEreignis = function (i, e) {
       const r = flugEreignis.apply(this, arguments);
       try {
-        if (e === 'landungSchraeg' && !moto() && this._t3 && this._t3.fz[i] && this._t3.fz[i].tricksImFlug > 0) {
+        if (e === 'landungSchraeg' && !moto() && this.fahrzeuge[i] && this.fahrzeuge[i].istSpieler && this._t3 && this._t3.fz[i] && this._t3.fz[i].tricksImFlug > 0) {
           const z3 = this._t3.fz[i];
           if (!z3.wackel) autoLandeFehler(this, i, this.fahrzeuge[i], z3);
         }
@@ -442,5 +478,6 @@
     };
   }
 
-  R.SpassTricks._intern = { schrittSpiel, ZAEHL, z3Holen, lauschen };
+  R.SpassTricks.kiAlt = kiAlt;
+  R.SpassTricks._intern = { schrittSpiel, kiAktiv, kiPlanFlug, ZAEHL, z3Holen, lauschen };
 })();

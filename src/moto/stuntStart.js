@@ -94,7 +94,7 @@
       if (!f || !z || !fl || f.ausgeschieden) continue;
       const v = f.vehicle, luft = !!fl.aktiv, rampe = !!fl.rampe && !luft;
       const abflug = fl.fluege > z.fluegeGesehen;
-      if (abflug) { z.fluegeGesehen = fl.fluege; z.kiPlan = f.istSpieler ? null : St.kiPlan(sz.saat, i, fl.fluege); }
+      if (abflug) { z.fluegeGesehen = fl.fluege; z.kiPlan = f.istSpieler ? null : (R.SpassTricks && R.SpassTricks.kiAlt ? R.SpassTricks.kiAlt(spiel, i, f, sz.saat, fl.fluege, St) : St.kiPlan(sz.saat, i, fl.fluege)); }
       // --- Eingaben: Menschen/Autopilot über die Trick-Taste, KI über den deterministischen Plan ---
       let tipp = false, halten = false, bremse = false;
       if (f.istSpieler && f.spielerNr >= 0 && input) {

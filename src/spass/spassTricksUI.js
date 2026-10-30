@@ -1,6 +1,6 @@
 // ============================================================
 // Spaß-Paket S3 – Oberfläche, Zeitlupe, Kamera, Sticker, Online-Anbindung der neuen Tricks (nur Browser; läuft ganz am Ende, alles Umhüllungen):
-//   Menü (R.Menue)        Pillen „🤸 Auto-Tricks“ (nur Autorennen) und „🎬 Zeitlupe“ im Spaß-Streifen (Fokus-Zeilen 'autoTricks' / 'zeitlupe', Standard an) + Zeile „Tricks“ in der Steuerungs-Tafel
+//   Menü (R.Menue)        Pillen „🤸 Auto-Tricks“ (nur Autorennen), „🤖 KI-Tricks“ (R3, beide Spiele, Standard an, nur offline) und „🎬 Zeitlupe“ im Spaß-Streifen (Fokus-Zeilen 'autoTricks' / 'zeitlupe', Standard an) + Zeile „Tricks“ in der Steuerungs-Tafel
 //   Spiel.spassGrosserSprung    (von spassTricks.js gerufen, offline) Zeitlupe (Anzeige-Zeit ×0,4 für ~1 s, Physik-Takt bleibt gleich: nur weniger Schritte je Sekunde) + Kamera-Schwenk
 //   Spiel._frameRumpf           umhüllt: dehnt die Zeit des Bildes (dt × Faktor); die Physik rechnet in festen Schritten – deterministisch, nur langsamer abgespielt
 //   FahrzeugKamera.update       umhüllt: Kamera schwenkt seitlich um das springende Fahrzeug (auch ohne Zeitlupe-Zeit: online nur dieser Schwenk)
@@ -143,15 +143,16 @@
   if (R.Menue) {
     const M = R.Menue.prototype;
     const zeilen = M.zeilen;
-    M.zeilen = function () { const z = zeilen.apply(this, arguments), i = z.indexOf('start'); z.splice(i < 0 ? z.length : i, 0, ...(moto() ? ['zeitlupe'] : ['autoTricks', 'zeitlupe'])); return z; };
+    M.zeilen = function () { const z = zeilen.apply(this, arguments), i = z.indexOf('start'); z.splice(i < 0 ? z.length : i, 0, ...(moto() ? ['kiTricks', 'zeitlupe'] : ['autoTricks', 'kiTricks', 'zeitlupe'])); return z; };
     const zeilenWert = M.zeilenWert;
     M.zeilenWert = function (zeile, dx) {
-      if (zeile === 'autoTricks' || zeile === 'zeitlupe') { if (dx) this.wertSetzen(zeile, dx > 0 ? 'an' : 'aus'); return; }
+      if (zeile === 'autoTricks' || zeile === 'kiTricks' || zeile === 'zeitlupe') { if (dx) this.wertSetzen(zeile, dx > 0 ? 'an' : 'aus'); return; }
       return zeilenWert.apply(this, arguments);
     };
     const wertSetzen = M.wertSetzen;
     M.wertSetzen = function (zeile, k) {
       if (zeile === 'autoTricks') { ST.anSetzen('auto', k === 'an'); this.e.autoTricks = k === 'an'; return; }
+      if (zeile === 'kiTricks') { ST.anSetzen('ki', k === 'an'); this.e.kiTricks = k === 'an'; return; }
       if (zeile === 'zeitlupe') { ST.anSetzen('zeit', k === 'an'); this.e.zeitlupe = k === 'an'; return; }
       return wertSetzen.apply(this, arguments);
     };
@@ -168,6 +169,7 @@
         };
         let teil = '';
         if (!moto()) teil += gr('autoTricks', 'auto', '🤸 Auto-Tricks', 'In der Luft Fassrolle und Schraube (Umschalt-Taste) – Aus: Autos fliegen wie früher');
+        teil += gr('kiTricks', 'ki', '🤖 KI-Tricks', 'Computer-Gegner machen in der Luft auch Tricks (nur offline) – Aus: wie früher');
         teil += gr('zeitlupe', 'zeit', '🎬 Zeitlupe', 'Bei großen Sprüngen kurz Zeitlupe und Kamera-Schwenk – Aus: wie früher');
         h = h.replace('<span class="knopf klein" data-a="album"', teil + '<span class="knopf klein" data-a="album"');
         const tz = moto()
