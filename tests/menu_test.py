@@ -36,10 +36,21 @@ with sync_playwright() as p:
     page.on('pageerror', lambda e: fehler.append(str(e)))
     page.on('console', lambda m: fehler.append('console.error: ' + m.text) if m.type == 'error' else None)
     page.goto(url)
-    page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=90000)
-    page.wait_for_timeout(1500)
+    page.wait_for_function('window.Rennspiel && Rennspiel.spiel && Rennspiel.spiel.menue', timeout=90000)
+    page.wait_for_selector('.karte', state='attached')
     zustand = lambda: page.evaluate('Rennspiel.spiel.zustand')
-    taste = lambda t, n=1: [page.keyboard.press(t) or page.wait_for_timeout(60) for _ in range(n)]
+    taste = lambda t, n=1: [page.keyboard.press(t) for _ in range(n)]       # R5: kein festes Warten je Taste (Menü reagiert synchron)
+    def rahmen(n=2):
+        """R5: statt fester Pause: n Bildschirm-Takte abwarten (Layout/Neuzeichnen fertig)."""
+        page.evaluate('(n) => new Promise(r => { const f = () => (--n <= 0 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); })', n)
+    def bis(js, ms=60000):
+        """R5: Bedingungs-Warten; läuft die Zeit ab, geht der Test weiter (die folgende Prüfung meldet dann den Fehler)."""
+        try: page.wait_for_function(js, timeout=ms)
+        except Exception: print('WARTEN abgelaufen:', js[:90])
+    def ruhig(ausdruck, ms=15000):
+        """R5: wartet, bis ein Zahlenwert sich nicht mehr ändert (Animation fertig)."""
+        try: page.wait_for_function('(a) => { const w = window.__ruhig = window.__ruhig || { v: null, n: 0 }; const v = eval(a); if (w.v !== null && Math.abs(v - w.v) < 0.3) w.n++; else w.n = 0; w.v = v; if (w.n >= 4) { window.__ruhig = null; return true; } return false; }', arg=ausdruck, polling=60, timeout=ms)
+        except Exception: print('RUHIG abgelaufen:', ausdruck)
     snap = lambda name: page.screenshot(path=os.path.join(out, name))
 
     def auto_schritt(label, spieler, dreh, shot):
@@ -48,7 +59,9 @@ with sync_playwright() as p:
         pruefe(f'{label}: Vorschau läuft, {len(spieler)} Bühne(n) sichtbar', page.evaluate(AV + '.laeuft') and
                all(page.is_visible(f'canvas.buehne[data-sp="{sp}"]') for sp in spieler) and
                page.evaluate("document.querySelectorAll('canvas.buehne').length") == len(spieler))
-        page.wait_for_timeout(600)
+        for _ in range(40):          # R5: warten, bis alle Bühnen gezeichnet sind
+            if all((lambda q: q and q['anteil'] > 0.03 and q['farben'] >= 4)(page.evaluate(PIXEL, sp)) for sp in spieler): break
+            rahmen(3)
         for sp in spieler:
             px = page.evaluate(PIXEL, sp)
             pruefe(f'{label}: Bühne {sp + 1} nicht leer', px and px['anteil'] > 0.03 and px['farben'] >= 4, px)
@@ -61,14 +74,14 @@ with sync_playwright() as p:
         snap(shot)
         # Drehen per Taste (je 90° weich; die Eigendrehung liefert in 0,8 s nur ~20°)
         for sp, (links, rechts) in zip(spieler, dreh):
-            w0 = page.evaluate(f'{AV}.winkel({sp})'); taste(rechts); page.wait_for_timeout(1500)
-            w1 = page.evaluate(f'{AV}.winkel({sp})'); taste(links); page.wait_for_timeout(1500)
+            ruhig(f'{AV}.winkel({sp})'); w0 = page.evaluate(f'{AV}.winkel({sp})'); taste(rechts); bis(f'{AV}.winkel({sp}) - {w0} < -25', 8000); ruhig(f'{AV}.winkel({sp})')
+            w1 = page.evaluate(f'{AV}.winkel({sp})'); taste(links); bis(f'{AV}.winkel({sp}) - {w1} > 25', 8000); ruhig(f'{AV}.winkel({sp})')
             w2 = page.evaluate(f'{AV}.winkel({sp})')
             pruefe(f'{label}: Spieler {sp + 1} dreht mit {rechts}/{links} um 90°', w1 - w0 < -25 and w2 - w1 > 25, [round(w0), round(w1), round(w2)])
         # Pfeiltasten bewegen den Fokus, drehen NICHT
         w0 = page.evaluate(f'{AV}.winkel(0)'); a0 = page.evaluate('Rennspiel.spiel.einstellungen.autoIds[0]')
-        page.wait_for_timeout(500)
-        taste('ArrowRight' if False else 'ArrowLeft'); page.wait_for_timeout(500)
+        ruhig(f'{AV}.winkel(0)'); w0 = page.evaluate(f'{AV}.winkel(0)')
+        taste('ArrowLeft'); bis(f"Rennspiel.spiel.einstellungen.autoIds[0] !== '{a0}'", 8000); page.wait_for_timeout(250)
         w1 = page.evaluate(f'{AV}.winkel(0)')
         pruefe(f'{label}: Pfeiltaste wechselt Auto, dreht nicht extra', page.evaluate('Rennspiel.spiel.einstellungen.autoIds[0]') != a0 and abs(w1 - w0) < 40, [round(w0), round(w1)])
         pruefe(f'{label}: Bühne zeigt nach Wechsel neues Auto', page.evaluate(f'{AV}.autoId(0)') == page.evaluate('Rennspiel.spiel.einstellungen.autoIds[0]'))
@@ -83,7 +96,7 @@ with sync_playwright() as p:
         pruefe(f'{label}: Bühne nach Drehen weiter gefüllt', px and px['anteil'] > 0.03, px)
 
     def vorschau_stoppt(label):
-        f0 = page.evaluate('Rennspiel.AutoVorschau.debug.frames'); page.wait_for_timeout(500)
+        f0 = page.evaluate('Rennspiel.AutoVorschau.debug.frames'); page.wait_for_timeout(300)
         f1 = page.evaluate('Rennspiel.AutoVorschau.debug.frames')
         pruefe(f'{label}: Vorschau-Loop stoppt außerhalb des Auto-Schritts', f1 == f0 and not page.evaluate('Rennspiel.AutoVorschau.laeuft'), [f0, f1])
     # a) Menü
@@ -97,9 +110,9 @@ with sync_playwright() as p:
     snap('menu_1_modus.png')
     # Runde 6 (W3-G): Garage-Karte im Modus-Schritt, Klick öffnet die Garage, Esc schließt sie wieder
     pruefe('W3-G: Garage-Karte im Modus-Schritt sichtbar', page.is_visible('[data-a="garage"]') and 'Garage' in page.inner_text('[data-a="garage"]'))
-    page.click('[data-a="garage"]'); page.wait_for_timeout(300)
+    page.click('[data-a="garage"]'); rahmen()
     offen = page.is_visible('#garage') and not page.is_visible('#menue')
-    taste('Escape'); page.wait_for_timeout(200)
+    taste('Escape'); rahmen()
     pruefe('W3-G: Klick öffnet Garage, Esc zurück ins Menü (Modus-Schritt)', offen and page.is_visible('#menue') and not page.is_visible('#garage')
            and page.evaluate('Rennspiel.spiel.menue.schritt') == 0)
     r = page.evaluate("""(() => { const m = document.querySelector('.m-inhalt'), k = document.querySelector('[data-a="garage"]').getBoundingClientRect();
@@ -112,27 +125,27 @@ with sync_playwright() as p:
         frei: r.every((a, i) => r.every((b, j) => i === j || a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1)),
         textUeber: k.some(e => e.scrollHeight > e.clientHeight + 2) }; })()"""
     for vw, vh in ((1280, 800), (1440, 900)):
-        page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(300)
+        page.set_viewport_size({'width': vw, 'height': vh}); rahmen()
         m4 = page.evaluate(MODUS4)
         pruefe(f'W3-F: 4 Modus-Karten {vw}×{vh} im Bild, ohne Überlappung', m4['ids'] == ['modus:solo', 'modus:zwei', 'modus:pokal', 'modus:elimination']
                and m4['innen'] and m4['frei'] and not m4['textUeber'], m4)
-    page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
+    page.set_viewport_size({'width': 1280, 'height': 800}); rahmen()
     # W5: 5. Karte „🌐 Online“ – von der Festplatte (file://) ausgegraut mit Hinweis, Pfeiltasten wandern darüber, Enter tut nichts
     ON = """(() => { const k = document.querySelector('.karte.online-karte'); if (!k) return null; const r = k.getBoundingClientRect(), m = document.querySelector('.m-inhalt');
       return { aus: k.classList.contains('aus'), text: k.textContent, gew: k.classList.contains('gewaehlt'), scroll: m.scrollHeight <= m.clientHeight + 1,
         innen: r.left >= 0 && r.right <= innerWidth && r.bottom <= document.querySelector('.m-fuss').getBoundingClientRect().top + 2 }; })()"""
     for vw, vh in ((1280, 800), (1440, 900)):
-        page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(300)
+        page.set_viewport_size({'width': vw, 'height': vh}); rahmen()
         o = page.evaluate(ON)
         pruefe(f'W5: Online-Karte {vw}×{vh} von file:// ausgegraut mit Hinweis „Mehrspieler starten“, Modus-Schritt ohne Scrollen',
                o is not None and o['aus'] and 'Mehrspieler starten' in o['text'] and ((o['scroll'] and o['innen']) or page.evaluate(MENU_SCROLLT)), o)
-    page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
+    page.set_viewport_size({'width': 1280, 'height': 800}); rahmen()
     taste('ArrowRight', 4)
     o = page.evaluate(ON)
     pruefe('W5: Pfeiltasten → nach „Letzter fliegt raus“ die Online-Karte (gewählt, nur ein Cursor)', o['gew'] and page.evaluate('Rennspiel.spiel.menue.onlineGewaehlt')
            and page.evaluate("document.querySelectorAll('.karte.gewaehlt').length") == 1, o)
     snap('menu_1c_modus_online_aus.png')
-    taste('Enter'); page.wait_for_timeout(200)
+    taste('Enter'); rahmen()
     pruefe('W5: Enter auf der ausgegrauten Online-Karte bleibt im Modus-Schritt (kein Online-Bildschirm)',
            page.evaluate('Rennspiel.spiel.menue.schritt') == 0 and page.is_visible('#menue') and not page.is_visible('#online'))
     taste('ArrowRight')
@@ -142,7 +155,7 @@ with sync_playwright() as p:
     # b) Tastatur: Modus zu zweit
     taste('ArrowRight'); snap('menu_1b_modus_zwei.png')
     pruefe('Modus zu zweit', page.evaluate('Rennspiel.spiel.einstellungen.modus') == 'zwei')
-    taste('Enter'); page.wait_for_timeout(200); snap('menu_2_strecke.png')
+    taste('Enter'); rahmen(); snap('menu_2_strecke.png')
     karten = page.evaluate("Array.from(document.querySelectorAll('.karte.strecke')).map(k => k.dataset.a)")
     pruefe('Streckenwahl: die 8 Klassiker in Reihenfolge, dazu die Welten ab S5 (Mond, Unterwasser, Regenbogenland)', [k for k in karten if k not in ('strecke:mond', 'strecke:unterwasser', 'strecke:regenbogenland')] == ['strecke:wiese', 'strecke:wald', 'strecke:wueste', 'strecke:fantasie', 'strecke:dino', 'strecke:alpen', 'strecke:formel1', 'strecke:mega'], karten)
     # 6 Karten (W4-I: + Alpen) in EINER Reihe (gleiches offsetTop), im Bild, ohne Überlappung – bei 1280×800 und 1440×900
@@ -158,28 +171,28 @@ with sync_playwright() as p:
         scroll: document.querySelector('.m-inhalt').scrollHeight <= document.querySelector('.m-inhalt').clientHeight + 1,
         breiten: r.map(a => Math.round(a.width)) }; })()"""
     for vw, vh in ((1280, 800), (1440, 900)):
-        page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(400)
+        page.set_viewport_size({'width': vw, 'height': vh}); rahmen()
         lage = page.evaluate(LAGE)
         pruefe(f'Streckenwahl {vw}×{vh}: alle Karten (umbrechend) seitlich im Bild, ohne Überlappung, Mittelteil scrollbar', lage['ok'] and (lage['scroll'] or page.evaluate(MENU_SCROLLT)) and not lage['textUeber'], lage)
         snap(f'menu_2_strecke_{vw}.png')
     pruefe('Streckenkarten: Schwierigkeits-Pillen der 8 Klassiker leicht/mittel/schnell/spaß/mittel/mittel/schnell/spaß (Formel 1, Mega)', lage['pilleText'][:7] + lage['pilleText'][-1:] == ['leicht', 'mittel', 'schnell', 'spaß', 'mittel', 'mittel', 'schnell', 'spaß'], lage['pilleText'])
     pruefe('Dino-Karte: eigene Farbe (Rahmen/Hintergrund) + Vulkan-Himmel im Bild', lage['farbe4'] != lage['farbe0'] and '242, 179, 106' in lage['bild4'], [lage['farbe4'], lage['bild4'][:80]])
     pruefe('Fantasie-Karte: eigene Farbe + Hinweis 2 Loopings, Bälle, Wasserstrahl', lage['farbe3'] != lage['farbe0'] and '2 Loopings' in lage['hinweis'] and 'Bälle' in lage['hinweis'] and 'Wasserstrahl' in lage['hinweis'], [lage['farbe3'], lage['hinweis']])
-    page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
+    page.set_viewport_size({'width': 1280, 'height': 800}); rahmen()
     # Durchblättern: Menü-Hintergrund baut jede Strecke auf (Deko/Thema ohne Fehler)
-    for _ in range(2): taste('ArrowRight'); page.wait_for_timeout(400)
+    for _ in range(2): taste('ArrowRight'); rahmen()
     pruefe('Streckenwahl: Wüste per Pfeiltaste', page.evaluate('Rennspiel.spiel.einstellungen.streckeId') == 'wueste')
     snap('menu_2b_strecke_wueste.png')
-    taste('ArrowRight'); page.wait_for_timeout(600)
+    taste('ArrowRight'); bis('Rennspiel.spiel.strecke.id === "fantasie"')
     pruefe('Streckenwahl: Fantasie per Pfeiltaste (Menü-Hintergrund mit Loopings)', page.evaluate('Rennspiel.spiel.einstellungen.streckeId') == 'fantasie' and
            page.evaluate('(() => { let n = 0; Rennspiel.spiel.szene.traverse(o => { if (o.name === "LoopingBand") n++; }); return n; })()') == 1)
     snap('menu_2c_strecke_fantasie.png')
-    taste('ArrowRight'); page.wait_for_timeout(800)
+    taste('ArrowRight'); bis('Rennspiel.spiel.strecke.id === "dino"')
     pruefe('Streckenwahl: Dino per Pfeiltaste (Menü-Hintergrund mit Vulkan + Deko-Dinos)', page.evaluate('Rennspiel.spiel.einstellungen.streckeId') == 'dino' and
            page.evaluate('(() => { let v = 0, d = 0; Rennspiel.spiel.szene.traverse(o => { if (o.name === "Vulkan") v++; if (o.name === "Dinos") d += o.count; }); return v === 1 && d >= 6; })()'))
     snap('menu_2d_strecke_dino.png')
-    for _ in range(4): taste('ArrowLeft'); page.wait_for_timeout(300)
-    taste('Enter'); page.wait_for_timeout(200)
+    for _ in range(4): taste('ArrowLeft'); rahmen()
+    taste('Enter'); rahmen()
     # Fahrer: Standard P1 Jonas, P2 Emmy; P1 wählt Senna, P2 läuft mit WASD auf Senna zu und wird übersprungen
     fe = lambda: page.evaluate('Rennspiel.spiel.einstellungen.fahrer')
     pruefe('Fahrer-Schritt aktiv (5 Schritte im Kopf)', page.evaluate("document.querySelector('.m-schritt.aktiv').textContent.includes('Fahrer')")
@@ -211,7 +224,7 @@ with sync_playwright() as p:
       for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length; j++) { const a = r[i], b = r[j];
         if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) return false; }
       return r.every(a => a.left >= 0 && a.right <= innerWidth && a.top >= 0 && a.bottom <= innerHeight); })()'''))
-    taste('Enter'); page.wait_for_timeout(200)
+    taste('Enter'); rahmen()
     # Autos: P1 (Pfeile) auf Porsche (Index 3), P2 (WASD) auf Multivan (Index 1)
     ids = page.evaluate('Rennspiel.carCatalog.waehlbare().map(a => a.id)')
     def cursor(sp): return ids.index(page.evaluate(f'Rennspiel.spiel.einstellungen.autoIds[{sp}]'))
@@ -222,15 +235,15 @@ with sync_playwright() as p:
     pruefe('Autos P1 Porsche, P2 Multivan', page.evaluate('Rennspiel.spiel.einstellungen.autoIds').__eq__(['porsche-911', 'multivan']))
     auto_schritt('Auto zwei', [0, 1], [('Comma', 'Period'), ('KeyQ', 'KeyE')], 'menu_3b_autos_zwei_3d.png')
     # Fenster 1440×900: ebenfalls ohne Scrollen
-    page.set_viewport_size({'width': 1440, 'height': 900}); page.wait_for_timeout(500)
+    page.set_viewport_size({'width': 1440, 'height': 900}); rahmen()
     rr = page.evaluate(IMPASSEND)
     pruefe('Auto zwei 1440×900: passt ohne Scrollen', rr['scroll'] and rr['innen'] and rr['fuss'], rr)
     snap('menu_3c_autos_zwei_1440.png')
-    page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(500)
+    page.set_viewport_size({'width': 1280, 'height': 800}); rahmen()
     # Zurück auf die gewünschten Autos (P1 Porsche, P2 Multivan)
     while cursor(0) != ids.index('porsche-911'): taste('ArrowRight')
     while cursor(1) != ids.index('multivan'): taste('KeyD' if cursor(1) < ids.index('multivan') else 'KeyA')
-    taste('Enter'); page.wait_for_timeout(200)
+    taste('Enter'); rahmen()
     vorschau_stoppt('Auto zwei')
     # Einstellungen: Runden auf 1 (Zeile 0), Gegner auf 2 (Zeile 1)
     taste('ArrowLeft', 12)
@@ -245,7 +258,7 @@ with sync_playwright() as p:
     # Start: bis zur Start-Zeile mit Enter, dann Enter
     for _ in range(80):        # seit S1–S8 hat die Einstellungs-Seite viel mehr Zeilen (Spaß, Tuning, Zauber …)
         if zustand() != 'menue': break
-        taste('Enter'); page.wait_for_timeout(100)
+        taste('Enter'); rahmen()
     try:
         page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=120000)
     except Exception:
@@ -253,11 +266,11 @@ with sync_playwright() as p:
     pruefe('Rennen gestartet (zwei Spieler + 2 Computer)', page.evaluate('Rennspiel.spiel.fahrzeuge.length') == 4)
     hudnamen = page.evaluate("Array.from(document.querySelectorAll('.hud-name')).map(e => e.textContent)")
     pruefe('HUD-Kopf zeigt Fahrernamen', len(hudnamen) == 2 and 'Senna' in hudnamen[0] and 'Verstappen' in hudnamen[1], hudnamen)
-    page.wait_for_timeout(1500)
+    rahmen(3)
     snap('menu_5_splitscreen_countdown.png')
     page.keyboard.down('ArrowUp'); page.keyboard.down('KeyW')
     page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=120000)
-    page.wait_for_timeout(2500)
+    bis('Rennspiel.spiel.fahrzeuge[0].vehicle.vLaengs > 3', 30000); rahmen(3)
     snap('menu_6_splitscreen_fahrt.png')
     page.keyboard.up('ArrowUp'); page.keyboard.up('KeyW')
     info = page.evaluate('''(() => { const s = Rennspiel.spiel; return { kameras: s.kameras.length, huds: s.huds.length,
@@ -285,7 +298,7 @@ with sync_playwright() as p:
     while gespielt < 400 and zustand() == 'rennen':
         page.evaluate('Rennspiel.spiel.schnellvorlauf(20)'); gespielt += 20
     pruefe('Zustand ergebnis erreicht', zustand() == 'ergebnis', f'{gespielt} s')
-    page.wait_for_timeout(2500)
+    bis('document.querySelectorAll("#ergebnis tbody tr").length === 4'); rahmen(3)
     snap('menu_7_ergebnis.png')
     zeilen = page.evaluate('''Array.from(document.querySelectorAll('#ergebnis tbody tr')).map(tr => Array.from(tr.children).map(td => td.textContent.trim()))''')
     print(json.dumps(zeilen, ensure_ascii=False))
@@ -327,7 +340,7 @@ with sync_playwright() as p:
     # d) Enter = Nochmal
     taste('Enter')
     page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=60000)
-    page.wait_for_timeout(1200)
+    rahmen()
     cd = page.evaluate('Rennspiel.spiel.rennen.zustand')
     pruefe('Nochmal: neues Rennen mit Countdown', cd == 'countdown', cd)
     speicher1 = page.evaluate('(() => { const m = Rennspiel.spiel.renderer.info.memory; return [m.geometries, m.textures]; })()')
@@ -335,165 +348,165 @@ with sync_playwright() as p:
     snap('menu_8_nochmal_countdown.png')
     page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=120000)
     # Pause
-    page.wait_for_timeout(1500)
-    taste('Escape'); page.wait_for_timeout(300)
+    rahmen(3)
+    taste('Escape'); rahmen()
     z1 = page.evaluate('Rennspiel.spiel.rennen.zeit')
-    page.wait_for_timeout(700)
+    page.wait_for_timeout(300)
     z2 = page.evaluate('Rennspiel.spiel.rennen.zeit')
     pruefe('Pause: Physik steht', page.evaluate('Rennspiel.spiel.pausiert') and abs(z2 - z1) < 1e-6 and z1 > 0, [z1, z2])
     snap('menu_9_pause.png')
-    taste('Escape'); page.wait_for_timeout(500)
+    taste('Escape'); rahmen()
     z3 = page.evaluate('Rennspiel.spiel.rennen.zeit')
     pruefe('Esc beendet Pause', not page.evaluate('Rennspiel.spiel.pausiert') and z3 > z2, [z2, z3])
-    taste('Escape'); page.wait_for_timeout(200)
-    page.click('#pause [data-a="weiter"]'); page.wait_for_timeout(200)
+    taste('Escape'); rahmen()
+    page.click('#pause [data-a="weiter"]'); rahmen()
     pruefe('Weiter-Knopf (Maus)', not page.evaluate('Rennspiel.spiel.pausiert'))
-    taste('Escape'); page.wait_for_timeout(200)
-    page.click('#pause [data-a="menue"]'); page.wait_for_timeout(500)
+    taste('Escape'); rahmen()
+    page.click('#pause [data-a="menue"]'); rahmen()
     pruefe('Hauptmenü aus Pause', zustand() == 'menue')
     snap('menu_10_zurueck_im_menue.png')
 
     # ---------- Runde 4: Welt, Jahreszeit, Wetter, Wind, Schaden, Gegner, Emojis ----------
     E = lambda: page.evaluate('Rennspiel.spiel.einstellungen')
     texte = lambda sel: page.evaluate("(s) => Array.from(document.querySelectorAll(s)).map(e => e.textContent.trim())", sel)
-    page.click('[data-a="modus:solo"]'); page.wait_for_timeout(150)
-    page.click('[data-a="strecke:wiese"]'); page.wait_for_timeout(300)
+    page.click('[data-a="modus:solo"]'); rahmen()
+    page.click('[data-a="strecke:wiese"]'); rahmen()
     w = texte('.m-welt .pille')
     pruefe('Welt-Pillen Wiese: 5 (Klassisch, Hindernisse, Stunt, Verrückt, Alles)', len(w) == 5 and 'Klassisch' in w[0] and 'Verrückt' in w[3] and 'Alles' in w[4] and '🎪' in w[4], w)
     pruefe('Welt Standard: Klassisch aktiv, Standard-Marke, Name in der Erklärung', 'Klassisch' in texte('.m-welt .pille.aktiv')[0] and 'Standard' in w[0]
            and 'Klassisch' in texte('.m-welt .welt-text')[0] and E()['welt'] == '', [texte('.m-welt .welt-text'), E()['welt']])
-    page.click('[data-a="welt:stunt"]'); page.wait_for_timeout(300)
+    page.click('[data-a="welt:stunt"]'); rahmen()
     pruefe('Welt Stunt: gespeichert + Erklärung', E()['welt'] == 'stunt' and 'Sprungschanzen' in texte('.m-welt .welt-text')[0], E()['welt'])
     snap('menu_r4_strecke_welt.png')
-    page.click('[data-a="welt:klassisch"]'); page.wait_for_timeout(100)
+    page.click('[data-a="welt:klassisch"]'); rahmen()
     pruefe('Standard-Welt anklicken -> welt "" (Standard)', E()['welt'] == '', E()['welt'])
     taste('ArrowDown'); taste('ArrowDown')
     pruefe('Taste ↓ schaltet die Welt weiter (Klassisch -> Hindernisse -> Stunt)', E()['welt'] == 'stunt', E()['welt'])
     taste('ArrowDown'); taste('ArrowUp'); taste('ArrowUp'); taste('ArrowUp')
     pruefe('Taste ↑ schaltet zurück (… -> Klassisch = Standard)', E()['welt'] == '', E()['welt'])
     page.click('[data-a="welt:stunt"]')
-    taste('ArrowRight'); page.wait_for_timeout(200)
+    taste('ArrowRight'); rahmen()
     pruefe('Streckenwechsel setzt Welt auf Standard zurück', E()['streckeId'] == 'wald' and E()['welt'] == '', E())
-    page.click('[data-a="welt:verrueckt"]'); page.click('[data-a="strecke:fantasie"]'); page.wait_for_timeout(300)
+    page.click('[data-a="welt:verrueckt"]'); page.click('[data-a="strecke:fantasie"]'); rahmen()
     w = texte('.m-welt .pille')
     pruefe('Welt-Pillen Fantasie: 3 (Fantasie Standard, Verrückt, Alles), Welt zurückgesetzt', len(w) == 3 and 'Fantasie' in w[0] and 'Verrückt' in w[1] and 'Alles' in w[2] and E()['welt'] == '', [w, E()['welt']])
     snap('menu_r4_strecke_fantasie_welt.png')
     for vw, vh in ((1280, 800), (1440, 900)):
-        page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(300)
+        page.set_viewport_size({'width': vw, 'height': vh}); rahmen()
         l = page.evaluate("""(() => { const m = document.querySelector('.m-inhalt'), r = document.querySelector('.m-welt').getBoundingClientRect();
           return { scroll: m.scrollHeight <= m.clientHeight + 1, ok: r.left >= 0 && r.right <= innerWidth && r.bottom <= document.querySelector('.m-fuss').getBoundingClientRect().top }; })()""")
         pruefe(f'Strecke+Welt {vw}×{vh}: Welt-Zeile erreichbar (im Bild oder Mittelteil scrollbar)', (l['scroll'] and l['ok']) or page.evaluate(MENU_SCROLLT), l)
-    page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
+    page.set_viewport_size({'width': 1280, 'height': 800}); rahmen()
     # ---------- Runde 6 (W2-E): Zeile „Variante“ (Normal / XL) nur bei Wüste und Fantasie ----------
     va = lambda: texte('.m-variante .pille')
     pruefe('Variante Fantasie: Zeile da, Pillen Normal + XL, Standard Normal', len(va()) == 2 and 'Normal' in va()[0] and 'XL' in va()[1] and E()['variante'] == '', [va(), E().get('variante')])
     pruefe('Welt-Pillen Fantasie unverändert 3 (Variante nicht darunter gemischt)', len(texte('.m-welt .pille')) == 3)
-    page.click('[data-a="variante:xl"]'); page.wait_for_timeout(700)
+    page.click('[data-a="variante:xl"]'); bis('Rennspiel.spiel.strecke.variante === "xl"')
     pruefe('Variante XL anklicken: einstellungen.variante xl, Pille aktiv, Erklärung', E()['variante'] == 'xl' and 'XL' in texte('.m-variante .pille.aktiv')[0] and 'doppelt' in texte('.m-variante .welt-text')[0], [E()['variante'], texte('.m-variante .welt-text')])
     pruefe('Menühintergrund baut die XL-Strecke (strecke.variante xl, Fantasie ≈ 2×)', page.evaluate('Rennspiel.spiel.strecke.variante') == 'xl' and page.evaluate('Rennspiel.spiel.strecke.laenge') > 2400, page.evaluate('Rennspiel.spiel.strecke.laenge'))
-    page.click('[data-a="welt:verrueckt"]'); page.wait_for_timeout(100)
+    page.click('[data-a="welt:verrueckt"]'); rahmen()
     pruefe('Welt-Zeile funktioniert weiter mit Variante (Welt verrueckt, Variante bleibt xl)', E()['welt'] == 'verrueckt' and E()['variante'] == 'xl', [E()['welt'], E()['variante']])
-    taste('ArrowUp'); page.wait_for_timeout(100)
+    taste('ArrowUp'); rahmen()
     pruefe('Taste ↑ schaltet weiterhin die Welt (Verrückt -> Fantasie = Standard), Variante bleibt', E()['welt'] == '' and E()['variante'] == 'xl', [E()['welt'], E()['variante']])
-    taste('KeyV'); page.wait_for_timeout(100)
+    taste('KeyV'); rahmen()
     pruefe('Taste V schaltet XL -> Normal', E()['variante'] == '', E()['variante'])
-    taste('KeyV'); page.wait_for_timeout(100)
+    taste('KeyV'); rahmen()
     pruefe('Taste V schaltet Normal -> XL', E()['variante'] == 'xl', E()['variante'])
     snap('menu_r6_strecke_variante.png')
     for vw, vh in ((1280, 800), (1440, 900)):
-        page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(300)
+        page.set_viewport_size({'width': vw, 'height': vh}); rahmen()
         l = page.evaluate("""(() => { const m = document.querySelector('.m-inhalt'), r = document.querySelector('.m-variante').getBoundingClientRect();
           return { scroll: m.scrollHeight <= m.clientHeight + 1, ok: r.left >= 0 && r.right <= innerWidth && r.bottom <= document.querySelector('.m-fuss').getBoundingClientRect().top }; })()""")
         pruefe(f'Strecke+Welt+Variante {vw}×{vh}: ohne Scrollen, Varianten-Zeile im Bild', l['scroll'] and l['ok'], l)
-    page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
-    taste('ArrowLeft'); page.wait_for_timeout(300)      # Fantasie -> Wüste (Katalogreihenfolge wiese, wald, wueste, fantasie)
+    page.set_viewport_size({'width': 1280, 'height': 800}); rahmen()
+    taste('ArrowLeft'); rahmen()      # Fantasie -> Wüste (Katalogreihenfolge wiese, wald, wueste, fantasie)
     pruefe('Streckenwechsel setzt Variante zurück (Wüste: Zeile da, Normal)', E()['streckeId'] == 'wueste' and len(va()) == 2 and E()['variante'] == '', [E()['streckeId'], va(), E()['variante']])
-    page.click('[data-a="variante:xl"]'); page.wait_for_timeout(700)
+    page.click('[data-a="variante:xl"]'); bis('Rennspiel.spiel.strecke.variante === "xl"')
     pruefe('Wüste XL: strecke.variante xl, Länge ≈ 1,6 × 3331 m', page.evaluate('Rennspiel.spiel.strecke.variante') == 'xl' and abs(page.evaluate('Rennspiel.spiel.strecke.laenge') / 3331 - 1.6) < 0.05, page.evaluate('Rennspiel.spiel.strecke.laenge'))
-    page.click('[data-a="variante:"]'); page.wait_for_timeout(700)
+    page.click('[data-a="variante:"]'); bis('Rennspiel.spiel.strecke.variante === ""')
     pruefe('Zurück auf Normal: strecke.variante leer, Länge 3331 m', page.evaluate('Rennspiel.spiel.strecke.variante') == '' and abs(page.evaluate('Rennspiel.spiel.strecke.laenge') - 3331) < 5)
-    page.click('[data-a="strecke:wiese"]'); page.wait_for_timeout(300)
+    page.click('[data-a="strecke:wiese"]'); rahmen()
     # v22 (14.10.): XL für ALLE Strecken – Varianten-Zeile (Normal + XL) bei jeder Strecke, XL baut ≈ Faktor × Länge, Zeile im Bild
     pruefe('Wiese: Varianten-Zeile Normal + XL, Standard Normal', len(va()) == 2 and 'XL' in va()[1] and E()['variante'] == '', [va(), E().get('variante')])
     for sid, f in (('wiese', 1.6), ('wald', 1.6), ('wueste', 1.6), ('fantasie', 2.0), ('dino', 1.6), ('alpen', 1.6)):
-        page.click('[data-a="strecke:%s"]' % sid); page.wait_for_timeout(500)
+        page.click('[data-a="strecke:%s"]' % sid)
         page.wait_for_function('Rennspiel.spiel.strecke.id === "%s" && Rennspiel.spiel.strecke.variante === ""' % sid, timeout=120000)   # Menühintergrund fertig gebaut (bei Last langsam)
         L0 = page.evaluate('Rennspiel.spiel.strecke.laenge')
         pruefe('%s: Varianten-Zeile Normal + XL, Variante Normal' % sid, len(va()) == 2 and 'Normal' in va()[0] and 'XL' in va()[1] and E()['variante'] == '', [va(), E().get('variante')])
-        page.click('[data-a="variante:xl"]'); page.wait_for_timeout(500)
+        page.click('[data-a="variante:xl"]')
         page.wait_for_function('Rennspiel.spiel.strecke.variante === "xl"', timeout=120000)
         L1 = page.evaluate('Rennspiel.spiel.strecke.laenge')
         l = page.evaluate("""(() => { const m = document.querySelector('.m-inhalt'), r = document.querySelector('.m-variante').getBoundingClientRect();
           return { scroll: m.scrollHeight <= m.clientHeight + 1, ok: r.left >= 0 && r.right <= innerWidth && r.bottom <= document.querySelector('.m-fuss').getBoundingClientRect().top }; })()""")
         pruefe('%s XL: strecke.variante xl, Länge ≈ %s × Normal (%d → %d m), Zeile im Bild ohne Scrollen' % (sid, f, L0, L1), page.evaluate('Rennspiel.spiel.strecke.variante') == 'xl' and abs(L1 / L0 - f) < 0.05 * f and l['scroll'] and l['ok'], l)
-        page.click('[data-a="variante:"]'); page.wait_for_timeout(500)
-    page.click('[data-a="strecke:wiese"]'); page.wait_for_timeout(300)
+        page.click('[data-a="variante:"]'); bis('Rennspiel.spiel.strecke.variante === ""')
+    page.click('[data-a="strecke:wiese"]'); rahmen()
     pruefe('Streckenwechsel setzt Variante zurück (Wiese Normal)', E()['variante'] == '' and E()['streckeId'] == 'wiese', E()['variante'])
     page.click('[data-a="strecke:wiese"]'); page.click('[data-a="welt:stunt"]')
     # 12.10. Hindernis-Menge: Zeile „🚧 Hindernisse“ (Normal / Viele / Sehr viele), Taste O, ausgegraut in Welt Klassisch
-    page.wait_for_timeout(500)
+    bis('Rennspiel.spiel.strecke.id === "wiese" && Rennspiel.spiel.strecke.variante === ""'); rahmen()
     hp = texte('.m-hindernisse .pille')
     pruefe('Hindernisse-Zeile unter der Welt: Normal · Viele · Sehr viele, Standard Normal aktiv', len(hp) == 3 and 'Normal' in hp[0] and 'Viele' in hp[1] and 'Sehr viele' in hp[2]
            and 'Normal' in texte('.m-hindernisse .pille.aktiv')[0] and E()['hindernisMenge'] == 'normal', hp)
     n_normal = page.evaluate('Rennspiel.spiel.strecke.hindernisse.length + Rennspiel.spiel.strecke.strohballen.length')
-    page.click('[data-a="hindernisse:viele"]'); page.wait_for_timeout(700)
+    page.click('[data-a="hindernisse:viele"]'); bis('Rennspiel.spiel.strecke.hindernisMenge === "viele"')
     n_viele = page.evaluate('Rennspiel.spiel.strecke.hindernisse.length + Rennspiel.spiel.strecke.strohballen.length')
     pruefe('Pille „Viele“: Einstellung viele, Menü-Hintergrund neu gebaut mit mehr Hindernissen', E()['hindernisMenge'] == 'viele' and page.evaluate('Rennspiel.spiel.strecke.hindernisMenge') == 'viele' and n_viele > n_normal, [n_normal, n_viele])
-    taste('KeyO'); page.wait_for_timeout(700)
+    taste('KeyO'); bis('Rennspiel.spiel.strecke.hindernisMenge === "sehrViele"')
     pruefe('Taste O: Viele → Sehr viele (mehr als Viele)', E()['hindernisMenge'] == 'sehrViele' and page.evaluate('Rennspiel.spiel.strecke.hindernisMenge') == 'sehrViele'
            and page.evaluate('Rennspiel.spiel.strecke.hindernisse.length + Rennspiel.spiel.strecke.strohballen.length') > n_viele , E()['hindernisMenge'])
     pruefe('Gespeichert (localStorage) und nach Neuaufbau gültig', page.evaluate("JSON.parse(localStorage.getItem(Rennspiel.config.ui.speicherSchluessel)).hindernisMenge") == 'sehrViele')
     snap('menu_2c_hindernisse_sehrViele.png')
-    page.click('[data-a="welt:klassisch"]'); page.wait_for_timeout(700)
+    page.click('[data-a="welt:klassisch"]'); bis('Rennspiel.spiel.strecke.hindernisse.length + Rennspiel.spiel.strecke.strohballen.length === 0'); rahmen()
     hk = page.evaluate("(() => { const z = document.querySelector('.m-hindernisse'); return { aus: z.classList.contains('aus'), klickbar: z.querySelectorAll('.pille[data-a]').length, text: z.querySelector('.welt-text').textContent }; })()")
     pruefe('Welt Klassisch: Hindernisse-Zeile ausgegraut (keine klickbaren Pillen), Hinweis „Erst ab Welt Hindernisse“', hk['aus'] and hk['klickbar'] == 0 and 'Erst ab Welt' in hk['text'], hk)
-    taste('KeyO'); page.wait_for_timeout(300)
+    taste('KeyO'); rahmen()
     pruefe('Welt Klassisch: Taste O ändert nichts; Strecke ohne Hindernisse', E()['hindernisMenge'] == 'sehrViele' and page.evaluate('Rennspiel.spiel.strecke.hindernisse.length + Rennspiel.spiel.strecke.strohballen.length') == 0)
     snap('menu_2d_hindernisse_klassisch_grau.png')
-    page.click('[data-a="welt:hindernisse"]'); page.wait_for_timeout(700)
+    page.click('[data-a="welt:hindernisse"]'); bis('Rennspiel.spiel.strecke.hindernisse.length + Rennspiel.spiel.strecke.strohballen.length > 0'); rahmen()
     pruefe('Zurück in Welt Hindernisse: Wahl „Sehr viele“ bleibt, Zeile wieder aktiv', E()['hindernisMenge'] == 'sehrViele' and page.evaluate("!document.querySelector('.m-hindernisse').classList.contains('aus')"))
     ueb = page.evaluate("""(() => { const m = document.querySelector('.m-inhalt'), f = document.querySelector('.m-fuss'), z = document.querySelector('.m-hindernisse').getBoundingClientRect();
       return { scroll: m.scrollHeight <= m.clientHeight + 1, zeileSichtbar: z.bottom <= f.getBoundingClientRect().top + 2 && z.top > 0 }; })()""")
     pruefe('Strecken-Schritt: Hindernisse-Zeile sichtbar, kein Überlauf im 1280×800-Fenster', ueb['scroll'] and ueb['zeileSichtbar'], ueb)
     page.evaluate("(() => { const m = Rennspiel.spiel.menue; m.e.hindernisMenge = 'bloedsinn'; m.weltFix(); })()")
     pruefe('Ungültiger Wert → Normal (weltFix)', E()['hindernisMenge'] == 'normal')
-    page.click('[data-a="hindernisse:normal"]'); page.click('[data-a="welt:stunt"]'); page.wait_for_timeout(300)
+    page.click('[data-a="hindernisse:normal"]'); page.click('[data-a="welt:stunt"]'); rahmen()
     # Fahrer-Emojis
-    page.click('[data-a="weiter"]'); page.wait_for_timeout(200)
+    page.click('[data-a="weiter"]'); rahmen()
     em = page.evaluate("""(() => { const f = (n) => document.querySelector('[data-a="fahrer:0:' + n + '"] .avatar').textContent;
       const alle = Array.from(document.querySelectorAll('.karte.fahrer .avatar')).map(a => a.textContent);
       return { emmy: f('Emmy'), jonas: f('Jonas'), einmalig: new Set(alle).size === alle.length, n: alle.length }; })()""")
     pruefe('Emmy-Karte 🦁, Jonas-Karte 🐯, alle 12 Emojis verschieden', em['emmy'] == '🦁' and em['jonas'] == '🐯' and em['einmalig'] and em['n'] == 12, em)
     # Einstellungen-Schritt (solo)
-    page.click('[data-a="schritt:4"]'); page.wait_for_timeout(300)
+    page.click('[data-a="schritt:4"]'); rahmen()
     zl = page.evaluate('Rennspiel.spiel.menue.zeilen()')
     pruefe('Fokus-Reihenfolge solo', zl == ['runden', 'gegner', 'schwierigkeit', 'hilfe0', 'tageszeit', 'jahreszeit', 'wetter', 'wind', 'schaden', 'tempo', 'polizei', 'rempeln', 'geister', 'krankenwagen', 'abschleppwagen', 'tiere', 'rennautos', 'zufall', 'spass', 'geist', 'tuning', 'autoTricks', 'kiTricks', 'zeitlupe', 'regenbogen', 'dino', 'zauber', 'start'], zl)   # seit Z1/S1–S8 mit Zufall- und Spaß-Zeilen
     pj = texte('[data-a="fokus:5"] .pille')
     pruefe('Jahreszeit-Pillen (Wiese): Frühling, Sommer, Herbst, Winter, Zufall; Sommer aktiv', len(pj) == 5 and 'Sommer' in pj[1] and 'Zufall' in pj[4]
            and 'Sommer' in texte('[data-a="fokus:5"] .pille.aktiv')[0], pj)
     pruefe('Wetter-Pillen Sommer: Klar, Regen, Zufall (kein Schnee)', page.locator('[data-a="wert:wetter:schnee"]').count() == 0 and page.locator('[data-a="wert:wetter:regen"]').count() == 1)
-    page.click('[data-a="wert:jahreszeit:winter"]'); page.wait_for_timeout(200)
+    page.click('[data-a="wert:jahreszeit:winter"]'); rahmen()
     pruefe('Winter: Wetter-Pillen enthalten Schnee + Hagel, Wetter auf Klar', page.locator('[data-a="wert:wetter:schnee"]').count() == 1
            and page.locator('[data-a="wert:wetter:hagel"]').count() == 1 and E()['jahreszeit'] == 'winter' and E()['wetter'] == 'klar', E())
-    page.click('[data-a="wert:wetter:schnee"]'); page.wait_for_timeout(100)
+    page.click('[data-a="wert:wetter:schnee"]'); rahmen()
     pruefe('Wetter Schnee gewählt', E()['wetter'] == 'schnee', E()['wetter'])
-    page.click('[data-a="wert:jahreszeit:herbst"]'); page.wait_for_timeout(200)
+    page.click('[data-a="wert:jahreszeit:herbst"]'); rahmen()
     pruefe('Jahreszeitwechsel setzt Wetter auf Klar; Herbst: Nebel ja, Schnee nein', E()['wetter'] == 'klar' and page.locator('[data-a="wert:wetter:nebel"]').count() == 1
            and page.locator('[data-a="wert:wetter:schnee"]').count() == 0, E())
-    page.click('[data-a="wert:jahreszeit:zufall"]'); page.wait_for_timeout(100)
+    page.click('[data-a="wert:jahreszeit:zufall"]'); rahmen()
     pruefe('Jahreszeit Zufall: Wetter Klar/Zufall', texte('[data-a="fokus:6"] .pille') == ['☀️ Klar', '🎲 Zufall'] or len(texte('[data-a="fokus:6"] .pille')) == 2, texte('[data-a="fokus:6"] .pille'))
     page.click('[data-a="wert:jahreszeit:winter"]'); page.click('[data-a="wert:wetter:schnee"]')
     # Wüste: Winter -> Sandsturm-Zeit, kein Schnee
-    page.evaluate("Rennspiel.spiel.menue.streckeWaehlen('wueste'); Rennspiel.spiel.menue.zeichnen()"); page.wait_for_timeout(300)
+    page.evaluate("Rennspiel.spiel.menue.streckeWaehlen('wueste'); Rennspiel.spiel.menue.zeichnen()"); rahmen()
     pw = texte('[data-a="fokus:6"] .pille'); pjw = texte('[data-a="fokus:5"] .pille')
     pruefe('Wüste: Schnee-Wetter zurück auf Klar, Winter heißt Sandsturm-Zeit, Wetter ohne Schnee/Hagel', E()['wetter'] == 'klar' and any('Sandsturm-Zeit' in t for t in pjw)
            and page.locator('[data-a="wert:wetter:schnee"]').count() == 0, [pjw, pw])
-    page.click('[data-a="wert:jahreszeit:winter"]'); page.wait_for_timeout(200)
+    page.click('[data-a="wert:jahreszeit:winter"]'); rahmen()
     pw = texte('[data-a="fokus:6"] .pille')
     pruefe('Wüste Winter: Wetter-Pillen Klar, Sandsturm, Zufall – kein Schnee', page.locator('[data-a="wert:wetter:sandsturm"]').count() == 1 and page.locator('[data-a="wert:wetter:schnee"]').count() == 0, pw)
-    page.evaluate("Rennspiel.spiel.menue.streckeWaehlen('wiese'); Rennspiel.spiel.menue.zeichnen()"); page.wait_for_timeout(200)
+    page.evaluate("Rennspiel.spiel.menue.streckeWaehlen('wiese'); Rennspiel.spiel.menue.zeichnen()"); rahmen()
     pruefe('Zurück zur Wiese: Welt zurückgesetzt (Streckenwechsel)', E()['welt'] == '', E()['welt'])
-    page.click('[data-a="schritt:1"]'); page.click('[data-a="welt:stunt"]'); page.click('[data-a="schritt:4"]'); page.wait_for_timeout(200)
+    page.click('[data-a="schritt:1"]'); page.click('[data-a="welt:stunt"]'); page.click('[data-a="schritt:4"]'); rahmen()
     # Wind
     for i in range(5): page.click('[data-a="stepper:wind:1"]')
     pruefe('Wind-Stepper bis 5', E()['windStaerke'] == 5 and page.inner_text('[data-a="fokus:7"] .zahl') == '5', E()['windStaerke'])
@@ -524,13 +537,13 @@ with sync_playwright() as p:
     taste('ArrowRight'); t1 = E().get('tageszeit'); taste('ArrowRight'); t2 = E().get('tageszeit'); taste('ArrowRight'); t3 = E().get('tageszeit')
     taste('ArrowLeft'); taste('ArrowLeft'); t4 = E().get('tageszeit')
     pruefe('Tastatur: Tageszeit → Dämmerung → Nacht (bleibt), ← ← Tag', [t1, t2, t3, t4] == ['daemmerung', 'nacht', 'nacht', 'tag'], [t1, t2, t3, t4])
-    page.click('[data-a="wert:tageszeit:nacht"]'); page.wait_for_timeout(900)
+    page.click('[data-a="wert:tageszeit:nacht"]'); bis('Rennspiel.spiel.wetter && Rennspiel.spiel.wetter.tageszeit === "nacht" && !!Rennspiel.spiel.szene.getObjectByName("Himmelskuppel")'); rahmen()
     gesp_tz = page.evaluate('JSON.parse(localStorage.getItem(Rennspiel.config.ui.speicherSchluessel)).tageszeit')
     pruefe('Tageszeit Nacht anklicken: gespeichert, Menü-Hintergrund nachts (Kuppel + Sterne)', E().get('tageszeit') == 'nacht' and gesp_tz == 'nacht'
            and page.evaluate("Rennspiel.spiel.wetter && Rennspiel.spiel.wetter.tageszeit") == 'nacht'
            and page.evaluate("!!Rennspiel.spiel.szene.getObjectByName('Himmelskuppel')"), [E().get('tageszeit'), gesp_tz])
     snap('menu_r6_tageszeit_nacht.png')
-    page.click('[data-a="wert:tageszeit:tag"]'); page.wait_for_timeout(900)
+    page.click('[data-a="wert:tageszeit:tag"]'); bis('Rennspiel.spiel.wetter && Rennspiel.spiel.wetter.tageszeit === "tag"'); rahmen()
     pruefe('Tageszeit zurück auf Tag: keine Himmelskuppel', E().get('tageszeit') == 'tag' and not page.evaluate("!!Rennspiel.spiel.szene.getObjectByName('Himmelskuppel')"))
     page.evaluate('Rennspiel.spiel.menue.fokus = 4; Rennspiel.spiel.menue.zeichnen()')
     taste('ArrowDown')
@@ -593,11 +606,11 @@ with sync_playwright() as p:
         for tafel in (False, True):
             for vw, vh in ((1280, 800), (1440, 900)):
                 page.evaluate(f"Rennspiel.spiel.menue.tafelOffen = {'true' if tafel else 'false'}; Rennspiel.spiel.menue.zeichnen()")
-                page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(300)
+                page.set_viewport_size({'width': vw, 'height': vh}); rahmen()
                 l = page.evaluate(LAYOUT)
                 pruefe(f'Einstellungen {modus} {"Tafel auf" if tafel else "Tafel zu"} {vw}×{vh}: ohne Scrollen, nichts abgeschnitten', (l['scroll'] or page.evaluate(MENU_SCROLLT)) and l['innen'] and l['breitenOk'], l)
                 snap(f'menu_r4_einstellungen_{modus}_{"tafel" if tafel else "zu"}_{vw}.png')
-    page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
+    page.set_viewport_size({'width': 1280, 'height': 800}); rahmen()
     page.evaluate("Rennspiel.spiel.einstellungen.modus = 'solo'; Rennspiel.spiel.menue.einstellungenFix(); Rennspiel.spiel.menue.tafelOffen = false; Rennspiel.spiel.menue.zeichnen()")
     # Start mit den gewählten Welt-Einstellungen
     page.click('[data-a="start"]', force=True)      # fokussierter Knopf wackelt (Animation) -> nicht „stabil“
@@ -617,35 +630,35 @@ with sync_playwright() as p:
     pruefe('rennenStarten: Fantasie + ungültige Welt -> Fantasie', page.evaluate('Rennspiel.spiel.strecke.welt') == 'fantasie', page.evaluate('Rennspiel.spiel.strecke.welt'))
     # Aufräumen: Standardwerte wie vor dem Block (spätere Tests erwarten Sommer/klar/kein Wind)
     page.evaluate("Rennspiel.spiel.rennenStarten({ streckeId: 'wiese', welt: '', jahreszeit: 'sommer', wetter: 'klar', windStaerke: 0, schaden: false, gegner: 3, modus: 'solo' })")
-    page.evaluate("Rennspiel.spiel.zumMenue()"); page.wait_for_timeout(500)
+    page.evaluate("Rennspiel.spiel.zumMenue()"); bis('Rennspiel.spiel.zustand === "menue"'); rahmen()
     # Maus im Menü: Solo wählen, bis Start klicken
-    page.click('[data-a="modus:solo"]'); page.wait_for_timeout(150)
-    page.click('[data-a="strecke:wiese"]'); page.wait_for_timeout(150)
-    page.click('[data-a="weiter"]'); page.wait_for_timeout(150)      # Runde 4: Klick auf die Karte bleibt im Schritt (darunter: Welt)
-    page.click('[data-a="fahrer:0:Kerle"]'); page.wait_for_timeout(150)
+    page.click('[data-a="modus:solo"]'); rahmen()
+    page.click('[data-a="strecke:wiese"]'); rahmen()
+    page.click('[data-a="weiter"]'); rahmen()      # Runde 4: Klick auf die Karte bleibt im Schritt (darunter: Welt)
+    page.click('[data-a="fahrer:0:Kerle"]'); rahmen()
     snap('menu_10b_fahrer_solo.png')
-    page.evaluate("Rennspiel.Sterne.gutschreiben('Kerle', 12)"); page.evaluate("Rennspiel.spiel.menue.zeichnen && Rennspiel.spiel.menue.zeichnen()"); page.wait_for_timeout(200)
+    page.evaluate("Rennspiel.Sterne.gutschreiben('Kerle', 12)"); page.evaluate("Rennspiel.spiel.menue.zeichnen && Rennspiel.spiel.menue.zeichnen()"); rahmen()
     karte = page.evaluate("(() => { const k = document.querySelector('[data-a=\"fahrer:0:Kerle\"]'); return k ? k.textContent.trim() : null; })()")
     pruefe('Runde 6: Fahrerkarte zeigt „⭐ 12“ (Sterne-Gesamtzahl je Fahrer)', karte is not None and '⭐ 12' in karte, karte)
     # Runde 6 (W3-G): Münz-Kontostand an der Fahrerkarte
-    page.evaluate("Rennspiel.Garage.gutschreiben('Kerle', 7 - Rennspiel.Garage.konto('Kerle'))"); page.evaluate("Rennspiel.spiel.menue.zeichnen()"); page.wait_for_timeout(150)
+    page.evaluate("Rennspiel.Garage.gutschreiben('Kerle', 7 - Rennspiel.Garage.konto('Kerle'))"); page.evaluate("Rennspiel.spiel.menue.zeichnen()"); rahmen()
     karte = page.evaluate("(() => { const k = document.querySelector('[data-a=\"fahrer:0:Kerle\"]'); return k ? k.textContent.trim() : null; })()")
     pruefe('W3-G: Fahrerkarte zeigt „🪙 n“ (Münz-Kontostand)', karte is not None and ('🪙 %d' % page.evaluate("Rennspiel.Garage.konto('Kerle')")) in karte, karte)
     pruefe('Maus: Fahrer Kerle gewählt, Solo-Raster 12 Karten', page.evaluate('Rennspiel.spiel.einstellungen.fahrer[0]') == 'Kerle'
            and page.evaluate("document.querySelectorAll('.karte.fahrer').length") == 12)
-    page.click('[data-a="weiter"]'); page.wait_for_timeout(150)
-    page.click('[data-a="auto:0:bmw-m4"]'); page.wait_for_timeout(150)
+    page.click('[data-a="weiter"]'); rahmen()
+    page.click('[data-a="auto:0:bmw-m4"]'); rahmen()
     snap('menu_11_autos_solo.png')
     auto_schritt('Auto solo', [0], [('Comma', 'Period')], 'menu_11b_autos_solo_3d.png')
-    taste('KeyE'); page.wait_for_timeout(100); taste('KeyQ'); page.wait_for_timeout(100)    # Q/E drehen im Solo-Modus ebenfalls
-    page.set_viewport_size({'width': 1440, 'height': 900}); page.wait_for_timeout(500)
+    taste('KeyE'); rahmen(); taste('KeyQ'); rahmen()    # Q/E drehen im Solo-Modus ebenfalls
+    page.set_viewport_size({'width': 1440, 'height': 900}); rahmen()
     rr = page.evaluate(IMPASSEND)
     pruefe('Auto solo 1440×900: passt ohne Scrollen', rr['scroll'] and rr['innen'] and rr['fuss'], rr)
     snap('menu_11c_autos_solo_1440.png')
-    page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
-    page.click('[data-a="auto:0:bmw-m4"]'); page.wait_for_timeout(150)
+    page.set_viewport_size({'width': 1280, 'height': 800}); rahmen()
+    page.click('[data-a="auto:0:bmw-m4"]'); rahmen()
     pruefe('Maus: Auto BMW M4 gewählt (Karte)', page.evaluate('Rennspiel.spiel.einstellungen.autoIds[0]') == 'bmw-m4')
-    page.click('[data-a="weiter"]'); page.wait_for_timeout(150)
+    page.click('[data-a="weiter"]'); rahmen()
     vorschau_stoppt('Auto solo')
     snap('menu_12_einstellungen_solo.png')
     PILLEN = """(() => { const z = Array.from(document.querySelectorAll('.zeile')).find(e => e.querySelector('[data-a="wert:schwierigkeit:unschlagbar"]'));
@@ -654,17 +667,17 @@ with sync_playwright() as p:
         abgeschnitten: p.some(e => e.scrollWidth > e.clientWidth + 1), rot: getComputedStyle(p[6]).backgroundColor, rot0: getComputedStyle(p[0]).backgroundColor,
         fuss: Math.max(...r.map(a => a.bottom)) <= document.querySelector('.m-fuss').getBoundingClientRect().top }; })()"""
     for vw, vh in ((1280, 800), (1440, 900)):
-        page.set_viewport_size({'width': vw, 'height': vh}); page.wait_for_timeout(400)
+        page.set_viewport_size({'width': vw, 'height': vh}); rahmen()
         pl = page.evaluate(PILLEN)
         pruefe(f'Einstellungen {vw}×{vh}: 7 Stärke-Pillen sichtbar, nicht abgeschnitten, in Rang-Reihenfolge, Unschlagbar rot mit 💀',
                pl['n'] == 7 and pl['innen'] and not pl['abgeschnitten'] and pl['fuss'] and pl['namen'][0] == 'Leicht' and pl['namen'][6] == '💀 Unschlagbar' and pl['rot'] != pl['rot0'], pl)
         snap(f'menu_12_einstellungen_{vw}.png')
-    page.set_viewport_size({'width': 1280, 'height': 800}); page.wait_for_timeout(300)
+    page.set_viewport_size({'width': 1280, 'height': 800}); rahmen()
     page.click('[data-a="start"]')
     page.wait_for_function('Rennspiel.spiel.zustand === "rennen"', timeout=120000)
     pruefe('Maus: Solo-Rennen gestartet', page.evaluate('Rennspiel.spiel.kameras.length') == 1 and page.evaluate('Rennspiel.spiel.fahrzeuge[0].auto.id') == 'bmw-m4')
     page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=120000)
-    page.wait_for_timeout(1500); snap('menu_13_solo_hud.png')
+    rahmen(3); snap('menu_13_solo_hud.png')
     pruefe('Solo-HUD zeigt Fahrername Kerle', 'Kerle' in page.evaluate("document.querySelector('.hud-name').textContent"))
     # HUD-Hinweise: "Falsch herum!" und Rundenmeldungen
     page.evaluate("Rennspiel.spiel.fahrzeuge[0].vehicle.heading += Math.PI")
@@ -684,7 +697,7 @@ with sync_playwright() as p:
         if t >= 2: banner.append(txt); break
     pruefe('Meldungen "Kerle Runde 2!" und "Kerle Letzte Runde!"', banner == ['KerleRunde 2!', 'KerleLetzte Runde!'], banner)
     page.evaluate('Rennspiel.spiel.schnellvorlauf(150)')
-    page.wait_for_timeout(300)
+    rahmen()
     pruefe('Zieleinlauf-Meldung mit Name', 'Platz' in page.evaluate("document.querySelector('.hud-banner').textContent")
            and 'Kerle' in page.evaluate("document.querySelector('.hud-banner').textContent"),
            page.evaluate("document.querySelector('.hud-banner').textContent"))

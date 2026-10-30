@@ -28,13 +28,16 @@ def malen_punkte(cx, cy, rx, ry, n=90, wackel=6, luecke=0.04, start=0.3):
 def acht_punkte(cx, cy, rx, ry, n=120):
     return [(cx + rx * math.sin(i / n * 2 * math.pi), cy + ry * math.sin(2 * i / n * 2 * math.pi)) for i in range(n + 1)]
 
+BROWSER = None
 def neue_seite(p, spiel, w, h, touch=False):
-    b = p.chromium.launch(args=ARGS)
+    global BROWSER
+    if BROWSER is None: BROWSER = p.chromium.launch(args=ARGS)     # R5: ein Browser für alle Läufe (Kontexte sind getrennt)
+    b = BROWSER
     ctx = b.new_context(viewport={'width': w, 'height': h}, has_touch=touch, is_mobile=touch, device_scale_factor=1)
-    pg = ctx.new_page(); fehler = []
+    pg = ctx.new_page(); pg.set_default_timeout(120000); fehler = []
     pg.on('pageerror', lambda e: fehler.append('pageerror: ' + str(e)))
     pg.on('console', lambda m: fehler.append('console.error: ' + m.text) if m.type == 'error' and 'GPU stall' not in m.text and ('WebGL' not in m.text or 'Shader' in m.text or 'Program' in m.text) and 'favicon' not in m.text else None)
-    pg.goto('file://' + os.path.join(BASIS, spiel + '.html')); pg.wait_for_function('window.Rennspiel && Rennspiel.spiel'); pg.wait_for_timeout(1000)
+    pg.goto('file://' + os.path.join(BASIS, spiel + '.html')); pg.wait_for_function('window.Rennspiel && Rennspiel.spiel && Rennspiel.spiel.menue'); pg.wait_for_selector('.karte', state='attached')
     return b, ctx, pg, fehler
 
 def leinwand(pg):
@@ -75,7 +78,7 @@ def lauf_spiel(p, spiel):
     pg.screenshot(path=f'{OUT}/{kz}_editor_hinweis_offen_1280.png')
     # ---- richtige Linie malen
     pts = malen_punkte(c['x'] + c['w'] / 2, c['y'] + c['h'] / 2, c['w'] * 0.3, c['h'] * 0.32)
-    strich(pg, pts); pg.wait_for_timeout(500)
+    strich(pg, pts); pg.wait_for_function('Rennspiel.EditorUI.zustand().d != null', timeout=10000)
     d = pg.evaluate("(() => { const S = Rennspiel.EditorUI.zustand(); return S.d ? { n: S.d.pkt.length, L: Math.round(Rennspiel.Editor.geometrie(S.d).laenge), welt: S.d.welt } : null; })()")
     pruefe(f'{spiel}: Linie gemalt → Strecke fertig (glatt, geschlossen)', d is not None and 900 < d['L'] < 6000, json.dumps(d))
     pg.screenshot(path=f'{OUT}/{kz}_editor_gemalt_1280.png')
@@ -181,27 +184,28 @@ def lauf_spiel(p, spiel):
     pruefe(f'{spiel}: Rennen aus der Streckenwahl startet mit der eigenen Strecke', pg.evaluate("Rennspiel.spiel.zustand === 'rennen' && Rennspiel.spiel.strecke.id") == gew)
     pg.evaluate("Rennspiel.spiel.zumMenue(true)"); pg.wait_for_timeout(300)
     # ---- Seite neu laden: Strecke noch da; Code importieren in frischer Seite
-    pg.reload(); pg.wait_for_function('window.Rennspiel && Rennspiel.spiel'); pg.wait_for_timeout(800)
+    pg.reload(); pg.wait_for_function('window.Rennspiel && Rennspiel.spiel && Rennspiel.spiel.menue'); pg.wait_for_selector('.karte', state='attached')
     da = pg.evaluate("Rennspiel.trackCatalog.filter(t => t.eigen).map(t => t.name)")
     pruefe(f'{spiel}: nach dem Neuladen steht die Strecke im Katalog', da == [name], json.dumps(da, ensure_ascii=False))
     pg.evaluate("localStorage.clear()")
-    b2, ctx2, pg2, fehler2 = neue_seite(p, spiel, 1280, 800)
+    # „anderes Gerät“: Seite neu laden mit leerem Speicher (statt zweiter Browser-Start)
+    n_alt = len(fehler); pg.reload(); pg.wait_for_function('window.Rennspiel && Rennspiel.spiel && Rennspiel.spiel.menue'); pg.wait_for_selector('.karte', state='attached')
+    pg2 = pg
     pg2.evaluate("Rennspiel.spiel.menue.aktion('editor:weiter')"); pg2.wait_for_selector('#e7'); pg2.click('.e7-k[data-b="import"]'); pg2.wait_for_selector('#e7-imp')
-    pg2.fill('#e7-imp', 'Hier meine Strecke:\n' + code + '\nViel Spaß!'); pg2.click('.e7-dlg .e7-k:has-text("Laden")'); pg2.wait_for_timeout(500)
+    pg2.fill('#e7-imp', 'Hier meine Strecke:\n' + code + '\nViel Spaß!'); pg2.click('.e7-dlg .e7-k:has-text("Laden")')
+    pg2.wait_for_function("Rennspiel.EditorUI.zustand().d != null")
     imp = pg2.evaluate("(() => { const S = Rennspiel.EditorUI.zustand(); return S.d ? { name: S.d.name, el: S.d.el.length, L: Math.round(Rennspiel.Editor.geometrie(S.d).laenge) } : null; })()")
     pruefe(f'{spiel}: Import des Codes in frischer Seite (anderes Gerät): gleiche Strecke', imp is not None and imp['name'] == name and imp['el'] == len(elemente) and imp['L'] == d['L'], json.dumps(imp, ensure_ascii=False))
-    pg2.click('.e7-t[data-t="schanze"]') if False else None
     pg2.screenshot(path=f'{OUT}/{kz}_editor_importiert_1280.png')
-    pruefe(f'{spiel}: Konsole (Seite 2) ohne Fehler', not fehler2, fehler2[:3])
-    b2.close()
+    pruefe(f'{spiel}: Konsole (Seite 2) ohne Fehler', not fehler[n_alt:], fehler[n_alt:][:3])
     pruefe(f'{spiel}: Konsole ohne Fehler (ganzer Ablauf)', not fehler, fehler[:3])
-    b.close()
+    ctx.close()
 
 def lauf_acht(p, spiel):
     kz = 'moto' if spiel == 'Motorrad' else 'auto'
     b, ctx, pg, fehler = neue_seite(p, spiel, 1280, 800)
     pg.evaluate("localStorage.clear()"); pg.evaluate("Rennspiel.spiel.menue.aktion('editor:neu')"); pg.wait_for_selector('#e7'); pg.wait_for_timeout(200)
-    c = leinwand(pg); strich(pg, acht_punkte(c['x'] + c['w'] / 2, c['y'] + c['h'] / 2, c['w'] * 0.3, c['h'] * 0.2)); pg.wait_for_timeout(500)
+    c = leinwand(pg); strich(pg, acht_punkte(c['x'] + c['w'] / 2, c['y'] + c['h'] / 2, c['w'] * 0.3, c['h'] * 0.2)); pg.wait_for_function('Rennspiel.EditorUI.zustand().d != null', timeout=10000)
     kr = pg.evaluate("(() => { const S = Rennspiel.EditorUI.zustand(); return S.d ? Rennspiel.Editor.kreuzungenVon(S.d).length : -1; })()")
     pruefe(f'{spiel}: Acht gemalt → eine Brücke (Überführung)', kr == 1, kr)
     pg.click('.e7-chip[data-w="regenbogenland"]'); pg.wait_for_timeout(200)
@@ -217,7 +221,7 @@ def lauf_acht(p, spiel):
     pg.wait_for_timeout(300)
     pg.screenshot(path=f'{OUT}/{kz}_rennen_bruecke_1280.png')
     pruefe(f'{spiel}: Konsole ohne Fehler (Acht)', not fehler, fehler[:3])
-    b.close()
+    ctx.close()
 
 def lauf_handy(p, spiel):
     kz = 'moto' if spiel == 'Motorrad' else 'auto'
@@ -246,7 +250,7 @@ def lauf_handy(p, spiel):
     pg.wait_for_timeout(500)
     pg.screenshot(path=f'{OUT}/{kz}_editor_nach_speichern_390x844.png')
     pruefe(f'{spiel}: Konsole ohne Fehler (Handy)', not fehler, fehler[:3])
-    b.close()
+    ctx.close()
 
 with sync_playwright() as p:
     for spiel in SPIELE:
