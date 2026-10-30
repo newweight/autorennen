@@ -597,20 +597,28 @@ function starten(opt) {
       // einfache Bremse: > 400 Nachrichten/s → ignorieren, > 2000 → trennen
       const jetzt = Date.now();
       if (jetzt - c.zaehlerSeit > 1000) { c.zaehler = 0; c.zaehlerSeit = jetzt; }
-      if (++c.zaehler > 2000) { ws.terminate(); return; }
+      if (++c.zaehler > 2000) { c.endeGrund = 'zu viele Nachrichten'; ws.terminate(); return; }
       if (c.zaehler > 400 || binaer) return;
       let m;
       try { m = JSON.parse(daten.toString('utf8')); } catch (e) { return fehler(ws, 'json', 'Ungültige Nachricht'); }
       if (!m || typeof m !== 'object' || Array.isArray(m) || typeof m.t !== 'string') return fehler(ws, 'json', 'Ungültige Nachricht');
       try { nachricht(c, m); } catch (e) { console.error('Fehler bei Nachricht', m.t, e && e.stack); fehler(ws, 'intern', 'Interner Fehler'); }
     });
-    ws.on('close', () => {
-      verbindungen--; verlassen(c, 'Verbindung zu');
+    ws.on('close', (code) => {
+      verbindungen--;
+      log('Verbindung zu: ' + (c.fahrer || c.id) + ', Close-Code ' + code + (c.endeGrund ? ', Server beendete: ' + c.endeGrund : ', vom Client / Netz') + (c.raum ? ' (Raum ' + c.raum.code + ', ' + c.raum.zustand + ')' : ''));      // R2-FIX: Diagnose, warum eine Verbindung endet
+      verlassen(c, 'Verbindung zu');
       if (ws.ipKey) { const n = (proIp.get(ws.ipKey) || 1) - 1; if (n <= 0) proIp.delete(ws.ipKey); else proIp.set(ws.ipKey, n); }
     });
     ws.on('error', () => {});
     c.herz = setInterval(() => {
-      if (!c.lebt) { ws.terminate(); return; }
+      if (!c.lebt) {
+        // R2-FIX: Ein Browser, der gerade das Rennen aufbaut/die ersten Bilder rechnet (langsamer Rechner, Software-GL), liest seinen Socket oft >10 s nicht
+        // (Ping bleibt liegen, Close-Code 1006 mit „Herzschlag“ im Log) → in einem Raum (Lobby, Laden, Rennen, Ergebnis) sind 6 verpasste Herzschläge erlaubt (~30 s; auch eine ruhende, vom Rechner ausgehungerte Seite fliegt nicht gleich raus), ohne Raum wie bisher 1.
+        const grenze = c.raum ? 6 : 0;
+        if ((c.stille || 0) >= grenze) { c.endeGrund = 'Herzschlag (keine Antwort auf ping, ' + ((c.stille || 0) + 1) + ' Mal)'; ws.terminate(); return; }
+        c.stille = (c.stille || 0) + 1;
+      } else c.stille = 0;
       c.lebt = false;
       try { ws.ping(); } catch (e) { /* zu */ }
     }, N.HERZSCHLAG_MS);

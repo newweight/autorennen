@@ -101,6 +101,19 @@ const teil = (k) => !nurTeil || nurTeil === k;
     // Gleicher Modus: nachträgliches Ändern des Hosts bleibt (z. B. Strecke im K.-o.)
     const koStrecke = einstellungenPruefen(Object.assign({}, einstellungenPruefen(Object.assign({}, basis, { modus: 'ko' }), 2), { streckeId: 'wald' }), 2);
     pruefe('A K.-o.: Strecke ändern bleibt möglich', koStrecke.streckeId === 'wald' && koStrecke.modus === 'ko');
+    // R2-FIX Punkt 4: Geist/Dino überleben jeden Moduswechsel (Rennen → Kurz/K.-o./Frei → Rennen, auch Kurz → K.-o. → Rennen)
+    const bGD = einstellungenPruefen({ streckeId: 'alpen', geist: true, dino: 'immer' }, 2);
+    const wechsel = (e, m) => einstellungenPruefen(Object.assign({}, e, { modus: m }), 2);
+    let gd = true, gdInfo = '';
+    for (const weg of ['kurz', 'ko', 'frei']) {
+      const im = wechsel(bGD, weg), zu = wechsel(im, 'rennen');
+      const ok1 = im.geist === undefined && im.dino === undefined && zu.geist === true && zu.dino === 'immer' && json(zu) === json(bGD);
+      if (!ok1) { gd = false; gdInfo += weg + ':' + json(zu) + ' '; }
+    }
+    const k2 = wechsel(wechsel(wechsel(bGD, 'kurz'), 'ko'), 'rennen'), k3 = wechsel(wechsel(bGD, 'kurz'), 'kurz');
+    pruefe('A Geist/Dino bleiben beim Moduswechsel erhalten (Rennen → Kurz/K.-o./Frei → Rennen bitgleich; Kurz → K.-o. → Rennen; im Modus selbst keine Schlüssel)', gd && k2.geist === true && k2.dino === 'immer' && k3.geist === undefined, gdInfo);
+    const nurDino = wechsel(wechsel(einstellungenPruefen({ streckeId: 'wiese', dino: 'dino' }, 2), 'frei'), 'rennen');
+    pruefe('A nur Dino gewählt → nach Moduswechsel nur Dino, kein Geist; ohne Wahl bleibt es ohne Schlüssel', nurDino.dino === 'dino' && nurDino.geist === undefined && json(wechsel(wechsel(basis, 'kurz'), 'rennen')) === json(basis));
   }
 
   // ================================================================== B) Server = Client

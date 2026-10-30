@@ -13,6 +13,8 @@ basis = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MOTO = os.environ.get('R2_MOTO') == '1'
 SEITE = 'Motorrad.html' if MOTO else 'Autorennen.html'
 SUFFIX = '_moto' if MOTO else ''
+VPW, VPH = [int(x) for x in os.environ.get('R2_VP', '1100x700').split('x')]      # R2-FIX: Fenstergröße wählbar (z. B. R2_VP=844x390)
+SUFFIX += '' if (VPW, VPH) == (1100, 700) else '_%dx%d' % (VPW, VPH)
 out = os.path.join(basis, 'tests', 'bilder_r2')
 os.makedirs(out, exist_ok=True)
 ergebnisse, fehler = [], []
@@ -27,7 +29,10 @@ def freier_port():
 
 port = freier_port()
 args = ['node', os.path.join(basis, 'server', 'server.js'), '--port', str(port), '--host', '127.0.0.1'] + (['--motorrad'] if MOTO else [])
-server = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+os.makedirs(os.path.join(basis, 'tests', 'out', 'r2'), exist_ok=True)
+SERVERLOG = os.path.join(basis, 'tests', 'out', 'r2', 'server%s.log' % ('_moto' if MOTO else ''))
+# R2-FIX: Server-Ausgabe in eine Datei (nicht in eine ungelesene Pipe: laeuft die voll, steht der Server und trennt Clients) – dient zugleich als Server-Log
+server = subprocess.Popen(args, stdout=open(SERVERLOG, 'w'), stderr=subprocess.STDOUT, text=True)
 for _ in range(100):
     try: socket.create_connection(('127.0.0.1', port), timeout=0.2).close(); break
     except OSError: time.sleep(0.1)
@@ -63,7 +68,7 @@ def main(szenarien):
         browser = p.chromium.launch(args=ARGS)
 
         def seite(name, init=None):
-            ctx = browser.new_context(viewport={'width': 1100, 'height': 700})
+            ctx = browser.new_context(viewport={'width': VPW, 'height': VPH})
             if init: ctx.add_init_script(init)
             pg = ctx.new_page()
             pg.on('pageerror', lambda e: fehler.append(name + ': ' + str(e)))

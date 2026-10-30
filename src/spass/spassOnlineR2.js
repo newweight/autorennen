@@ -27,6 +27,15 @@
     try { const nm = ui.spiel.rennen.teilnehmer[ui.du].name; if (n > 0 && R.Garage && R.Garage.gutschreiben && nm) R.Garage.gutschreiben(nm, n); } catch (e) { /* Konto egal */ }
   };
   const ton = (name, ...a) => { try { if (R.Audio && R.Audio[name]) R.Audio[name](...a); } catch (e) { /* Ton egal */ } };
+  /** R2-FIX: Banner unter die Platz-Box setzen (sonst verdeckt es sie oben in der Mitte). */
+  function hudR2(html) {
+    M.hud(html);
+    try {
+      const el = document.getElementById('s4-hud'), p = document.querySelector('.hud-platz');
+      if (el && p) { const b = p.getBoundingClientRect().bottom; el.style.top = (b > 0 ? Math.round(b + 6) : 0) + 'px'; el.style.maxWidth = '60vw'; el.style.whiteSpace = 'normal'; }
+    } catch (e) { /* Lage egal */ }
+  }
+  const hudLage = () => { try { const el = document.getElementById('s4-hud'); if (el) { el.style.top = ''; el.style.maxWidth = ''; el.style.whiteSpace = ''; } } catch (e) { /* egal */ } };
   const sterneText = (n) => (n > 0 ? '⭐'.repeat(n) : '–');
   const zeitT = (s) => (R.zeitText ? R.zeitText(s) : (+s).toFixed(1) + ' s');
 
@@ -50,8 +59,10 @@
     const z = zeilen.apply(this, arguments);
     if (this.istHost && S.serverR2) {
       const m = einst(this).modus || 'rennen';
-      z.push('r2modus');
-      if (m === 'kurz') z.push('r2level'); else if (m === 'frei') z.push('r2frei'); else if (m === 'rennen') z.push('r2geist', 'r2dino');
+      const r2 = ['r2modus'];       // R2-FIX: Spielart + Zubehör stehen ganz oben in der Host-Spalte (vor „Strecke“), die Fokus-Reihenfolge folgt
+      if (m === 'kurz') r2.push('r2level'); else if (m === 'frei') r2.push('r2frei'); else if (m === 'rennen') r2.push('r2geist', 'r2dino');
+      let i = z.indexOf('strecke'); if (i < 0) i = z.length;
+      z.splice(i, 0, ...r2);
     }
     return z;
   };
@@ -100,7 +111,9 @@
             w.liste.map((x) => `<span class="pille${x.k === w.wert ? ' aktiv' : ''}"${x.titel ? ` title="${esc(x.titel)}"` : ''} data-a="wert:${id}:${esc(x.k)}">${esc(x.text)}</span>`).join('') + '</div></div>';
         };
         const t = z.filter((id) => ZEILEN.indexOf(id) >= 0).map(reihe).join('') + (hint ? `<div class="on-info on-r2">${esc(hint)}</div>` : '');
-        h = h.replace('<div class="on-fest">', t + '<div class="on-fest">');
+        const kopf = /<h3>⚙️ Rennen \(du bist der Host\)<\/h3>/;
+        if (kopf.test(h)) h = h.replace(kopf, (k) => k + t);        // R2-FIX: nach oben (direkt unter die Überschrift)
+        else h = h.replace('<div class="on-fest">', t + '<div class="on-fest">');
       } else if (hint) {
         h = h.replace(/(<div class="on-zusammen">[\s\S]*?)(<\/div>)/, `$1<br>${esc(hint)}$2`);
       }
@@ -181,7 +194,7 @@
     const X = ui._r2;
     if (!X) return;
     ui._r2 = null;
-    try { M.hudWeg(); } catch (e) { /* egal */ }
+    try { M.hudWeg(); hudLage(); } catch (e) { /* egal */ }
     try { document.body.classList.remove('s4-frei'); } catch (e) { /* egal */ }
     if (X.muenzen) { try { X.muenzen.entfernen(); } catch (e) { /* egal */ } }
     if (X.fr) freiAbbau(X.fr);
@@ -247,13 +260,13 @@
     if (X.fertig) {
       const f = X.fertig;
       const k = f.status === 'geschafft' ? `🎉 <b>Geschafft!</b> ${sterneText(f.sterne)} in ${(+f.zeit).toFixed(1)} s` : (f.status === 'zeitUm' ? '⏱️ <b>Zeit um!</b>' : '🚩 <b>Ziel verpasst!</b>');
-      M.hud(`${d.emoji} ${k}<small>Warte auf die anderen … (Esc = Rennen verlassen)</small>`);
+      hudR2(`${d.emoji} ${k}<small>Warte auf die anderen … (Esc = Rennen verlassen)</small>`);
       return;
     }
     const lst = SK.liste(SP()), nr = lst.findIndex((x) => x.id === d.id) + 1;
     const zeit = r.zustand === 'laeuft' ? r.zeit : 0, lim = X.kurz.info.limit, rest = Math.max(0, Math.round(X.kurz.ab.s1 - (t ? t.fortschritt : 0)));
     const n = d.art === 'ziel' ? '' : (d.art === 'muenzen' ? '🪙 ' : '') + Math.min(X.zaehl, d.n) + '/' + d.n + ' · ';
-    M.hud(`${d.emoji} <b>Level ${nr}</b> · ${SK.aufgabeText(d)}<small>${n}⏱ <span${lim - zeit < 10 ? ' class="rot"' : ''}>${zeit.toFixed(0)} s</span> (Limit ${lim} s) · ${rest} m bis zum Ziel</small>`);
+    hudR2(`${d.emoji} <b>Level ${nr}</b> · ${SK.aufgabeText(d)}<small>${n}⏱ <span${lim - zeit < 10 ? ' class="rot"' : ''}>${zeit.toFixed(0)} s</span> (Limit ${lim} s) · ${rest} m bis zum Ziel</small>`);
   }
   function kurzFertig(ui, X, m, t) {
     const spiel = ui.spiel, name = t ? t.name : '';
@@ -281,7 +294,7 @@
   function koHud(ui, X) {
     const r = ui.spiel.rennen, s = R.SpassKO.status(r);
     const k = s.finale ? '🏁 FINALE – nur noch zwei!' : `Nächste Wertung: Platz ${s.aktive} fliegt raus`;
-    M.hud(`🚪 <b>K.-o.-Rallye</b> · noch <b>${s.aktive}</b> im Rennen<small>${X.raus ? '🚪 Du bist raus – schau zu!' : k + ' · Wertung ' + Math.min(s.naechste, s.gesamt) + '/' + s.gesamt}</small>`);
+    hudR2(`🚪 <b>K.-o.-Rallye</b> · noch <b>${s.aktive}</b> im Rennen<small>${X.raus ? '🚪 Du bist raus – schau zu!' : k + ' · Wertung ' + Math.min(s.naechste, s.gesamt) + '/' + s.gesamt}</small>`);
   }
   function koRaus(ui, X, m, t) {
     const spiel = ui.spiel, r = spiel.rennen;
@@ -294,6 +307,7 @@
       if (V) { V.schritt = function () { }; V.abgleich = function () { }; }       // der Server hat den Wagen geparkt – die Vorhersage steht still
       mel(ui, '🚪 Du bist raus – schau zu!', 3000);
     }
+    koHud(ui, X);       // R2-FIX: sofort neu zeichnen (nicht erst beim nächsten 6er-Schritt)
   }
   /** Ausgeschiedene schauen dem Führenden zu (online ist die eigene Kamera die Nr. 0, das eigene Auto aber fahrzeuge[du]). */
   function zuschauer(ui) {
@@ -411,7 +425,7 @@
       zeile = `<small>❓ <b>${NAMEN()[a.art]}</b>: ${ziel} · ⏱ <span${rs < 6 ? ' class="rot"' : ''}>${rs.toFixed(0)} s</span></small>`;
     } else zeile = '<small>Fahr an die bunten ❓-Kisten – wer zuerst da ist, bekommt die Aufgabe!</small>';
     const mm = Math.floor(rest / 60), ss = String(Math.floor(rest % 60)).padStart(2, '0');
-    M.hud(`🗺️ <b>Freie Fahrt</b> · ✔ <b>${ok}/${F.kisten.length}</b> (❓ ${gef}) · 🪙 ${F.gold} · ⏱ ${mm}:${ss}${zeile}`);
+    hudR2(`🗺️ <b>Freie Fahrt</b> · ✔ <b>${ok}/${F.kisten.length}</b> (❓ ${gef}) · 🪙 ${F.gold} · ⏱ ${mm}:${ss}${zeile}`);
   }
 
   // ================================================================ Geist (nur Client)
@@ -508,7 +522,7 @@
   function ergebnis(ui, X, m) {
     const e = X.e;
     if (!e.modus) return;
-    try { M.hudWeg(); document.body.classList.remove('s4-frei'); } catch (err) { /* egal */ }
+    try { M.hudWeg(); hudLage(); document.body.classList.remove('s4-frei'); } catch (err) { /* egal */ }
     const autos = R.carCatalog.waehlbare();
     let kopf, titel, hinweis = '';
     if (m.kurz) {
