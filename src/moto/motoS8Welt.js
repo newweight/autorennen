@@ -21,9 +21,10 @@
   R.Moto = R.Moto || {};
 
   R.config.motoS8 = {
-    feld: { schlamm: { bremse: 1.15, laenge: 26 }, wasser: { bremse: 0.4, laenge: 30 } },
+    feld: { schlamm: { bremse: 1.15, laenge: 26 }, wasser: { bremse: 0.4, laenge: 44, breite: 0.75, spritz: 80 } },   // FIX3: Wasser länger (44 statt 30 m), breiter (75 % der Fahrbahn), viel mehr Spritzer (je s)
     kisten: { radius: 1.6, minTempo: 3, punkte: 150, bremse: 0.93, proGruppe: 2 },
-    platz: { feldJe: 1500, feldMax: 4, kistenJe: 1700, kistenMax: 3, ab: 900, schritt: 6, abstand: 120, kappa: 1 / 150, abseits: 0.3 },
+    platz: { feldJe: 1500, feldMax: 4, lockerung: [1, 1.7, 3, 6],   // FIX3: Krümmungs-Stufen der Suche (zuletzt sehr locker: Wasser soll auf JEDER Strecke vorkommen)
+       kistenJe: 1700, kistenMax: 3, ab: 900, schritt: 6, abstand: 120, kappa: 1 / 150, abseits: 0.3 },
   };
   const C = () => R.config.motoS8;
   const klemme = (x, a, b) => (x < a ? a : x > b ? b : x);
@@ -48,9 +49,9 @@
     const nF = klemme(Math.round(L / P.feldJe), 1, P.feldMax), nK = klemme(Math.round(L / P.kistenJe), 1, P.kistenMax), n = nF + nK;
     const gesetzt = [];
     // Je Element ein eigener Abschnitt der Runde (Schlamm/Wasser und Kisten im Wechsel), gelockerte Krümmungs-Stufen
-    function suche(i, vor, nach) {
-      const a0 = von + laenge * i / n, a1 = von + laenge * (i + 1) / n;
-      for (const fr of [1, 1.7, 3]) {
+    function suche(i, vor, nach, r0, r1) {
+      const a0 = r0 !== undefined ? r0 : von + laenge * i / n, a1 = r1 !== undefined ? r1 : von + laenge * (i + 1) / n;
+      for (const fr of P.lockerung) {
         let beste = null;
         for (let s = Math.round(a0 + phase); s <= a1 - (vor + nach) * 0.25; s += P.schritt) {
           const sa = s - vor, sb = s + nach;
@@ -77,15 +78,22 @@
         kisten.push({ s, q: -a * links }, { s: s + 3, q: a * links }); nrK++;
         gesetzt.push({ s0: s - 14, s1: s + 17 }); zonen.push({ s0: s - 16, s1: s + 19 });
       } else {
-        const art = nrF % 2 === 0 ? 'schlamm' : 'wasser', len = c.feld[art].laenge;
-        const s = suche(i, 12, len + 12);
+        const art = nrF % 2 === 0 ? 'wasser' : 'schlamm';   // FIX3: das erste Feld ist immer Wasser (Wunsch des Vaters)
+        const s = suche(i, 32, c.feld[art].laenge + 12);
         if (s === null) continue;
-        const seite = (nrF + (seed & 1)) % 2 === 0 ? 1 : -1;      // Feld deckt rund 70 % der Breite ab, die Seite wechselt: man kann (fast) ausweichen
-        const q0 = seite > 0 ? -halb + 0.6 : -halb * 0.4, q1 = seite > 0 ? halb * 0.4 : halb - 0.6;
-        felder.push({ art, s0: s, laenge: len, q0: Math.round(q0 * 100) / 100, q1: Math.round(q1 * 100) / 100 });
-        gesetzt.push({ s0: s - 12, s1: s + len + 12 }); zonen.push({ s0: s - 14, s1: s + len + 14 });
-        nrF++;
+        feldSetzen(art, s);
       }
+    }
+    // FIX3: Wasser auf JEDER Strecke: fand der eigene Abschnitt keine Stelle, wird die ganze Runde abgesucht (auch statt eines nicht platzierten Schlamms)
+    if (!felder.some((f) => f.art === 'wasser')) { const s = suche(-1, 32, c.feld.wasser.laenge + 12, von, bis); if (s !== null) feldSetzen('wasser', s); }
+    function feldSetzen(art, s) {
+      const len = c.feld[art].laenge;
+      const seite = (nrF + (seed & 1)) % 2 === 0 ? 1 : -1;      // die Seite wechselt: man kann ausweichen
+      const br = Math.min((art === 'wasser' ? c.feld.wasser.breite : 0.7) * breite, breite - 1.2);      // Breite des Feldes in m (Wasser 75 % der Fahrbahn); der Rest bleibt zum Ausweichen
+      const q0 = seite > 0 ? -halb + 0.6 : halb - 0.6 - br, q1 = q0 + br;
+      felder.push({ art, s0: s, laenge: len, q0: Math.round(q0 * 100) / 100, q1: Math.round(q1 * 100) / 100 });
+      gesetzt.push({ s0: s - 32, s1: s + len + 12 }); zonen.push({ s0: s - 34, s1: s + len + 14 });
+      nrF++;
     }
     if (!felder.length && !kisten.length) return null;
     zonen.forEach((z) => erg.zonen.push(z));
