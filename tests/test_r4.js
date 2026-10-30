@@ -3,8 +3,9 @@
 //  B) Motorrad/Standard bitgleich: Pipe-Fingerabdrücke und Pläne gegen tests/r4_referenz.json (aus dem Stand VOR R4), Motorrad-Pipe ohne Auto-Felder
 //  C) Auto in der Halfpipe: deterministisch, Wandfahrten/Höhe/Luft/Landung (Pendelschläge messen), vCap, Gas hält das Tempo, kein Steckenbleiben, mehrere Autos
 //  D) Looping → Magnet-Röhre: Fantasie 0 Loopings / ≥ 2 Röhren, ohne Option exakt wie vorher, Sperrzonen, KI fährt die Runde, Menü-Schalter, Hülle
+//  E) P5 Online loopMag: Raum-Prüfung (nur echtes true, nur Auto mit spass+zauber), Server baut Röhren, Browser-Strecke identisch, Standard bitgleich, Quelltext-Haken (online.js/main.js/Lobby)
 const fs = require('fs'), path = require('path');
-const { Simulation, laden, ladenMoto } = require('../server/simulation');
+const { Simulation, laden, ladenMoto, einstellungenPruefen } = require('../server/simulation');
 
 let fehler = 0, ok = 0;
 setTimeout(() => { console.log('FEHL Wächter: Test hängt (> 900 s) – Abbruch'); process.exit(3); }, 900000).unref();
@@ -186,6 +187,37 @@ function pipeLauf(strategie, v0, qEin, auto, opt) {
   const t2 = neu('fantasie', false, { gegner: 3, runden: 1, ohneMensch: true });
   pruefe(`D Fantasie mit Röhren statt Loopings: alle KI im Ziel ohne Resets, jede Röhre wird befahren (${zF.magnet.length} Röhren, ${magnet} Fahrten, ${stF.loopings.length} Loopings)`, t.sim.fertig && resets === 0 && stF.loopings.length === 0 && magnet >= zF.magnet.length * 2, `${(n / 60).toFixed(0)} s, Resets ${resets}, ${((Date.now() - t0) / 1000).toFixed(0)} s Rechenzeit`);
   pruefe('D Fantasie klassisch (Option aus) hat weiter 2 Loopings und keine Röhren aus Loopings', t2.st.loopings.length === 2 && !t2.st.spass.zauber.magnet.some((m) => m.ausLooping));
+}
+
+// ---------------------------------------------------------------- E) P5 Online loopMag
+{
+  const EP = (roh, moto) => einstellungenPruefen(roh, 1, moto === true);
+  const ohneKey = EP({ streckeId: 'fantasie', spass: true, zauber: true });
+  pruefe('E Raum-Prüfung: ohne loopMag kein Schlüssel; loopMag:false / "true" / 1 / null ebenfalls nicht', !('loopMag' in ohneKey) && [false, 'true', 1, null, 'ja', [], {}].every((v) => !('loopMag' in EP({ streckeId: 'fantasie', spass: true, zauber: true, loopMag: v }))));
+  pruefe('E Raum-Prüfung: nur echtes true mit spass UND zauber trägt loopMag:true ein', EP({ streckeId: 'fantasie', spass: true, zauber: true, loopMag: true }).loopMag === true && !('loopMag' in EP({ streckeId: 'fantasie', spass: true, zauber: false, loopMag: true })) && !('loopMag' in EP({ streckeId: 'fantasie', spass: false, zauber: true, loopMag: true })) && !('loopMag' in EP({ streckeId: 'fantasie', loopMag: true })));
+  pruefe('E Raum-Prüfung: Motorrad-Raum kennt loopMag nicht', !('loopMag' in EP({ streckeId: 'wiese', spass: true, zauber: true, loopMag: true }, true)));
+  pruefe('E Standard bitgleich: Einstellungen mit loopMag:false deep-gleich ohne Feld (Auto)', JSON.stringify(EP({ streckeId: 'fantasie', spass: true, zauber: true, loopMag: false })) === JSON.stringify(ohneKey));
+  const mk = (loopMag) => neu('fantasie', false, { gegner: 2, runden: 1, einst: loopMag === undefined ? {} : { loopMag } });
+  const a = mk(true), b = mk(), c0 = mk(false);
+  const Za = a.st.spass.zauber, Zb = b.st.spass.zauber;
+  pruefe(`E Server (loopMag online): 0 Loopings, ${Za.magnet.length} Röhren aus Loopings (Fantasie)`, a.sim.einstellungen.loopMag === true && a.st.loopings.length === 0 && Za.magnet.filter((m) => m.ausLooping).length >= 2);
+  pruefe('E Server ohne loopMag: 2 Loopings, keine Röhre aus Loopings, Schlüssel fehlt', b.st.loopings.length === 2 && !Zb.magnet.some((m) => m.ausLooping) && !('loopMag' in b.sim.einstellungen));
+  pruefe('E Server loopMag:false == ohne Feld (Plan, Strecke, Einstellungen deep-gleich)', JSON.stringify(c0.st.spass.zauber) === JSON.stringify(Zb) && JSON.stringify(c0.sim.einstellungen) === JSON.stringify(b.sim.einstellungen) && JSON.stringify(c0.st.loopings) === JSON.stringify(b.st.loopings));
+  const daten = R.trackCatalog.find((t) => t.id === 'fantasie');
+  const e = a.sim.einstellungen;
+  const welt = R.Strecke.weltName ? R.Strecke.weltName(daten, e.welt) : daten.weltStandard;
+  const sOptClient = { welt, variante: e.variante, hindernisMenge: e.hindernisMenge, spass: true, zauber: true };
+  if (sOptClient.zauber === true && e.loopMag === true) sOptClient.loopingMagnet = true;
+  const stC = new R.Strecke(daten, sOptClient);
+  const rohr = (st) => st.spass.zauber.magnet.map((m) => [m.s0, m.s1, m.laenge, m.rampe, !!m.ausLooping].join(':')).join('|');
+  pruefe(`E Browser = Server: gleiche Strecke (0 Loopings, ${stC.spass.zauber.magnet.length} Röhren, Pläne und Zonen deep-gleich)`, stC.loopings.length === 0 && rohr(stC) === rohr(a.st) && JSON.stringify(stC.spass.zauber) === JSON.stringify(Za) && JSON.stringify(stC.spass.liste) === JSON.stringify(a.st.spass.liste) && stC.hindernisse.length === a.st.hindernisse.length);
+  const sOptKlassisch = Object.assign({}, sOptClient); delete sOptKlassisch.loopingMagnet;
+  pruefe('E Browser klassisch (kein loopMag vom Server) = Server klassisch', JSON.stringify(new R.Strecke(daten, sOptKlassisch).spass.zauber) === JSON.stringify(Zb));
+  const lauf = (x) => { let h = 2166136261; for (let i = 0; i < 600; i++) { x.sim.schritt(); x.S.fahrzeuge.forEach((f) => { h = hash(hash(h, f.vehicle.x), f.vehicle.z); }); } return h; };
+  const h1 = lauf(a), h2 = lauf(mk(true));
+  pruefe('E Server deterministisch mit loopMag (600 Ticks, 2 Läufe gleich)', h1 === h2 && h1 !== 0);
+  const q = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  pruefe('E Haken: online.js sendet + übernimmt, main.js baut, simulation.js prüft + baut, Lobby-Zeile, Protokoll', /loopMag: true/.test(q('src/net/online.js')) && /loopMag: e\.loopMag === true/.test(q('src/net/online.js')) && /e\.loopMag === true\) sOpt\.loopingMagnet = true/.test(q('src/main.js')) && /r\.loopMag === true && moto !== true/.test(q('server/simulation.js')) && /sOpt\.loopingMagnet = true/.test(q('server/simulation.js')) && /'loopmag'/.test(q('src/spass/spassOnlineS8.js')) && /loopMag/.test(q('server/PROTOKOLL.md')));
 }
 
 console.log(`\n${ok} OK, ${fehler} FEHL`);

@@ -566,7 +566,7 @@
 
   // ---------------------------------------------------------------- Spiel.physikSchritt (Browser + Server)
   const P = R.Spiel.prototype;
-  // R4: nur Rennen, die der Spieler offline startet (streckeAufbauen), bauen Loopings als Magnet-Röhre – Online (streckeSzeneBauen direkt) und der Server bleiben klassisch (P5 folgt nach R2)
+  // R4: Rennen, die der Spieler offline startet (streckeAufbauen), bauen Loopings als Magnet-Röhre nach seinem Menü-Schalter; online (streckeSzeneBauen direkt) entscheidet der Raum-Schalter loopMag (P5: main.js/online.js/simulation.js) – lokal nie
   if (!P._loopMagHuelle && P.streckeAufbauen) {
     P._loopMagHuelle = true;
     const aufbauen = P.streckeAufbauen;

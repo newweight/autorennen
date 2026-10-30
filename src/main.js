@@ -346,6 +346,7 @@
       const zufallOpt = R.ZufallSpiel ? R.ZufallSpiel.opt(this, daten) : undefined;
       const sOpt = zufallOpt ? { welt, variante, hindernisMenge: e.hindernisMenge, zufall: zufallOpt } : { welt, variante, hindernisMenge: e.hindernisMenge };
       if (e.spass !== false && R.Spass) { sOpt.spass = true; if (R.SpassZauber && R.SpassZauber.an()) sOpt.zauber = true; }   // S6: Fahr-Zauber (Menü „✨ Fahr-Zauber“, Standard an)
+      if (sOpt.zauber === true && e.loopMag === true) sOpt.loopingMagnet = true;      // R4 P5: nur online (Raum-Einstellung vom Server); offline setzt die Hülle um streckeAufbauen die Option, e.loopMag fehlt dort
       // S1: Trampolin/Kanone (Menü „Spaß-Elemente“, Standard an; aus = keine Option = bitgleich wie vorher)
       const strecke = new R.Strecke(daten, sOpt);
       this.strecke = strecke;

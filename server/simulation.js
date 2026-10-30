@@ -206,6 +206,8 @@ function einstellungenPruefen(roh, spielerAnzahl, moto) {
   }
   // R3 (additiv): Raum-Schalter Tricks (Auto: Fassrolle/Schraube der Menschen + Computer-Tricks, Motorrad: Computer-Tricks); nur ein echtes true trägt den Schlüssel ein (sonst bitgleich wie vorher)
   if (r.tricks === true) erg.tricks = true;
+  // R4 P5 (additiv): Loopings als Magnet-Röhre (`loopMag`, nur Autorennen, braucht Spaß-Elemente + Fahr-Zauber); nur ein echtes true trägt den Schlüssel ein (sonst bitgleich wie vorher)
+  if (r.loopMag === true && moto !== true && erg.spass === true && erg.zauber === true) erg.loopMag = true;
   // R2 (additiv): Modus-Wahl (Kurz-Level, K.-o., Freie Fahrt), Geist, Dino – ohne R2-Wahl kommt `erg` unverändert zurück (bitgleich wie vorher)
   return R.SpassR2 ? R.SpassR2.einstellungen(erg, R.SpassR2.rohVorher(r00), moto === true ? 'motorrad' : 'auto', spielerAnzahl) : erg;
 }
@@ -231,7 +233,7 @@ class Simulation {
     this.zufallSeed = e.zufall === true && R.Zufall ? R.Zufall.hash32(seed, 0x5a31, 1, 7) : null;
     const sOpt = { welt, variante: e.variante, hindernisMenge: e.hindernisMenge };
     if (this.zufallSeed !== null) sOpt.zufall = { seed: this.zufallSeed };
-    if (e.spass === true) { sOpt.spass = true; if (e.zauber === true) sOpt.zauber = true; }
+    if (e.spass === true) { sOpt.spass = true; if (e.zauber === true) { sOpt.zauber = true; if (e.loopMag === true) sOpt.loopingMagnet = true; } }      // R4 P5: loopMag → R.Spass.plan baut Röhren statt Loopings (wie der Browser)
     const strecke = new R.Strecke(daten, sOpt);
     // Wetter auflösen (Zufall nur hier, mit Seed) → konkrete Werte gehen an alle Browser (gleiche Umwelt-Physik)
     const wa = R.Wetter.aufloesen({ jahreszeit: e.jahreszeit, wetter: e.wetter, wind: { staerke: e.windStaerke, richtung: 'zufall' },

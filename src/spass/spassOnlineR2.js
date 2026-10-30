@@ -61,7 +61,7 @@
       const m = einst(this).modus || 'rennen';
       const r2 = ['r2modus'];       // R2-FIX: Spielart + Zubehör stehen ganz oben in der Host-Spalte (vor „Strecke“), die Fokus-Reihenfolge folgt
       if (m === 'kurz') r2.push('r2level'); else if (m === 'frei') r2.push('r2frei'); else if (m === 'rennen') r2.push('r2geist', 'r2dino');
-      let i = z.indexOf('strecke'); if (i < 0) i = z.length;
+      let i = z.indexOf('spass'); if (i < 0) i = z.indexOf('strecke'); if (i < 0) i = z.length;      // R4-FIX: Spielart steht vor den übrigen Spaß-Zeilen (Spaß-Elemente, Fahr-Zauber, Loopings, Tricks)
       z.splice(i, 0, ...r2);
     }
     return z;

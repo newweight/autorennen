@@ -42,7 +42,11 @@
   const zeilen = B.zeilen;
   B.zeilen = function () {
     const z = zeilen.apply(this, arguments);
-    if (this.istHost && S.serverR3 && z.indexOf('r3tricks') < 0) z.push('r3tricks');
+    if (this.istHost && S.serverR3 && z.indexOf('r3tricks') < 0) {
+      // R4-FIX: „Tricks“ steht oben bei den Spaß-Zeilen (nach Spaß-Elemente / Fahr-Zauber / Loopings, vor „Strecke“); ohne diese Zeilen vor „Strecke“, sonst hinten
+      let i = Math.max(z.indexOf('loopmag'), z.indexOf('zauber'), z.indexOf('spass')); i = i >= 0 ? i + 1 : z.indexOf('strecke');
+      if (i < 0) z.push('r3tricks'); else z.splice(i, 0, 'r3tricks');
+    }
     return z;
   };
   const werte = B.werte;
@@ -71,7 +75,7 @@
         const z = this.zeilen(), w = this.werte('r3tricks');
         const reihe = `<div class="on-zeile${z.indexOf('r3tricks') === this.fokus ? ' fokus' : ''}" data-a="fokus:${z.indexOf('r3tricks')}"><div class="on-label">${LABEL}</div><div class="on-werte">` +
           w.liste.map((x) => `<span class="pille${x.k === w.wert ? ' aktiv' : ''}" data-a="wert:r3tricks:${esc(x.k)}">${esc(x.text)}</span>`).join('') + '</div></div>' + (an ? `<div class="on-info on-r3">${esc(hinweis())}</div>` : '');
-        h = h.replace('<div class="on-fest">', reihe + '<div class="on-fest">');
+        h = R.SpassOnlineS8 && R.SpassOnlineS8.vorStrecke ? R.SpassOnlineS8.vorStrecke(h, reihe) : h.replace('<div class="on-fest">', reihe + '<div class="on-fest">');      // R4-FIX: oben direkt vor „Strecke“
       } else if (an) {
         h = h.replace(/(<div class="on-zusammen">[\s\S]*?)(<\/div>)/, `$1<br>${esc(LABEL + ': an')}$2`);
       }
