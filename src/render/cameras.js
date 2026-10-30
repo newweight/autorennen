@@ -104,14 +104,7 @@
         this.kamera.lookAt(f.x - Math.sin(h) * bw, f.y + c.hoehe - 0.5, f.z - Math.cos(h) * bw);
         // lookAt baut die Drehung mit up = (0,1,0) (Horizont waagerecht); danach nur die gewollte Wankneigung als Roll
         // um die Blickachse (YXZ: z = reiner Roll, unabhängig von der Fahrtrichtung)
-        // FIX3 (nur Motorrad): im Flug schief hängende Kamera vermeiden – Roll weich auf 25 % (0,15 s ein, 0,5 s zurück)
-        let rollF = 1;
-        if (window.MOTORRAD === true) {
-          const sp = R.spiel, fz = sp && sp.fahrzeuge && sp.fahrzeuge.find((x) => x.vehicle === this.ziel), fl = fz && fz.flug, luft = !!(fl && (fl.aktiv || fl.gleit));
-          this._luftW = (this._luftW === undefined ? 0 : this._luftW) + ((luft ? 1 : 0) - (this._luftW || 0)) * (1 - Math.exp(-(luft ? 7 : 2) * dt));
-          rollF = 1 - 0.75 * this._luftW;
-        }
-        this.kamera.rotation.z = f.neigung * 0.5 * rollF;
+        this.kamera.rotation.z = f.neigung * 0.5;
         this._wackelnAnwenden(dt);
         return;
       }
