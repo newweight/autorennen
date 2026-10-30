@@ -259,5 +259,51 @@ function pipeLauf(strategie, v0, qEin, auto, opt) {
   pruefe('G Streckentext: 2 → „2 Magnet-Röhren“, 1 → „1 Magnet-Röhre“; Text ohne Loopings unverändert', /2 Magnet-Röhren/.test(t) && L('1 Loopings') === '1 Magnet-Röhre' && L('Bälle, Wasserstrahl') === 'Bälle, Wasserstrahl');
 }
 
+// ---------------------------------------------------------------- H) PRUEF-FIX 4: Landung aus dem Flug hoch an der Halfpipe-Wand
+{
+  const pa = R.config.spass.zauber.pipeAuto;
+  // Flug direkt über der Pipe-Wand starten (Seite, Abstand d von der flachen Mitte, Höhe h über der Wand, Heading-Versatz gier), danach 8 s mit Gas simulieren und die erste Landung messen
+  function landung(side, d, h, gier) {
+    const t = neu('autoarena', false, { runden: 99 }), sp = t.st.spline, pe = t.st.spass.zauber.pipe, f = t.f, v = t.v;
+    const s = (pe.s0 + pe.s1) / 2 - 40, pt = sp.punktBei(s), q = side * (pe.qF + d), x = pt.x + pt.nx * q, z = pt.z + pt.nz * q;
+    v.setzen(x, z, R.headingAus(pt.tx, pt.tz) + gier); v.vLaengs = 20; f.index = -1;
+    t.S.rennen.verfolgungSetzen(t.S.rennen.teilnehmer[0], x, z, s); t.sim.schritt();
+    const fz = f.flug, bod = t.st.hoeheAn(x, z, fz.index);
+    v.x = x; v.z = z; v.vLaengs = 20; v.vQuer = 0; v.imFlug = true;
+    Object.assign(fz, { aktiv: true, pipe: null, vy: 0, y: bod + h, yVorher: bod + h, t: 0, sprungGemeldet: true, startX: x, startZ: z }); fz.fluege++;
+    const r = { landeD: null, eingefangen: false, hang: 0, hangMax: 0, nan: false, luftNach: 0, ds3: 0, yAb: [] };
+    let nL = 0, sL = 0;
+    for (let i = 0; i < 480; i++) {
+      t.sim.eingabeSetzen(0, { gas: 1, bremse: 0, lenkung: 0 }); t.sim.schritt();
+      if (!isFinite(v.x) || !isFinite(fz.y)) { r.nan = true; break; }
+      const n = t.st.abfrage(v.x, v.z, f.index), a = sp.differenzS(n.s, pe.s0), imRohr = a > 3 && a < pe.s1 - pe.s0 - 3, y = fz.aktiv ? fz.y : t.st.hoeheAn(v.x, v.z, f.index);
+      if (r.landeD === null && !fz.aktiv) { r.landeD = Math.abs(n.seitenabstand) - pe.qF; nL = i; sL = n.s; }
+      if (r.landeD === null) continue;
+      if (i <= nL + 3 && fz.pipe) r.eingefangen = true;
+      if (imRohr && !fz.aktiv && !fz.pipe && y > 1 && Math.abs(n.seitenabstand) - pe.qF <= pe.r) { r.hang++; r.hangMax = Math.max(r.hangMax, y); }
+      if (fz.aktiv && !fz.pipe && i > nL + 3) r.luftNach++;
+      if (i === nL + 30 || i === nL + 60) r.yAb.push(y);
+      if (i === nL + 180) r.ds3 = n.s - sL;
+    }
+    return r;
+  }
+  const fall = [];
+  for (const side of [1, -1]) for (const d of [3, 5, 5.6, 6.2]) for (const h of [0.5, 3]) for (const gier of [-0.3, 0, 0.3]) fall.push([side, d, h, gier, landung(side, d, h, gier)]);
+  const hoch = fall.filter((x) => x[4].landeD !== null && x[4].landeD > pa.einfangMax * pa.r && x[4].landeD <= 0.99 * pa.r);
+  pruefe(`H Landung hoch an der Wand (${(pa.einfangMax * pa.r).toFixed(2)}–${pa.r} m von der Mitte, ${hoch.length} Flüge, beide Seiten, 0,5/3 m Höhe, 3 Richtungen): alle werden sofort eingefangen`, hoch.length >= 20 && hoch.every((x) => x[4].eingefangen), `${hoch.filter((x) => x[4].eingefangen).length}/${hoch.length}`);
+  pruefe('H … sie hängen nicht an der Wand (höchstens 3 Bilder über 1 m ohne Pendel-Physik) und springen nicht erneut in die Luft', hoch.every((x) => x[4].hang <= 3 && x[4].luftNach === 0), 'größte Hängezeit ' + Math.max(...hoch.map((x) => x[4].hang)) + ' Bilder');
+  pruefe('H … sie rutschen ab: 0,5 s und 1 s nach der Landung tiefer als 0,5 s nach der Landung, höchster Punkt ≤ 7 m', hoch.every((x) => x[4].yAb[1] < x[4].yAb[0] + 0.05 && x[4].hangMax <= 7.001));
+  pruefe('H … und fahren danach weiter (≥ 30 m in 3 s), nie NaN, nie hinter der Pipe verloren', fall.every((x) => !x[4].nan && x[4].ds3 > 30));
+  const gleich = fall.filter((x) => x[0] === 1).every((x, i) => { const sp = fall.find((y) => y[0] === -1 && y[1] === x[1] && y[2] === x[2] && y[3] === -x[3])[4], a = x[4]; return Math.abs(sp.landeD - a.landeD) < 1e-6 && sp.eingefangen === a.eingefangen && sp.hang === a.hang; });
+  pruefe('H Spiegelung: linke und rechte Wand verhalten sich gleich', gleich);
+  // Gegenprobe: mit der alten Schwelle (einfangLand = einfangMax) bliebe es hängen – der Test misst also wirklich das Problem
+  const alt = pa.einfangLand; pa.einfangLand = pa.einfangMax;
+  const ra = landung(1, 5, 3, -0.3); pa.einfangLand = alt;
+  pruefe('H Gegenprobe: ohne den Fix (alte Schwelle) kein Einfangen und > 30 Bilder an der Wand', ra.landeD > pa.einfangMax * pa.r && !ra.eingefangen && ra.hang > 30, `hängt ${ra.hang} Bilder bis ${ra.hangMax.toFixed(1)} m`);
+  // Landung aus der Pipe-Luft (normaler Pumpsprung) fängt weiter ein; Tempo bleibt gedeckelt
+  const pump = pipeLauf('pump', 24, 9);
+  pruefe('H Pumpsprung landet weiter in der Pipe, Tempo im Rohr ≤ vCap', pump.luft >= 1 && pump.fertig && pump.vMaxRohr <= pa.vCap + 1e-9);
+}
+
 console.log(`\n${ok} OK, ${fehler} FEHL`);
 process.exit(fehler ? 1 : 0);

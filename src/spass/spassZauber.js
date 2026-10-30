@@ -31,7 +31,7 @@
     loopMag: { laenge: 90, rampe: 24, rand: 4 },      // R4: Looping → Magnet-Röhre (Menü „🌀 Loopings“, Standard Klassisch): Röhre um die Mitte des Loopings; rand = Abstand zu anderen Elementen
     pipe: { s0: 800, s1: 872, qF: 6, r: 6, rampe: 14, wMin: 5, pumpe: 2.5, vyMax: 11, reibung: 0.3, abstandStart: 0.08, vMin: 4, hopInnen: 2.0 },
     // R4: Halfpipe der Auto-Stunt-Arena (src/spass/spassArena.js, Eintrag mit stuntBereich: true). Länger und breiter als die Motorrad-Pipe; vCap = Höchsttempo im Rohr (m/s).
-    pipeAuto: { s0: 700, s1: 950, qF: 6, r: 7, rampe: 22, wMin: 5, pumpe: 2.5, vyMax: 11, reibung: 0.03, abstandStart: 0.08, vMin: 4, hopInnen: 2.0, vCap: 26, einfangMax: 0.75, reMin: 0.5 },
+    pipeAuto: { s0: 700, s1: 950, qF: 6, r: 7, rampe: 22, wMin: 5, pumpe: 2.5, vyMax: 11, reibung: 0.03, abstandStart: 0.08, vMin: 4, hopInnen: 2.0, vCap: 26, einfangMax: 0.75, einfangLand: 0.995, reMin: 0.5 },
     pipeGeo: { zOff: 1034, xMin: 150, xMax: 250 },      // Lage der Pipe-Gerade im Stadion (z = s − zOff, x im Streifen xMin..xMax) – gilt für Stunt-Park und Stunt-Arena
     extras: { n: 3, radius: 2.6, erneuerung: 12, vorher: 25,
       riese: { zeit: 8, faktor: 2.1, vMax: 0.9, besch: 0.8, schiebe: 0.09 },
@@ -318,10 +318,13 @@
     const c = pipeC(e), sp = st.spline, z = zz(fz);
     const side = q >= 0 ? 1 : -1, w = pipeW(e, nah.s - e.s0), re = e.r * w;
     if (re < 0.4) return null;
-    if (e.auto && (re < e.r * c.reMin || Math.abs(q) - e.qF > re * c.einfangMax)) return null;      // R4: Auto wird erst eingefangen, wenn die Rundung unter ihm schon hoch genug ist (sonst Katapult am Rampenanfang); Motorrad unverändert
+    // PRUEF-FIX 4: Landet das Auto aus dem Flug hoch an der Wand (jenseits der Einfangschwelle, aber noch auf der Rundung), fing es früher niemand: es klebte mit normaler Fahrphysik an der bis zu 90° steilen Wand,
+    // bis die Pipe zu Ende war. Jetzt wird die Landung bis fast zur Kante (einfangLand) eingefangen und rutscht aus der Ruhe (keine Wandgeschwindigkeit nach außen) per Pendel sauber ab.
+    const land = e.auto === true && z.pipeLand === true;
+    if (e.auto && (re < e.r * c.reMin || Math.abs(q) - e.qF > re * (land ? c.einfangLand : c.einfangMax))) return null;      // R4: Auto wird erst eingefangen, wenn die Rundung unter ihm schon hoch genug ist (sonst Katapult am Rampenanfang); Motorrad unverändert
     const pt = sp.punktBei(nah.s), vo = dt > 0 ? ((v.x - xAlt) * pt.nx + (v.z - zAlt) * pt.nz) / dt * side : 0;
     const d = Math.abs(q) - e.qF, phi0 = Math.asin(klemme(d / re, 0, 0.99));
-    fz.pipe = { e, side, phi: phi0, w: Math.max(vo, c.wMin) / re, s: nah.s, vF: e.vCap ? Math.min(v.vLaengs, e.vCap) : v.vLaengs, sAus: 0 };
+    fz.pipe = { e, side, phi: phi0, w: (land ? Math.min(vo, 0) : Math.max(vo, c.wMin)) / re, s: nah.s, vF: e.vCap ? Math.min(v.vLaengs, e.vCap) : v.vLaengs, sAus: 0 };
     fz.index = nah.index;
     fz.aktiv = true; fz.rampe = null; fz.rampenH = 0; fz.vy = 0; fz.y = st.hoeheAn(v.x, v.z, nah.index); fz.yVorher = fz.y; fz.t = 0; fz.sprungGemeldet = true;
     fz.startX = v.x; fz.startZ = v.z; fz.nicken = 0; fz.nickenVorher = 0;
@@ -375,7 +378,10 @@
     const pe = za.pipe;
     if (pe) {
       const a = sp.differenzS(sNeu, pe.s0);
-      if (a > 3 && a < pe.s1 - pe.s0 - 3 && Math.abs(q) > pe.qF + pipeC(pe).abstandStart && v.vLaengs >= pipeC(pe).vMin) return pipeStart(fz, v, st, nah, pe, q, sAlt, xAlt, zAlt, dt);
+      let erg = null;
+      if (a > 3 && a < pe.s1 - pe.s0 - 3 && Math.abs(q) > pe.qF + pipeC(pe).abstandStart && v.vLaengs >= pipeC(pe).vMin) erg = pipeStart(fz, v, st, nah, pe, q, sAlt, xAlt, zAlt, dt);
+      if (pe.auto && z.pipeLand) z.pipeLand = false;      // PRUEF-FIX 4: das Landungs-Merkmal gilt nur für diesen einen Schritt (nur Auto-Arena; Motorrad unverändert)
+      return erg;
     }
     return null;
   }
@@ -512,6 +518,8 @@
         if (fz.gleit && strecke && strecke.spass) return gleitSchritt(fz, vehicle, strecke, steuerung, dt);
         if (fz.schiene && strecke && strecke.spass) return schieneSchritt(fz, vehicle, strecke, steuerung, dt);
         if (fz.pipe && strecke && strecke.spass) return pipeSchritt(fz, vehicle, strecke, steuerung, dt);
+        const zp = strecke && strecke.spass && strecke.spass.zauber && strecke.spass.zauber.pipe;
+        if (zp && zp.auto) { const erg = flugSchritt.apply(this, arguments); if (!fz.aktiv) zz(fz).pipeLand = true; return erg; }      // PRUEF-FIX 4: Landung in der Auto-Halfpipe merken (nachSchritt fängt sie ein)
       }
       return flugSchritt.apply(this, arguments);
     };
