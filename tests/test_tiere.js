@@ -47,6 +47,7 @@ function pfadS(t) { return [t.s, t.s + t.vs * (Math.abs(t.qZiel - t.anfangQ) / M
       const nm = `${daten.id}${w ? '/' + w : ''}${va ? '/' + va : ''}`, L = st.spline.laenge;
       const arten = Tiere.artenFuer(st);
       if (daten.id === "formel1") { if (arten.length) keineArt.push(nm + " (Formel 1 soll keine Tiere haben)"); }   // v29 F3
+      else if (/^(mond|unterwasser|regenbogenland)/.test(nm)) { /* 30.10.: S5-Welten Mond/Unterwasser/Regenbogenland haben bewusst keine Tiere */ }
       else if (!arten.length || !arten.every(a => ARTEN[a])) keineArt.push(nm);
       const erwartet = { wiese: 'kuh', wald: 'reh', alpen: 'baer', dino: 'dino', wueste: 'kamel', fantasie: 'einhorn' }[daten.id];
       if (erwartet && !arten.includes(erwartet)) artFalsch.push(nm + ' ' + arten.join('+'));
