@@ -22,7 +22,11 @@
       '.m-aktionen.m-fest{flex-wrap:nowrap;gap:.5em}.m-aktionen.m-fest .start-knopf{font-size:1.15em;padding:.25em .8em;min-width:0;flex:1 1 auto;white-space:nowrap}' +
       '.m-aktionen.m-fest .knopf.klein{font-size:.78em;padding:.25em .6em;white-space:nowrap}.m-aktionen.m-fest .knopf kbd{display:none}' +
       '@media (max-height:720px){.m-inhalt.m-scroll h1{font-size:1.3em;margin-bottom:.2em}.m-inhalt.m-scroll .m-start{font-size:.86em}' +
-      '.m-inhalt.m-scroll .karte.gross{padding:.35em .5em}.m-inhalt.m-scroll .karte.gross .emoji{font-size:2.2em}.m-inhalt.m-scroll .karte.gross .karten-sub{font-size:.8em}.m-inhalt.m-scroll .reihe{gap:.9em}}';
+      '.m-inhalt.m-scroll .karte.gross{padding:.35em .5em}.m-inhalt.m-scroll .karte.gross .emoji{font-size:2.2em}.m-inhalt.m-scroll .karte.gross .karten-sub{font-size:.8em}.m-inhalt.m-scroll .reihe{gap:.9em}' +
+      // R4-FIX: im Modus-Schritt (Klasse modus-reihe, höhere Spezifität als styles.css) die großen Karten flacher, damit „🎪 Stunt-Arena“ bei 1100×650 ohne Scrollen ganz im Bild steht
+      '.m-inhalt.m-scroll .reihe.modus-reihe .karte.gross{padding:.3em .5em}.m-inhalt.m-scroll .reihe.modus-reihe .karte.gross .emoji{font-size:2.1em}.m-inhalt.m-scroll .reihe.modus-reihe .karte.gross .karten-sub{font-size:.8em;margin-top:.1em}' +
+      '.m-inhalt.m-scroll .reihe.modus-reihe .modus-pillen{margin-top:.1em;gap:.15em}.m-inhalt.m-scroll .reihe.modus-reihe .modus-pillen .pille{font-size:.78em;padding:.02em .5em}' +
+      '.m-inhalt.m-scroll .s4-reihe{margin-top:.3em;gap:.5em}}';
     document.head.appendChild(s);
   }
 

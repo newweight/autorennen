@@ -59,10 +59,14 @@
     const z = zeilen.apply(this, arguments);
     if (this.istHost && S.serverR2) {
       const m = einst(this).modus || 'rennen';
-      const r2 = ['r2modus'];       // R2-FIX: Spielart + Zubehör stehen ganz oben in der Host-Spalte (vor „Strecke“), die Fokus-Reihenfolge folgt
-      if (m === 'kurz') r2.push('r2level'); else if (m === 'frei') r2.push('r2frei'); else if (m === 'rennen') r2.push('r2geist', 'r2dino');
-      let i = z.indexOf('spass'); if (i < 0) i = z.indexOf('strecke'); if (i < 0) i = z.length;      // R4-FIX: Spielart steht vor den übrigen Spaß-Zeilen (Spaß-Elemente, Fahr-Zauber, Loopings, Tricks)
-      z.splice(i, 0, ...r2);
+      // R2-FIX: Spielart + Level/Dauer stehen ganz oben in der Host-Spalte, die Fokus-Reihenfolge folgt.
+      // R4-FIX: davor die übrigen Spaß-Zeilen (Spaß-Elemente, Fahr-Zauber, Loopings, Tricks) direkt unter der Spielart; Geist/Dino-Freund (nur Rennen) danach, kurz vor „Strecke“ (kleine Fenster erreichen Tricks sofort)
+      const oben = ['r2modus'], spaet = [];
+      if (m === 'kurz') oben.push('r2level'); else if (m === 'frei') oben.push('r2frei'); else if (m === 'rennen') spaet.push('r2geist', 'r2dino');
+      let i = z.indexOf('spass'); if (i < 0) i = z.indexOf('strecke'); if (i < 0) i = z.length;
+      z.splice(i, 0, ...oben);
+      let j = z.indexOf('strecke'); if (j < 0) j = z.length;
+      z.splice(j, 0, ...spaet);
     }
     return z;
   };
@@ -110,10 +114,13 @@
           return `<div class="on-zeile${z.indexOf(id) === this.fokus ? ' fokus' : ''}" data-a="fokus:${z.indexOf(id)}"><div class="on-label">${LABEL[id]}</div><div class="on-werte">` +
             w.liste.map((x) => `<span class="pille${x.k === w.wert ? ' aktiv' : ''}"${x.titel ? ` title="${esc(x.titel)}"` : ''} data-a="wert:${id}:${esc(x.k)}">${esc(x.text)}</span>`).join('') + '</div></div>';
         };
-        const t = z.filter((id) => ZEILEN.indexOf(id) >= 0).map(reihe).join('') + (hint ? `<div class="on-info on-r2">${esc(hint)}</div>` : '');
+        const SPAET = ['r2geist', 'r2dino'], info = hint ? `<div class="on-info on-r2">${esc(hint)}</div>` : '', rennen = (e.modus || 'rennen') === 'rennen';
+        const t = z.filter((id) => ZEILEN.indexOf(id) >= 0 && SPAET.indexOf(id) < 0).map(reihe).join('') + (rennen ? '' : info);
+        const t2 = z.filter((id) => SPAET.indexOf(id) >= 0).map(reihe).join('') + (rennen ? info : '');
         const kopf = /<h3>⚙️ Rennen \(du bist der Host\)<\/h3>/;
         if (kopf.test(h)) h = h.replace(kopf, (k) => k + t);        // R2-FIX: nach oben (direkt unter die Überschrift)
         else h = h.replace('<div class="on-fest">', t + '<div class="on-fest">');
+        if (t2) h = R.SpassOnlineS8 && R.SpassOnlineS8.vorStrecke ? R.SpassOnlineS8.vorStrecke(h, t2) : h.replace('<div class="on-fest">', t2 + '<div class="on-fest">');      // R4-FIX: Geist/Dino direkt vor „Strecke“ (nach den Spaß-Zeilen)
       } else if (hint) {
         h = h.replace(/(<div class="on-zusammen">[\s\S]*?)(<\/div>)/, `$1<br>${esc(hint)}$2`);
       }

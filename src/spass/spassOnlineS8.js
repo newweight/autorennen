@@ -46,10 +46,38 @@
   const loopMagDa = () => window.MOTORRAD !== true && !!(R.SpassZauber && R.SpassZauber.loopMagSetzen);
   /** R4-FIX: Zeilen-HTML direkt VOR die Zeile „Strecke“ setzen (Host-Spalte oben); ohne diese Zeile (fremdes Layout) wie früher vor `on-fest`. */
   function vorStrecke(h, html) {
-    const m = /<div class="on-zeile[^"]*" data-a="fokus:\d+"><div class="on-label">🗺️ Strecke<\/div>/.exec(h);
+    const m = /<div class="on-zeile[^"]*" data-a="fokus:\d+"><div class="on-label">(?:🗺️ Strecke|👻 Geist|🦖 Dino-Freund)<\/div>/.exec(h);      // erste dieser Zeilen (Geist/Dino setzt R2 vor „Strecke“)
     if (m) return h.slice(0, m.index) + html + h.slice(m.index);
     return h.replace('<div class="on-fest">', html + '<div class="on-fest">');
   }
+  // R4-FIX: Die Spalten der Lobby waren `overflow: hidden` – in kleinen Fenstern (844×390) kam man an die unteren Zeilen weder mit Rad noch mit der Tastatur heran.
+  // Jetzt scrollen sie senkrecht (dünne Leiste), die Zeichnung merkt sich die Scroll-Lage, und ↑/↓ holen die Fokus-Zeile in die Spalte.
+  try {
+    if (typeof document !== 'undefined' && !document.getElementById('r4-lobby-scroll')) {
+      const st = document.createElement('style'); st.id = 'r4-lobby-scroll';
+      st.textContent = '.online .on-einst, .online .on-mitte { overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.35) transparent; overscroll-behavior: contain; }';
+      document.head.appendChild(st);
+    }
+  } catch (err) { /* nur Optik */ }
+  const zeichnen = B.zeichnen;
+  B.zeichnen = function () {
+    const lage = {};
+    try { if (this.wurzel) ['.on-einst', '.on-mitte'].forEach((s) => { const e = this.wurzel.querySelector(s); if (e) lage[s] = e.scrollTop; }); } catch (err) { /* egal */ }
+    const r = zeichnen.apply(this, arguments);
+    try {
+      if (this.wurzel && this.ansicht === 'lobby') {
+        Object.keys(lage).forEach((s) => { const e = this.wurzel.querySelector(s); if (e) e.scrollTop = lage[s]; });
+        if (this._r4Fokus === undefined) this._r4Fokus = this.fokus;      // erste Zeichnung der Lobby: nichts verschieben
+        if (this._r4Fokus !== this.fokus) {       // Fokus hat sich geändert (Pfeiltaste/Klick): Zeile ganz in die Spalte holen
+          this._r4Fokus = this.fokus;
+          const f = this.wurzel.querySelector('.on-zeile.fokus'), sp = f && f.closest('.on-spalte');
+          if (f && sp) { const a = sp.getBoundingClientRect(), b = f.getBoundingClientRect(); if (b.bottom > a.bottom - 2) sp.scrollTop += b.bottom - a.bottom + 6; else if (b.top < a.top + 2) sp.scrollTop -= a.top - b.top + 6; }
+        }
+      }
+      else this._r4Fokus = undefined;
+    } catch (err) { /* egal */ }
+    return r;
+  };
   const zeilen = B.zeilen;
   B.zeilen = function () {
     const z = zeilen.apply(this, arguments);
