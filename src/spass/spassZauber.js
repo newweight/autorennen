@@ -236,9 +236,19 @@
     st._pipeEin = true;
     const proto = Object.getPrototypeOf(st), o = proto.hoeheAn, sp = st.spline, geo = e.geo || C().pipeGeo, zOff = geo.zOff, xMin = geo.xMin, xMax = geo.xMax;
     const z0 = e.s0 - zOff - 2, z1 = e.s1 - zOff + 2;
+    // R4 (nur Auto-Arena): Das Asphaltband hat je Splinepunkt nur zwei Randpunkte; bei 40 m Breite lägen sie oben auf den Bänken (Höhe = Radius) und das Band wäre ein flacher Deckel über der Pipe,
+    // der Auto und Bänke verdeckt. Darum nur für die Darstellung: Asphalt/Rand im Pipe-Bereich so breit wie die flache Mitte (2·qF + 0,6). Physik/Breite der Strecke bleiben unverändert.
+    if (e.auto && st._breiteGeo) {
+      const bg = st._breiteGeo, sA = e.s0, sB = e.s1;
+      st._breiteGeo = function (i, sx) { const b = bg.call(this, i, sx); return sx >= sA && sx <= sB ? Math.min(b, 2 * e.qF + 0.6) : b; };
+    }
+    if (e.auto && typeof st.bauen === 'function') {       // R4 (Auto-Arena): Boden-/Straßengitter ohne Profil bauen (grobe 10-m-Felder lägen sonst als Hügel über dem Pipe-Boden); die Bänke zeichnet spassZauberUI (HalfpipeBanken) in voller Höhe darüber
+      const bauen = st.bauen;
+      st.bauen = function () { this._pipeAus = true; try { return bauen.apply(this, arguments); } finally { this._pipeAus = false; } };
+    }
     st.hoeheAn = function (x, z, idx) {
       const y = o.call(this, x, z, idx);
-      if (z < z0 || z > z1 || x < xMin || x > xMax) return y;
+      if (this._pipeAus || z < z0 || z > z1 || x < xMin || x > xMax) return y;
       const s = z + zOff, p = sp.punktBei(s), q = (x - p.x) * p.nx + (z - p.z) * p.nz;
       return y + pipeProfil(e, s, q);
     };

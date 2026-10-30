@@ -101,9 +101,10 @@ def arena(p):
     pruefe('Arena: Halfpipe gebaut (Fahr-Zauber erzwungen, Spieler-Einstellung „aus“ bleibt), 2 Schanzen, Szene-Gruppe da', bool(info['pipe']) and info['pipe']['auto'] and info['gruppe'] and info['zauberAus'] and info['schanzen'] == 2, json.dumps(info['pipe']))
     bild(pg, 'arena_start.png')
     # Draufsicht
-    d = pg.evaluate("""() => { const s = Rennspiel.spiel, r = s.renderer, W = r.domElement.width, H = r.domElement.height; const cam = new THREE.PerspectiveCamera(50, W / H, 1, 3000);
-      cam.position.set(100, 760, -180); cam.up.set(0, 0, -1); cam.lookAt(100, 0, -180); cam.updateMatrixWorld(); const u = document.getElementById('ui'); if (u) u.style.display = 'none';
-      r.render(s.szene, cam); return r.domElement.toDataURL('image/png'); }""")
+    d = pg.evaluate("""() => { const s = Rennspiel.spiel, r = s.renderer, W = r.domElement.width, H = r.domElement.height; const cam = new THREE.PerspectiveCamera(62, W / H, 1, 4000);
+      const fog = s.szene.fog, weg = []; s.szene.fog = null; s.szene.traverse((o) => { if (o.visible && o.isMesh && o.geometry && o.geometry.boundingSphere === null) o.geometry.computeBoundingSphere(); if (o.visible && o.isMesh && o.geometry && o.geometry.boundingSphere && o.geometry.boundingSphere.radius > 700) { weg.push(o); o.visible = false; } });
+      cam.position.set(100, 520, -190); cam.up.set(0, 0, -1); cam.lookAt(100, 0, -190); cam.updateMatrixWorld(); const u = document.getElementById('ui'); if (u) u.style.display = 'none';
+      r.setScissorTest(false); r.setViewport(0, 0, innerWidth, innerHeight); r.render(s.szene, cam); const png = r.domElement.toDataURL('image/png'); weg.forEach((o) => { o.visible = true; }); s.szene.fog = fog; return png; }""")
     open(os.path.join(OUT, 'arena_karte.png'), 'wb').write(base64.b64decode(d.split(',')[1]))
     # Fahrt mit Autopilot – Konsole und Stabilität
     pg.evaluate("() => { Rennspiel.spiel.autopilot(0, true); }"); frames(pg, 60 * 25)
@@ -116,37 +117,69 @@ def arena(p):
     pruefe('Arena: keine Konsolenfehler', not FEHLER, FEHLER[:3])
     b.close()
 
-# ------------------------------------------------------------ Halfpipe: Auto an der Wand
+# ------------------------------------------------------------ Halfpipe: Auto an der Wand (natürliche Fahrt: Pilot lenkt hinein, pumpt in der Pipe)
+PIPE_JS = """() => { const s = Rennspiel.spiel, R = Rennspiel; const orig = s.input.steuerung.bind(s.input);
+  window.__P = { q: 9, v: 20, pump: false };
+  s.input.steuerung = function (nr) {
+    const P = window.__P; if (!P || nr !== 0) return orig(nr);
+    const st = s.strecke, f = s.fahrzeuge[0], v = f.vehicle, sp = st.spline, n = st.abfrage(v.x, v.z, f.index), vl = Math.max(3, v.vLaengs), L = Math.max(9, Math.min(50, 0.55 * vl + 8)), pt = sp.punktBei(n.s + L);
+    const zx = pt.x + pt.nx * P.q, zz = pt.z + pt.nz * P.q; let diff = R.headingAus(zx - v.x, zz - v.z) - v.heading;
+    while (diff > Math.PI) diff -= 2 * Math.PI; while (diff < -Math.PI) diff += 2 * Math.PI;
+    let lenk = Math.max(-1, Math.min(1, -(2 * vl * Math.sin(diff) / Math.hypot(zx - v.x, zz - v.z)) / v.drehrateMax(vl)));
+    const pp = f.flug && f.flug.pipe; if (pp && P.pump) lenk = pp.side * (pp.w > 0 ? 1 : -1);
+    return { gas: v.vLaengs < P.v ? 1 : 0, bremse: 0, lenkung: lenk, trick: false };
+  };
+  window.__zu = () => { const f = s.fahrzeuge[0], fz = f.flug, n = f.nah || {}; return { s: n.s, pipe: !!fz.pipe, phi: fz.pipe ? fz.pipe.phi : null, y: fz.aktiv ? fz.y : f.vehicle.y, luft: !!fz.aktiv && !fz.pipe, hoch: fz.z ? fz.z.pipeMax || 0 : 0, vy: fz.vy }; };
+  window.__fr = (k) => { const z0 = s.zeichnen; s.zeichnen = function () {}; for (let i = 0; i < k; i++) { window.__t += 1000 / 60; s._frameRumpf(window.__t); } s.zeichnen = z0; return window.__zu(); };
+  window.__aussen = (pos, blick) => { const k = s.kameras[0].kamera, p0 = k.position.clone(), q0 = k.quaternion.clone(); const u = document.getElementById('ui'); if (u) u.style.display = 'none';
+    k.position.set(pos[0], pos[1], pos[2]); k.lookAt(blick[0], blick[1], blick[2]); k.updateMatrixWorld(true); s.szene.updateMatrixWorld(); s.renderer.setScissorTest(false); s.renderer.setViewport(0, 0, innerWidth, innerHeight); s.renderer.render(s.szene, k);
+    const png = s.renderer.domElement.toDataURL('image/png'); k.position.copy(p0); k.quaternion.copy(q0); k.updateMatrixWorld(true); return png; };
+}"""
+
 def pipe(p):
     b, pg = neue_seite(p, 960, 540)
     uhr_anhalten(pg)
     pg.evaluate("""() => { const m = Rennspiel.spiel.menue; m.zeigen(0); m.e.spassModus = 'arena'; m.starten(); window.requestAnimationFrame = () => 0; }""")
     pg.wait_for_timeout(500); bis_start(pg)
-    setz = """([phi, w, side, dS]) => { const s = Rennspiel.spiel, st = s.strecke, f = s.fahrzeuge[0], v = f.vehicle, fz = f.flug, pe = st.spass.zauber.pipe, SZ = Rennspiel.SpassZauber;
-      const sA = pe.s0 + dS, pt = st.spline.punktBei(sA); v.setzen(pt.x, pt.z, Rennspiel.headingAus(pt.tx, pt.tz)); f.index = -1;
-      s.rennen.verfolgungSetzen(0, v.x, v.z, sA);
-      v.vLaengs = 20; fz.aktiv = true; fz.rampe = null; fz.vy = 0; fz.t = 0; fz.sprungGemeldet = true; v.imFlug = true;
-      fz.pipe = { e: pe, side: side, phi: phi, w: w, s: sA, vF: 20, sAus: 0 }; s.autopilot(0, false); s.pausiert = false; }"""
-    pg.evaluate(setz, [0.9, 0.55, 1, 110])
-    frames(pg, 6); bild(pg, 'pipe_wand_1.png')
-    st1 = pg.evaluate("() => { const f = Rennspiel.spiel.fahrzeuge[0], P = f.flug.pipe; return P ? { phi: +P.phi.toFixed(2), y: +f.flug.y.toFixed(2) } : null; }")
-    pruefe('Pipe: Auto hängt in der Rundung (fz.pipe, φ > 0,5, Höhe > 1 m)', bool(st1) and st1['phi'] > 0.5 and st1['y'] > 1, json.dumps(st1))
-    frames(pg, 14); bild(pg, 'pipe_wand_2.png')
-    pose = pg.evaluate("() => { const f = Rennspiel.spiel.fahrzeuge[0]; return f._zPose ? { art: f._zPose.art, ux: +f._zPose.u.x.toFixed(2), uy: +f._zPose.u.y.toFixed(2), uz: +f._zPose.u.z.toFixed(2) } : null; }")
-    pruefe('Pipe: Auto liegt in der Rundung (Pose pipe, Oben-Vektor geneigt)', bool(pose) and pose['art'] == 'pipe' and pose['uy'] < 0.98, json.dumps(pose))
-    # an der Kante in die Luft
-    pg.evaluate(setz, [1.5, 1.2, -1, 120]); frames(pg, 18); bild(pg, 'pipe_kante.png')
-    pg.evaluate(setz, [1.5, 2.2, 1, 120])
-    luft = None
-    for i in range(40):
-        frames(pg, 4)
-        luft = pg.evaluate("() => { const f = Rennspiel.spiel.fahrzeuge[0]; return { aktiv: f.flug.aktiv, pipe: !!f.flug.pipe, y: +f.flug.y.toFixed(2) }; }")
-        if luft['aktiv'] and not luft['pipe'] and luft['y'] > 8: break
-    bild(pg, 'pipe_luft.png')
-    pruefe('Pipe: oben an der Kante abgehoben (Luft, Höhe > 8 m)', bool(luft) and luft['aktiv'] and not luft['pipe'] and luft['y'] > 8, json.dumps(luft))
-    frames(pg, 60 * 6)
-    nach = pg.evaluate("() => { const f = Rennspiel.spiel.fahrzeuge[0]; return { aktiv: f.flug.aktiv, pipe: !!f.flug.pipe, ok: isFinite(f.vehicle.x) && isFinite(f.flug.y), y: +f.flug.y.toFixed(2) }; }")
-    pruefe('Pipe: danach wieder gelandet / eingefangen, Werte endlich', nach['ok'] and (not nach['aktiv'] or nach['pipe']), json.dumps(nach))
+    pg.evaluate(PIPE_JS)
+    def setzen(dS, q, tempo, pump):
+        pg.evaluate("""([dS, q, tempo, pump]) => { const s = Rennspiel.spiel, st = s.strecke, f = s.fahrzeuge[0], v = f.vehicle, pe = st.spass.zauber.pipe, sA = pe.s0 + dS, pt = st.spline.punktBei(sA);
+          const x = pt.x + pt.nx * q, z = pt.z + pt.nz * q; v.setzen(x, z, Rennspiel.headingAus(pt.tx, pt.tz)); v.y = st.hoeheAn(x, z); f.index = -1; v.vLaengs = tempo;
+          const o = f.flug; o.aktiv = false; o.gleit = null; o.schiene = null; o.pipe = null; s.rennen.verfolgungSetzen(0, x, z, sA); f.autopilot = null; window.__P = { q: 9, v: tempo, pump }; s.pausiert = false;
+          const k = s.kameras[0]; if (k) { k._erstesMal = true; } }""", [dS, q, tempo, pump])
+    def aussen(name):
+        pos = pg.evaluate("""() => { const s = Rennspiel.spiel, st = s.strecke, f = s.fahrzeuge[0], v = f.vehicle, sp = st.spline, n = f.nah, pt = sp.punktBei(n.s - 22);
+          const y = v.y + 3; return { p: [pt.x - pt.nx * 0 + pt.tx * 0, y + 4, pt.z], b: [v.x, v.y + 1, v.z], n: [pt.nx, pt.nz, pt.tx, pt.tz], y: v.y }; }""")
+        # Blick von der Mittellinie der Pipe (gegenüberliegende Seite, 14 m hinter dem Auto)
+        d = pg.evaluate("""() => { const s = Rennspiel.spiel, st = s.strecke, f = s.fahrzeuge[0], v = f.vehicle, sp = st.spline, n = f.nah, pt = sp.punktBei(n.s - 16), side = f.flug.pipe ? f.flug.pipe.side : 1;
+          return window.__aussen([pt.x - pt.nx * side * 4, 7 + (f.flug.aktiv ? 0 : 0), pt.z - pt.nz * side * 4], [v.x, v.y + 1, v.z]); }""")
+        open(os.path.join(OUT, name), 'wb').write(base64.b64decode(d.split(',')[1]))
+    # 1) hinein und hochfahren (ruhig)
+    setzen(-40, 9, 20, False)
+    z = None
+    for i in range(80):
+        z = pg.evaluate("window.__fr(6)")
+        if z['pipe'] and z['phi'] is not None and z['phi'] > 0.8: break
+    bild(pg, 'pipe_wand_verfolger.png'); aussen('pipe_wand_aussen.png')
+    pruefe('Pipe: Auto fährt natürlich hinein und hängt in der Rundung (φ > 0,8, Höhe > 1,5 m)', bool(z) and z['pipe'] and z['phi'] > 0.8 and z['y'] > 1.5, json.dumps(z))
+    pose = pg.evaluate("() => { const f = Rennspiel.spiel.fahrzeuge[0]; return f._zPose ? { art: f._zPose.art, uy: +f._zPose.u.y.toFixed(2) } : null; }")
+    pruefe('Pipe: Auto liegt schräg in der Rundung (Pose pipe, Oben-Vektor geneigt)', bool(pose) and pose['art'] == 'pipe' and pose['uy'] < 0.9, json.dumps(pose))
+    # 2) Pumpen bis zur Kante und Luftsprung
+    setzen(-40, 9, 20, True)
+    luft = None; ma = 0
+    for i in range(160):
+        z = pg.evaluate("window.__fr(5)")
+        ma = max(ma, z['y'])
+        if z['luft'] and z['y'] > 9: luft = z; break
+    bild(pg, 'pipe_luft_verfolger.png'); aussen('pipe_luft_aussen.png')
+    pruefe('Pipe: mit Pumpen oben an der Kante abgehoben (Luft, Höhe > 9 m über der Straße)', bool(luft), json.dumps(luft) + ' max ' + str(round(ma, 2)))
+    z = None
+    for i in range(60):
+        z = pg.evaluate("window.__fr(60)")
+        if not z['luft'] and not z['pipe']: break
+    pruefe('Pipe: nach den Pendelschlägen wieder auf dem Boden (innerhalb 60 s, Autopilot pumpt weiter)', bool(z) and not z['luft'] and not z['pipe'], json.dumps(z))
+    ok_ = pg.evaluate("() => { const f = Rennspiel.spiel.fahrzeuge[0]; return isFinite(f.vehicle.x) && isFinite(f.vehicle.z) && isFinite(f.flug.y); }")
+    pruefe('Pipe: Fahrzeugwerte endlich nach dem Sprung', ok_)
     pruefe('Pipe: keine Konsolenfehler', not FEHLER, FEHLER[:3])
     b.close()
 
