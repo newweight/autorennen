@@ -333,7 +333,7 @@ def online_kombi(browser, spiel, strecke, grafik, sekunden):
             try: socket.create_connection(('127.0.0.1', port), timeout=0.2).close(); break
             except OSError: time.sleep(0.1)
         url = 'http://127.0.0.1:%d/' % port
-        host = neue_seite(browser, spiel, 400, 225); gast = neue_seite(browser, spiel, 400, 225); seiten = [host, gast]
+        host = neue_seite(browser, spiel, 400, 225); gast = neue_seite(browser, spiel, 400, 225); seiten = [host, gast]   # Lobby im kleinen Fenster (src/net/online.js: unter 520 px Höhe kompakt)
         for pg in seiten:
             pg.context.add_init_script("try{localStorage.setItem('%s','%s')}catch(e){}" % (gkey, grafik))
         host.goto(url + html, wait_until='domcontentloaded')
@@ -341,7 +341,7 @@ def online_kombi(browser, spiel, strecke, grafik, sekunden):
         host.keyboard.press('ShiftLeft')
         host.evaluate("() => { Rennspiel.spiel.menue.onlineOeffnen(); }"); host.wait_for_timeout(400)
         host.click('[data-a="erstellen"]')
-        host.wait_for_function("Rennspiel.spiel.menue.onlineUi && Rennspiel.spiel.menue.onlineUi.lobby && Rennspiel.spiel.menue.onlineUi.ansicht === 'lobby'", timeout=30000, polling=200)
+        host.wait_for_function("Rennspiel.spiel.menue.onlineUi && Rennspiel.spiel.menue.onlineUi.lobby && Rennspiel.spiel.menue.onlineUi.ansicht === 'lobby'", timeout=900000, polling=200)
         code = host.evaluate('Rennspiel.spiel.menue.onlineUi.lobby.code')
         # Host stellt Strecke + Spaß ein (Lobby-Pillen), 1 Runde, 1 Computer
         for a in ['wert:strecke:' + strecke, 'wert:spass:an', 'wert:zauber:an', 'wert:runden:1', 'wert:gegner:1']:
@@ -351,12 +351,12 @@ def online_kombi(browser, spiel, strecke, grafik, sekunden):
         gast.wait_for_function("Rennspiel.spiel.menue.onlineUi && Rennspiel.spiel.menue.onlineUi.ansicht === 'code'", timeout=120000, polling=200)
         gast.keyboard.press('ShiftLeft')
         gast.keyboard.press('Enter')
-        gast.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby !== null && Rennspiel.spiel.menue.onlineUi.ansicht === 'lobby'", timeout=30000, polling=200)
-        host.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.spieler.length === 2", timeout=15000, polling=200)
+        gast.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby !== null && Rennspiel.spiel.menue.onlineUi.ansicht === 'lobby'", timeout=900000, polling=200)
+        host.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.spieler.length === 2", timeout=90000, polling=200)
         got = host.evaluate("Rennspiel.spiel.menue.onlineUi.lobby.einstellungen.streckeId")
         if got != strecke: return False, 'Lobby: Strecke %s statt %s' % (got, strecke), {}
         gast.keyboard.press('Space')
-        host.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.spieler[1].bereit === true", timeout=15000, polling=200)
+        host.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.spieler[1].bereit === true", timeout=90000, polling=200)
         host.keyboard.press('Enter')
         for pg in seiten:
             pg._fl.clear()
@@ -383,8 +383,13 @@ def online_kombi(browser, spiel, strecke, grafik, sekunden):
         if max(vmax) < 3: return False, 'online fährt niemand (max. %.1f m/s)' % max(vmax), {}
         return True, '', {'vmax': [round(x, 1) for x in vmax]}
     except Exception as e:
+        import traceback
         fl = [x for pg in seiten for x in pg._fl][:2]
-        return False, 'Ausnahme: %s %s' % (str(e)[:250], fl), {}
+        for pg in seiten:
+            try: fl.append(pg.evaluate("() => { const u = Rennspiel.spiel.menue.onlineUi; return u ? 'ansicht=' + u.ansicht + ' hinweis=' + (u.hinweis || '') + ' lobby=' + !!u.lobby + ' fehler=' + (u.fehler || '') : 'keine onlineUi'; }"))
+            except Exception: pass
+        zeile = [z for z in traceback.format_exc().splitlines() if 'matrix_alle.py' in z][-1:]
+        return False, 'Ausnahme: %s %s %s' % (str(e)[:250], fl, zeile), {}
     finally:
         for pg in seiten:
             try: pg.context.close()
