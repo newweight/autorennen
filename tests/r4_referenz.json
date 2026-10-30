@@ -12,5 +12,10 @@
  "planhash-wiese": "1222247509/0",
  "planhash-fantasie": "1099997156/2",
  "planhash-alpen": "3145561948/0",
- "planhash-wald": "2986554698/0"
+ "planhash-wald": "2986554698/0",
+ "kurz": {
+  "auto-fantasie-zauber": 2501373998,
+  "auto-fantasie-ohne": 3840455255,
+  "moto-alpen-zauber": 1500295794
+ }
 }

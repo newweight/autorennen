@@ -31,7 +31,7 @@
     loopMag: { laenge: 90, rampe: 24, rand: 4 },      // R4: Looping → Magnet-Röhre (Menü „🌀 Loopings“, Standard Klassisch): Röhre um die Mitte des Loopings; rand = Abstand zu anderen Elementen
     pipe: { s0: 800, s1: 872, qF: 6, r: 6, rampe: 14, wMin: 5, pumpe: 2.5, vyMax: 11, reibung: 0.3, abstandStart: 0.08, vMin: 4, hopInnen: 2.0 },
     // R4: Halfpipe der Auto-Stunt-Arena (src/spass/spassArena.js, Eintrag mit stuntBereich: true). Länger und breiter als die Motorrad-Pipe; vCap = Höchsttempo im Rohr (m/s).
-    pipeAuto: { s0: 700, s1: 950, qF: 6, r: 7, rampe: 22, wMin: 5, pumpe: 2.5, vyMax: 11, reibung: 0.08, abstandStart: 0.08, vMin: 4, hopInnen: 2.0, vCap: 26, einfangMax: 0.75, reMin: 0.5 },
+    pipeAuto: { s0: 700, s1: 950, qF: 6, r: 7, rampe: 22, wMin: 5, pumpe: 2.5, vyMax: 11, reibung: 0.03, abstandStart: 0.08, vMin: 4, hopInnen: 2.0, vCap: 26, einfangMax: 0.75, reMin: 0.5 },
     pipeGeo: { zOff: 1034, xMin: 150, xMax: 250 },      // Lage der Pipe-Gerade im Stadion (z = s − zOff, x im Streifen xMin..xMax) – gilt für Stunt-Park und Stunt-Arena
     extras: { n: 3, radius: 2.6, erneuerung: 12, vorher: 25,
       riese: { zeit: 8, faktor: 2.1, vMax: 0.9, besch: 0.8, schiebe: 0.09 },
