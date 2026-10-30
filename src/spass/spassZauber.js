@@ -55,7 +55,7 @@
     }
     return AN.an;
   }
-  /** R4: Loopings als Magnet-Röhre (Menü „🌀 Loopings“, Standard Klassisch = aus). Gilt nur mit Fahr-Zauber und nur für Rennen, die der Spieler offline startet. */
+  /** R4: Loopings als Magnet-Röhre (Menü „🌀 Loopings“, Standard Klassisch = aus). Gilt nur mit Fahr-Zauber. Offline entscheidet dieser Schalter (Hülle um streckeAufbauen); online entscheidet allein der Raum-Schalter loopMag vom Server (der lokale Schalter wird gesendet, wenn man Host ist, und gilt nie für Gäste). */
   function loopMagRoh() {
     if (AN.loopMag === null) {
       AN.loopMag = false;
@@ -66,6 +66,14 @@
   const loopMag = () => loopMagRoh() && an();
   function loopMagSetzen(b) { AN.loopMag = !!b; try { if (typeof localStorage !== 'undefined') localStorage.setItem('rennspiel.spass.zauber.loopMag', b ? '1' : '0'); } catch (e) { /* egal */ } }
   function erzwingen(b) { AN.erzwungen = !!b; }
+  /** PRUEF-FIX 5: Streckentexte im Menü, wenn „🌀 Loopings: Magnet-Röhre“ an ist: alle Nennungen der Fantasie-Loopings (Karte „2 Loopings“, Beschreibung „zwei Loopings (Vollgas!)“, Welt-Text „Loopings, Bälle …“, Variante „gleiche Loopings“). */
+  function loopText(h) {
+    return String(h).replace(/(\d+) Loopings/g, (m, n) => n + (n === '1' ? ' Magnet-Röhre' : ' Magnet-Röhren')).replace(/zwei Loopings \(Vollgas!\)/g, 'zwei Magnet-Röhren (kopfüber an der Decke)')
+      .replace(/gleiche Loopings/g, 'gleiche Magnet-Röhren').replace(/\bLoopings, Bälle/g, 'Magnet-Röhren, Bälle');
+  }
+  /** PRUEF-FIX 1: Fahr-Zauber für den STRECKENBAU. Online (e.raumOnline, setzt online.js rennenAufbauen) zählt nur die vom Server bestätigte Raum-Einstellung e.zauber –
+   *  nie der lokale Menü-Schalter (sonst baut ein Gast mit Zauber aus eine andere Strecke als der Server). Offline: der lokale Schalter wie bisher. */
+  function zauberFuer(e) { return !!e && e.raumOnline === true ? e.zauber === true : an(); }
   function anSetzen(b) { AN.an = !!b; try { if (typeof localStorage !== 'undefined') localStorage.setItem('rennspiel.spass.zauber.an', b ? '1' : '0'); } catch (e) { /* egal */ } }
 
   /** Neuer Zustand (fz.z). */
@@ -566,7 +574,7 @@
 
   // ---------------------------------------------------------------- Spiel.physikSchritt (Browser + Server)
   const P = R.Spiel.prototype;
-  // R4: Rennen, die der Spieler offline startet (streckeAufbauen), bauen Loopings als Magnet-Röhre nach seinem Menü-Schalter; online (streckeSzeneBauen direkt) entscheidet der Raum-Schalter loopMag (P5: main.js/online.js/simulation.js) – lokal nie
+  // R4: Rennen, die der Spieler offline startet (streckeAufbauen), bauen Loopings als Magnet-Röhre nach seinem Menü-Schalter; online (streckeSzeneBauen direkt, ohne diese Hülle) entscheidet ausschließlich der Raum-Schalter loopMag vom Server (P5: main.js/online.js/simulation.js)
   if (!P._loopMagHuelle && P.streckeAufbauen) {
     P._loopMagHuelle = true;
     const aufbauen = P.streckeAufbauen;
@@ -645,5 +653,5 @@
     };
   }
 
-  R.SpassZauber = { an, anSetzen, erzwingen, loopMag, loopMagRoh, loopMagSetzen, plan, nachSchritt, magnetTheta, pipeProfil, pipeW, zustand, zz, wirkungSetzen, zeitAblauf, magnetAus, glatt, weltPose, zauberVon };
+  R.SpassZauber = { an, anSetzen, erzwingen, zauberFuer, loopText, loopMag, loopMagRoh, loopMagSetzen, plan, nachSchritt, magnetTheta, pipeProfil, pipeW, zustand, zz, wirkungSetzen, zeitAblauf, magnetAus, glatt, weltPose, zauberVon };
 })();

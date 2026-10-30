@@ -793,6 +793,7 @@
         windRichtung: e.windRichtung, tageszeit: e.tageszeit, hindernisMenge: e.hindernisMenge, tempoKlasse: e.tempoKlasse, runden: e.runden, gegner: e.gegner,
         spass: e.spass === true,    // S1: Trampolin/Kanone wie im Server (fehlt = aus)
         zauber: e.zauber === true,  // S6: Fahr-Zauber wie im Server (fehlt = aus)
+        raumOnline: true,           // PRUEF-FIX 1: Streckenbau (main.js streckeSzeneBauen) nimmt online nur die Raum-Einstellungen, nie lokale Schalter
         loopMag: e.loopMag === true,  // R4 P5: Loopings als Magnet-Röhre wie im Server (fehlt = klassisch)
         wetterSeed: m.wetterSeed,   // v22: Megastrecke – gleicher Seed wie der Server → gleiche Zonen
         schaden: false, tiere: e.tiere === true, polizei: e.polizei === true, geisterfahrer: e.geisterfahrer === true, krankenwagen: R.Verkehr.ausEinstellung(e).krankenwagen, abschleppwagen: R.Verkehr.ausEinstellung(e).abschleppwagen, verkehr: e.krankenwagen === true || e.abschleppwagen === true || e.verkehr === 'wenig' || e.verkehr === 'viel' ? 'wenig' : 'aus', rempeln: 'sanft', modus: 'solo', spielart: 'rennen',

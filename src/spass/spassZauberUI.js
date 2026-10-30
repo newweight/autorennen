@@ -535,11 +535,11 @@
       if (zeile === 'loopmag') { if (SZ.an()) SZ.loopMagSetzen(k === 'mag'); return; }
       return wertSetzen.apply(this, arguments);
     };
-    /** Streckenkarten: „2 Loopings“ → „2 Magnet-Röhren“, wenn die Magnet-Röhren-Option an ist. */
+    /** Streckenkarten: „2 Loopings“, „zwei Loopings“, „Loopings, Bälle …“, „gleiche Loopings“ → Magnet-Röhren, wenn die Option an ist (SZ.loopText). */
     const htmlStrecke = M.htmlStrecke;
     M.htmlStrecke = function () {
       const h = htmlStrecke.apply(this, arguments);
-      try { if (SZ.loopMag()) return h.replace(/(\d+) Loopings/g, (m, n) => n + (n === '1' ? ' Magnet-Röhre' : ' Magnet-Röhren')).replace(/zwei Loopings \(Vollgas!\)/g, 'zwei Magnet-Röhren (kopfüber an der Decke)'); } catch (err) { console.error('R4 (Streckentext):', err); }
+      try { if (SZ.loopMag()) return SZ.loopText(h); } catch (err) { console.error('R4 (Streckentext):', err); }
       return h;
     };
     const htmlStart = M.htmlStart;
@@ -553,7 +553,7 @@
         const gr = `<span class="gr${gf === 'zauber' ? ' fokus' : ''}" title="Magnet-Röhren, Schluchten mit Flügeln/Gleitschirm, Geländer und Wände, Halfpipe, Riesen-/Mini-Kristalle auf passenden Strecken – Aus: wie früher (braucht „Spaß-Elemente“)">` +
           `<span class="z-label" data-a="fokus:${z.indexOf('zauber')}">✨ Fahr-Zauber</span>${pille('aus', 'Aus', !an)}${pille('an', 'An', an)}</span>`;
         const lm = SZ.loopMagRoh(), pilleL = (k, text, a) => `<span class="pille${a ? ' aktiv' : ''}" data-a="wert:loopmag:${k}">${text}</span>`;
-        const gl = `<span class="gr${gf === 'loopmag' ? ' fokus' : ''}${an ? '' : ' r4-grau'}" title="Fantasie-Loopings als Magnet-Röhre fahren: das Auto haftet an der Wand und fährt kopfüber über die Decke – ohne Anlauf-Tempo. Klassisch: wie bisher (braucht „Fahr-Zauber“; nur offline)">` +
+        const gl = `<span class="gr${gf === 'loopmag' ? ' fokus' : ''}${an ? '' : ' r4-grau'}" title="Fantasie-Loopings als Magnet-Röhre fahren: das Auto haftet an der Wand und fährt kopfüber über die Decke – ohne Anlauf-Tempo. Klassisch: wie bisher (braucht „Fahr-Zauber“; online stellt der Host es in der Lobby ein)">` +
           `<span class="z-label" data-a="fokus:${z.indexOf('loopmag')}">🌀 Loopings</span>${pilleL('klassisch', 'Klassisch', !lm || !an)}${pilleL('mag', 'Magnet-Röhre', lm && an)}</span>`;
         h = h.replace('<span class="knopf klein" data-a="album"', gr + gl + '<span class="knopf klein" data-a="album"');
       } catch (err) { console.error('Zauber UI (Menü):', err); }

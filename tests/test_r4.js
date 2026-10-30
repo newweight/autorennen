@@ -169,7 +169,7 @@ function pipeLauf(strategie, v0, qEin, auto, opt) {
   const s0 = SZ.loopMagRoh(); SZ.loopMagSetzen(true);
   const an = SZ.an(); const m1 = SZ.loopMag(); SZ.anSetzen(false); const m2 = SZ.loopMag(); SZ.anSetzen(an); SZ.loopMagSetzen(s0);
   pruefe('D Menü: Loopings „Magnet-Röhre“ gilt nur mit Fahr-Zauber; Standard Klassisch', s0 === false && m1 === an && m2 === false);
-  pruefe('D Hülle um streckeAufbauen vorhanden (Magnet-Röhre nur im Offline-Rennstart, nie online)', R.Spiel.prototype._loopMagHuelle === true);
+  pruefe('D Hülle um streckeAufbauen vorhanden (offline-Rennstart: Menü-Schalter; online entscheidet der Raum-Schalter loopMag, siehe E)', R.Spiel.prototype._loopMagHuelle === true);
 
   // Rennen: KI auf Fantasie mit Röhren statt Loopings (Option per Hülle um R.Spass.plan eingeschleust)
   const planOrig = R.Spass.plan;
@@ -218,6 +218,45 @@ function pipeLauf(strategie, v0, qEin, auto, opt) {
   pruefe('E Server deterministisch mit loopMag (600 Ticks, 2 Läufe gleich)', h1 === h2 && h1 !== 0);
   const q = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   pruefe('E Haken: online.js sendet + übernimmt, main.js baut, simulation.js prüft + baut, Lobby-Zeile, Protokoll', /loopMag: true/.test(q('src/net/online.js')) && /loopMag: e\.loopMag === true/.test(q('src/net/online.js')) && /e\.loopMag === true\) sOpt\.loopingMagnet = true/.test(q('src/main.js')) && /r\.loopMag === true && moto !== true/.test(q('server/simulation.js')) && /sOpt\.loopingMagnet = true/.test(q('server/simulation.js')) && /'loopmag'/.test(q('src/spass/spassOnlineS8.js')) && /loopMag/.test(q('server/PROTOKOLL.md')));
+}
+
+// ---------------------------------------------------------------- F) PRUEF-FIX 1: online baut der Browser die Strecke aus dem RAUM, nie aus lokalen Schaltern
+{
+  const Z = R.SpassZauber, an0 = Z.an();
+  const sig = (st) => JSON.stringify({ z: st.spass.zauber, l: st.spass.liste, lo: st.loopings.length, hi: st.hindernisse.length });
+  // Browser-Streckenbau wie main.js streckeSzeneBauen (sOpt-Teil) mit der Einstellungs-Form aus online.js rennenAufbauen (raumOnline) bzw. offline (ohne)
+  const browser = (daten, e) => {
+    const welt = R.Strecke.weltName ? R.Strecke.weltName(daten, e.welt) : daten.weltStandard;
+    const sOpt = { welt, variante: e.variante && daten.varianten && daten.varianten[e.variante] ? e.variante : '', hindernisMenge: e.hindernisMenge };
+    if (e.spass !== false && R.Spass) { sOpt.spass = true; if (Z.zauberFuer(e)) sOpt.zauber = true; }
+    if (sOpt.zauber === true && e.loopMag === true) sOpt.loopingMagnet = true;
+    return new R.Strecke(daten, sOpt);
+  };
+  for (const tid of ['fantasie', 'wiese']) for (const raumZauber of [true, false]) for (const loopMag of [false, true]) {
+    if (loopMag && !raumZauber) continue;
+    const x = neu(tid, false, { gegner: 1, runden: 1, einst: { zauber: raumZauber, loopMag } }), e = x.sim.einstellungen, daten = R.trackCatalog.find((t) => t.id === tid);
+    const rennenE = Object.assign({}, e, { spass: e.spass === true, zauber: e.zauber === true, loopMag: e.loopMag === true, raumOnline: true });
+    const ergebnisse = [true, false].map((lokal) => { Z.anSetzen(lokal); return sig(browser(daten, rennenE)); });
+    Z.anSetzen(an0);
+    pruefe(`F ${tid}: Raum-Zauber ${raumZauber ? 'an' : 'aus'}${loopMag ? ' + Magnet' : ''}: Gast-Strecke == Server-Strecke, egal ob lokal Zauber an oder aus`, ergebnisse[0] === sig(x.st) && ergebnisse[1] === sig(x.st), `Zauber im Plan: ${!!x.st.spass.zauber}`);
+  }
+  // Gegenprobe: ohne raumOnline (offline) gilt weiter der lokale Schalter
+  { const daten = R.trackCatalog.find((t) => t.id === 'fantasie'), eo = { spass: true, hindernisMenge: 'normal' };
+    Z.anSetzen(false); const aus = !!browser(daten, eo).spass.zauber; Z.anSetzen(true); const an1 = !!browser(daten, eo).spass.zauber; Z.anSetzen(an0);
+    pruefe('F offline: lokaler Fahr-Zauber-Schalter gilt weiter (aus → kein Zauber, an → Zauber)', aus === false && an1 === true); }
+  // andere Strecken-Einstellungen: streckeSzeneBauen darf nur aus e.* (Raum) lesen – keine lokalen Schalter/Speicher
+  const q = fs.readFileSync(path.join(__dirname, '..', 'src/main.js'), 'utf8'), von = q.indexOf('streckeSzeneBauen(trackId) {'), bis = q.indexOf('Menü-Hintergrund', von);
+  const rumpf = q.slice(von, bis).replace(/\/\/.*$/gm, '');
+  pruefe('F main.js streckeSzeneBauen: kein localStorage, kein .an()-Schalter; Zauber nur über zauberFuer(e); online.js setzt raumOnline', !/localStorage|\.an\(\)/.test(rumpf) && /zauberFuer\(e\)/.test(rumpf) && /raumOnline: true/.test(fs.readFileSync(path.join(__dirname, '..', 'src/net/online.js'), 'utf8')));
+}
+
+// ---------------------------------------------------------------- G) PRUEF-FIX 5: Streckentext bei aktiver Magnet-Option
+{
+  const L = R.SpassZauber.loopText, kat = R.trackCatalog.find((t) => t.id === 'fantasie');
+  const fantasie = [kat.beschreibung, '2 Loopings', 'Loopings, Bälle und Wasserfontänen.', (kat.varianten.xl || {}).beschreibung].join(' | ');
+  const t = L(fantasie);
+  pruefe('G Streckentext Magnet: kein „Loopings“ mehr (Karte, Beschreibung, Welt-Text, XL-Variante)', /Loopings/.test(fantasie) && !/Looping/.test(t), t.slice(0, 120));
+  pruefe('G Streckentext: 2 → „2 Magnet-Röhren“, 1 → „1 Magnet-Röhre“; Text ohne Loopings unverändert', /2 Magnet-Röhren/.test(t) && L('1 Loopings') === '1 Magnet-Röhre' && L('Bälle, Wasserstrahl') === 'Bälle, Wasserstrahl');
 }
 
 console.log(`\n${ok} OK, ${fehler} FEHL`);

@@ -565,7 +565,7 @@
     htmlGarageKarte() {
       if (!R.Garage) return R.Online ? `<div class="reihe garage-reihe">${this.htmlOnlineKarte()}</div>` : '';
       return `<div class="reihe garage-reihe"><div class="karte garage-karte" data-a="garage">` +
-        `<div class="emoji">🔧</div><div><div class="karten-name">Garage</div><div class="karten-sub">Münzen ausgeben: Farben, Motor, Reifen, Bremsen <kbd>G</kbd></div></div></div>` +
+        `<div class="emoji">🔧</div><div><div class="karten-name">Garage</div><div class="karten-sub">Münzen ausgeben: Farben und Tuning <kbd>G</kbd></div></div></div>` +
         this.htmlOnlineKarte() + `</div>`;
     }
     /** W5: Karte „🌐 Online" (neben der Garage). Von der Festplatte (file://) ausgegraut mit Hinweis. */

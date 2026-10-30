@@ -356,15 +356,17 @@
     if (spiel.tricksRaum !== undefined && spiel.tricksRaum !== true && !istMoto) return;      // R3 online: Auto-Raum ohne Raum-Schalter `tricks` → sofort zurück (bitgleich wie ohne dieses Modul)
     if (!rennen || !strecke || !input || spiel.zustand !== 'rennen' || spiel.pausiert || !(dt > 0) || !spiel.fahrzeuge) return;
     if (istMoto && (!sz || !sz.fz)) return;
-    if (!istMoto && spiel.tricksRaum !== true && !an('auto')) { if (spiel._t3) spiel._t3 = null; return; }
     const kiAn = kiAktiv(spiel);
+    // PRUEF-FIX 2: Auto-Tricks (Menschen) und KI-Tricks sind getrennte Schalter. Nur wenn BEIDE aus sind, endet der Schritt wie bisher (bitgleich); ist nur „Auto-Tricks“ aus, machen die Computer-Gegner trotzdem Tricks, die Menschen nicht.
+    const menschAn = istMoto || spiel.tricksRaum === true || an('auto');
+    if (!istMoto && !menschAn && !kiAn) { if (spiel._t3) spiel._t3 = null; return; }
     const S = z3Holen(spiel), T = R.config.tasten && R.config.tasten.spieler;
     const jetzt = istMoto ? sz.zeit : (spiel._t3.zeit = (spiel._t3.zeit || 0) + dt);
     for (let i = 0; i < spiel.fahrzeuge.length; i++) {
       const f = spiel.fahrzeuge[i], fl = f && f.flug;
       if (!f || !fl || f.ausgeschieden) continue;
       const ki = !f.istSpieler;                                             // R3: KI nur mit Schalter „KI-Tricks“ (kiAktiv), sonst wie bisher übersprungen
-      if (ki ? !(kiAn && kiFahrerOk(f)) : !(f.spielerNr >= 0)) continue;
+      if (ki ? !(kiAn && kiFahrerOk(f)) : !(f.spielerNr >= 0 && menschAn)) continue;
       const z = istMoto ? sz.fz[i] : null;
       if (istMoto && !z) continue;
       const z3 = S.fz[i] || (S.fz[i] = zNeu());

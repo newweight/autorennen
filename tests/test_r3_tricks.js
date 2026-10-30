@@ -64,6 +64,7 @@ function spielen(art, schw, opt) {
   const R2 = ladeMit(moto ? ['src/config.js', 'src/moto/stunts.js', 'src/spass/spassSticker.js', 'src/spass/spassTricks.js'] : ['src/config.js', 'src/spass/spassSticker.js', 'src/spass/spassTricks.js'], moto);
   const S = R2.SpassTricks;
   if (opt.ki === false) S.anSetzen('ki', false);
+  if (opt.auto === false) S.anSetzen('auto', false);      // PRUEF-FIX 2: Schalter „Auto-Tricks“ (Menschen) getrennt von „KI-Tricks"
   const mk = (ist, nr) => ({ istSpieler: ist, spielerNr: ist ? nr : -1, ausgeschieden: false, index: 0, vehicle: { x: 0, z: 0, vLaengs: 30 }, driver: ist ? undefined : { schwierigkeit: schw },
     flug: { aktiv: false, t: 0, fluege: 0, y: 0, vy: 0 }, looping: { aktiv: false, fallen: false }, mesh: null });
   const spiel = Object.create(R2.Spiel.prototype);
@@ -113,6 +114,16 @@ function spielen(art, schw, opt) {
 for (const art of ['auto', 'moto']) {
   const aus = spielen(art, 'profi', { ki: false });
   pruefe('B ' + art + ': Schalter aus → KI hat keinerlei Trick-Zustand', !aus.kiHatZustand && aus.gestartet[1] === 0 && aus.gestartet[2] === 0);
+  if (art === 'auto') {
+    // PRUEF-FIX 2: „Auto-Tricks“ aus + „KI-Tricks“ an → die Computer-Gegner machen Tricks, der Mensch nicht; beide aus → Schritt endet sofort (kein Zustand, nichts verändert)
+    const ma = spielen(art, 'unschlagbar', { auto: false });
+    const gm = ma.gestartet[1] + ma.gestartet[2], vollAn = spielen(art, 'unschlagbar');
+    pruefe('B auto: Auto-Tricks AUS + KI-Tricks AN → KI macht trotzdem Tricks (wie bei beiden an), Mensch keine', gm >= 20 && gm === vollAn.gestartet[1] + vollAn.gestartet[2] && ma.gestartet[0] === 0 && ma.abgekuerzt === 0 && ma.fehl === 0, gm + ' gestartet');
+    const beide = spielen(art, 'unschlagbar', { auto: false, ki: false });
+    pruefe('B auto: beide AUS → bitgleich wie bisher (kein Trick-Zustand, keine Eingriffe)', !beide.kiHatZustand && beide.gestartet.every((x) => x === 0) && beide.fehl === 0 && beide.spielerEreignisse === 0);
+    const nurMensch = spielen(art, 'unschlagbar', { ki: false });
+    pruefe('B auto: Auto-Tricks AN + KI AUS → nur Menschen (KI ohne Zustand)', !nurMensch.kiHatZustand && nurMensch.gestartet[1] === 0);
+  }
   const ohne = spielen(art, 'profi', { ohneSzene: true });
   pruefe('B ' + art + ': ohne Szene (Server/kopflos) → keine KI-Tricks', !ohne.kiHatZustand);
   const r = spielen(art, 'unschlagbar');
