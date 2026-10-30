@@ -28,7 +28,11 @@
       platz: { je: 2600, max: 2, abLaenge: 1500, kappa: 1 / 380, vorher: 30, nachher: 30 } },
     schiene: { laenge: 54, hoehe: 0.85, rand: 1.0, einfang: 1.2, vMin: 5, ausSek: 0.12, ausLenk: 0.45, hop: 2.4, punkteJeM: 2, platz: { je: 1500, max: 2, abLaenge: 1100, kappa: 1 / 260, vorher: 14, nachher: 22 } },
     wand: { laenge: 38, hoehe: 2.3, abstand: 0.3, einfang: 1.7, vMin: 11, lenkMin: 0.15, ausSek: 0.12, ausLenk: 0.45, hop: 1.2, punkteJeM: 3, platz: { je: 2300, max: 2, abLaenge: 1400, kappa: 1 / 260, vorher: 14, nachher: 22 } },
+    loopMag: { laenge: 90, rampe: 24, rand: 4 },      // R4: Looping → Magnet-Röhre (Menü „🌀 Loopings“, Standard Klassisch): Röhre um die Mitte des Loopings; rand = Abstand zu anderen Elementen
     pipe: { s0: 800, s1: 872, qF: 6, r: 6, rampe: 14, wMin: 5, pumpe: 2.5, vyMax: 11, reibung: 0.3, abstandStart: 0.08, vMin: 4, hopInnen: 2.0 },
+    // R4: Halfpipe der Auto-Stunt-Arena (src/spass/spassArena.js, Eintrag mit stuntBereich: true). Länger und breiter als die Motorrad-Pipe; vCap = Höchsttempo im Rohr (m/s).
+    pipeAuto: { s0: 700, s1: 950, qF: 6, r: 7, rampe: 22, wMin: 5, pumpe: 2.5, vyMax: 11, reibung: 0.03, abstandStart: 0.08, vMin: 4, hopInnen: 2.0, vCap: 26, einfangMax: 0.75, reMin: 0.5 },
+    pipeGeo: { zOff: 1034, xMin: 150, xMax: 250 },      // Lage der Pipe-Gerade im Stadion (z = s − zOff, x im Streifen xMin..xMax) – gilt für Stunt-Park und Stunt-Arena
     extras: { n: 3, radius: 2.6, erneuerung: 12, vorher: 25,
       riese: { zeit: 8, faktor: 2.1, vMax: 0.9, besch: 0.8, schiebe: 0.09 },
       mini: { zeit: 8, faktor: 0.6, vMax: 1.15, besch: 1.35 },
@@ -42,14 +46,26 @@
   const melden = (fz, n) => R.Spass.melden(fz, n);
 
   // ---------------------------------------------------------------- Schalter (Menü „✨ Fahr-Zauber“, Standard an)
-  const AN = { an: null };
+  const AN = { an: null, erzwungen: false, loopMag: null, bau: false };
   function an() {
+    if (AN.erzwungen) return true;                        // R4: Stunt-Arena braucht die Halfpipe (nur während des Rennstarts gesetzt)
     if (AN.an === null) {
       AN.an = !(R.config.spass.zauber && R.config.spass.zauber.standardAn === false);
       try { const o = typeof localStorage !== 'undefined' ? localStorage.getItem('rennspiel.spass.zauber.an') : null; if (o === '0') AN.an = false; else if (o === '1') AN.an = true; } catch (e) { /* kein localStorage */ }
     }
     return AN.an;
   }
+  /** R4: Loopings als Magnet-Röhre (Menü „🌀 Loopings“, Standard Klassisch = aus). Gilt nur mit Fahr-Zauber und nur für Rennen, die der Spieler offline startet. */
+  function loopMagRoh() {
+    if (AN.loopMag === null) {
+      AN.loopMag = false;
+      try { const o = typeof localStorage !== 'undefined' ? localStorage.getItem('rennspiel.spass.zauber.loopMag') : null; if (o === '1') AN.loopMag = true; } catch (e) { /* kein localStorage */ }
+    }
+    return AN.loopMag;
+  }
+  const loopMag = () => loopMagRoh() && an();
+  function loopMagSetzen(b) { AN.loopMag = !!b; try { if (typeof localStorage !== 'undefined') localStorage.setItem('rennspiel.spass.zauber.loopMag', b ? '1' : '0'); } catch (e) { /* egal */ } }
+  function erzwingen(b) { AN.erzwungen = !!b; }
   function anSetzen(b) { AN.an = !!b; try { if (typeof localStorage !== 'undefined') localStorage.setItem('rennspiel.spass.zauber.an', b ? '1' : '0'); } catch (e) { /* egal */ } }
 
   /** Neuer Zustand (fz.z). */
@@ -87,10 +103,11 @@
     const leer = { magnet: [], schluchten: [], schienen: [], extras: [], pipe: null };
     if (!st.spline || !erg || !opt || opt.zauber !== true) return null;
     const c = C();
-    // Stunt-Park (nur Motorrad-Katalog): echte Halfpipe
-    if (daten.id === 'stuntpark') {
-      const p = c.pipe;
+    // Stunt-Park (nur Motorrad-Katalog) und Stunt-Arena (R4, nur Autorennen: daten.stuntBereich): echte Halfpipe
+    if (daten.id === 'stuntpark' || daten.stuntBereich === true) {
+      const arena = daten.stuntBereich === true, p = arena ? c.pipeAuto : c.pipe;
       leer.pipe = { s0: p.s0, s1: p.s1, qF: p.qF, r: p.r, rampe: p.rampe, halb: st.breite / 2 };
+      if (arena) { leer.pipe.auto = true; leer.pipe.vCap = p.vCap; leer.pipe.geo = Object.assign({}, c.pipeGeo); }   // nur Arena: Motorrad-Pipe bleibt bitgleich (kein auto/vCap/geo)
       erg.zonen.push({ s0: p.s0 - 10, s1: p.s1 + 10 });
       pipeEinbauen(st, leer.pipe);
       return leer;
@@ -100,7 +117,10 @@
     const N = Math.max(8, Math.ceil(L / 4)), ds = L / N, kr = new Float32Array(N);
     for (let k = 0; k < N; k++) kr[k] = Math.abs(sp.punktBei(k * ds).kruemmung || 0);
     const kMax = (a, b) => { let i0 = Math.floor(a / ds), i1 = Math.ceil(b / ds), m = 0; if (i1 - i0 > N) { i0 = 0; i1 = N; } for (let i = i0; i <= i1; i++) { const x = kr[((i % N) + N) % N]; if (x > m) m = x; } return m; };
-    const belegt = R.Spass.sperrZonen(st, sicht, !zufallAn).slice();
+    const lm = (opt.loopingMagnet === true || AN.bau === true) && st.loopings && st.loopings.length > 0, alteLoops = lm ? st.loopings.slice() : null;
+    if (lm) st.loopings = [];                                       // R4: ohne die Looping-Sperrzonen messen (die Loopings werden gleich ersetzt oder von Hand wieder eingetragen)
+    let belegt;
+    try { belegt = R.Spass.sperrZonen(st, sicht, !zufallAn).slice(); } finally { if (lm) st.loopings = alteLoops; }
     (erg.zonen || []).forEach((z) => { const len = sp.wrapS(z.s1 - z.s0); belegt.push({ c: z.s0 + len / 2, h: len / 2 }); });
     const frei = (a, b) => { const c0 = (a + b) / 2, h0 = (b - a) / 2; for (let k = 0; k < belegt.length; k++) if (Math.abs(sp.differenzS(c0, belegt[k].c)) < h0 + belegt[k].h) return false; return true; };
     const seed = hashText(String(daten.id || st.id || '') + '|' + (st.variante || '') + '|zauber');
@@ -127,6 +147,38 @@
       return null;
     }
     const nach = (je, max, abL, pl) => (L >= abL ? klemme(Math.round(L / je), 1, max) : 0);
+    // R4: Loopings → Magnet-Röhre (zuerst, damit alle anderen Elemente drumherum gelegt werden). Wunschplatz = Mitte des Loopings; ist dort etwas im Weg (Start/Ziel, Kreuzung, Kurve),
+    // rückt die Röhre in 6-m-Schritten zur nächsten freien geraden Stelle der Runde. Reicht der Platz nicht für alle, werden die Röhren kürzer (90 → 70 → 56 m); was dann
+    // noch nicht passt, bleibt ein Looping.
+    if (lm) {
+      const LM = c.loopMag, M0 = c.magnet;
+      const versuch = (len) => {
+        const rampe = len === LM.laenge ? LM.rampe : Math.round(len * LM.rampe / LM.laenge), neu = [], gz = gesetzt.slice(), rest = [];
+        alteLoops.forEach((l) => {
+          const mitte = l.s0 + sp.wrapS(l.s1 - l.s0) / 2;
+          let ok = null;
+          for (let d = 0; d <= L / 2 && !ok; d += 6) for (const sg of (d === 0 ? [1] : [1, -1])) {
+            const s0 = sp.wrapS(mitte - len / 2 + sg * d), sa = s0 - LM.rand, sb = s0 + len + LM.rand;
+            if (sa < von - 20 || sb > bis + 20 || !frei(sa, sb) || kMax(sa, sb) >= M0.platz.kappa) continue;
+            if (gz.some((z) => Math.abs(sp.differenzS((sa + sb) / 2, (z.a + z.b) / 2)) < (sb - sa) / 2 + (z.b - z.a) / 2)) continue;
+            ok = { s0, sa, sb }; break;
+          }
+          if (!ok) { rest.push(l); return; }
+          gz.push({ a: ok.sa, b: ok.sb });
+          neu.push({ nr: 0, s0: ok.s0, s1: ok.s0 + len, laenge: len, rampe, halb, ausLooping: true, sa: ok.sa, sb: ok.sb });
+        });
+        return { neu, rest };
+      };
+      let best = null;
+      for (const len of [LM.laenge, Math.round(LM.laenge * 0.78), Math.round(LM.laenge * 0.62)]) {
+        const v = versuch(len);
+        if (!best || v.neu.length > best.neu.length) best = v;
+        if (!v.rest.length) break;
+      }
+      best.neu.forEach((m) => { gesetzt.push({ a: m.sa, b: m.sb }); erg.zonen.push({ s0: m.sa, s1: m.sb }); delete m.sa; delete m.sb; m.nr = leer.magnet.length; leer.magnet.push(m); });
+      best.rest.forEach((l) => { belegt.push({ c: l.s0 + (sp.wrapS(l.s1 - l.s0) + 35 - 100) / 2, h: (sp.wrapS(l.s1 - l.s0) + 135) / 2 }); });
+      if (best.rest.length !== alteLoops.length) { st.loopings = best.rest; best.rest.forEach((l, i) => { l.nr = i; }); }
+    }
     // Schlucht
     const S = c.schlucht, nS = nach(S.platz.je, S.platz.max, S.platz.abLaenge);
     for (let i = 0; i < nS; i++) {
@@ -178,16 +230,26 @@
   };
   const zauberVon = (st) => (st && st.spass && st.spass.zauber) || null;
 
-  /** Halfpipe-Profil auf die Höhe der Strecke aufaddieren (nur Stunt-Park, Gerade 2: x = 2·Radius, z = s − 1034). */
+  /** Halfpipe-Profil auf die Höhe der Strecke aufaddieren (Stunt-Park/Stunt-Arena, Gerade 2: x = 2·Radius, z = s − zOff; Lage in e.geo, Vorgabe pipeGeo = 1034 / 150..250). */
   function pipeEinbauen(st, e) {
     if (st._pipeEin) return;
     st._pipeEin = true;
-    const proto = Object.getPrototypeOf(st), o = proto.hoeheAn, sp = st.spline;
-    const z0 = e.s0 - 1034 - 2, z1 = e.s1 - 1034 + 2;
+    const proto = Object.getPrototypeOf(st), o = proto.hoeheAn, sp = st.spline, geo = e.geo || C().pipeGeo, zOff = geo.zOff, xMin = geo.xMin, xMax = geo.xMax;
+    const z0 = e.s0 - zOff - 2, z1 = e.s1 - zOff + 2;
+    // R4 (nur Auto-Arena): Das Asphaltband hat je Splinepunkt nur zwei Randpunkte; bei 40 m Breite lägen sie oben auf den Bänken (Höhe = Radius) und das Band wäre ein flacher Deckel über der Pipe,
+    // der Auto und Bänke verdeckt. Darum nur für die Darstellung: Asphalt/Rand im Pipe-Bereich so breit wie die flache Mitte (2·qF + 0,6). Physik/Breite der Strecke bleiben unverändert.
+    if (e.auto && st._breiteGeo) {
+      const bg = st._breiteGeo, sA = e.s0, sB = e.s1;
+      st._breiteGeo = function (i, sx) { const b = bg.call(this, i, sx); return sx >= sA && sx <= sB ? Math.min(b, 2 * e.qF + 0.6) : b; };
+    }
+    if (e.auto && typeof st.bauen === 'function') {       // R4 (Auto-Arena): Boden-/Straßengitter ohne Profil bauen (grobe 10-m-Felder lägen sonst als Hügel über dem Pipe-Boden); die Bänke zeichnet spassZauberUI (HalfpipeBanken) in voller Höhe darüber
+      const bauen = st.bauen;
+      st.bauen = function () { this._pipeAus = true; try { return bauen.apply(this, arguments); } finally { this._pipeAus = false; } };
+    }
     st.hoeheAn = function (x, z, idx) {
       const y = o.call(this, x, z, idx);
-      if (z < z0 || z > z1 || x < 150 || x > 250) return y;
-      const s = z + 1034, p = sp.punktBei(s), q = (x - p.x) * p.nx + (z - p.z) * p.nz;
+      if (this._pipeAus || z < z0 || z > z1 || x < xMin || x > xMax) return y;
+      const s = z + zOff, p = sp.punktBei(s), q = (x - p.x) * p.nx + (z - p.z) * p.nz;
       return y + pipeProfil(e, s, q);
     };
   }
@@ -242,13 +304,16 @@
     return e.art;
   }
 
+  /** Pipe-Werte: Auto-Arena (e.auto) hat eigene, sonst die Motorrad-Werte. */
+  const pipeC = (e) => (e.auto ? C().pipeAuto : C().pipe);
   function pipeStart(fz, v, st, nah, e, q, sAlt, xAlt, zAlt, dt) {
-    const c = C().pipe, sp = st.spline, z = zz(fz);
+    const c = pipeC(e), sp = st.spline, z = zz(fz);
     const side = q >= 0 ? 1 : -1, w = pipeW(e, nah.s - e.s0), re = e.r * w;
     if (re < 0.4) return null;
+    if (e.auto && (re < e.r * c.reMin || Math.abs(q) - e.qF > re * c.einfangMax)) return null;      // R4: Auto wird erst eingefangen, wenn die Rundung unter ihm schon hoch genug ist (sonst Katapult am Rampenanfang); Motorrad unverändert
     const pt = sp.punktBei(nah.s), vo = dt > 0 ? ((v.x - xAlt) * pt.nx + (v.z - zAlt) * pt.nz) / dt * side : 0;
     const d = Math.abs(q) - e.qF, phi0 = Math.asin(klemme(d / re, 0, 0.99));
-    fz.pipe = { e, side, phi: phi0, w: Math.max(vo, c.wMin) / re, s: nah.s, vF: v.vLaengs, sAus: 0 };
+    fz.pipe = { e, side, phi: phi0, w: Math.max(vo, c.wMin) / re, s: nah.s, vF: e.vCap ? Math.min(v.vLaengs, e.vCap) : v.vLaengs, sAus: 0 };
     fz.index = nah.index;
     fz.aktiv = true; fz.rampe = null; fz.rampenH = 0; fz.vy = 0; fz.y = st.hoeheAn(v.x, v.z, nah.index); fz.yVorher = fz.y; fz.t = 0; fz.sprungGemeldet = true;
     fz.startX = v.x; fz.startZ = v.z; fz.nicken = 0; fz.nickenVorher = 0;
@@ -302,7 +367,7 @@
     const pe = za.pipe;
     if (pe) {
       const a = sp.differenzS(sNeu, pe.s0);
-      if (a > 3 && a < pe.s1 - pe.s0 - 3 && Math.abs(q) > pe.qF + C().pipe.abstandStart && v.vLaengs >= C().pipe.vMin) return pipeStart(fz, v, st, nah, pe, q, sAlt, xAlt, zAlt, dt);
+      if (a > 3 && a < pe.s1 - pe.s0 - 3 && Math.abs(q) > pe.qF + pipeC(pe).abstandStart && v.vLaengs >= pipeC(pe).vMin) return pipeStart(fz, v, st, nah, pe, q, sAlt, xAlt, zAlt, dt);
     }
     return null;
   }
@@ -383,11 +448,11 @@
   }
 
   function pipeSchritt(fz, v, st, steuerung, dt) {
-    const P = fz.pipe, e = P.e, c = C().pipe, sp = st.spline, z = zz(fz), g = G();
+    const P = fz.pipe, e = P.e, c = pipeC(e), sp = st.spline, z = zz(fz), g = G();
     fz.t += dt; fz.yVorher = fz.y; fz.nickenVorher = fz.nicken;
     const lenk = klemme((steuerung && steuerung.lenkung) || 0, -1, 1);
     v.lenkung += (lenk - v.lenkung) * Math.min(1, 6 * dt);
-    P.vF *= Math.exp(-c.reibung * dt);
+    P.vF *= Math.exp(-c.reibung * (e.auto ? 1 - klemme((steuerung && steuerung.gas) || 0, 0, 1) : 1) * dt);   // R4: Auto – mit Gas bleibt das Tempo im Rohr (kein Steckenbleiben); Motorrad unverändert
     P.s += P.vF * dt;
     const a = P.s - e.s0, w = pipeW(e, a), re = Math.max(0.3, e.r * w);
     const aus = lenk * P.side;                                       // > 0: nach außen (zur Wand) lenken
@@ -408,14 +473,14 @@
     return null;
   }
   function pipeVerlassen(fz, v, st, P, pt, re, luft) {
-    const c = C().pipe, e = P.e;
+    const e = P.e, c = pipeC(e);
     if (luft) {
       // oben an der Kante: senkrecht hoch, leicht nach innen – der normale Flug (Tricks, Landung) übernimmt
       const q = P.side * (e.qF + re), lat = -P.side * c.hopInnen;
       const wp = weltPose(st, P.s, q), grund = st.hoeheAn(wp.x, wp.z, fz.index) - pipeProfil(e, P.s, q);
       const vx = pt.tx * P.vF + pt.nx * lat, vz = pt.tz * P.vF + pt.nz * lat;
       v.x = wp.x; v.z = wp.z; v.heading = R.headingAus(vx, vz); v.vLaengs = Math.hypot(vx, vz); v.vQuer = 0;
-      fz.pipe = null; fz.vy = klemme(re * P.w, 2, C().pipe.vyMax); fz.y = grund + re; fz.yVorher = fz.y; fz.t = 0; fz.sprungGemeldet = false; fz.fluege++;
+      fz.pipe = null; fz.vy = klemme(re * P.w, 2, c.vyMax); fz.y = grund + re; fz.yVorher = fz.y; fz.t = 0; fz.sprungGemeldet = false; fz.fluege++;
       melden(fz, 'pipeLuft');
       return null;
     }
@@ -501,6 +566,15 @@
 
   // ---------------------------------------------------------------- Spiel.physikSchritt (Browser + Server)
   const P = R.Spiel.prototype;
+  // R4: nur Rennen, die der Spieler offline startet (streckeAufbauen), bauen Loopings als Magnet-Röhre – Online (streckeSzeneBauen direkt) und der Server bleiben klassisch (P5 folgt nach R2)
+  if (!P._loopMagHuelle && P.streckeAufbauen) {
+    P._loopMagHuelle = true;
+    const aufbauen = P.streckeAufbauen;
+    P.streckeAufbauen = function () {
+      AN.bau = loopMag();
+      try { return aufbauen.apply(this, arguments); } finally { AN.bau = false; }
+    };
+  }
   if (!P._zauberPhysik) {
     P._zauberPhysik = true;
     const orig = P.physikSchritt;
@@ -571,5 +645,5 @@
     };
   }
 
-  R.SpassZauber = { an, anSetzen, plan, nachSchritt, magnetTheta, pipeProfil, pipeW, zustand, zz, wirkungSetzen, zeitAblauf, magnetAus, glatt, weltPose, zauberVon };
+  R.SpassZauber = { an, anSetzen, erzwingen, loopMag, loopMagRoh, loopMagSetzen, plan, nachSchritt, magnetTheta, pipeProfil, pipeW, zustand, zz, wirkungSetzen, zeitAblauf, magnetAus, glatt, weltPose, zauberVon };
 })();

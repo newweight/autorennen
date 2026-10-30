@@ -81,8 +81,9 @@
     kurz: { emoji: '⭐', name: 'Kurz-Level', sub: '12 kurze Aufgaben mit 1–3 Sternen' },
     frei: { emoji: '🗺️', name: 'Freie Fahrt', sub: 'Ohne Gegner: finde die ❓-Kisten' },
     ko: { emoji: '🏁', name: 'K.-o.-Rallye', sub: 'An jeder Wertung fliegt der Letzte raus' },
+    arena: { emoji: '🎪', name: 'Stunt-Arena', sub: 'Halfpipe und Schanzen, ohne Gegner' },      // R4: nur Autorennen (Motorrad hat den Stunt-Park)
   };
-  const ARTEN = ['kurz', 'frei', 'ko'];
+  const ARTEN = window.MOTORRAD === true ? ['kurz', 'frei', 'ko'] : ['kurz', 'frei', 'ko', 'arena'];
   function stilB() {
     if (document.getElementById('spass-menue-stil-b')) return;
     const s = document.createElement('style'); s.id = 'spass-menue-stil-b';

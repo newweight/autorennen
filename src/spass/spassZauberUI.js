@@ -375,7 +375,9 @@
       else if (fz && fz.pipe) {
         const P_ = fz.pipe, phi = P_.phi; const p = st.spline.punktBei(P_.s);
         _f.set(p.tx, 0, p.tz).normalize(); _u.set(-P_.side * Math.sin(phi) * p.nx, Math.cos(phi), -P_.side * Math.sin(phi) * p.nz).normalize();
-        _pos.set(d.x, d.y, d.z); pose = { pos: _pos, u: _u, f: _f, art: 'pipe', phi };
+        _pos.set(d.x, d.y, d.z);
+        if (P_.e && P_.e.auto) _pos.addScaledVector(_u, 0.0 + (P_.e.hebung === undefined ? 0.55 : P_.e.hebung));      // R4: Auto liegt sichtbar auf der Bank (die Bank wird mit Tiefen-Versatz gezeichnet und verdeckte sonst die flache Karosserie); Motorrad unverändert
+        pose = { pos: _pos, u: _u, f: _f, art: 'pipe', phi };
       } else if (fz && fz.schiene && fz.schiene.art === 'wand') {
         const S_ = fz.schiene, p = st.spline.punktBei(S_.s), al = 1.4 * SZ.glatt(S_.weg / 3);
         _f.set(p.tx, 0, p.tz).normalize(); _u.set(-S_.side * Math.sin(al) * p.nx, Math.cos(al), -S_.side * Math.sin(al) * p.nz).normalize();
@@ -513,17 +515,33 @@
   function stil() {
     if (typeof document === 'undefined' || document.getElementById('spass-zauber-stil')) return;
     const s = document.createElement('style'); s.id = 'spass-zauber-stil';
-    s.textContent = '.m-spass{gap:.25em .5em!important;font-size:.7em!important}.m-spass .gr{padding:.1em .3em!important;gap:.2em!important}';
+    s.textContent = '.m-spass{gap:.25em .5em!important;font-size:.7em!important}.m-spass .gr{padding:.1em .3em!important;gap:.2em!important}.m-spass .gr.r4-grau{opacity:.4;pointer-events:none}';
     document.head.appendChild(s);
   }
   if (R.Menue) {
     const M = R.Menue.prototype;
     const zeilen = M.zeilen;
-    M.zeilen = function () { const z = zeilen.apply(this, arguments), i = z.indexOf('start'); z.splice(i < 0 ? z.length : i, 0, 'zauber'); return z; };
+    // R4: zweite Zeile „🌀 Loopings: Klassisch | Magnet-Röhre“ direkt hinter dem Fahr-Zauber (nur Autorennen und Motorrad mit Fantasie-Loopings; Standard Klassisch, ausgegraut ohne Fahr-Zauber)
+    M.zeilen = function () { const z = zeilen.apply(this, arguments), i = z.indexOf('start'); z.splice(i < 0 ? z.length : i, 0, 'zauber', 'loopmag'); return z; };
     const zeilenWert = M.zeilenWert;
-    M.zeilenWert = function (zeile, dx) { if (zeile === 'zauber') { if (dx) this.wertSetzen('zauber', dx > 0 ? 'an' : 'aus'); return; } return zeilenWert.apply(this, arguments); };
+    M.zeilenWert = function (zeile, dx) {
+      if (zeile === 'zauber') { if (dx) this.wertSetzen('zauber', dx > 0 ? 'an' : 'aus'); return; }
+      if (zeile === 'loopmag') { if (dx) this.wertSetzen('loopmag', dx > 0 ? 'mag' : 'klassisch'); return; }
+      return zeilenWert.apply(this, arguments);
+    };
     const wertSetzen = M.wertSetzen;
-    M.wertSetzen = function (zeile, k) { if (zeile === 'zauber') { SZ.anSetzen(k === 'an'); this.e.zauber = k === 'an'; return; } return wertSetzen.apply(this, arguments); };
+    M.wertSetzen = function (zeile, k) {
+      if (zeile === 'zauber') { SZ.anSetzen(k === 'an'); this.e.zauber = k === 'an'; return; }
+      if (zeile === 'loopmag') { if (SZ.an()) SZ.loopMagSetzen(k === 'mag'); return; }
+      return wertSetzen.apply(this, arguments);
+    };
+    /** Streckenkarten: „2 Loopings“ → „2 Magnet-Röhren“, wenn die Magnet-Röhren-Option an ist. */
+    const htmlStrecke = M.htmlStrecke;
+    M.htmlStrecke = function () {
+      const h = htmlStrecke.apply(this, arguments);
+      try { if (SZ.loopMag()) return h.replace(/(\d+) Loopings/g, (m, n) => n + (n === '1' ? ' Magnet-Röhre' : ' Magnet-Röhren')).replace(/zwei Loopings \(Vollgas!\)/g, 'zwei Magnet-Röhren (kopfüber an der Decke)'); } catch (err) { console.error('R4 (Streckentext):', err); }
+      return h;
+    };
     const htmlStart = M.htmlStart;
     M.htmlStart = function () {
       let h = htmlStart.apply(this, arguments);
@@ -534,7 +552,10 @@
         const pille = (k, text, a) => `<span class="pille${a ? ' aktiv' : ''}" data-a="wert:zauber:${k}">${text}</span>`;
         const gr = `<span class="gr${gf === 'zauber' ? ' fokus' : ''}" title="Magnet-Röhren, Schluchten mit Flügeln/Gleitschirm, Geländer und Wände, Halfpipe, Riesen-/Mini-Kristalle auf passenden Strecken – Aus: wie früher (braucht „Spaß-Elemente“)">` +
           `<span class="z-label" data-a="fokus:${z.indexOf('zauber')}">✨ Fahr-Zauber</span>${pille('aus', 'Aus', !an)}${pille('an', 'An', an)}</span>`;
-        h = h.replace('<span class="knopf klein" data-a="album"', gr + '<span class="knopf klein" data-a="album"');
+        const lm = SZ.loopMagRoh(), pilleL = (k, text, a) => `<span class="pille${a ? ' aktiv' : ''}" data-a="wert:loopmag:${k}">${text}</span>`;
+        const gl = `<span class="gr${gf === 'loopmag' ? ' fokus' : ''}${an ? '' : ' r4-grau'}" title="Fantasie-Loopings als Magnet-Röhre fahren: das Auto haftet an der Wand und fährt kopfüber über die Decke – ohne Anlauf-Tempo. Klassisch: wie bisher (braucht „Fahr-Zauber“; nur offline)">` +
+          `<span class="z-label" data-a="fokus:${z.indexOf('loopmag')}">🌀 Loopings</span>${pilleL('klassisch', 'Klassisch', !lm || !an)}${pilleL('mag', 'Magnet-Röhre', lm && an)}</span>`;
+        h = h.replace('<span class="knopf klein" data-a="album"', gr + gl + '<span class="knopf klein" data-a="album"');
       } catch (err) { console.error('Zauber UI (Menü):', err); }
       return h;
     };

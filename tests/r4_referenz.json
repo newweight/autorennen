@@ -1,0 +1,21 @@
+{
+ "moto-pipe-pump": "3897989926 rides 236 ymax 11.084",
+ "moto-pipe-ruhig": "3690079543 rides 0 ymax 0.000",
+ "auto-wiese-zauber": "420862811 n 9000",
+ "auto-fantasie-zauber": "277546513 n 9000",
+ "auto-fantasie-ohne": "709474179 n 9000",
+ "moto-alpen-zauber": "1379549740 n 9000",
+ "plan-wiese": "806:563825440",
+ "plan-fantasie": "273:1368625456",
+ "plan-alpen": "792:1044276352",
+ "plan-wald": "805:291359984",
+ "planhash-wiese": "1222247509/0",
+ "planhash-fantasie": "1099997156/2",
+ "planhash-alpen": "3145561948/0",
+ "planhash-wald": "2986554698/0",
+ "kurz": {
+  "auto-fantasie-zauber": 2501373998,
+  "auto-fantasie-ohne": 3840455255,
+  "moto-alpen-zauber": 1500295794
+ }
+}
