@@ -511,6 +511,7 @@
     // ---------- Darstellung ----------
     zeichnen() {
       if (!this.sichtbar) return;
+      try { if (R.Garage && R.Garage.hinweisZeigen) R.Garage.hinweisZeigen(); } catch (e) { /* egal */ }      // R1: einmaliger Erstattungs-Hinweis (alte Upgrades → Goldstücke)
       const id = SCHRITTE[this.schritt].id;
       const kopf = SCHRITTE.map((s, i) =>
         `<div class="m-schritt${i === this.schritt ? ' aktiv' : ''}${i < this.schritt ? ' fertig' : ''}" data-a="schritt:${i}">` +

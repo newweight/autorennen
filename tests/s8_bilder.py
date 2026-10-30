@@ -91,7 +91,7 @@ with sync_playwright() as p:
         b.close()
     if 'garage' in TEILE:
         b, pg = seite(p, 'Motorrad', 1200, 760); name = pg.evaluate("Rennspiel.config.fahrerStandard[0]")
-        pg.evaluate("""([n]) => { const R = Rennspiel; R.Garage.gutschreiben(n, 900); R.SpassTuning.kaufen(n, R.spiel.einstellungen.autoIds[0], 'motor'); R.Garage.upgradeKaufen(n, R.spiel.einstellungen.autoIds[0], 'motor');
+        pg.evaluate("""([n]) => { const R = Rennspiel; R.Garage.gutschreiben(n, 900); R.SpassTuning.kaufen(n, R.spiel.einstellungen.autoIds[0], 'motor');
           const m = R.spiel.menue; m.garageOeffnen(); const g = m.garageUi; g.fahrer = n; g.autoId = R.spiel.einstellungen.autoIds[0]; g.phase = 'tuning'; g.tuningZeile = 0; g.zeichnen(); }""", [name])
         pg.wait_for_timeout(1500); pg.screenshot(path=f'{OUT}/garage_tuning_gesamt.png', timeout=120000); print('Bild garage_tuning_gesamt', flush=True)
         print(pg.evaluate("(document.querySelector('.g-tuningpanel') || {}).innerText"))

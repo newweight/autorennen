@@ -3,13 +3,13 @@
 a) Rennen Wiese (Autopilot): Münzen liegen (20–40, 1 Draw-Call), Spieler sammelt (HUD „🪙 n"), KI sammelt nebenbei,
    Preisgeld nach dem Rennen (Kontostand = gesammelt + Preisgeld), Bild der Münzreihe.
 b) Garage per Taste G: Fahrer → Auto → Werkstatt; Farbe per Pfeil = Live-Vorschau auf der Bühne, Enter kauft (−20),
-   Motor-Upgrade per Tastatur (−30), Reifen per Maus, Reparatur bei Schaden aus = „Nicht nötig", Esc zurück ins Menü.
-c) Nächstes Rennen: Spielerauto im neuen Lack (Material-Farben + Pixel im Bild), KI unverändert; vMax × 1,04;
-   Schalter „Upgrades zählen: aus" → vMax Standard, Lack bleibt.
+   R1: keine Upgrades mehr; Tuning per Tastatur/Maus (−10), Reparatur bei Schaden aus = „Nicht nötig", Esc zurück ins Menü.
+c) Nächstes Rennen: Spielerauto im neuen Lack (Material-Farben + Pixel im Bild), KI unverändert; nur noch Tuning wirkt (kein Upgrade-Schalter);
+   R1-Erstattung: alter Spielstand mit Upgrades → Goldstücke, Hinweis einmalig, Bilder.
 d) v32: Schaden-Rest wird nicht mehr gespeichert, jedes Rennen startet mit 100 %, Garage zeigt „Alles heil ✓“ (Reparatur kostet 0).
 e) Fahrer-Schritt zeigt „🪙 n"; keine JS-Fehler.
 Bilder: tests/out/garage/*.png (mit Read ansehen).  Aufruf: python3 tests/garage_test.py"""
-import sys, os, json
+import sys, os, json, time
 from playwright.sync_api import sync_playwright
 from PIL import Image
 
@@ -51,6 +51,7 @@ VMAX = """(nr) => { const s = Rennspiel.spiel, f = s.fahrzeuge[nr], b = new Renn
 with sync_playwright() as p:
     browser = p.chromium.launch(args=ARGS)
     page = browser.new_page(viewport={'width': 1280, 'height': 800})
+    page.set_default_timeout(180000)      # R1: großzügig (nur 2 CPU-Kerne, zweiter Agent läuft mit)
     page.on('pageerror', lambda e: fehler.append(str(e)))
     page.on('console', lambda m: fehler.append('console.error: ' + m.text) if m.type == 'error' else None)
     page.goto(url)
@@ -84,7 +85,7 @@ with sync_playwright() as p:
     # Spieler-Autopilot, Rennen zu Ende fahren (Spieler wurde versetzt → neu starten für saubere Wertung)
     page.evaluate("""Rennspiel.spiel.rennenStarten(); Rennspiel.spiel.autopilot(0, true)""")
     plus_gesehen = False
-    for _ in range(40):
+    for _ in range(150):
         page.evaluate('Rennspiel.spiel.schnellvorlauf(5)')
         if page.evaluate('Rennspiel.spiel.muenzen && Rennspiel.spiel.muenzen.anzahlVon(0) > 0'): plus_gesehen = True
         if page.evaluate('Rennspiel.spiel.zustand') != 'rennen': break
@@ -123,20 +124,41 @@ with sync_playwright() as p:
     lack_vorschau = page.evaluate('Rennspiel.AutoVorschau.lack(0)')
     pruefe('Pfeil → Pink: Live-Vorschau auf der Bühne (noch nicht gekauft)', lack_vorschau == PINK and lack0 != PINK
            and page.evaluate("Rennspiel.Garage.lackFarbe('Jonas', 'troc-cabrio')") is None and page.evaluate("Rennspiel.Garage.konto('Jonas')") == konto0, [lack0, lack_vorschau])
-    winkel0 = page.evaluate('Rennspiel.AutoVorschau.winkel(0)'); taste('Period'); page.wait_for_timeout(900)
+    winkel0 = page.evaluate('Rennspiel.AutoVorschau.winkel(0)'); taste('Period'); page.wait_for_timeout(2500)
     pruefe('Bühne dreht mit . (90°)', page.evaluate('Rennspiel.AutoVorschau.winkel(0)') - winkel0 < -25)
     taste('Enter'); page.wait_for_timeout(500)
     pruefe('Enter kauft Pink: −20, Lack gespeichert', page.evaluate("Rennspiel.Garage.lackFarbe('Jonas', 'troc-cabrio')") == PINK
            and page.evaluate("Rennspiel.Garage.konto('Jonas')") == konto0 - 20, page.inner_text('#garage .g-nachricht'))
     pruefe('Bühne zeigt gekauften Lack', page.evaluate('Rennspiel.AutoVorschau.lack(0)') == PINK)
-    taste('ArrowDown', 2); taste('Enter'); page.wait_for_timeout(300)
-    pruefe('Tastatur: Motor Stufe 1 (−30)', page.evaluate("Rennspiel.Garage.autoDaten('Jonas', 'troc-cabrio').motor") == 1
-           and page.evaluate("Rennspiel.Garage.konto('Jonas')") == konto0 - 50)
-    page.click('#garage [data-g="upgrade:reifen"]'); page.wait_for_timeout(300)
-    pruefe('Maus: Reifen Stufe 1 (−30), Balken zeigt 1 von 3', page.evaluate("Rennspiel.Garage.autoDaten('Jonas', 'troc-cabrio').reifen") == 1
+    # R1: keine Upgrade-Zeilen/-Knöpfe mehr; Tastatur: ↓ = Zeile „Tuning öffnen“ (nur 2 Zeilen, kein totes Feld), Enter öffnet
+    pruefe('R1: keine Upgrade-Knöpfe, kein „Upgrades“-Text, kein Schalter in der Werkstatt', page.locator('#garage [data-g^="upgrade"]').count() == 0
+           and page.locator('#garage [data-g^="schalter"]').count() == 0 and 'Upgrade' not in page.inner_text('#garage'))
+    def zeile_warten(z):
+        t0 = time.time()
+        try: page.wait_for_function("Rennspiel.spiel.menue.garageUi.zeile === " + str(z), timeout=60000, polling=250)
+        except Exception: print('zeile_warten: Zeit ueberschritten', z, flush=True)
+        page.wait_for_timeout(500)
+    taste('ArrowDown'); zeile_warten(1)
+    pruefe('R1: ↓ in der Garage stellt nicht heimlich den Spaß-Modus ein', page.evaluate("!Rennspiel.spiel.einstellungen.spassModus"))
+    pruefe('R1: ↓ fokussiert „Tuning öffnen“ (gelber Fokus)', page.evaluate("!!document.querySelector('#garage [data-g=\\'tuning:oeffnen\\'].fokus')"))
+    taste('ArrowDown'); zeile_warten(0)
+    pruefe('R1: nochmal ↓ springt zurück auf Lack (nur 2 Zeilen)', page.evaluate("Rennspiel.spiel.menue.garageUi.zeile") == 0 and page.evaluate("!!document.querySelector('#garage .g-zeile.fokus')"))
+    taste('ArrowUp'); zeile_warten(1)
+    pruefe('R1: ↑ vom Lack aus springt zu „Tuning öffnen“', page.evaluate("Rennspiel.spiel.menue.garageUi.zeile") == 1)
+    taste('Enter'); page.wait_for_timeout(500)
+    page.wait_for_timeout(600)
+    pruefe('R1: Enter öffnet den Tuning-Schritt (reines Tuning, „Gesamt“ ohne Upgrades)', page.evaluate("Rennspiel.spiel.menue.garageUi.phase") == 'tuning'
+           and page.locator('#garage .g-tuningpanel').count() == 1 and 'Upgrades' not in page.inner_text('#garage .g-tuningpanel'), page.inner_text('#garage .g-tuningpanel')[:300])
+    taste('ArrowRight'); page.wait_for_timeout(300)
+    pruefe('Tastatur: Tuning Motor Stufe 1 (−10)', page.evaluate("Rennspiel.SpassTuning.stufen('Jonas', 'troc-cabrio').motor") == 1
+           and page.evaluate("Rennspiel.Garage.konto('Jonas')") == konto0 - 30)
+    page.click('#garage [data-g="tuning:kauf:reifen"]'); page.wait_for_timeout(300)
+    pruefe('Maus: Tuning Reifen Stufe 1 (−10), Balken zeigt 1', page.evaluate("Rennspiel.SpassTuning.stufen('Jonas', 'troc-cabrio').reifen") == 1
            and page.evaluate("Array.from(document.querySelectorAll('#garage .g-zeile')).filter(z => z.textContent.includes('Reifen'))[0].querySelectorAll('.g-balken i.voll').length") == 1)
-    pruefe('v32: Reparatur-Zeile „Alles heil ✓“, kein Reparatur-Knopf, Konto unverändert', 'Alles heil' in page.inner_text('#garage .g-zeile:nth-child(2)')
-           and page.locator('#garage [data-g="reparatur"]').count() == 0 and page.evaluate("Rennspiel.Garage.konto('Jonas')") == konto0 - 80)
+    taste('Escape'); page.wait_for_timeout(300)
+    pruefe('Esc: zurück in die Werkstatt', page.evaluate("Rennspiel.spiel.menue.garageUi.phase") == 'werkstatt' and page.locator('#garage [data-g="farbe:0"]').count() == 1)
+    pruefe('v32: Reparatur-Zeile „Alles heil ✓“, kein Reparatur-Knopf, Konto unverändert', 'Alles heil' in page.evaluate("Array.from(document.querySelectorAll('#garage .g-zeile')).filter(z => z.textContent.includes('Reparatur'))[0].textContent")
+           and page.locator('#garage [data-g="reparatur"]').count() == 0 and page.evaluate("Rennspiel.Garage.konto('Jonas')") == konto0 - 40)
     page.mouse.move(5, 5); page.wait_for_timeout(700)
     lay = page.evaluate("""(() => { const m = document.querySelector('#garage .m-inhalt'), r = Array.from(document.querySelectorAll('#garage .g-zeile, #garage canvas.buehne')).map(e => e.getBoundingClientRect());
       return { scroll: m.scrollHeight <= m.clientHeight + 1, innen: r.every(a => a.left >= 0 && a.right <= innerWidth && a.bottom <= innerHeight) }; })()""")
@@ -163,7 +185,7 @@ with sync_playwright() as p:
 
     # ---------------------------------------------------------------- c) Nächstes Rennen: neuer Lack, Upgrade
     page.evaluate("""Rennspiel.spiel.rennenStarten({ modus: 'solo', streckeId: 'wiese', gegner: 1, runden: 1, fahrer: ['Jonas', 'Emmy'],
-      autoIds: ['troc-cabrio', 'multivan'], upgradesZaehlen: true })""")
+      autoIds: ['troc-cabrio', 'multivan'] })""")
     m0 = page.evaluate(LACK_IM_MESH, [0, PINK]); m1 = page.evaluate(LACK_IM_MESH, [1, PINK])
     pruefe('Rennen: Spielerauto im Garage-Lack (Material-Farben pink)', m0['lack'] == PINK and m0['anteil'] > 0.2, m0)
     pruefe('Rennen: KI-Auto unverändert (kein Pink)', m1['lack'] != PINK and m1['anteil'] == 0, m1)
@@ -173,21 +195,20 @@ with sync_playwright() as p:
     katalog_farbe = page.evaluate("Rennspiel.carCatalog.finde('troc-cabrio').farbe")
     pruefe('Cache: Standard-Cabrio hat eigene Geometrie (unverändert in der Katalogfarbe)', std != pink_geo and page.evaluate("Rennspiel.carBuilder.bauen(Rennspiel.carCatalog.finde('troc-cabrio')).userData.lackFarbe") == katalog_farbe, hex(katalog_farbe))
     vm = page.evaluate(VMAX, 0); vk = page.evaluate(VMAX, 1)
-    pruefe('Upgrade Motor 1: vMax × 1,04, Reifen 1: grip × 1,04', abs(vm['verh'] - 1.04) < 1e-6 and abs(vm['grip'] - 1.04) < 1e-6, vm)
-    pruefe('KI ohne Upgrades (vMax × 1)', abs(vk['verh'] - 1) < 1e-9, vk)
+    jc = page.evaluate("Rennspiel.config.spass.tuning.jeStufe")
+    pruefe('Nur Tuning wirkt: Motor 1 = vMax × (1 + jeStufe.vMax), Reifen 1 = grip × (1 + jeStufe.grip); keine Upgrade-Anteile', abs(vm['verh'] - (1 + jc['vMax'])) < 1e-6 and abs(vm['grip'] - (1 + jc['grip'])) < 1e-6, [vm, jc])
+    pruefe('KI: nie mehr als Tuning (kein Upgrade-Anteil, Garage-Faktoren 1)', vk['verh'] <= vm['verh'] + 1e-9 and vk['verh'] <= 1 + jc['vMax'] + 1e-9, vk)
     page.wait_for_function('Rennspiel.spiel.rennen.zustand === "laeuft"', timeout=300000)
     page.evaluate('Rennspiel.spiel.autopilot(0, true); Rennspiel.spiel.schnellvorlauf(4)')
     page.wait_for_timeout(1200)
     bild_rennen = snap('06_rennen_pink.png')
     pink_rennen = pixel_anteil(bild_rennen, 'pink', box=(400, 380, 880, 760))
     pruefe('Bild Rennen: eigenes Auto pink (Pixel hinter der Kamera)', pink_rennen > 0.01, round(pink_rennen, 4))
-    # Schalter aus (wie in der Garage) → Standard-vMax, Lack bleibt
+    # R1: kein Upgrade-Schalter mehr – alter gespeicherter Schalter in den Einstellungen wird ignoriert, nichts bricht
     page.evaluate("Rennspiel.spiel.rennenStarten({ upgradesZaehlen: false })")
     vm2 = page.evaluate(VMAX, 0); m2 = page.evaluate(LACK_IM_MESH, [0, PINK])
-    pruefe('Schalter aus: vMax/grip Standard, Lack bleibt pink', abs(vm2['verh'] - 1) < 1e-9 and abs(vm2['grip'] - 1) < 1e-9 and m2['lack'] == PINK, [vm2, m2['lack']])
-    pruefe('Schalter gespeichert (Einstellungen)', E()['upgradesZaehlen'] is False and '"upgradesZaehlen":false' in page.evaluate('localStorage.getItem(Rennspiel.config.ui.speicherSchluessel)'))
-    page.evaluate("Rennspiel.spiel.rennenStarten({ upgradesZaehlen: true })")
-    pruefe('Schalter wieder an: vMax × 1,04', abs(page.evaluate(VMAX, 0)['verh'] - 1.04) < 1e-6)
+    pruefe('Alte Option upgradesZaehlen:false wird ignoriert (Tuning bleibt, Lack bleibt pink)', abs(vm2['verh'] - vm['verh']) < 1e-9 and m2['lack'] == PINK, [vm2, m2['lack']])
+    pruefe('Einstellungen enthalten kein upgradesZaehlen mehr', 'upgradesZaehlen' not in E() and 'upgradesZaehlen' not in page.evaluate('localStorage.getItem(Rennspiel.config.ui.speicherSchluessel) || ""'))
 
     # ---------------------------------------------------------------- d) Schaden-Rest + Reparatur
     page.evaluate("Rennspiel.spiel.rennenStarten({ schaden: true, gegner: 1 })")
@@ -205,7 +226,7 @@ with sync_playwright() as p:
     page.click('[data-a="garage"]'); page.wait_for_timeout(300)
     page.click('#garage [data-g="fahrer:Jonas"]'); page.wait_for_timeout(300)
     page.click('#garage [data-g="auto:troc-cabrio"]'); page.wait_for_timeout(500)
-    rep_text = page.inner_text('#garage .g-zeile:nth-child(2)')
+    rep_text = page.evaluate("Array.from(document.querySelectorAll('#garage .g-zeile')).filter(z => z.textContent.includes('Reparatur'))[0].textContent")
     k1 = page.evaluate("Rennspiel.Garage.konto('Jonas')")
     pruefe('v32: Garage zeigt „Alles heil ✓“, kein Reparaturpreis, kein Reparatur-Knopf', 'Alles heil' in rep_text and '🪙' not in rep_text
            and page.locator('#garage [data-g="reparatur"]').count() == 0, rep_text)
@@ -218,7 +239,30 @@ with sync_playwright() as p:
     # Schaden aus: kein Rest gespeichert/angewendet (Standard unverändert)
     page.evaluate("Rennspiel.spiel.rennenStarten({ schaden: false })")
     pruefe('Schaden aus: kein Schaden-System aktiv', not page.evaluate('!!(Rennspiel.spiel.schaden && Rennspiel.spiel.schaden.an)'))
-    page.evaluate("Rennspiel.spiel.rennenStarten({ schaden: false, upgradesZaehlen: true })")
+    page.evaluate("Rennspiel.spiel.rennenStarten({ schaden: false })")
+
+    # ---------------------------------------------------------------- f) R1: Erstattung alter Upgrades beim Laden + einmaliger Hinweis
+    page.evaluate('Rennspiel.spiel.zumMenue()'); page.wait_for_timeout(300)
+    alt = page.evaluate("""(() => { const k = Rennspiel.config.garage.speicherSchluessel, o = JSON.parse(localStorage.getItem(k));
+      Object.keys(o).forEach(n => delete o[n].upgradesErstattet);
+      o.Jonas.autos['troc-cabrio'].motor = 3; o.Jonas.autos['troc-cabrio'].reifen = 1;           // 190 + 30
+      o.Emmy = o.Emmy || { muenzen: 0, autos: {} }; o.Emmy.autos.multivan = Object.assign(o.Emmy.autos.multivan || {}, { farbe: null, farben: [], motor: 2, bremsen: 3 });   // 90 + 190
+      localStorage.setItem(k, JSON.stringify(o));
+      return { jonas: o.Jonas.muenzen, emmy: o.Emmy.muenzen || 0 }; })()""")
+    page.reload(); page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=90000); page.wait_for_timeout(1200)
+    pruefe('R1: Konto Jonas = alt + 220 (Motor 3 + Reifen 1), Emmy = alt + 280 (Motor 2 + Bremsen 3)',
+           page.evaluate("Rennspiel.Garage.konto('Jonas')") == alt['jonas'] + 220 and page.evaluate("Rennspiel.Garage.konto('Emmy')") == alt['emmy'] + 280, [alt, page.evaluate("Rennspiel.Garage.konto('Jonas')")])
+    pruefe('R1: Hinweis sichtbar mit Summe 500 Goldstücken', page.is_visible('#garage-hinweis') and 'in 500 Goldstücke getauscht' in page.inner_text('#garage-hinweis'), page.inner_text('#garage-hinweis') if page.locator('#garage-hinweis').count() else 'fehlt')
+    snap('08_hinweis_erstattung.png')
+    page.click('#garage-hinweis-ok'); page.wait_for_timeout(300)
+    pruefe('R1: Hinweis weg nach „Super!“', page.locator('#garage-hinweis').count() == 0)
+    pruefe('R1: Upgrade-Daten gelöscht, Merker gesetzt', page.evaluate("""(() => { const o = Rennspiel.Garage.laden(); return Object.keys(o).every(n => o[n].upgradesErstattet === true && !('erstattung' in o[n]) && Object.keys(o[n].autos).every(id => !('motor' in o[n].autos[id]) && !('reifen' in o[n].autos[id]) && !('bremsen' in o[n].autos[id]))); })()"""))
+    k_nach = page.evaluate("Rennspiel.Garage.konto('Jonas')")
+    page.reload(); page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=90000); page.wait_for_timeout(1000)
+    pruefe('R1: nach Neuladen kein zweiter Hinweis und keine zweite Gutschrift', page.locator('#garage-hinweis').count() == 0 and page.evaluate("Rennspiel.Garage.konto('Jonas')") == k_nach)
+    page.click('[data-a="garage"]'); page.wait_for_timeout(300)
+    pruefe('R1: auch in der Garage kein erneuter Hinweis', page.locator('#garage-hinweis').count() == 0)
+    page.click('#garage [data-g="zurueck"]'); page.wait_for_timeout(200)
 
     pruefe('Keine JS-Fehler', not fehler, fehler)
     print(json.dumps({'ok': all(x['ok'] for x in pruefungen), 'fehler': fehler}, ensure_ascii=False))

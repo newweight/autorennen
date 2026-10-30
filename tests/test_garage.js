@@ -2,7 +2,8 @@
 // Münzen: 20–40 je Strecke (alle Strecken + XL), Reihen à 5 auf Geraden, nichts im Looping/Start, auf der Fahrbahn,
 //   deterministisch; Einsammeln ändert NICHTS am Fahrzeug (keine Physik), Looping/Flug/Polizei sammeln nicht.
 // Garage (ohne localStorage → Arbeitsspeicher): Kontostand, Preisgeld, Farbkauf (20, danach gratis, Original gratis),
-//   Upgrades 30/60/100 und Faktoren (+4 % vMax / +4 % grip / +6 % bremsen je Stufe, Schalter aus = 1),
+//   R1: keine Upgrades mehr (Faktoren immer 1, config ohne upgradePreise); alte Upgrade-Stufen 0–3 werden beim Laden
+//   einmalig in Goldstücke erstattet (30 / 30+60 / 30+60+100 je Art), idempotent, Hinweis-Betrag einmalig,
 //   Reparatur-Logik (nur mit Schaden an und Rest < 100), Schaden-Rest (min. 30 %), Speicherformat, Fahrer getrennt.
 const { ladeModule } = require('./lade');
 const R = ladeModule(['src/config.js', 'src/physics/vehicle.js', 'src/track/spline.js', 'src/track/trackCatalog.js',
@@ -100,34 +101,68 @@ pruefe('4 Farben je Auto (alle Garage-Autos)', G.autos().every(a => G.farbenFuer
   r = G.farbeKaufen('Jonas', 'troc-cabrio', 0x123456);
   pruefe('Fremde Farbe abgelehnt', !r.ok && r.grund === 'farbe');
   pruefe('Farbe gilt nur für dieses Auto', G.lackFarbe('Jonas', 'multivan') === null);
-  pruefe('fahrzeugWerte liefert Lack', G.fahrzeugWerte('Jonas', 'troc-cabrio', true).farbe === pink && G.fahrzeugWerte('Jonas', 'troc-cabrio', false).farbe === pink);
+  pruefe('fahrzeugWerte liefert Lack', G.fahrzeugWerte('Jonas', 'troc-cabrio').farbe === pink);
 }
 
-// ------------------------------------------------------------ Garage: Upgrades
+// ------------------------------------------------------------ Garage: Upgrades entfernt (R1) + Erstattung
 {
-  G.gutschreiben('Jonas', 400);       // 411
-  const p = [];
-  for (let i = 0; i < 4; i++) { const r = G.upgradeKaufen('Jonas', 'troc-cabrio', 'motor'); p.push(r.ok ? r.kosten : r.grund); }
-  pruefe('Motor: Stufen kosten 30/60/100, danach „max"', JSON.stringify(p) === JSON.stringify([30, 60, 100, 'max']), JSON.stringify(p));
-  pruefe('Konto nach Motor 3: 411 − 190 = 221', G.konto('Jonas') === 221, G.konto('Jonas'));
-  G.upgradeKaufen('Jonas', 'troc-cabrio', 'reifen');
-  G.upgradeKaufen('Jonas', 'troc-cabrio', 'bremsen'); G.upgradeKaufen('Jonas', 'troc-cabrio', 'bremsen');
-  const f = G.faktoren('Jonas', 'troc-cabrio', true);
-  const nah = (a, b) => Math.abs(a - b) < 1e-9;
-  pruefe('Faktoren: vMax 1,12 (3×4 %), grip 1,04, bremsen 1,12 (2×6 %)', nah(f.vMax, 1.12) && nah(f.grip, 1.04) && nah(f.bremsen, 1.12), JSON.stringify(f));
-  const aus = G.faktoren('Jonas', 'troc-cabrio', false);
-  pruefe('Schalter aus: alle Faktoren 1', aus.vMax === 1 && aus.grip === 1 && aus.bremsen === 1);
-  const fremd = G.faktoren('Emmy', 'troc-cabrio', true);
-  pruefe('Upgrades je Fahrer+Auto (Emmy/Cabrio, Jonas/Multivan = 1)', fremd.vMax === 1 && G.faktoren('Jonas', 'multivan', true).vMax === 1);
-  const r = G.upgradeKaufen('Emmy', 'multivan', 'motor');
-  pruefe('Upgrade ohne Geld: grund geld, Kosten 30', !r.ok && r.grund === 'geld' && r.kosten === 30);
-  pruefe('Unbekanntes Upgrade abgelehnt', !G.upgradeKaufen('Jonas', 'multivan', 'turbo').ok);
-  // Wirkung wie in main.js.fahrzeugHinzufuegen: Faktoren direkt in vehicle.daten
+  pruefe('R1: config.garage ohne upgradePreise/upgradeJeStufe', CG.upgradePreise === undefined && CG.upgradeJeStufe === undefined);
+  pruefe('R1: keine Upgrade-Funktionen mehr (upgradeKaufen/upgradePreis/faktoren/ARTEN)', G.upgradeKaufen === undefined && G.upgradePreis === undefined && G.faktoren === undefined && G.ARTEN === undefined);
+  G.gutschreiben('Jonas', 400);
+  const fw = G.fahrzeugWerte('Jonas', 'troc-cabrio', true);
+  pruefe('R1: fahrzeugWerte: Faktoren immer 1 (auch mit altem Parameter „true“)', fw.vMax === 1 && fw.grip === 1 && fw.bremsen === 1);
+  const d = G.autoDaten('Jonas', 'troc-cabrio');
+  pruefe('R1: autoDaten ohne motor/reifen/bremsen', !('motor' in d) && !('reifen' in d) && !('bremsen' in d));
+
+  // Erstattung: Stufe 0 / 1 / 2 / 3 je Art, mehrere Autos, mehrere Fahrer
+  G._ramLeeren();
+  G.speichern({
+    Anna: { muenzen: 10, autos: { passat: { farbe: null, farben: [], motor: 0, reifen: 0, bremsen: 0, rest: 100 } } },                     // 0 → 0
+    Ben: { muenzen: 5, autos: { passat: { farbe: 0xe3202b, farben: [0xe3202b], motor: 1, reifen: 0, bremsen: 0, rest: 100 } } },          // 1 → 30
+    Cleo: { muenzen: 0, autos: { passat: { farbe: null, farben: [], motor: 2, reifen: 0, bremsen: 0, rest: 100 } } },                     // 2 → 90
+    Dino: { muenzen: 100, autos: { passat: { farbe: null, farben: [], motor: 3, reifen: 3, bremsen: 3, rest: 100 },                       // 3×190 = 570
+      multivan: { farbe: null, farben: [], motor: 1, reifen: 2, bremsen: 3, rest: 100 } } },                                                 // 30+90+190 = 310
+  });
+  pruefe('Erstattung Stufe 0: Konto bleibt 10', G.konto('Anna') === 10);
+  pruefe('Erstattung Stufe 1: 5 + 30 = 35', G.konto('Ben') === 35, G.konto('Ben'));
+  pruefe('Erstattung Stufe 2 (30+60): 0 + 90', G.konto('Cleo') === 90, G.konto('Cleo'));
+  pruefe('Erstattung Stufe 3 in allen Arten + zweites Auto: 100 + 570 + 310 = 980', G.konto('Dino') === 980, G.konto('Dino'));
+  const o = G.laden();
+  const rein = Object.keys(o).every((n) => o[n].upgradesErstattet === true && Object.keys(o[n].autos).every((id) => !('motor' in o[n].autos[id]) && !('reifen' in o[n].autos[id]) && !('bremsen' in o[n].autos[id])));
+  pruefe('Upgrade-Daten gelöscht, Merker upgradesErstattet gesetzt', rein, JSON.stringify(o.Dino));
+  pruefe('Lack bleibt bei der Erstattung (Ben: rot, gekauft)', G.lackFarbe('Ben', 'passat') === 0xe3202b && G.autoDaten('Ben', 'passat').farben.length === 1);
+  // Idempotenz: mehrfach laden/speichern/lesen ändert nichts
+  const vorher = JSON.stringify(G.laden());
+  G.konto('Dino'); G.autoDaten('Dino', 'passat'); G.speichern(G.laden()); G.laden();
+  pruefe('Idempotent: nochmal laden/speichern → Konto und Daten gleich', G.konto('Dino') === 980 && JSON.stringify(G.laden()).replace(/"erstattung":\d+,?/g, '') === vorher.replace(/"erstattung":\d+,?/g, ''));
+  // alte Felder tauchen später wieder auf (z. B. alte Sicherung eingespielt) → nur gelöscht, NICHT nochmal bezahlt
+  { const p = G.laden(); p.Dino.autos.passat.motor = 3; G.speichern(p); pruefe('Alte Felder nach der Erstattung: ignoriert/gelöscht, kein zweites Geld', G.konto('Dino') === 980 && !('motor' in G.autoDaten('Dino', 'passat')) && !('motor' in G.laden().Dino.autos.passat)); }
+  // neuer Fahrer ohne Upgrades: keine Gutschrift
+  G.gutschreiben('Neu', 7);
+  pruefe('Neuer Fahrer: kein Geld dazu', G.konto('Neu') === 7);
+  // Hinweis-Betrag: einmalig, Summe + je Fahrer, danach null
+  const h = G.hinweisHolen();
+  pruefe('Hinweis: Summe 30 + 90 + 880 = 1000, vier... drei Fahrer mit Erstattung', !!h && h.summe === 1000 && h.fahrer.length === 3, JSON.stringify(h));
+  pruefe('Hinweis je Fahrer (Ben 30, Cleo 90, Dino 880)', !!h && h.fahrer.find((x) => x.name === 'Ben').summe === 30 && h.fahrer.find((x) => x.name === 'Cleo').summe === 90 && h.fahrer.find((x) => x.name === 'Dino').summe === 880);
+  pruefe('Hinweis nur EINMAL (zweiter Aufruf null, Konto unverändert)', G.hinweisHolen() === null && G.konto('Dino') === 980);
+  pruefe('Hinweis-Merker gelöscht (kein „erstattung“ mehr im Speicher)', Object.keys(G.laden()).every((n) => !('erstattung' in G.laden()[n])));
+  // Spielstand ohne jedes Upgrade: kein Hinweis
+  G._ramLeeren(); G.speichern({ Eva: { muenzen: 12, autos: { passat: { farbe: null, farben: [], rest: 100 } } } });
+  pruefe('Spielstand ohne Upgrades: kein Hinweis, Konto 12', G.hinweisHolen() === null && G.konto('Eva') === 12);
+  // kaputte Stufen (9, -2, 'x', 1.7) werden geklemmt: 9 → 3 (190), -2 → 0, 'x' → 0, 1.7 → 1 (30)
+  G._ramLeeren(); G.speichern({ Kai: { muenzen: 0, autos: { a: { motor: 9, reifen: -2, bremsen: 'x' }, b: { motor: 1.7 } } } });
+  pruefe('Kaputte Stufen geklemmt: 190 + 30 = 220', G.konto('Kai') === 220, G.konto('Kai'));
+  G._ramLeeren();
+  // Wirkung wie in main.js.fahrzeugHinzufuegen: mit Garage-Werten bleibt vehicle.daten unverändert (Faktor 1)
   const v0 = new R.Vehicle(R.carCatalog.finde('troc-cabrio').fahrwerte, { tempoKlasse: 'normal' });
   const v1 = new R.Vehicle(R.carCatalog.finde('troc-cabrio').fahrwerte, { tempoKlasse: 'normal' });
-  v1.daten.vMax *= f.vMax; v1.daten.grip *= f.grip; v1.daten.bremsen *= f.bremsen;
-  pruefe('vehicle.daten: vMax × 1,12 gegenüber Standard (Katalog unverändert)', nah(v1.daten.vMax / v0.daten.vMax, 1.12) &&
-    R.carCatalog.finde('troc-cabrio').fahrwerte.vMax === 230 / 3.6);
+  v1.daten.vMax *= fw.vMax; v1.daten.grip *= fw.grip; v1.daten.bremsen *= fw.bremsen;
+  pruefe('vehicle.daten mit Garage-Werten = Standard (Katalog unverändert)', v1.daten.vMax === v0.daten.vMax && v1.daten.grip === v0.daten.grip && R.carCatalog.finde('troc-cabrio').fahrwerte.vMax === 230 / 3.6);
+  // Quelltext: nirgends mehr upgradesZaehlen / upgradePreise
+  const fs = require('fs'), pfad = require('path');
+  const dateien = ['src/main.js', 'src/config.js', 'src/ui/garage.js', 'src/ui/menu.js', 'src/spass/spassTuningUI.js', 'src/net/online.js', 'server/server.js', 'server/simulation.js'];
+  const treffer = dateien.filter((f) => /upgradesZaehlen|upgradePreise|upgradeJeStufe|upgradeKaufen/.test(fs.readFileSync(pfad.join(__dirname, '..', f), 'utf8')));
+  pruefe('Quelltext ohne upgradesZaehlen/upgradePreise/upgradeJeStufe/upgradeKaufen', treffer.length === 0, treffer.join(','));
 }
 
 // ------------------------------------------------------------ Garage: Reparatur / Schaden-Rest
@@ -142,28 +177,30 @@ pruefe('4 Farben je Auto (alle Garage-Autos)', G.autos().every(a => G.farbenFuer
   pruefe('v32: Rest 0 (liegengeblieben) → Start 100 %', G.startProzent('Jonas', 'troc-cabrio') === 100);
   const r = G.reparieren('Jonas', 'troc-cabrio', true);
   pruefe('v32: Reparatur kostet nichts (nichtNoetig, Konto gleich)', !r.ok && r.grund === 'nichtNoetig' && r.kosten === 0 && G.konto('Jonas') === k0);
-  // alter gespeicherter Rest (40) wird beim Laden verworfen
+  // alter gespeicherter Rest (40) wird beim Laden verworfen; altes Motor-Upgrade 1 wird erstattet (R1)
   {
     const o = G.laden(); o.Alt = { muenzen: 50, autos: { multivan: { farbe: null, farben: [], motor: 1, reifen: 0, bremsen: 0, rest: 40 } } };
     G.speichern(o);
     const d = G.autoDaten('Alt', 'multivan');
-    pruefe('v32: alter Rest 40 → beim Laden 100, Tuning (Motor 1) bleibt, Start 100 %', d.rest === 100 && d.motor === 1 && G.startProzent('Alt', 'multivan') === 100);
-    pruefe('v32: Reparatur ohne Kosten, Konto bleibt 50', G.reparieren('Alt', 'multivan', true).kosten === 0 && G.konto('Alt') === 50);
+    pruefe('v32: alter Rest 40 → beim Laden 100, altes Motor-Upgrade weg, Start 100 %', d.rest === 100 && !('motor' in d) && G.startProzent('Alt', 'multivan') === 100);
+    pruefe('v32/R1: Reparatur ohne Kosten, Konto 50 + 30 (Erstattung Motor 1) = 80', G.reparieren('Alt', 'multivan', true).kosten === 0 && G.konto('Alt') === 80, G.konto('Alt'));
   }
 }
 
 // ------------------------------------------------------------ Speicherformat
 {
+  G._ramLeeren();
+  G.gutschreiben('Jonas', 50); G.farbeKaufen('Jonas', 'troc-cabrio', R.config.garage.farben['troc-cabrio'][3]);
   const o = G.laden();
   const j = o.Jonas, a = j && j.autos && j.autos['troc-cabrio'];
-  pruefe('Speicherformat { fahrer: { muenzen, autos: { autoId: { farbe, motor, reifen, bremsen } } } }',
-    !!a && typeof j.muenzen === 'number' && a.motor === 3 && a.reifen === 1 && a.bremsen === 2 && Number.isFinite(a.farbe) && Array.isArray(a.farben) && a.rest === 100,
+  pruefe('Speicherformat { fahrer: { muenzen, upgradesErstattet, autos: { autoId: { farbe, farben, rest } } } } (ohne Upgrade-Felder)',
+    !!a && typeof j.muenzen === 'number' && j.upgradesErstattet === true && !('motor' in a) && !('reifen' in a) && !('bremsen' in a) && Number.isFinite(a.farbe) && Array.isArray(a.farben) && a.rest === 100,
     JSON.stringify(o).slice(0, 220));
   pruefe('JSON-tauglich (Hin und zurück gleich)', JSON.stringify(JSON.parse(JSON.stringify(o))) === JSON.stringify(o));
   // kaputte Daten → Standardwerte
   G.speichern({ Kerle: { muenzen: 'viel', autos: { passat: { motor: 9, reifen: -2, farbe: 'rot' } } }, Sara: 5 });
   const d = G.autoDaten('Kerle', 'passat');
-  pruefe('Kaputte Werte → geklemmt/Standard (Stufen 0..3, Farbe null, Konto 0)', G.konto('Kerle') === 0 && d.motor === 3 && d.reifen === 0 && d.farbe === null && G.konto('Sara') === 0,
+  pruefe('Kaputte Werte → Standard (Farbe null, Konto = Erstattung der geklemmten Stufe 3 = 190, Sara 0)', G.konto('Kerle') === 190 && d.farbe === null && !('motor' in d) && G.konto('Sara') === 0,
     JSON.stringify(d));
 }
 

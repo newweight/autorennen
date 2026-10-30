@@ -770,8 +770,8 @@ Rennspiel.config = {
   // (|Krümmung| > kurveAb 1/m) einzeln. Einsammeln = Abstand Auto-Mitte ↔ Münze ≤ radius m; KEIN Stoß, keine Physik.
   // Preisgeld nach dem Rennen je Spieler: Platz 1–3 = preisgeld[0..2], sonst preisgeldSonst.
   // Garage je Fahrer (localStorage speicherSchluessel): Lackfarben (4 je Auto, farbPreis je Farbe, einmal kaufen,
-  // danach frei wechselbar; Original immer), Upgrades Motor/Reifen/Bremsen je 3 Stufen (upgradePreise),
-  // je Stufe vMax/grip/bremsen + upgradeJeStufe; Reparatur (nur wenn Schaden an): nächstes Rennen mit 100 %.
+  // danach frei wechselbar; Original immer). R1: die alten Upgrades (Motor/Reifen/Bremsen Stufe 0–3) sind entfernt und
+  // wurden in Goldstücke erstattet (src/ui/garage.js); Leistung kommt nur noch aus dem Tuning (config.spass.tuning); Reparatur (nur wenn Schaden an): nächstes Rennen mit 100 %.
   // Schaden-Rest: Endprozent je Fahrer+Auto, nächstes Rennen startet damit (mindestens restMin).
   garage: {
     speicherSchluessel: 'rennspiel.garage.v1',
@@ -781,8 +781,6 @@ Rennspiel.config = {
     farbPreis: 20,
     reparaturPreis: 10,
     restMin: 30,
-    upgradePreise: [30, 60, 100],          // Stufe 1, 2, 3
-    upgradeJeStufe: { motor: 0.04, reifen: 0.04, bremsen: 0.06 },   // vMax / grip / bremsen je Stufe
     // 4 Lackfarben je Auto (Polizei nicht in der Garage); Namen für die Anzeige in farbNamen
     farben: {
       'troc-cabrio': [0xe3202b, 0xffc400, 0x14a64a, 0xff5fb8],
