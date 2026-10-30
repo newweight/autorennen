@@ -612,7 +612,13 @@ function starten(opt) {
     });
     ws.on('error', () => {});
     c.herz = setInterval(() => {
-      if (!c.lebt) { c.endeGrund = 'Herzschlag (keine Antwort auf ping)'; ws.terminate(); return; }
+      if (!c.lebt) {
+        // R2-FIX: Ein Browser, der gerade das Rennen aufbaut/die ersten Bilder rechnet (langsamer Rechner, Software-GL), liest seinen Socket oft >10 s nicht
+        // (Ping bleibt liegen, Close-Code 1006 mit „Herzschlag“ im Log) → in einem Raum (Lobby, Laden, Rennen, Ergebnis) sind 6 verpasste Herzschläge erlaubt (~30 s; auch eine ruhende, vom Rechner ausgehungerte Seite fliegt nicht gleich raus), ohne Raum wie bisher 1.
+        const grenze = c.raum ? 6 : 0;
+        if ((c.stille || 0) >= grenze) { c.endeGrund = 'Herzschlag (keine Antwort auf ping, ' + ((c.stille || 0) + 1) + ' Mal)'; ws.terminate(); return; }
+        c.stille = (c.stille || 0) + 1;
+      } else c.stille = 0;
       c.lebt = false;
       try { ws.ping(); } catch (e) { /* zu */ }
     }, N.HERZSCHLAG_MS);
