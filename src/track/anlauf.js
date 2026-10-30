@@ -74,7 +74,9 @@
     const c = C(), l = [];
     const abstandFuer = (vMin, override) => {
       const m = mindestAnlauf(vMin * (1 + wert(c.reserve, 0.1)));
-      const berechnet = Math.ceil((m.weg + 10) / 10) * 10;
+      // Unerreichbares Tempo (weg = Infinity, z. B. Roller im Motorrad-Spiel bei Looping-Mindesttempo): endlich bleiben,
+      // sonst wird der Abstand Infinity und die Anlauf-Position NaN (Absturz in _zurAnlauf).
+      const berechnet = isFinite(m.weg) ? Math.ceil((m.weg + 10) / 10) * 10 : 0;
       if (override) return { abstand: override, berechnet: m.weg, quelle: 'katalog', auto: m.auto, klasse: m.klasse };
       const std = wert(c.abstand, 150);
       return berechnet > std ? { abstand: berechnet, berechnet: m.weg, quelle: 'berechnet', auto: m.auto, klasse: m.klasse }

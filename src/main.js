@@ -961,6 +961,8 @@
         if (this.zustand === 'rennen') { this.pausiert = true; this.uhr.rest = 0; }   // Gegenlesen F2: nur offline pausieren (online hält der Server)
         if (this.zustand === 'rennen' && this.pauseAnzeige) this.pauseAnzeige.zeigen();
         this.huds.forEach(hd => { if (hd && hd.meldung) hd.meldung('⚠️ Fehler – Esc für Menü', 600000); });
+        // STARTFEHLER: Fehlertext + Codestelle auch sichtbar machen (Motorrad: Fehlerkasten, Foto genügt), sonst steht nur „Fehler“ im Bild
+        try { if (typeof window.motoFehlerZeigen === 'function') window.motoFehlerZeigen('Fehler im Spielbild: ' + (e && e.message || e) + '\n' + String(e && e.stack || '').split('\n').slice(1, 5).join('\n')); } catch (e2) { /* nur Anzeige */ }
       }
     }
 

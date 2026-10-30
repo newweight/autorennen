@@ -192,13 +192,13 @@ def http_server_starten():
     return srv, port
 
 
-def neue_seite(browser, spiel, breite=480, hoehe=270):
+def neue_seite(browser, spiel, breite=400, hoehe=225):
     ctx = browser.new_context(viewport={'width': breite, 'height': hoehe})
     ctx.add_init_script(PROFIL)
     page = ctx.new_page(); page.set_default_timeout(600000)
     page._fl = []
-    page.on('pageerror', lambda e: page._fl.append('pageerror: %s' % str(e)[:400]))
-    page.on('console', lambda m: page._fl.append('console.error: ' + m.text[:400]) if m.type == 'error' and not any(h in m.text for h in HARMLOS) else None)
+    page.on('pageerror', lambda e: page._fl.append(('pageerror: %s' % str(e)).replace('\n', ' | ')[:700]))
+    page.on('console', lambda m: page._fl.append(('console.error: ' + m.text).replace('\n', ' | ')[:900]) if m.type == 'error' and not any(h in m.text for h in HARMLOS) else None)
     return page
 
 
@@ -207,7 +207,7 @@ def spiel_laden(page, spiel, url=None):
     page.goto(url or ('file://' + os.path.join(basis, html)), wait_until='domcontentloaded')
     page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=120000, polling=200)
     page.wait_for_timeout(1200)
-    page.mouse.click(40, 40)                         # echte Eingabe: der Ton startet wie beim Kind (Autoplay-Regel)
+    page.keyboard.press('ShiftLeft')                 # echte Eingabe: der Ton startet wie beim Kind (Autoplay-Regel), Umschalt tut im Menü nichts
     page.wait_for_timeout(300)
     page.evaluate(JS_PREP)
 
@@ -258,7 +258,7 @@ def offline_kombi(page, spiel, strecke, modus, grafik, sekunden, nr, bildordner=
     # --- Countdown
     gesehen_cd = [cd0]; ok_cd = False
     for i in range(14):
-        page.evaluate('() => window.__mx.laufen(0.5, 0)')
+        page.evaluate('() => window.__mx.laufen(0.6, 8)')      # ein Bild je 0,2 s Spielzeit
         s1 = page.evaluate('() => window.__mx.status()')
         gesehen_cd.append(s1['cd'])
         f = alle_fehler(page, s1)
@@ -269,7 +269,7 @@ def offline_kombi(page, spiel, strecke, modus, grafik, sekunden, nr, bildordner=
     vmax = [0, 0]; fertig = 0.0; gewechselt = []
     while fertig < sekunden:
         schritt = min(5.0, sekunden - fertig)
-        v = page.evaluate('(a) => window.__mx.laufen(a[0], a[1])', [schritt, 12])
+        v = page.evaluate('(a) => window.__mx.laufen(a[0], a[1])', [schritt, 20])      # ein Bild je 0,4 s Spielzeit
         fertig += schritt; vmax = [max(vmax[0], v[0]), max(vmax[1], v[1])]
         s2 = page.evaluate('() => window.__mx.status()')
         f = alle_fehler(page, s2)
@@ -336,7 +336,7 @@ def online_kombi(browser, spiel, strecke, grafik, sekunden):
             pg.context.add_init_script("try{localStorage.setItem('%s','%s')}catch(e){}" % (gkey, grafik))
         host.goto(url + html, wait_until='domcontentloaded')
         host.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=120000, polling=200); host.wait_for_timeout(1000)
-        host.mouse.click(30, 30)
+        host.keyboard.press('ShiftLeft')
         host.evaluate("() => { Rennspiel.spiel.menue.onlineOeffnen(); }"); host.wait_for_timeout(400)
         host.click('[data-a="erstellen"]')
         host.wait_for_function("Rennspiel.spiel.menue.onlineUi && Rennspiel.spiel.menue.onlineUi.lobby && Rennspiel.spiel.menue.onlineUi.ansicht === 'lobby'", timeout=30000, polling=200)
@@ -347,7 +347,7 @@ def online_kombi(browser, spiel, strecke, grafik, sekunden):
             except Exception: pass
         gast.goto(url + html + '?raum=' + code.lower(), wait_until='domcontentloaded')
         gast.wait_for_function("Rennspiel.spiel.menue.onlineUi && Rennspiel.spiel.menue.onlineUi.ansicht === 'code'", timeout=120000, polling=200)
-        gast.mouse.click(30, 30)
+        gast.keyboard.press('ShiftLeft')
         gast.keyboard.press('Enter')
         gast.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby !== null && Rennspiel.spiel.menue.onlineUi.ansicht === 'lobby'", timeout=30000, polling=200)
         host.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.spieler.length === 2", timeout=15000, polling=200)
