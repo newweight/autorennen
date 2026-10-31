@@ -529,7 +529,8 @@
       (fahrzeugListe || []).forEach((f, i) => {
         const a = this.autos[i];
         if (!a || !f || !f.mesh) return;
-        if (!a.teile && !a.schild && !(a.turbo > 0) && !(a.platzt > 0)) return;
+        const schub = !!(f.anlauf && f.anlauf.schub);      // Looping-Schub (track/anlauf.js): Flammen wie im Turbo
+        if (!a.teile && !a.schild && !(a.turbo > 0) && !(a.platzt > 0) && !schub) return;
         this._autoTeile(i, f);
         // Schild-Hülle: sichtbar mit Schild, beim Platzen größer werden und verblassen
         const h = a.huelle;
@@ -542,7 +543,7 @@
           h.scale.set(h.userData.sx * (1 + u), 1.15 * (1 + u), h.userData.sz * (1 + u));
         } else h.visible = false;
         // Flammen: im Turbo voll, im Auslauf kleiner
-        const an = a.turbo > 0 ? 1 : (a.vFaktor > 1.001 ? 0.45 : 0);
+        const an = a.turbo > 0 || schub ? 1 : (a.vFaktor > 1.001 ? 0.45 : 0);
         a.flammen.forEach((sp, k) => {
           sp.visible = an > 0;
           if (!an) return;

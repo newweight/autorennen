@@ -100,7 +100,7 @@
 
   /** Neuer Zustand je Fahrzeug (f.anlauf = Anlauf.zustand()). */
   function zustand() {
-    return { stelle: null, bremst: false, stehZeit: 0, gestoppt: 0, eingriffe: 0, gemeldet: false };
+    return { stelle: null, bremst: false, schub: false, stehZeit: 0, gestoppt: 0, eingriffe: 0, gemeldet: false };
   }
 
   /**
@@ -138,7 +138,7 @@
   function nachSchritt(az, vehicle, strecke, nah, xAlt, zAlt, steuerung, dt) {
     if (!az || !strecke || !nah) return null;
     const l = stellen(strecke);
-    if (!l.length || vehicle.imLooping || vehicle.imFlug) { az.bremst = false; az.stehZeit = 0; az.stelle = null; return null; }
+    if (!l.length || vehicle.imLooping || vehicle.imFlug) { az.bremst = false; az.schub = false; az.stehZeit = 0; az.stelle = null; return null; }
     const c = C(), sp = strecke.spline, pt = sp.punktBei(nah.s);
     const dx = vehicle.x - xAlt, dz = vehicle.z - zAlt;
     const sNeu = nah.s + dx * pt.tx + dz * pt.tz, q = nah.seitenabstand + dx * pt.nx + dz * pt.nz;
@@ -152,13 +152,18 @@
     }
     if (!st || Math.abs(q) > st.halb) {
       if (az.bremst) ereignis = 'frei';
-      az.bremst = false; az.stehZeit = 0;
+      az.bremst = false; az.schub = false; az.stehZeit = 0;
       if (!st) az.stelle = null;
       return ereignis;
     }
     const r = vehicle.richtung(), vorwaerts = r.x * pt.tx + r.z * pt.tz > 0.3;
     const v = vehicle.vLaengs;
+    // Looping-Schub: Fahrzeuge, deren Höchsttempo das Looping-Mindesttempo nicht erreicht (Roller, Tempo-Klasse „normal“), bekommen statt der
+    // Anlauf-Bremse einen automatischen Schub auf Mindesttempo + schubReserve (wie ein Turbo; KI und Mensch, deterministisch, Server = Client).
+    // Schnellere Fahrzeuge (vMax ≥ vMin · schubSchwelle) sind davon unberührt (bitgleich wie bisher).
+    const schubZiel = st.art === 'looping' && vehicle.daten.vMax < st.vMin * wert(c.schubSchwelle, 1.05) ? st.vMin * (1 + wert(c.schubReserve, 0.05)) : 0;
     if (az.bremst && (v < -0.3 || !vorwaerts)) { az.bremst = false; az.stehZeit = 0; }   // rückwärts: Bremse löst
+    if (az.schub && (v < -0.3 || !vorwaerts || !schubZiel)) az.schub = false;
     if (!az.bremst && vorwaerts && v > -0.3) {
       const gas = (steuerung && steuerung.gas) || 0;
       // ohne Gas: Tempo halten (nicht pessimistisch ausrollen lassen – sonst würde z. B. die KI, die vor einer Rampe
@@ -167,9 +172,19 @@
       const vVor = Math.sqrt(Math.max(0, v * v + 2 * a * Math.max(0, d)));
       const rest = d - stopp, brauch = Math.max(0, v) * Math.max(0, v) / (2 * aSanft) + Math.max(0, v) * dt * 2 + 0.5;
       if (vVor < st.vMin * (1 + wert(c.marge, 0.02)) && rest <= brauch) {
-        az.bremst = true; az.stelle = st; az.eingriffe++; az.gemeldet = false;
-        ereignis = 'zuLangsam';
+        if (schubZiel) {
+          if (!az.schub) { az.schub = true; az.stelle = st; ereignis = 'schub'; }
+        } else {
+          az.bremst = true; az.stelle = st; az.eingriffe++; az.gemeldet = false;
+          ereignis = 'zuLangsam';
+        }
       }
+    }
+    if (az.schub && schubZiel && vorwaerts && !az.bremst) {
+      az.stelle = st;
+      // vehicle.schritt klemmt das Tempo jeden Schritt auf vMax zurück – der Schub setzt deshalb erst im letzten Schritt vor der Einfahrt
+      // (Looping-Einfahrt wird direkt danach geprüft) auf das Schub-Ziel; bis dahin bleiben Flammen/Meldung an.
+      if (v < schubZiel && d <= Math.max(2, Math.max(0, v) * dt * 3)) vehicle.vLaengs = schubZiel;
     }
     if (az.bremst) {
       az.stelle = st;

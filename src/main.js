@@ -1823,6 +1823,7 @@
      * (steht an der Linie) → HUD „Zu langsam! Zurück und Anlauf nehmen – oder R: Anlaufposition" (Spieler 2: T).
      */
     _anlaufEreignis(i, e) {
+      if (e === 'schub') { const fs = this.fahrzeuge[i]; if (fs && fs.istSpieler) this._meldung(i, 'Looping-Schub! 🔥', 1600); return; }
       if (e !== 'zuLangsam' && e !== 'gestoppt') return;
       const f = this.fahrzeuge[i];
       if (!f || !f.istSpieler) return;
