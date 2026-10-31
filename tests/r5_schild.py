@@ -8,8 +8,12 @@ bild = os.environ.get('BILD_ORDNER') or os.path.join(basis, 'tests', 'bilder_r5'
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
 # (Strecke, Art, Zonen-Start s0) – Schild steht 12 m vor s0
 ZIELE = [z for z in [('wiese', 'stoppie', 110), ('wiese', 'wheelie', 1655), ('alpen', 'stoppie', 1005), ('alpen', 'wheelie', 795)] if len(sys.argv) < 2 or z[1] in sys.argv[1:]]
-SETZEN = '''([s0, abstand]) => { const S = Rennspiel.spiel, sp = S.strecke.spline, p = sp.punktBei(sp.wrapS(s0 - abstand)), v = S.fahrzeuge[0].vehicle;
-  v.setzen(p.x, p.z, Rennspiel.headingAus(p.tx, p.tz)); v.y = S.strecke.hoeheAn(p.x, p.z); }'''
+# R6b BILDFIX: Der Messpunkt (Kamera) darf nicht in einer Schanze stehen – bei Wiese liegt eine Rampe bei s 75–85 (30 m vor der Stoppie-Zone 110);
+# ein dorthin teleportiertes Fahrzeug steckt samt Kamera im Rampenkeil (Bild: ocker Fläche + Schachbrettkante). Im echten Spiel fährt das Motorrad AUF der Rampe.
+SETZEN = '''([s0, abstand]) => { const S = Rennspiel.spiel, st = S.strecke, sp = st.spline; let s = sp.wrapS(s0 - abstand);
+  (st.schanzen || []).forEach((r) => { const d = sp.differenzS(s, r.s); if (d > -4 && d < (r.laenge || 10) + 8) s = sp.wrapS(r.s + (r.laenge || 10) + 8); });
+  const p = sp.punktBei(s), v = S.fahrzeuge[0].vehicle;
+  v.setzen(p.x, p.z, Rennspiel.headingAus(p.tx, p.tz)); v.y = st.hoeheAn(p.x, p.z); }'''
 fehler = []
 with sync_playwright() as pw:
     b = pw.chromium.launch(args=ARGS)
