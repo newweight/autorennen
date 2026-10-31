@@ -102,6 +102,20 @@
 .karte.online-karte .karten-sub { font-size: .7em; opacity: .9; max-width: 15em; }
 .karte.online-karte.aus { filter: grayscale(1); opacity: .6; cursor: not-allowed; }
 .karte.online-karte.aus:hover { transform: none; }
+/* Niedrige Fenster (z. B. Handy quer, 400x225): kleinere Schrift, Online-Bildschirm scrollt, Lobby wächst mit dem Inhalt – große Fenster unverändert */
+@media (max-height: 520px) {
+  .menue.online { font-size: clamp(9px, 3.4vh, 18px); overflow-y: auto; padding-top: .6vh; padding-bottom: .6vh; }
+  .online .on-wahl { gap: 1em; }
+  .online .on-wahl .karte.gross { width: 10em; padding: .5em .5em; }
+  .online .on-wahl .karte.gross .emoji { font-size: 2.2em; }
+  .online .on-codefelder span { font-size: 1.6em; }
+  .online .on-tasten { margin-bottom: .3em; }
+  .online .on-info, .online .on-schalter { margin-top: .4em; }
+  .online .on-lobby { height: auto; min-height: 100%; }
+  .online .on-spalte { overflow: visible; }
+  .online .on-qr svg { width: 6em; height: 6em; }
+  .online .on-code { font-size: 1.8em; }
+}
 `;
   function stilEinfuegen() {
     if (document.getElementById('online-stil')) return;

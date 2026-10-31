@@ -605,7 +605,8 @@
       }
       const r = orig.apply(this, arguments);
       const zeit = this._physikZeit || 0;
-      const ex = this._zExtra || (this._zExtra = za.extras.map(() => ({ bis: 0 })));
+      // Zwischenspeicher gehört zur Strecke (za): wechselt man im selben Fenster auf eine Strecke mit mehr Extras, war ex[k] leer → TypeError 'bis' in jedem Bild
+      const ex = this._zExtra && this._zExtraFuer === za && this._zExtra.length === za.extras.length ? this._zExtra : (this._zExtraFuer = za, this._zExtra = za.extras.map(() => ({ bis: 0 })));
       for (let i = 0; i < fahr.length; i++) {
         const f = fahr[i], e = vor[i], fz = f.flug, v = f.vehicle;
         if (!fz || !e) continue;

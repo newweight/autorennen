@@ -611,6 +611,7 @@ function starten(opt) {
       if (ws.ipKey) { const n = (proIp.get(ws.ipKey) || 1) - 1; if (n <= 0) proIp.delete(ws.ipKey); else proIp.set(ws.ipKey, n); }
     });
     ws.on('error', () => {});
+    c.verpasst = 0;
     c.herz = setInterval(() => {
       if (!c.lebt) {
         // R2-FIX: Ein Browser, der gerade das Rennen aufbaut/die ersten Bilder rechnet (langsamer Rechner, Software-GL), liest seinen Socket oft >10 s nicht

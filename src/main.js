@@ -958,6 +958,8 @@
         if (this.zustand === 'rennen') { this.pausiert = true; this.uhr.rest = 0; }   // Gegenlesen F2: nur offline pausieren (online hält der Server)
         if (this.zustand === 'rennen' && this.pauseAnzeige) this.pauseAnzeige.zeigen();
         this.huds.forEach(hd => { if (hd && hd.meldung) hd.meldung('⚠️ Fehler – Esc für Menü', 600000); });
+        // STARTFEHLER: Fehlertext + Codestelle auch sichtbar machen (Motorrad: Fehlerkasten, Foto genügt), sonst steht nur „Fehler“ im Bild
+        try { if (typeof window.motoFehlerZeigen === 'function') window.motoFehlerZeigen('Fehler im Spielbild: ' + (e && e.message || e) + '\n' + String(e && e.stack || '').split('\n').slice(1, 5).join('\n')); } catch (e2) { /* nur Anzeige */ }
       }
     }
 
@@ -1818,6 +1820,7 @@
      * (steht an der Linie) → HUD „Zu langsam! Zurück und Anlauf nehmen – oder R: Anlaufposition" (Spieler 2: T).
      */
     _anlaufEreignis(i, e) {
+      if (e === 'schub') { const fs = this.fahrzeuge[i]; if (fs && fs.istSpieler) this._meldung(i, 'Looping-Schub! 🔥', 1600); return; }
       if (e !== 'zuLangsam' && e !== 'gestoppt') return;
       const f = this.fahrzeuge[i];
       if (!f || !f.istSpieler) return;

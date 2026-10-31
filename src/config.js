@@ -681,6 +681,8 @@ Rennspiel.config = {
     loopingHilfe: 0.9,         // Looping oben: ab Tempo ≥ 0,9 · nötiges Tempo schiebt die Arcade-Hilfe (mit Gas) nach
     resetMaxZurueck: 150,      // 13.10.: Reset (Abschleppen, R/T, KI festgefahren) im Anlaufbereich → Anlaufposition, höchstens so viele m hinter dem Checkpoint
     resetSchwungA: 3,          // m/s²: fehlt dadurch Anlaufweg, bekommt das Auto Start-Schwung v = sqrt(2·a·fehlenderWeg) (höchstens Mindesttempo)
+    schubSchwelle: 1.05,       // Looping-Schub: nur Fahrzeuge mit vMax < Mindesttempo × 1,05 (Roller, Klasse „normal“); schnellere bleiben wie bisher
+    schubReserve: 0.05,        // Schub-Ziel = Mindesttempo × (1 + 5 %)
   },
   // --- Runde 5: Fantasie-Klebestreifen (Katalog kleber [{ s0, s1, seite }], Logik + Optik: src/world/kleber.js) ---
   // Untergrund 'kleber' auf dem Randstreifen; > sekunden am Stück darauf → dauer s festgeklebt (Steuerung aus,

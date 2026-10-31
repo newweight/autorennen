@@ -25,7 +25,7 @@ Aufruf (Teilmengen):
             --modus solo|zwei|online[,…]|alle   --grafik normal|schoen|ultra|alle   --sekunden 20
             --startbilder  Bild beider Hälften je Strecke (Kamera-Befund) nach tests/bilder_startfehler/kamera/
 Ausgabe: je Kombination OK/FEHL, am Ende Zusammenfassung; Exit-Code 0 nur ohne FEHL."""
-import argparse, os, sys, time, json, socket, subprocess, threading, http.server, functools
+import tempfile, argparse, os, sys, time, json, socket, subprocess, threading, http.server, functools
 from playwright.sync_api import sync_playwright
 
 basis = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -179,6 +179,8 @@ JS_AUSNAHME_TEXT = """() => (window.__mx ? window.__mx.fehler.slice(0, 4) : [])"
 
 
 # ------------------------------------------------------------------------------------------------ Hilfen
+KLICK_TIMEOUT = int(__import__("os").environ.get("MX_KLICK_MS", "90000"))   # echter Klick (Sichtbarkeit/Überdeckung wird geprüft); Zeit großzügig wegen SwiftShader
+
 def freier_port():
     s = socket.socket(); s.bind(('127.0.0.1', 0)); p = s.getsockname()[1]; s.close(); return p
 
@@ -192,13 +194,13 @@ def http_server_starten():
     return srv, port
 
 
-def neue_seite(browser, spiel, breite=480, hoehe=270):
+def neue_seite(browser, spiel, breite=400, hoehe=225):
     ctx = browser.new_context(viewport={'width': breite, 'height': hoehe})
     ctx.add_init_script(PROFIL)
     page = ctx.new_page(); page.set_default_timeout(600000)
     page._fl = []
-    page.on('pageerror', lambda e: page._fl.append('pageerror: %s' % str(e)[:400]))
-    page.on('console', lambda m: page._fl.append('console.error: ' + m.text[:400]) if m.type == 'error' and not any(h in m.text for h in HARMLOS) else None)
+    page.on('pageerror', lambda e: page._fl.append(('pageerror: %s' % str(e)).replace('\n', ' | ')[:700]))
+    page.on('console', lambda m: page._fl.append(('console.error: ' + m.text).replace('\n', ' | ')[:900]) if m.type == 'error' and not any(h in m.text for h in HARMLOS) else None)
     return page
 
 
@@ -207,7 +209,7 @@ def spiel_laden(page, spiel, url=None):
     page.goto(url or ('file://' + os.path.join(basis, html)), wait_until='domcontentloaded')
     page.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=120000, polling=200)
     page.wait_for_timeout(1200)
-    page.mouse.click(40, 40)                         # echte Eingabe: der Ton startet wie beim Kind (Autoplay-Regel)
+    page.keyboard.press('ShiftLeft')                 # echte Eingabe: der Ton startet wie beim Kind (Autoplay-Regel), Umschalt tut im Menü nichts
     page.wait_for_timeout(300)
     page.evaluate(JS_PREP)
 
@@ -258,7 +260,7 @@ def offline_kombi(page, spiel, strecke, modus, grafik, sekunden, nr, bildordner=
     # --- Countdown
     gesehen_cd = [cd0]; ok_cd = False
     for i in range(14):
-        page.evaluate('() => window.__mx.laufen(0.5, 0)')
+        page.evaluate('() => window.__mx.laufen(0.6, 8)')      # ein Bild je 0,2 s Spielzeit
         s1 = page.evaluate('() => window.__mx.status()')
         gesehen_cd.append(s1['cd'])
         f = alle_fehler(page, s1)
@@ -269,7 +271,7 @@ def offline_kombi(page, spiel, strecke, modus, grafik, sekunden, nr, bildordner=
     vmax = [0, 0]; fertig = 0.0; gewechselt = []
     while fertig < sekunden:
         schritt = min(5.0, sekunden - fertig)
-        v = page.evaluate('(a) => window.__mx.laufen(a[0], a[1])', [schritt, 12])
+        v = page.evaluate('(a) => window.__mx.laufen(a[0], a[1])', [schritt, 20])      # ein Bild je 0,4 s Spielzeit
         fertig += schritt; vmax = [max(vmax[0], v[0]), max(vmax[1], v[1])]
         s2 = page.evaluate('() => window.__mx.status()')
         f = alle_fehler(page, s2)
@@ -280,12 +282,12 @@ def offline_kombi(page, spiel, strecke, modus, grafik, sekunden, nr, bildordner=
             try:
                 page.evaluate("() => { const S = Rennspiel.spiel; S.pauseSetzen(true); S.pauseAnzeige.zeigen(); }")
                 for k in range(3):
-                    page.click('#pause [data-g1]', timeout=30000)
+                    page.click('#pause [data-g1]', timeout=KLICK_TIMEOUT)
                     page.evaluate('() => window.__mx.frame(4)')
                     gewechselt.append(page.evaluate('() => Rennspiel.Grafik.stufe'))
                 page.evaluate("() => { const S = Rennspiel.spiel; S.pauseAnzeige.verstecken(); S.pauseSetzen(false); window.__mx.frame(4); }")
             except Exception as e:
-                return False, 'Grafikwechsel im Pause-Menü: ' + str(e)[:200], info
+                return False, 'Grafikwechsel im Pause-Menü: ' + str(e)[:1800], info
             s3 = page.evaluate('() => window.__mx.status()'); f = alle_fehler(page, s3)
             if f: return False, 'Fehler nach Grafikwechsel im Pause-Menü: ' + ' | '.join(f[:3]), info
     info['vmax'] = [round(x, 1) for x in vmax]
@@ -324,22 +326,23 @@ def online_kombi(browser, spiel, strecke, grafik, sekunden):
     html, gkey = SPIELE[spiel]
     port = freier_port()
     cmd = ['node', os.path.join(basis, 'server', 'server.js'), '--port', str(port), '--host', '127.0.0.1'] + (['--motorrad'] if spiel == 'moto' else [])
-    srv = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    srv_log = tempfile.NamedTemporaryFile('w+', suffix='.srvlog', delete=False)
+    srv = subprocess.Popen(cmd, stdout=srv_log, stderr=subprocess.STDOUT)
     seiten = []
     try:
         for _ in range(100):
             try: socket.create_connection(('127.0.0.1', port), timeout=0.2).close(); break
             except OSError: time.sleep(0.1)
         url = 'http://127.0.0.1:%d/' % port
-        host = neue_seite(browser, spiel, 400, 225); gast = neue_seite(browser, spiel, 400, 225); seiten = [host, gast]
+        host = neue_seite(browser, spiel, 400, 225); gast = neue_seite(browser, spiel, 400, 225); seiten = [host, gast]   # Lobby im kleinen Fenster (src/net/online.js: unter 520 px Höhe kompakt)
         for pg in seiten:
             pg.context.add_init_script("try{localStorage.setItem('%s','%s')}catch(e){}" % (gkey, grafik))
         host.goto(url + html, wait_until='domcontentloaded')
         host.wait_for_function('window.Rennspiel && Rennspiel.spiel', timeout=120000, polling=200); host.wait_for_timeout(1000)
-        host.mouse.click(30, 30)
+        host.keyboard.press('ShiftLeft')
         host.evaluate("() => { Rennspiel.spiel.menue.onlineOeffnen(); }"); host.wait_for_timeout(400)
         host.click('[data-a="erstellen"]')
-        host.wait_for_function("Rennspiel.spiel.menue.onlineUi && Rennspiel.spiel.menue.onlineUi.lobby && Rennspiel.spiel.menue.onlineUi.ansicht === 'lobby'", timeout=30000, polling=200)
+        host.wait_for_function("Rennspiel.spiel.menue.onlineUi && Rennspiel.spiel.menue.onlineUi.lobby && Rennspiel.spiel.menue.onlineUi.ansicht === 'lobby'", timeout=900000, polling=200)
         code = host.evaluate('Rennspiel.spiel.menue.onlineUi.lobby.code')
         # Host stellt Strecke + Spaß ein (Lobby-Pillen), 1 Runde, 1 Computer
         for a in ['wert:strecke:' + strecke, 'wert:spass:an', 'wert:zauber:an', 'wert:runden:1', 'wert:gegner:1']:
@@ -347,14 +350,14 @@ def online_kombi(browser, spiel, strecke, grafik, sekunden):
             except Exception: pass
         gast.goto(url + html + '?raum=' + code.lower(), wait_until='domcontentloaded')
         gast.wait_for_function("Rennspiel.spiel.menue.onlineUi && Rennspiel.spiel.menue.onlineUi.ansicht === 'code'", timeout=120000, polling=200)
-        gast.mouse.click(30, 30)
+        gast.keyboard.press('ShiftLeft')
         gast.keyboard.press('Enter')
-        gast.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby !== null && Rennspiel.spiel.menue.onlineUi.ansicht === 'lobby'", timeout=30000, polling=200)
-        host.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.spieler.length === 2", timeout=15000, polling=200)
+        gast.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby !== null && Rennspiel.spiel.menue.onlineUi.ansicht === 'lobby'", timeout=900000, polling=200)
+        host.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.spieler.length === 2", timeout=90000, polling=200)
         got = host.evaluate("Rennspiel.spiel.menue.onlineUi.lobby.einstellungen.streckeId")
         if got != strecke: return False, 'Lobby: Strecke %s statt %s' % (got, strecke), {}
         gast.keyboard.press('Space')
-        host.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.spieler[1].bereit === true", timeout=15000, polling=200)
+        host.wait_for_function("Rennspiel.spiel.menue.onlineUi.lobby.spieler[1].bereit === true", timeout=90000, polling=200)
         host.keyboard.press('Enter')
         for pg in seiten:
             pg._fl.clear()
@@ -368,7 +371,14 @@ def online_kombi(browser, spiel, strecke, grafik, sekunden):
                 if f: return False, 'Fehler im Countdown (%s): %s' % ('Host' if pg is host else 'Gast', ' | '.join(f[:3])), {}
             if all(st['rz'] == 'laeuft' for st in sts): lauf = True; break
             host.wait_for_timeout(500)
-        if not lauf: return False, 'Countdown läuft online nicht durch (%s)' % [st['rz'] for st in sts], {}
+        if not lauf:
+            zus = []
+            for pg in seiten:
+                try: zus.append(pg.evaluate("() => { const S = Rennspiel.spiel, o = S.online, u = S.menue && S.menue.onlineUi; return {zustand: S.zustand, phase: o && o.phase, empfangen: !!(o && o.empfangen), rennen: !!S.rennen, rz: S.rennen && S.rennen.zustand, cd: S.rennen && S.rennen.countdown, verb: !!(o && o.verb), hinweis: u && u.hinweis, n: S.fahrzeuge && S.fahrzeuge.length}; }"))
+                except Exception as e2: zus.append('Auslesen fehlgeschlagen: %s' % str(e2)[:80])
+            try: srv_log.flush(); srv_log.seek(0); slog = srv_log.read()[-500:].replace('\n', ' | ')
+            except Exception: slog = ''
+            return False, 'Countdown läuft online nicht durch (%s) Zustand Host/Gast=%s Fehler=%s Server=%s Serverlog=%s' % ([st['rz'] for st in sts], zus, [x for pg in seiten for x in pg._fl][:3], 'läuft' if srv.poll() is None else 'BEENDET', slog), {}
         for pg in seiten: pg.evaluate(AUTOPILOT, 'an')
         t1 = time.time(); vmax = [0, 0]
         while time.time() - t1 < sekunden:
@@ -381,8 +391,16 @@ def online_kombi(browser, spiel, strecke, grafik, sekunden):
         if max(vmax) < 3: return False, 'online fährt niemand (max. %.1f m/s)' % max(vmax), {}
         return True, '', {'vmax': [round(x, 1) for x in vmax]}
     except Exception as e:
+        import traceback
         fl = [x for pg in seiten for x in pg._fl][:2]
-        return False, 'Ausnahme: %s %s' % (str(e)[:250], fl), {}
+        for pg in seiten:
+            try: fl.append(pg.evaluate("() => { const u = Rennspiel.spiel.menue.onlineUi; return u ? 'ansicht=' + u.ansicht + ' hinweis=' + (u.hinweis || '') + ' lobby=' + !!u.lobby + ' fehler=' + (u.fehler || '') : 'keine onlineUi'; }"))
+            except Exception: pass
+        zeile = [z for z in traceback.format_exc().splitlines() if 'matrix_alle.py' in z][-1:]
+        try:
+            srv_log.flush(); srv_log.seek(0); slog = srv_log.read()[-400:].replace('\n', ' | ')
+        except Exception: slog = ''
+        return False, 'Ausnahme: %s %s %s Serverprozess=%s Serverlog=%s' % (str(e)[:250], fl, zeile, 'läuft' if srv.poll() is None else 'BEENDET (%s)' % srv.poll(), slog), {}
     finally:
         for pg in seiten:
             try: pg.context.close()

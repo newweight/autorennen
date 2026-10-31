@@ -19,7 +19,8 @@
     ZUSTAND_JE_TICKS: 3,     // Zustand an alle alle 3 Ticks = 20 Hz
     INTERP_VERZUG: 0.1,      // s – andere Autos werden 100 ms hinter dem Server-Zeitstempel gezeigt
     HART_KORREKTUR: 3,       // m – größere Abweichung der Vorhersage → sofort springen statt weich angleichen
-    HERZSCHLAG_MS: 5000,     // ws-Ping vom Server; wer zwei Herzschläge nicht antwortet, fliegt raus
+    HERZSCHLAG_MS: 5000,     // ws-Ping vom Server; wer HERZ_VERPASST Herzschläge nicht antwortet, fliegt raus
+    HERZ_VERPASST: 6,        // 30 s: ein Browser, der gerade eine schwere Strecke lädt (Seite blockiert, liest keine Nachrichten), wird nicht rausgeworfen (vorher 2 = 10 s)
     PFAD: '/ws',
 
     /** Raumcode prüfen/normalisieren ('abcd' → 'ABCD'); ungültig → null. */

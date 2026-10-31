@@ -271,6 +271,13 @@ html.touch-an .garage-knopf { right: 64px; }   /* Platz für die Vollbild-Taste 
 .ergebnis .knoepfe { display: flex; gap: 1em; justify-content: center; margin-top: .8em; }
 .pause { align-items: center; justify-content: center; font-size: clamp(20px, 2.6vh, 28px); font-weight: 800; background: rgba(10, 20, 50, .5); }
 .pause-karte { display: flex; flex-direction: column; gap: .7em; min-width: 14em; }
+/* Niedrige Fenster (z. B. Handy quer): Pause-Karte immer ganz im Bild – Schrift kleiner, sonst scrollt die Karte */
+.pause-karte { max-height: 96%; overflow-y: auto; box-sizing: border-box; }
+@media (max-height: 520px) {
+  .pause { font-size: clamp(9px, 3.6vh, 20px); }
+  .pause-karte { gap: .4em; padding: .5em 1.2em .7em; }
+  .pause-karte h1 { font-size: 1.5em; margin-bottom: .2em; }
+}
 
 .m-autos:not(.zwei) .beschreibung { max-width: none; text-align: center; }
 
