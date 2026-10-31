@@ -128,7 +128,7 @@
     ober: 0.27, unter: 0.27, bein: 0.43,
     ruhe: { A: [0, 1.07, 0.19], rho: 0, theta: 0, fuss: [[-0.245, 0.52, 0.19], [0.245, 0.52, 0.19]], knie: [[-0.25, 0.3, -1], [0.25, 0.3, -1]], ellbogen: [[-0.8, 0.4, 0.35], [0.8, 0.4, 0.35]], kopfRoll: 0 },
     superman: { A: [0, 1.26, 0.49], rho: 0, theta: -41 * Math.PI / 180, fuss: [[-0.17, 1.40, 1.34], [0.17, 1.40, 1.34]], knie: [[-0.15, 1, -0.1], [0.15, 1, -0.1]], ellbogen: [[-0.6, 0.8, 0], [0.6, 0.8, 0]], kopfRoll: 0 },
-    handstand: { A: [0, 2.115, -0.24], rho: Math.PI, theta: -24 * Math.PI / 180, fuss: [[-0.26, 2.95, -0.10], [0.26, 2.95, -0.10]], knie: [[-0.2, 0.1, -1], [0.2, 0.1, -1]], ellbogen: [[-0.8, 0, -0.6], [0.8, 0, -0.6]], kopfRoll: Math.PI },
+    handstand: { A: [0, 2.115, -0.24], rho: Math.PI, theta: -24 * Math.PI / 180, fuss: [[-0.30, 2.95, -0.52], [0.30, 2.95, 0.02]], knie: [[-0.1, 0.05, 1], [0.1, 0.05, -1]], ellbogen: [[-0.8, 0, -0.6], [0.8, 0, -0.6]], kopfRoll: Math.PI },
   };
   /**
    * Pose des Fahrers: art 'superman' | 'handstand' (sonst Ruhe), w = Einblend-Gewicht 0..1, t = Zeit (s, für das Wackeln der Beine).

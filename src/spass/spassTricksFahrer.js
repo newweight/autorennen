@@ -109,7 +109,7 @@
     return T;
   }
 
-  const _h = new THREE.Vector3(), _k = new THREE.Vector3(), _f = new THREE.Vector3(), _p = new THREE.Vector3(), _sh = new THREE.Vector3(), _el = new THREE.Vector3(), _hd = new THREE.Vector3(), _n = new THREE.Vector3();
+  const _h = new THREE.Vector3(), _k = new THREE.Vector3(), _f = new THREE.Vector3(), _p = new THREE.Vector3(), _sh = new THREE.Vector3(), _el = new THREE.Vector3(), _hd = new THREE.Vector3(), _n = new THREE.Vector3(), _t1 = new THREE.Vector3(), _t2 = new THREE.Vector3(), _t3 = new THREE.Vector3();
   function zeigen(T, an) {
     if (T.an === an) return;
     T.an = an; T.grp.visible = an;
@@ -136,7 +136,11 @@
       W.gelenk(_h, _f, F.bein, F.bein, _p, _k);
       W.spanne(b.ober, _h, _k); W.spanne(b.unter, _k, _f); b.knie.position.copy(_k);
       b.stiefel.position.copy(_f); _n.subVectors(_f, _k).normalize(); b.stiefel.quaternion.setFromUnitVectors(b.n0 || _n, _n);
-      if (b.n0) { /* Stiefel folgt dem Schienbein */ }
+      if (art === 'handstand' && w > 0) {          // BILDFIX: Stiefelspitze bleibt nach vorn (−z) gerichtet, nicht nach hinten geklappt (sonst Knick am Beinende)
+        _t1.set(0, 0, -1).applyQuaternion(b.stiefel.quaternion); _t2.set(0, 0, -1).addScaledVector(_n, _n.z); if (_t2.lengthSq() > 1e-6) {
+          _t2.normalize(); _t3.crossVectors(_t1, _t2); const ang = Math.atan2(_t3.dot(_n), _t1.dot(_t2)) * Math.min(1, w * 1.5);
+          _qb.setFromAxisAngle(_n, ang); b.stiefel.quaternion.premultiply(_qb); }
+      }
     }
     // Arme: Schulter (nach der Drehung) → Handschuh des Motorrads (bleibt am Griff)
     for (let a = 0; a < 2; a++) {
