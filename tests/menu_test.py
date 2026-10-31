@@ -593,7 +593,7 @@ with sync_playwright() as p:
     n0 = E().get('nurRennautos'); taste('ArrowRight'); n1 = E().get('nurRennautos'); taste('ArrowLeft'); n2 = E().get('nurRennautos')
     pruefe('Tastatur: Nur Rennautos (Wiese) → = an, ← = aus', n1 is True and n2 is False, [n0, n1, n2])
     page.evaluate('Rennspiel.spiel.einstellungen.nurRennautos = null')
-    for _ in range(11): taste('ArrowDown')   # seit Z1/S1–S8: nach „Nur Rennautos“ noch 9 Zeilen (Zufall … Fahr-Zauber, R4: + Loopings), dann Start
+    for _ in range(12): taste('ArrowDown')   # seit Z1/S1–S8: nach „Nur Rennautos“ noch 9 Zeilen (Zufall … Fahr-Zauber, R4: + Loopings), dann Start
     pruefe('Tastatur: ↓ erreicht Start (Fokus-Ring), Schaden wieder an', page.locator('.start-knopf.fokus').count() == 1 and E()['schaden'] is True)
     # Layout ohne Überlauf: solo/zwei × Tafel zu/auf × 1280×800 / 1440×900
     LAYOUT = """(() => { const m = document.querySelector('.m-inhalt'), fuss = document.querySelector('.m-fuss').getBoundingClientRect().top;

@@ -35,12 +35,16 @@ def schritte(page, n):
     return page.evaluate("""(n) => { const S = Rennspiel.spiel; S.pausiert = false; for (let i = 0; i < n; i++) S.physikSchritt(1 / 60); S.pausiert = true; S.uhr.rest = 0; const z = S._t3 && S._t3.fz[1]; return { aktiv: S.fahrzeuge[1].flug.aktiv, art: z && z.trick ? z.trick.art : null, p: z && z.trick ? +(z.trick.t / z.trick.dauer).toFixed(2) : 0 }; }""", n)
 
 def seite(page, name, abstand, hoch, winkel=0.0):
-    page.evaluate("""([d, h, w]) => { const S = Rennspiel.spiel, f = S.fahrzeuge[1], m = f.mesh, k = S.kameras[0].kamera;
+    """R6: Bild des KI-Fahrzeugs (Fahrzeug 1) von der Seite aus einer EIGENEN Kamera (Spielschleife stellt die Spielkamera sonst zurück → falsches Motiv: Cockpit des Spielers).
+    Erst s.zeichnen() (Posen/Meshes aktualisieren), dann Szene direkt mit eigener Kamera rendern; HUD ist DOM und damit nicht im Bild."""
+    import base64
+    d = page.evaluate("""([d, h, w]) => { const S = Rennspiel.spiel, f = S.fahrzeuge[1], m = f.mesh, r = S.renderer; S.zeichnen();
       const hd = f.vehicle.heading, rx = Math.cos(hd), rz = -Math.sin(hd), bx = Math.sin(hd), bz = Math.cos(hd);
       m.updateMatrixWorld(true); const c = new THREE.Vector3(); c.setFromMatrixPosition(m.matrixWorld);
-      k.position.set(c.x + (rx * Math.cos(w) + bx * Math.sin(w)) * d, c.y + h, c.z + (rz * Math.cos(w) + bz * Math.sin(w)) * d); k.lookAt(c.x, c.y + h * 0.8 + 0.2, c.z); k.rotation.z = 0; }""", [abstand, hoch, winkel])
-    page.wait_for_timeout(350)
-    page.screenshot(path=os.path.join(bild, name))
+      const W = r.domElement.width, H = r.domElement.height, cam = new THREE.PerspectiveCamera(50, W / H, 0.2, 1500);
+      cam.position.set(c.x + (rx * Math.cos(w) + bx * Math.sin(w)) * d, c.y + h, c.z + (rz * Math.cos(w) + bz * Math.sin(w)) * d); cam.lookAt(c.x, c.y + 1.1, c.z); cam.updateMatrixWorld(true);
+      r.setScissorTest(false); r.setViewport(0, 0, innerWidth, innerHeight); r.render(S.szene, cam); return r.domElement.toDataURL('image/png'); }""", [abstand, hoch, winkel])
+    open(os.path.join(bild, name), 'wb').write(base64.b64decode(d.split(',')[1]))
 
 def blatt(namen, ziel, spalten=3):
     ims = [Image.open(os.path.join(bild, n)) for n in namen]
@@ -94,7 +98,7 @@ with sync_playwright() as p:
             for k, frames in enumerate([2, 10, 10, 10, 10]):
                 schritte(page, frames)
                 if tag == 'moto':
-                    n = '%s_ki_%s_%d.png' % (tag, art, k); seite(page, n, 4.2, 1.0); namen.append(n)
+                    n = '%s_ki_%s_%d.png' % (tag, art, k); seite(page, n, 6.2, 1.4); namen.append(n)
                 else:
                     n = '%s_ki_%s_%d.png' % (tag, art, k); seite(page, n, 7.5, 2.0); namen.append(n)
                     n = '%s_ki_%s_%db.png' % (tag, art, k); seite(page, n, 7.5, 2.0, 1.2); namen.append(n)

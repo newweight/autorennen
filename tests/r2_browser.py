@@ -15,7 +15,7 @@ SEITE = 'Motorrad.html' if MOTO else 'Autorennen.html'
 SUFFIX = '_moto' if MOTO else ''
 VPW, VPH = [int(x) for x in os.environ.get('R2_VP', '1100x700').split('x')]      # R2-FIX: Fenstergröße wählbar (z. B. R2_VP=844x390)
 SUFFIX += '' if (VPW, VPH) == (1100, 700) else '_%dx%d' % (VPW, VPH)
-out = os.path.join(basis, 'tests', 'bilder_r2')
+out = os.environ.get('BILD_ORDNER') or os.path.join(basis, 'tests', 'bilder_r2')
 os.makedirs(out, exist_ok=True)
 ergebnisse, fehler = [], []
 START = time.time()
