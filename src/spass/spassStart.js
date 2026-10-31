@@ -38,6 +38,21 @@
     return r;
   };
 
+  // ---------- BILDFIX R6b: Überlagerungen – das große Banner (LOS!/Platz/Geschafft) weicht Ergebnis-Karten und Sticker-Hinweisen ----------
+  // body.s-ueber, solange eine Karte (Ergebnis, Pause, Kurz-Level/K.-o.-Fenster) oder ein Sticker-Hinweis sichtbar ist; der Missions-Chip (#s4-hud) weicht ebenfalls.
+  (function ueberWaechter() {
+    if (typeof document === 'undefined' || !document.head || document.getElementById('spass-ueber')) return;
+    const s = document.createElement('style'); s.id = 'spass-ueber';
+    s.textContent = 'body.s-ueber .hud-banner,body.s-ueber .hud-countdown,body.s-ueber #s4-hud{opacity:0!important}';
+    document.head.appendChild(s);
+    const sichtbar = (x) => x.getClientRects().length > 0 && getComputedStyle(x).visibility !== 'hidden';
+    let jetzt = false;
+    setInterval(() => {
+      const an = Array.prototype.some.call(document.querySelectorAll('.ergebnis,.pause-karte,.s4-fenster,.spass-toast.an'), sichtbar);
+      if (an !== jetzt) { jetzt = an; document.body.classList.toggle('s-ueber', an); }
+    }, 100);
+  })();
+
   // ---------- Toast „Neuer Sticker!“ ----------
   const toasts = [];
   let toastLaeuft = false;
@@ -58,14 +73,40 @@
       const n = toasts.shift();
       if (!n) { toastLaeuft = false; return; }
       const d = document.createElement('div');
-      // S5 (Teil A): liegt gerade die Ergebnis-/Pause-Karte in der Mitte, kommt der Hinweis klein nach unten (überdeckte sie vorher)
-      const karteDa = Array.prototype.some.call(document.querySelectorAll('.ergebnis,.pause-karte'), (x) => x.getClientRects().length > 0 && getComputedStyle(x).visibility !== 'hidden');
-      d.className = 'spass-toast' + (karteDa ? ' unten' : '');
+      d.className = 'spass-toast';
       d.innerHTML = `<small>Neuer Sticker! 🎉</small><b>${n.emoji}</b>${n.name}`;
       document.body.appendChild(d);
-      setTimeout(() => d.classList.add('an'), 30);
-      setTimeout(() => d.classList.remove('an'), 2700);
-      setTimeout(() => { d.remove(); weiter(); }, 3100);
+      setTimeout(() => {
+        // BILDFIX R6b: Ort erst jetzt bestimmen (die Ergebnis-Karte öffnet oft im selben Atemzug wie der Sticker):
+        //  - Kurz-Level-/K.-o.-Karte (.s4-karte): Sticker als Zeile IN der Karte (am kleinen Fenster 844x390 ist sonst kein Platz neben ihr)
+        //  - Ergebnis-/Pause-Karte (S5): kleiner Hinweis unten
+        //  - sonst: unterhalb der Platz-Box (nie über „1. von 4“); das große Banner wird solange ausgeblendet (body.s-ueber)
+        const s4 = Array.prototype.find.call(document.querySelectorAll('.s4-fenster .s4-karte'), (x) => x.getClientRects().length > 0);
+        if (s4) {
+          d.remove();
+          const alt = s4.querySelector('.s4-sticker');
+          if (alt) { alt.textContent = alt.textContent.replace('Neuer Sticker:', 'Neue Sticker:') + ' · ' + n.emoji + ' ' + n.name; }   // mehrere Sticker: eine Zeile, die Karte wächst nicht
+          else {
+            const z = document.createElement('div'); z.className = 's4-sticker';
+            z.style.cssText = 'display:inline-block;margin:.5em auto 0;padding:.2em .9em;border-radius:1em;background:linear-gradient(#fff6c8,#ffd23a);color:#2a2f6b;font-weight:900;border:.12em solid #fff;font-size:.85em';
+            z.textContent = '🎉 Neuer Sticker: ' + n.emoji + ' ' + n.name;
+            const wrap = document.createElement('div'); wrap.appendChild(z);
+            s4.insertBefore(wrap, s4.querySelector('.s4-knoepfe') || null);
+          }
+          setTimeout(weiter, 400);
+          return;
+        }
+        const karteDa = Array.prototype.some.call(document.querySelectorAll('.ergebnis,.pause-karte'), (x) => x.getClientRects().length > 0 && getComputedStyle(x).visibility !== 'hidden');
+        if (karteDa) d.classList.add('unten');
+        else {
+          let unten = 0;
+          Array.prototype.forEach.call(document.querySelectorAll('.hud-platz'), (x) => { const r = x.getBoundingClientRect(); if (r.height > 2 && r.bottom > unten) unten = r.bottom; });
+          if (unten > 0) d.style.top = Math.ceil(unten + 8) + 'px';
+        }
+        d.classList.add('an');
+        setTimeout(() => d.classList.remove('an'), 2670);
+        setTimeout(() => { d.remove(); weiter(); }, 3070);
+      }, 30);
     };
     weiter();
   }

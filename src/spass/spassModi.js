@@ -37,7 +37,7 @@
     s.textContent =
       '#s4-hud{position:fixed;left:50%;top:1.2vh;transform:translateX(-50%);z-index:120;pointer-events:none;text-align:center;font:900 clamp(15px,2.5vh,26px)/1.2 Arial,sans-serif;color:#fff;' +
       'background:rgba(14,24,58,.72);border:.12em solid rgba(255,255,255,.5);border-radius:1em;padding:.2em .8em;text-shadow:0 .08em .15em rgba(0,0,0,.6);max-width:92vw;white-space:nowrap;display:none}' +
-      '.s4-frei .hud-runde{display:none!important}' +
+      '.s4-frei .hud-runde,.s4-kurz .hud-runde{display:none!important}' +
       '#s4-hud small{display:block;font-size:.72em;font-weight:800;opacity:.92}#s4-hud b{color:#ffd23a}#s4-hud .gut{color:#7dff9a}#s4-hud .rot{color:#ff9a8a}' +
       '.s4-fenster{position:fixed;inset:0;z-index:260;display:flex;align-items:center;justify-content:center;background:rgba(10,20,50,.74);color:#fff;font:800 clamp(15px,2.4vh,26px)/1.25 Arial,sans-serif;padding:2vh 3vw;box-sizing:border-box}' +
       '.s4-karte{background:linear-gradient(#27346e,#18214a);border:.15em solid #fff;border-radius:1.2em;padding:.9em 1.4em;text-align:center;max-width:min(94vw,44em);max-height:94vh;overflow:auto;box-shadow:0 .4em 1.4em rgba(0,0,0,.55)}' +
@@ -54,9 +54,28 @@
     if (typeof document === 'undefined') return;
     stil();
     if (!hudEl) { hudEl = document.createElement('div'); hudEl.id = 's4-hud'; document.body.appendChild(hudEl); }
+    hudLage();
     if (html === hudText && hudEl.style.display === 'block') return;
     hudText = html; hudEl.innerHTML = html; hudEl.style.display = html ? 'block' : 'none';
   }
+  /** BILDFIX R6b: Chip direkt UNTER die Platz-Box („1. von 4“) setzen (lag darüber), solange nichts anderes dort ist; überlappt er das große Banner/den Countdown (kleines Fenster), wird er für diese Zeit ausgeblendet. */
+  function hudLage() {
+    if (!hudEl) return;
+    let unten = 0;
+    Array.prototype.forEach.call(document.querySelectorAll('.hud-platz'), (x) => { const r = x.getBoundingClientRect(); if (r.height > 2 && r.bottom > unten) unten = r.bottom; });
+    const top = unten > 0 ? Math.ceil(unten + 6) + 'px' : '';
+    if (hudEl.style.top !== top) hudEl.style.top = top;
+    if (hudEl.style.display !== 'block') return;
+    const c = hudEl.getBoundingClientRect();
+    const kollidiert = Array.prototype.some.call(document.querySelectorAll('.hud-banner.an,.hud-countdown,.hud-meldung'), (x) => {
+      if (!x.textContent.trim()) return false;
+      const r = x.getBoundingClientRect(), cs = getComputedStyle(x);
+      return cs.visibility !== 'hidden' && +cs.opacity > 0.05 && r.height > 2 && r.left < c.right && c.left < r.right && r.top < c.bottom && c.top < r.bottom;
+    });
+    const v = kollidiert ? '0' : '';      // Deckkraft statt visibility: Text bleibt les-/prüfbar
+    if (hudEl.style.opacity !== v) hudEl.style.opacity = v;
+  }
+  if (typeof window !== 'undefined' && window.setInterval) setInterval(() => { try { hudLage(); } catch (e) { /* egal */ } }, 150);   // auch im Countdown/nach Größenänderung nachführen
   function hudWeg() { hudText = ''; if (hudEl) hudEl.style.display = 'none'; }
 
   let offen = null;

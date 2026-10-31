@@ -236,6 +236,7 @@
     start(spiel, m) {
       const sp = spielName(), def = level(sp, m.level), st = spiel.strecke, spl = st.spline, r = spiel.rennen, t = r.teilnehmer[0], f = spiel.fahrzeuge[0];
       const ab = abschnitt(st, def), cps = st.checkpoints;
+      if (typeof document !== 'undefined') { M.stil(); document.body.classList.add('s4-kurz'); }   // BILDFIX R6b: „Runde 1/10“ gibt es im Kurz-Level nicht
       const p = spl.punktBei(ab.s0), q = (def.q || 0);
       const x = p.x + p.nx * q, zz = p.z + p.nz * q;
       f.vehicle.setzen(x, zz, R.headingAus(p.tx, p.tz)); f.vehicle.y = st.hoeheAn(x, zz); f.index = -1; spiel._vorherAngleichen(f);
@@ -288,6 +289,7 @@
       if (z && !z.ende && f && f.istSpieler && name === 'kanoneBumm') z.zaehl.kanone++;
     },
     aufraeumen(spiel) {
+      if (typeof document !== 'undefined') document.body.classList.remove('s4-kurz');
       const z = spiel.s4 && spiel.s4.kurz;
       if (z && z.muenzen) { z.muenzen.entfernen(); z.muenzen = null; }
     },
@@ -309,7 +311,7 @@
       if (spiel.spassKonfetti) { const v = spiel.fahrzeuge[0].vehicle; spiel.spassKonfetti.burst(v.x, v.y + 3, v.z, 120); }
       const naechste = () => { M.karteZu(); spiel.pausiert = false; spiel.uhr.rest = 0; spiel._s4Modus = { art: 'kurz', level: lst[idx + 1].id }; spiel.rennenStarten(); };
       M.karte({
-        html: `<h1>🎉 Geschafft!</h1><div>${z.def.emoji} Level ${idx + 1} · ${z.def.titel}</div>${sternText(e.sterne, true)}` +
+        html: `<h1>🎉 Geschafft!</h1><div>${z.def.emoji} Level ${idx + 1} · ${z.def.art === 'ziel' ? 'Ziel erreicht' : z.def.titel}</div>${sternText(e.sterne, true)}` +
           `<div>Zeit <b>${fmt(e.zeit)}</b>${erg.neuerRekord && vorher > 0 ? ' · 🏅 neue Bestzeit!' : ''}${erg.gold ? ` · +${erg.gold} 🪙` : ''}</div>` +
           `<small>⭐⭐⭐ bis ${z.lauf.z.t3} s · ⭐⭐ bis ${z.lauf.z.t2} s</small>` +
           `<div class="s4-knoepfe">${hatNaechstes ? '<div class="s4-knopf gruen" data-s4="weiter">Nächstes Level ▶ <kbd>Enter</kbd></div>' : ''}` +
