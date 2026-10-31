@@ -25,7 +25,7 @@ Aufruf (Teilmengen):
             --modus solo|zwei|online[,…]|alle   --grafik normal|schoen|ultra|alle   --sekunden 20
             --startbilder  Bild beider Hälften je Strecke (Kamera-Befund) nach tests/bilder_startfehler/kamera/
 Ausgabe: je Kombination OK/FEHL, am Ende Zusammenfassung; Exit-Code 0 nur ohne FEHL."""
-import argparse, os, sys, time, json, socket, subprocess, threading, http.server, functools
+import tempfile, argparse, os, sys, time, json, socket, subprocess, threading, http.server, functools
 from playwright.sync_api import sync_playwright
 
 basis = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -326,7 +326,8 @@ def online_kombi(browser, spiel, strecke, grafik, sekunden):
     html, gkey = SPIELE[spiel]
     port = freier_port()
     cmd = ['node', os.path.join(basis, 'server', 'server.js'), '--port', str(port), '--host', '127.0.0.1'] + (['--motorrad'] if spiel == 'moto' else [])
-    srv = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    srv_log = tempfile.NamedTemporaryFile('w+', suffix='.srvlog', delete=False)
+    srv = subprocess.Popen(cmd, stdout=srv_log, stderr=subprocess.STDOUT)
     seiten = []
     try:
         for _ in range(100):
@@ -370,7 +371,14 @@ def online_kombi(browser, spiel, strecke, grafik, sekunden):
                 if f: return False, 'Fehler im Countdown (%s): %s' % ('Host' if pg is host else 'Gast', ' | '.join(f[:3])), {}
             if all(st['rz'] == 'laeuft' for st in sts): lauf = True; break
             host.wait_for_timeout(500)
-        if not lauf: return False, 'Countdown läuft online nicht durch (%s)' % [st['rz'] for st in sts], {}
+        if not lauf:
+            zus = []
+            for pg in seiten:
+                try: zus.append(pg.evaluate("() => { const S = Rennspiel.spiel, o = S.online, u = S.menue && S.menue.onlineUi; return {zustand: S.zustand, phase: o && o.phase, empfangen: !!(o && o.empfangen), rennen: !!S.rennen, rz: S.rennen && S.rennen.zustand, cd: S.rennen && S.rennen.countdown, verb: !!(o && o.verb), hinweis: u && u.hinweis, n: S.fahrzeuge && S.fahrzeuge.length}; }"))
+                except Exception as e2: zus.append('Auslesen fehlgeschlagen: %s' % str(e2)[:80])
+            try: srv_log.flush(); srv_log.seek(0); slog = srv_log.read()[-500:].replace('\n', ' | ')
+            except Exception: slog = ''
+            return False, 'Countdown läuft online nicht durch (%s) Zustand Host/Gast=%s Fehler=%s Server=%s Serverlog=%s' % ([st['rz'] for st in sts], zus, [x for pg in seiten for x in pg._fl][:3], 'läuft' if srv.poll() is None else 'BEENDET', slog), {}
         for pg in seiten: pg.evaluate(AUTOPILOT, 'an')
         t1 = time.time(); vmax = [0, 0]
         while time.time() - t1 < sekunden:
@@ -389,7 +397,10 @@ def online_kombi(browser, spiel, strecke, grafik, sekunden):
             try: fl.append(pg.evaluate("() => { const u = Rennspiel.spiel.menue.onlineUi; return u ? 'ansicht=' + u.ansicht + ' hinweis=' + (u.hinweis || '') + ' lobby=' + !!u.lobby + ' fehler=' + (u.fehler || '') : 'keine onlineUi'; }"))
             except Exception: pass
         zeile = [z for z in traceback.format_exc().splitlines() if 'matrix_alle.py' in z][-1:]
-        return False, 'Ausnahme: %s %s %s' % (str(e)[:250], fl, zeile), {}
+        try:
+            srv_log.flush(); srv_log.seek(0); slog = srv_log.read()[-400:].replace('\n', ' | ')
+        except Exception: slog = ''
+        return False, 'Ausnahme: %s %s %s Serverprozess=%s Serverlog=%s' % (str(e)[:250], fl, zeile, 'läuft' if srv.poll() is None else 'BEENDET (%s)' % srv.poll(), slog), {}
     finally:
         for pg in seiten:
             try: pg.context.close()
