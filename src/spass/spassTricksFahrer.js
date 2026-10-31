@@ -189,6 +189,7 @@
           z.wAnz = (z.wAnz || 0) + (z.w - (z.wAnz || 0)) * k; art = z.art; w = z.wAnz;
         } else if (zs && zs.neuPoseZiel) { zs.neuPoseZiel.wAnz = 0; }
         animieren(mesh, art, w, t);
+        if (t3 && t3.wackel && !t3.trick && !(spiel.online || spiel.zustand === 'online')) autoPose(mesh, { rolle: t3.pose.rolle, schraube: 0, hoehe: 0 });       // R3-LOCKER: KI-Fehltrick – kurzes Wackeln nach der Landung (Anzeige; das Abbremsen rechnet spassTricks.js im Server wie im Browser)
       }
     } else if (spiel._t3 && spiel._t3.fz) {
       for (let i = 0; i < F.length; i++) {

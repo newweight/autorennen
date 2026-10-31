@@ -10,6 +10,7 @@ setTimeout(() => { console.log('FEHL Wächter: Test hängt'); process.exit(3); }
 function pruefe(name, gut, info) { console.log((gut ? 'OK   ' : 'FEHL ') + name + (info !== undefined ? '  (' + info + ')' : '')); if (gut) ok++; else fehler++; }
 
 const R = ladeModule(['src/config.js', 'src/spass/spassSticker.js', 'src/spass/spassTricks.js']);
+const FEHL_MAX = 0.15;
 const T = R.SpassTricks, K = T.config(), STUFEN = ['leicht', 'mittel', 'schwer', 'profi', 'meister', 'legende', 'unschlagbar'];
 
 // ---------------------------------------------------------------- A) Plan
@@ -40,7 +41,8 @@ const T = R.SpassTricks, K = T.config(), STUFEN = ['leicht', 'mittel', 'schwer',
   pruefe('A monoton: höhere Stufe = nie weniger Tricks (Auto und Motorrad)', STUFEN.every((s, i) => i === 0 || (anteil[s] >= anteil[STUFEN[i - 1]] && mo[s].chance >= mo[STUFEN[i - 1]].chance)));
   pruefe('A Startzeit im Bereich 0,25…0,45 s, Richtung passt zur Art', startOk && richtigeRichtung);
   pruefe('A Tabelle: Auto leicht kein Schraube; Motorrad leicht nur Superman', schr.leicht === 0 && mo.leicht.bf === 0 && mo.leicht.hs === 0);
-  pruefe('A Genug-Zeit-Regel: Dauer + Reserve + 0,3 s', T.kiGenugZeit(K.zeit.backflip.dauer + K.reserve + 0.3, 'backflip') && !T.kiGenugZeit(K.zeit.backflip.dauer + K.reserve + 0.29, 'backflip') && !T.kiGenugZeit(null, 'backflip'));
+  pruefe('A R3-LOCKER: zusatz gelockert (−0,5…−0,3 s), Fehltrick-Mindestdauer gesetzt', K.ki.zusatz <= -0.3 && K.ki.zusatz >= -0.5 && K.ki.fehlMin > 0 && K.ki.kiTempo > 0.8 && K.ki.kiTempo < 1, 'zusatz ' + K.ki.zusatz);
+  pruefe('A Genug-Zeit-Regel: Dauer + Reserve + zusatz', T.kiGenugZeit(K.zeit.backflip.dauer + K.reserve + K.ki.zusatz + 1e-9, 'backflip') && !T.kiGenugZeit(K.zeit.backflip.dauer + K.reserve + K.ki.zusatz - 0.01, 'backflip') && !T.kiGenugZeit(null, 'backflip'));
   const quelle = require('fs').readFileSync(require('path').join(__dirname, '../src/spass/spassTricks.js'), 'utf8');
   pruefe('A kein Math.random in spassTricks.js', !/Math\.random/.test(quelle.replace(/\/\/.*$/gm, '')));
 }
@@ -76,16 +78,18 @@ function spielen(art, schw, opt) {
     const St = R2.Moto.stunts;
     spiel.stunt = { zeit: 0, saat: 'moto|test|a', alle: [], fz: fz.map(() => ({ punkte: 0, combo: St.comboNeu(), stat: { ereignisse: 0 }, pose: { salto: 0, hoehe: 0, gier: 0 }, trick: null, wartend: null, folge: null, gierRest: 0 })) };
   }
-  const dt = 1 / 60, ergebnis = { gestartet: [0, 0, 0], fertig: [0, 0, 0], abgekuerzt: 0, fehl: 0, arten: {}, fluege: 0, punkteKi: 0 };
+  const dt = 1 / 60, ergebnis = { gestartet: [0, 0, 0], fertig: [0, 0, 0], abgekuerzt: 0, fehl: 0, verpatzt: 0, wackelStarts: 0, schlimm: 0, minV: 30, arten: {}, fluege: 0, punkteKi: 0 };
   const S3 = () => spiel._t3;
   const dauern = [];
   for (let n = 0; n < 60; n++) dauern.push(0.5 + ((n * 37) % 100) / 100 * 2.7);        // 0,5…3,2 s, deterministisch gemischt
   let flugNr = 0;
+  const wackelAlt = [false, false, false];
   for (const D of dauern) {
     flugNr++;
     const vy = G * D / 2;
     for (const f of fz) { f.flug.fluege = flugNr; f.flug.aktiv = true; f.flug.t = 0; f.flug.vy = vy; f.flug.y = 0; }
     const gesehen = [false, false, false];
+    for (const f of fz) f.vehicle.vLaengs = 30;
     for (let t = 0; t < D + 0.3; t += dt) {
       const luft = t < D;
       for (const f of fz) { f.flug.aktiv = luft; f.flug.t = luft ? t : 0; f.flug.y = luft ? vy * t - 0.5 * G * t * t : 0; f.flug.vy = vy - G * t; if (!luft) f.flug.vy = 0; }
@@ -97,14 +101,17 @@ function spielen(art, schw, opt) {
       for (let i = 0; i < 3; i++) {
         const z3 = s3 && s3.fz[i];
         if (z3 && z3.trick && !gesehen[i]) { gesehen[i] = true; ergebnis.gestartet[i]++; if (i > 0) { ergebnis.arten[z3.trick.art] = (ergebnis.arten[z3.trick.art] || 0) + 1; if (z3.trick.abgekuerzt) ergebnis.abgekuerzt++; } }
-        if (z3 && (z3.landeFehler || z3.wackel)) ergebnis.fehl += i > 0 ? 1 : 0;
+        const w = !!(z3 && z3.wackel);
+        if (i > 0 && w && !wackelAlt[i]) ergebnis.wackelStarts++;
+        wackelAlt[i] = w;
+        if (i === 0 && z3 && (z3.landeFehler || z3.wackel)) ergebnis.fehl++;        // der Mensch (Attrappe: keine Eingabe) bekommt nie Wackeln
       }
-      if (fz[1].vehicle.vLaengs !== 30 || fz[2].vehicle.vLaengs !== 30) ergebnis.fehl++;
+      for (const i of [1, 2]) { const v = fz[i].vehicle.vLaengs; ergebnis.minV = Math.min(ergebnis.minV, v); if (!isFinite(v) || v > 30 || v < 30 * K.ki.kiTempo - 1e-9) ergebnis.schlimm++; }       // KI: höchstens EIN kurzes Abbremsen um kiTempo (kein Hänger, kein Stillstand)
     }
     ergebnis.fluege++;
   }
   const s3 = S3();
-  for (let i = 0; i < 3; i++) { const z3 = s3 && s3.fz[i]; if (z3) ergebnis.fertig[i] = Object.keys(z3.stat).filter((k) => k !== 'abgekuerzt').reduce((a, k) => a + z3.stat[k], 0); }
+  for (let i = 0; i < 3; i++) { const z3 = s3 && s3.fz[i]; if (z3) { ergebnis.fertig[i] = Object.keys(z3.stat).filter((k) => k !== 'abgekuerzt' && k !== 'verpatzt').reduce((a, k) => a + z3.stat[k], 0); if (i > 0) ergebnis.verpatzt += z3.stat.verpatzt; } }
   ergebnis.spielerEreignisse = s3 && s3.fz[0] ? 1 : 0;
   ergebnis.kiHatZustand = !!(s3 && (s3.fz[1] || s3.fz[2]));
   ergebnis.sz = spiel.stunt;
@@ -118,7 +125,7 @@ for (const art of ['auto', 'moto']) {
     // PRUEF-FIX 2: „Auto-Tricks“ aus + „KI-Tricks“ an → die Computer-Gegner machen Tricks, der Mensch nicht; beide aus → Schritt endet sofort (kein Zustand, nichts verändert)
     const ma = spielen(art, 'unschlagbar', { auto: false });
     const gm = ma.gestartet[1] + ma.gestartet[2], vollAn = spielen(art, 'unschlagbar');
-    pruefe('B auto: Auto-Tricks AUS + KI-Tricks AN → KI macht trotzdem Tricks (wie bei beiden an), Mensch keine', gm >= 20 && gm === vollAn.gestartet[1] + vollAn.gestartet[2] && ma.gestartet[0] === 0 && ma.abgekuerzt === 0 && ma.fehl === 0, gm + ' gestartet');
+    pruefe('B auto: Auto-Tricks AUS + KI-Tricks AN → KI macht trotzdem Tricks (wie bei beiden an), Mensch keine', gm >= 20 && gm === vollAn.gestartet[1] + vollAn.gestartet[2] && ma.gestartet[0] === 0 && ma.fehl === 0, gm + ' gestartet');
     const beide = spielen(art, 'unschlagbar', { auto: false, ki: false });
     pruefe('B auto: beide AUS → bitgleich wie bisher (kein Trick-Zustand, keine Eingriffe)', !beide.kiHatZustand && beide.gestartet.every((x) => x === 0) && beide.fehl === 0 && beide.spielerEreignisse === 0);
     const nurMensch = spielen(art, 'unschlagbar', { ki: false });
@@ -129,11 +136,14 @@ for (const art of ['auto', 'moto']) {
   const r = spielen(art, 'unschlagbar');
   const gest = r.gestartet[1] + r.gestartet[2], fert = r.fertig[1] + r.fertig[2];
   pruefe('B ' + art + ': KI macht Tricks (unschlagbar, 60 Flüge × 2 KI)', gest >= 20, gest + ' gestartet, ' + JSON.stringify(r.arten));
-  pruefe('B ' + art + ': jeder gestartete KI-Trick wird fertig und nie abgekürzt = kein Fehltrick', gest === fert && r.abgekuerzt === 0 && r.fehl === 0, 'gestartet ' + gest + ' fertig ' + fert + ' abgekürzt ' + r.abgekuerzt + ' fehl ' + r.fehl);
+  const quote = r.verpatzt / Math.max(1, gest);
+  pruefe('B ' + art + ': R3-LOCKER Fehltrick-Quote der KI ≤ ' + FEHL_MAX * 100 + ' % (unschlagbar, 60 Flüge × 2 KI, Flugzeit 0,5…3,2 s)', quote <= FEHL_MAX, 'gestartet ' + gest + ' fertig ' + fert + ' verpatzt ' + r.verpatzt + ' = ' + (quote * 100).toFixed(1) + ' % (hastig ' + r.abgekuerzt + ')');
+  pruefe('B ' + art + ': jeder gestartete KI-Trick endet (fertig oder Fehltrick), der Mensch bleibt unberührt', gest === fert + r.verpatzt && r.fehl === 0, 'gestartet ' + gest + ' fertig ' + fert + ' verpatzt ' + r.verpatzt);
+  pruefe('B ' + art + ': Fehltrick = nur Wackeln + EIN kurzes Abbremsen (kein Sturz, kein Hänger, Tempo nie unter ×' + K.ki.kiTempo + ', jeder Fehltrick wackelt)', r.schlimm === 0 && r.wackelStarts === r.verpatzt && r.minV >= 30 * K.ki.kiTempo - 1e-9, 'Wackeln ' + r.wackelStarts + ' / Fehltricks ' + r.verpatzt + ', minV ' + r.minV.toFixed(2));
   const l = spielen(art, 'leicht');
   pruefe('B ' + art + ': leicht seltener als unschlagbar', l.gestartet[1] + l.gestartet[2] < gest, (l.gestartet[1] + l.gestartet[2]) + ' < ' + gest);
   const r2 = spielen(art, 'unschlagbar');
-  pruefe('B ' + art + ': zweimal gespielt = identisch (deterministisch)', JSON.stringify([r.gestartet, r.fertig, r.arten]) === JSON.stringify([r2.gestartet, r2.fertig, r2.arten]));
+  pruefe('B ' + art + ': zweimal gespielt = identisch (deterministisch)', JSON.stringify([r.gestartet, r.fertig, r.arten, r.verpatzt, r.wackelStarts, r.minV]) === JSON.stringify([r2.gestartet, r2.fertig, r2.arten, r2.verpatzt, r2.wackelStarts, r2.minV]));
   const sp = spielen(art, 'unschlagbar', { sonder: (fz) => { fz[1].ausgeschieden = true; fz[2].looping.aktiv = true; } });
   pruefe('B ' + art + ': ausgeschieden / im Looping → kein Trick', sp.gestartet[1] === 0 && sp.gestartet[2] === 0);
   const ka = spielen(art, 'unschlagbar', { sonder: (fz) => { fz[1].flug.kanone = { t: 0 }; fz[2].polizei = true; } });
@@ -263,7 +273,7 @@ function trickLauf(einst, dirS, opt) {
     for (const x of evs) if (x.art === 'trick') { kiEv.push(x); if (x.st === 'fehl') kiFehl++; }
     const kiTricks = kiLog.slice(1).filter((l) => l.length > 5).length;
     const fertigKi = kiLog.slice(1).every((l) => l.length === 0 || l[l.length - 1][1] >= 0.9);
-    pruefe('C Auto-Raum: Computer machen Tricks (at-Strom der Computer-Fahrzeuge), jeder wird fertig (kein Fehltrick, kein "fehl"-Ereignis)', kiTricks >= 1 && fertigKi && kiFehl === 0, kiLog.map((l) => l.length).join('/') + ' at-Zustände, fehl ' + kiFehl);
+    pruefe('C Auto-Raum: Computer machen Tricks (at-Strom der Computer-Fahrzeuge), jeder endet sauber (auch ein KI-Fehltrick läuft zu Ende: kein Hänger; kein "fehl"-Ereignis für den Menschen)', kiTricks >= 1 && fertigKi && kiFehl === 0, kiLog.map((l) => l.length).join('/') + ' at-Zustände, fehl ' + kiFehl);
     pruefe('C Computer-Tricks erzeugen keine Ereignisse (nur der Mensch bekommt Meldungen)', kiEv.every((x) => x.nr === 0));
     const ki2 = neueSim(Simulation, Object.assign({}, AUTO, { gegner: 3, schwierigkeit: 'unschlagbar' }), 1); const kiLog2 = [[], [], [], []];
     fahre(ki2, 60 * 80, null, (n) => { const z = ki2.zustand().at; for (let i = 1; i < 4; i++) if (z[i][0]) kiLog2[i].push(z[i].slice()); });
@@ -304,7 +314,7 @@ function trickLauf(einst, dirS, opt) {
 
   // ---------------------------------------------------------------- E) Motorrad-Raum: Computer-Tricks online
   if (mit('E')) {
-    const RM = ladenMoto(), ki0 = RM.config.spass.tricks.ki.zusatz;
+    const RM = ladenMoto();
     const lauf = (einst) => {
       const sim = neueSim(Simulation, Object.assign({ streckeId: 'stuntpark', gegner: 4, schwierigkeit: 'unschlagbar' }, einst), 1, true);
       const arten = {}, mo = [];
@@ -314,8 +324,7 @@ function trickLauf(einst, dirS, opt) {
       for (const x of ev) if (x.art === 'stunt') { const k = (x.nr === 0 ? 'M:' : 'K:') + x.st; arten[k] = (arten[k] || 0) + 1; }
       return { arten, mo, sim };
     };
-    try {
-      RM.config.spass.tricks.ki.zusatz = -0.3;      // nur für den Test: Stunt-Park-Flüge sind kurz (~1,4 s); mit der Regel „+0,3 s Reserve“ würde die KI hier nichts wagen
+    {
       const an = lauf({ tricks: true }), aus = lauf({});
       const neuK = (r) => Object.keys(r.arten).filter((k) => k.startsWith('K:') && /superman|backflip|handstand/.test(k)).reduce((s, k) => s + r.arten[k], 0);
       pruefe('E Motorrad-Raum mit tricks: Computer machen Superman/Backflip/Handstand (Stunt-Ereignisse + zustand.mo[13..14])', neuK(an) >= 1 && an.mo.length > 5, json(an.arten) + ' mo ' + an.mo.length);
@@ -323,13 +332,20 @@ function trickLauf(einst, dirS, opt) {
       pruefe('E der Mensch macht seine Tricks in beiden Räumen gleich (Backflip bleibt, Ereignisse M:backflip gleich)', (an.arten['M:backflip'] || 0) >= 1 && an.arten['M:backflip'] === aus.arten['M:backflip'], (an.arten['M:backflip']) + ' / ' + (aus.arten['M:backflip']));
       const an2 = lauf({ tricks: true });
       pruefe('E Motorrad-Computer-Tricks deterministisch (zweiter Lauf identisch)', json(an.arten) === json(an2.arten) && json(an.mo) === json(an2.mo));
-    } finally { RM.config.spass.tricks.ki.zusatz = ki0; }
-    // Standardregel: KI wagt nur mit genug Restflug, nie ein Fehltrick (kein abgekürzter Trick, alle fertig)
-    const sim = neueSim(Simulation, { streckeId: 'stuntpark', gegner: 4, schwierigkeit: 'unschlagbar', tricks: true }, 1, true);
-    const ev = fahre(sim, 60 * 100);
-    const kiS = ev.filter((x) => x.art === 'stunt' && x.nr > 0 && /superman|backflip|handstand/.test(x.st));
-    const st = sim.sim.stunt.fz; const abg = st.some((z, i) => i > 0 && z && z.stat && z.stat.abgekuerzt > 0);
-    pruefe('E Standardregel (Restflug ≥ Dauer + 0,45 s): kein abgekürzter Computer-Trick', !abg, kiS.length + ' Computer-Tricks im Lauf');
+    }
+    // R3-LOCKER: Standardregel (zusatz −0,4): Computer wagen auch knappe Flüge; Fehltrick-Quote ≤ 15 %, ein Fehltrick ist nur Wackeln + kurzes Abbremsen (kein Sturz, kein Hänger, alle Werte endlich), deterministisch
+    const kiLauf = () => {
+      const sim = neueSim(Simulation, { streckeId: 'stuntpark', gegner: 4, schwierigkeit: 'unschlagbar', tricks: true }, 1, true);
+      const vmax = []; let nan = 0;
+      const ev = fahre(sim, 60 * 100, null, (n) => { if (n < 300) return; sim.sim.fahrzeuge.forEach((f, i) => { if (i > 0) { const v = f.vehicle; if (!isFinite(v.x + v.z + v.vLaengs)) nan++; vmax[i] = Math.max(vmax[i] || 0, v.vLaengs); } }); });
+      let tricks = 0, fehl = 0, hastig = 0;
+      sim.sim._t3.fz.forEach((z, i) => { if (i > 0 && z) { tricks += z.stat.superman + z.stat.handstand + z.stat.backflip + z.stat.verpatzt; fehl += z.stat.verpatzt; hastig += z.stat.abgekuerzt; } });
+      return { tricks, fehl, hastig, nan, vmin: Math.min(...vmax.slice(1)), ev: ev.filter((x) => x.art === 'stunt' && x.nr > 0 && /superman|backflip|handstand/.test(x.st)).length };
+    };
+    const k1 = kiLauf(), k2 = kiLauf();
+    pruefe('E Standardregel: Computer-Tricks kommen vor (Stunt-Park, 100 s, 4 Computer)', k1.tricks >= 3 && k1.ev >= 1, json(k1));
+    pruefe('E Fehltrick-Quote ≤ ' + FEHL_MAX * 100 + ' % der Computer-Tricks, Werte endlich (kein Absturz/NaN), alle Computer fahren weiter (kein Hänger)', k1.fehl / Math.max(1, k1.tricks) <= FEHL_MAX && k1.nan === 0 && k1.vmin > 5, k1.fehl + ' / ' + k1.tricks);
+    pruefe('E Computer-Tricks inkl. Fehltricks deterministisch (zweiter Lauf identisch)', json(k1) === json(k2));
   }
 
   // ---------------------------------------------------------------- F) Vorhersage-Messung: Fehltrick-Sprung (Tempo × 0,88 bei der Landung, die Vorhersage kennt es nicht)

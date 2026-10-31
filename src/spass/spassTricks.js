@@ -54,7 +54,9 @@
     R.config.spass.tricks.ki = {
       chance: { leicht: 0.10, mittel: 0.25, schwer: 0.40, profi: 0.55, meister: 0.65, legende: 0.75, unschlagbar: 0.85 },
       schraube: { leicht: 0, mittel: 0.2, schwer: 0.35, profi: 0.5, meister: 0.55, legende: 0.6, unschlagbar: 0.6 },
-      moto: mo, startMin: 0.25, startSpanne: 0.2, zusatz: 0.3, standard: 'mittel',
+      // zusatz (R3-LOCKER, vorher +0,3): KI wagt den Trick, wenn Restflug ≥ Dauer + Reserve + zusatz. Bei negativem zusatz darf sie auch bei zu wenig Zeit anfangen (unter `min`+Reserve = Fehltrick:
+      // zu hastig, keine Punkte, kurzes Wackeln + Abbremsen bei der Landung); fehlMin = kürzeste Fehltrick-Dauer (s); kiTempo = Tempofaktor bei der Landung nach Fehltrick
+      moto: mo, startMin: 0.25, startSpanne: 0.2, zusatz: -0.4, fehlMin: 0.25, kiTempo: 0.92, standard: 'mittel',
     };
   }
   const C = () => R.config.spass.tricks;
@@ -94,12 +96,14 @@
     return (fl.vy + Math.sqrt(Math.max(0, fl.vy * fl.vy + 2 * g * h))) / g;
   }
   /** Zeitplan: { dauer, abgekuerzt } oder null (zu kurz → gar nicht erst beginnen). Der Trick ist spätestens `reserve` s vor der Landung fertig. */
-  function plan(rest, art, cfg) {
+  function plan(rest, art, cfg, ki) {
     const k = cfg || C(), c = k.zeit[art];
     if (!c || !(rest > 0)) return null;
     const frei = rest - k.reserve;
     if (frei >= c.dauer) return { dauer: c.dauer, abgekuerzt: false };
     if (frei >= c.min) return { dauer: frei, abgekuerzt: true };
+    // R3-LOCKER: nur die KI darf es bei zu wenig Restflug trotzdem wagen = Fehltrick (zu hastig, ohne Punkte, bei der Landung kurzes Wackeln + Abbremsen, kein Sturz)
+    if (ki && frei >= k.ki.fehlMin) return { dauer: frei, abgekuerzt: true, verpatzt: true };
     return null;
   }
   /** Einblend-Gewicht eines Haltetricks bei Zeitanteil p: sanft in die Pose, halten, sanft heraus (0..1). */
@@ -209,8 +213,8 @@
       tasteT: -Infinity, tastePrev: false, dirT, dirPrev, cnt: {},
       arten: {}, punkte: 0, combo: comboNeu(), ereignisse: [], tricksImFlug: 0,
       pose: { art: null, p: 0, w: 0, salto: 0, rolle: 0, schraube: 0, hoehe: 0, dir: 1 },
-      wackel: null, landeFehler: false,
-      stat: { superman: 0, handstand: 0, backflip: 0, fassrolle: 0, schraube: 0, abgekuerzt: 0 },
+      wackel: null, landeFehler: false, kiFehl: false,
+      stat: { superman: 0, handstand: 0, backflip: 0, fassrolle: 0, schraube: 0, abgekuerzt: 0, verpatzt: 0 },
       gross: false, zlGetan: false, rest0: 0, t0: 0,
     };
   }
@@ -218,6 +222,7 @@
   function fertig(z3, e, k, cfg) {
     const t = z3.trick;
     if (!t) return;
+    if (t.verpatzt) { z3.stat.verpatzt++; z3.kiFehl = true; return; }           // Fehltrick der KI: zählt nicht als Trick, bei der Landung Wackeln
     z3.stat[t.art]++; if (t.abgekuerzt) z3.stat.abgekuerzt++;
     const mult = e.comboStunt ? e.comboStunt(e.jetzt) : comboStunt(z3.combo, e.jetzt, cfg);
     const kette = e.comboZaehler ? e.comboZaehler() : z3.combo.zaehler;
@@ -239,7 +244,7 @@
     const k = cfg || C(), dt = e.dt, ret = { start: null };
     z3.jetzt = e.jetzt;
     if (e.abflug) {
-      z3.luft = true; z3.flugT = 0; z3.flugNr++; z3.trick = null; z3.startT = -Infinity; z3.tricksImFlug = 0; z3.landeFehler = false;
+      z3.luft = true; z3.flugT = 0; z3.flugNr++; z3.trick = null; z3.startT = -Infinity; z3.tricksImFlug = 0; z3.landeFehler = false; z3.kiFehl = false;
       z3.gross = false; z3.zlGetan = false; z3.rest0 = 0; z3.t0 = 0;
       RICHTUNGEN.forEach((d) => { z3.dirT[d] = -Infinity; }); z3.tasteT = -Infinity;
     }
@@ -250,7 +255,9 @@
     if (e.landung || (z3.luft && !e.luft && !e.abflug)) {
       z3.luft = false;
       const t = z3.trick;
-      if (t) {
+      if (z3.kiFehl) { z3.kiFehl = false; z3.landeFehler = true; }
+      if (t && t.verpatzt) { z3.stat.verpatzt++; z3.landeFehler = true; }
+      else if (t) {
         const anteil = t.t / t.dauer;
         if (anteil >= 0.5 && (e.art === 'moto' || anteil >= 0.9)) fertig(z3, e, k, cfg);                // Motorrad wie die alten Stunts (≥ 50 %); Auto: fast fertig, sonst Wackeln
         else if (e.art === 'auto') z3.landeFehler = true;
@@ -275,9 +282,9 @@
         else if (z3.tasteT > z3.startT && e.jetzt - z3.tasteT >= k.autoWarte) { art = 'fassrolle'; dir = 1; }       // Taste allein
       }
       if (art) {
-        const p = plan(e.rest, art, k);
+        const p = plan(e.rest, art, k, e.ki);
         if (p) {
-          z3.trick = { art, t: 0, dauer: p.dauer, abgekuerzt: p.abgekuerzt, dir, start: z3.flugT };
+          z3.trick = { art, t: 0, dauer: p.dauer, abgekuerzt: p.abgekuerzt, verpatzt: !!p.verpatzt, dir, start: z3.flugT, rest: e.rest };
           z3.startT = e.jetzt; if (genutzt) z3.dirT[genutzt] = -Infinity;
           z3.tasteT = Math.min(z3.tasteT, e.jetzt - k.fenster - 1);              // Taste verbraucht (gehalten zählt für einen weiteren Richtungs-Trick weiter)
           ret.start = art;
@@ -405,7 +412,7 @@
         }
       }
       const e = {
-        dt, jetzt, luft, abflug, landung, flugT: fl.t, rest, art: istMoto ? 'moto' : 'auto', taste, halten, dir,
+        dt, jetzt, luft, abflug, landung, flugT: fl.t, rest, ki, art: istMoto ? 'moto' : 'auto', taste, halten, dir,
         comboStunt: istMoto ? (j) => R.Moto.stunts.comboStunt(z.combo, j) : null,
         comboZaehler: istMoto ? () => z.combo.zaehler : null,
       };
@@ -438,7 +445,7 @@
         z3.ereignisse.length = 0;
       }
       // --- Auto: unfertige Landung → Wackeln, Abbremsen, Schaden nur mit Schaden-Modus ---
-      if (!istMoto && z3.landeFehler && ki) z3.landeFehler = false;       // KI: nie Wackeln/Abbremsen
+      if (z3.landeFehler && ki) { z3.landeFehler = false; kiLandeFehler(f, z3); }       // R3-LOCKER: KI-Fehltrick = Wackeln + kurzes Abbremsen (kein Schaden, kein Sturz) – Server und Client rechnen gleich
       if (!istMoto && z3.landeFehler) {
         z3.landeFehler = false;
         autoLandeFehler(spiel, i, f, z3);
@@ -453,6 +460,10 @@
     }
   }
 
+  function kiLandeFehler(f, z3) {
+    wackelStarten(z3);
+    f.vehicle.vLaengs *= C().ki.kiTempo;
+  }
   function autoLandeFehler(spiel, i, f, z3) {
     const w = C().wackeln;
     wackelStarten(z3);

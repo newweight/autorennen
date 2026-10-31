@@ -26,3 +26,12 @@ H 95–100 Gesamtlauf, stand-r3
 
 ## Tests
 tests/test_r3_tricks.js: A Plan, B Auto-Raum bitgleich zweimal, C Moto-Raum Server=Browser, D Raum ohne tricks bitgleich, E Client-Stub, F Fehltrick −12 %, G alter Client. Alle bestehenden 0 FEHL (test_physik-Fingerabdruck, test_netz 128, test_moto_netz 55, test_spass_s3 41). Browser r3_tricks_browser.py + Bilder (Sonnet prüft).
+
+## Entscheidung R3-LOCKER (31.10.2026, Sebastian): Sicherheitsregel für KI-Tricks gelockert
+- Vorher: KI wagt einen Trick nur bei Restflug >= Dauer + Reserve + 0,3 s (nie ein Fehltrick). Folge: Motorrad-KI machte auf normalen Strecken (Flüge ~0,8-1,3 s Rest) praktisch nie Superman/Handstand (0 Tricks in 600 s x 4 Strecken bei mittel/schwer).
+- Jetzt: `ki.zusatz = -0,4` (gemessen: -0,3 erlaubt 190 von 275 Versuchen ohne Fehltrick, -0,4 erlaubt 231 mit 7 % Fehltrick, -0,5 22 % = zu viel).
+- Drei Fälle je Flug (Restflug `rest` beim Trickstart): `rest >= Dauer + Reserve` sauber; `rest >= min + Reserve` hastig (kürzer, aber sauber, wie bisher "abgekürzt"); darunter bis zur Grenze `Dauer + Reserve + zusatz` = Fehltrick der KI (`plan(..., ki)`, `ki.fehlMin` 0,25 s).
+- Fehltrick (nur KI, Auto und Motorrad gleich): Trick läuft zu hastig, keine Punkte, nicht als Trick gezählt (`stat.verpatzt`), bei der Landung kurzes Wackeln (`z3.wackel`, Pose rolle) und EIN Abbremsen um `ki.kiTempo` (0,92). Kein Schaden, kein Sturz, kein Hängen (Tempo wird nicht wiederholt gesenkt, `landeFehler` löscht sich).
+- Server = Client: gleiche Funktion `schrittSpiel` (spassTricks.js), deterministisch (Plan aus Hash, Rest aus Physik). Online sehen Clients das Abbremsen über die Server-Position; die Wackel-Animation ist nur Anzeige (offline Motorrad/Auto; online nicht übertragen).
+- Tests: Fehltrick-Quote <= 15 %, kein Sturz/Hänger, deterministisch (test_r3_tricks A/B/E); Messskript tests/r3_locker_messung.js.
+
