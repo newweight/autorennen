@@ -79,6 +79,11 @@ window.Rennspiel = window.Rennspiel || {};
     const p = w.welt(s, qE + 1.8);
     g.position.set(p.x, strecke.hoeheAn(p.x, p.z), p.z);
     g.rotation.y = Math.atan2(-p.tx, -p.tz);
+    // R5: Tafeln, die nahe der Startaufstellung stehen (s < 90 m hinter/vor Start/Ziel), werden erst nach dem „LOS!“ eingeblendet – sonst steht die große Tafel beim Losfahren
+    // genau im Blickfeld unter Platz-Anzeige/„LOS!“ (hinter dem Startbogen). Weiter entfernte Tafeln sind immer sichtbar.
+    const sw = strecke.spline.wrapS ? strecke.spline.wrapS(s) : s, lg = strecke.spline.laenge || strecke.laenge || 0;
+    g.userData.startNah = sw < 90 || (lg > 0 && sw > lg - 40);
+    g.name = 'Wegweiser';
     const mat = new THREE.MeshLambertMaterial({ color: 0x666b73 });
     const b = 6.4, hh = 2.4;        // groß: von weitem lesbar
     [-b / 2 + 0.2, b / 2 - 0.2].forEach((dx) => { const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, hoehe, 0.14), mat); post.position.set(dx, hoehe / 2, 0); g.add(post); });
@@ -184,7 +189,13 @@ window.Rennspiel = window.Rennspiel || {};
       zustand() { return { status: 'aus', vorhanden: true, heilt: false }; },
       kiSteuerung() { return null; },
       // kameras bewusst NICHT weitergeben: die Halle des Autorennens blendet sich bei naher Kamera aus (sonst „Geisterhaus“); im Motorradmodus bleiben beide Gebäude immer deckend
-      animieren(t, fahrzeuge) { teile.forEach((x) => x.animieren(t, fahrzeuge, null)); },
+      animieren(t, fahrzeuge) {
+        teile.forEach((x) => x.animieren(t, fahrzeuge, null));
+        // R5: Start-nahe Wegweiser erst 1,5 s nach dem Start zeigen (Countdown + „LOS!“ bleiben frei); im Menü/ohne Rennen normal sichtbar
+        const rn = typeof window !== 'undefined' && window.Rennspiel && window.Rennspiel.spiel ? window.Rennspiel.spiel.rennen : null;
+        const an = !rn || (rn.zustand !== 'countdown' && !(rn.zustand === 'laeuft' && rn.zeit < 1.5));
+        g.children.forEach((c) => { if (c.userData && c.userData.startNah && c.visible !== an) c.visible = an; });
+      },
       zerstoeren() {
         teile.forEach((x) => x.zerstoeren());
         g.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
