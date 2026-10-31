@@ -609,8 +609,9 @@ function starten(opt) {
       if (ws.ipKey) { const n = (proIp.get(ws.ipKey) || 1) - 1; if (n <= 0) proIp.delete(ws.ipKey); else proIp.set(ws.ipKey, n); }
     });
     ws.on('error', () => {});
+    c.verpasst = 0;
     c.herz = setInterval(() => {
-      if (!c.lebt) { ws.terminate(); return; }
+      if (!c.lebt) { if (++c.verpasst >= (N.HERZ_VERPASST || 2)) { ws.terminate(); return; } } else c.verpasst = 0;
       c.lebt = false;
       try { ws.ping(); } catch (e) { /* zu */ }
     }, N.HERZSCHLAG_MS);
