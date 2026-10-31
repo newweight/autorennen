@@ -5,3 +5,6 @@ __pycache__/
 *.app/
 .DS_Store
 tests/bilder_m5/rundum_*/
+
+# Testbilder nicht ins Repo (31.10.2026, liegen lokal in ~/Desktop/Spiele/Motorrad-Testbilder)
+tests/bilder_*/
