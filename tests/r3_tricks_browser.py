@@ -151,6 +151,13 @@ WATCH = """(auto) => {
     const fz = o.vorhersage && o.vorhersage.fz, R_ = window.__rec;
     const z = s._t3 && s._t3.fz && s._t3.fz[o.du]; if (z && z.pose.art) R_.poses.push({ art: z.pose.art, p: +z.pose.p.toFixed(2), rolle: +z.pose.rolle.toFixed(2) });
     const z0 = s._t3 && s._t3.fz && s._t3.fz[0]; if (o.du !== 0 && z0 && z0.pose.art) R_.fremd.push({ art: z0.pose.art, p: +z0.pose.p.toFixed(2), rolle: +z0.pose.rolle.toFixed(2) });
+    // R6: Bild der Rolle aus eigener Seitenkamera (Host: eigenes Auto, Gast: Auto des Hosts), sobald die Pose läuft – Screenshots per Playwright kommen zu spät
+    { const ziel = o.du === 0 ? 0 : 0, zz = s._t3 && s._t3.fz && s._t3.fz[ziel]; window.__shots = window.__shots || [];
+      if (zz && zz.pose.art === 'fassrolle' && Math.abs(zz.pose.rolle) > 0.7 && window.__shots.length < 3 && (window.__shotLetzt === undefined || Math.abs(zz.pose.rolle - window.__shotLetzt) > 1.2)) {
+        window.__shotLetzt = zz.pose.rolle; const f = s.fahrzeuge[ziel], r = s.renderer; s.zeichnen(); const m = f.mesh; m.updateMatrixWorld(true); const c = new THREE.Vector3(); c.setFromMatrixPosition(m.matrixWorld);
+        const hd = f.vehicle.heading, rx = Math.cos(hd), rz = -Math.sin(hd), W = r.domElement.width, H = r.domElement.height, cam = new THREE.PerspectiveCamera(50, W / H, 0.2, 1500);
+        cam.position.set(c.x + rx * 7.5, c.y + 2.2, c.z + rz * 7.5); cam.lookAt(c.x, c.y + 1.0, c.z); cam.updateMatrixWorld(true);
+        r.setScissorTest(false); r.setViewport(0, 0, innerWidth, innerHeight); r.render(s.szene, cam); window.__shots.push(r.domElement.toDataURL('image/png')); } }
     const h = s.huds && s.huds[0]; if (h && /Fassrolle/.test(h.meldungText || '')) R_.meld.push(h.meldungText);
     if (fz && fz.aktiv) R_.flug++;
     if (auto && fz && fz.aktiv && fz.t >= 0.25 && !R_.druck) { R_.druck = true; R_.gedr++;
@@ -244,6 +251,11 @@ def online_test(moto):
                 pruefe('online Auto: Meldung "Fassrolle! +300" beim Host', bool(rec) and len(rec['meld']) >= 1, rec and rec['meld'][:1])
                 grec = gast.evaluate("window.__rec")
                 pruefe('online Auto: der Gast sieht die Fassrolle des Hosts (Pose von Fahrzeug 0 bei der anderen Seite)', bool(grec) and len(grec['fremd']) >= 1 and all(x['art'] == 'fassrolle' for x in grec['fremd']), grec and (len(grec['fremd']), grec['fremd'][:2]))
+                import base64
+                for pg_, nm in ((host, 'host'), (gast, 'gast')):
+                    for i_, d_ in enumerate(pg_.evaluate("window.__shots || []")):
+                        open(os.path.join(bild_ordner, 'online_auto_fassrolle_%s_%d.png' % (nm, i_)), 'wb').write(base64.b64decode(d_.split(',')[1]))
+                pruefe('online Auto: Bilder der Fassrolle bei Host und Gast aufgenommen', len(host.evaluate("window.__shots || []")) >= 1 and len(gast.evaluate("window.__shots || []")) >= 1, [len(host.evaluate("window.__shots || []")), len(gast.evaluate("window.__shots || []"))])
                 host.wait_for_timeout(1500)
                 s = stand(host)
                 pruefe('online Auto: nach dem Trick Pose wieder neutral', not (s['pose0'] and s['pose0']['art']), s['pose0'])
