@@ -5,7 +5,7 @@ nach tests/bilder_fix3/<tag>_wasser_<strecke>_<art>_<ansicht>_<vor|im>.png; Erge
 import os, sys, json, base64
 from playwright.sync_api import sync_playwright
 BASIS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = os.path.join(BASIS, 'tests', 'bilder_fix3'); os.makedirs(OUT, exist_ok=True)
+OUT = os.environ.get('BILD_ORDNER') or os.path.join(BASIS, 'tests', 'bilder_fix3'); os.makedirs(OUT, exist_ok=True)
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
 TAG = sys.argv[1] if len(sys.argv) > 1 else 'vorher'
 BILDSTRECKEN = [a for a in sys.argv[2:]] or ['wiese', 'alpen', 'wald']
