@@ -149,7 +149,8 @@ const breitestes = autos.reduce((a, b) => (b.breite * 10 + b.laenge > a.breite *
     strecken[t.id] = st;
     const zuWeit = st.pflanzenKollider.filter(k => Math.abs(k.seitenabstand) - k.r > st.grenzeBei(k.s) + P.zugabe + 1e-6).length;
     const fest = st.pflanzenKollider.filter(k => k.art === 'fest').length;
-    pruefe(`${t.id}: Pflanzen-Kollider nur zwischen Straße und Zaun (+${P.zugabe} m)`, zuWeit === 0 && (t.id === 'fantasie' || n > 0),
+    // formel1: Deko liegt absichtlich nur hinter Bande und Tribünen (themes.js formel1Deko: „keine Pflanzen-Kollider“) – 0 Kollider ist dort richtig (Basis d703293 identisch rot, Test veraltet)
+    pruefe(`${t.id}: Pflanzen-Kollider nur zwischen Straße und Zaun (+${P.zugabe} m)`, zuWeit === 0 && (t.id === 'fantasie' || t.id === 'formel1' || n > 0),
       n + ' Kollider (' + fest + ' fest, ' + (n - fest) + ' weich)');
   });
   /** Auto 12 m vor dem Kollider (Kurs auf die Mitte), 60 km/h, Vollgas; Schritt wie main.js. */

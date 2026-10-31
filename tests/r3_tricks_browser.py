@@ -7,7 +7,7 @@ import os, sys, socket, subprocess, time
 from playwright.sync_api import sync_playwright
 from PIL import Image
 basis = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-bild = os.path.join(basis, 'tests', 'bilder_r3'); os.makedirs(bild, exist_ok=True)
+bild = os.environ.get('BILD_ORDNER') or os.path.join(basis, 'tests', 'bilder_r3'); os.makedirs(bild, exist_ok=True)
 wahl = sys.argv[1] if len(sys.argv) > 1 else 'beide'
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
 online = wahl in ('online', 'online-moto')

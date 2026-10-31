@@ -271,3 +271,10 @@ In **Schnell** fahren die Autos **220 bis 270 km/h** (Multivan 220 … Porsche 2
 - **🤸 Tricks online** (Zeile in der Online-Lobby, nur der Host, Standard Aus): Mit **An** gelten die Tricks auch im Mehrspieler-Rennen – **auch im Autorennen** (Umschalt-Taste in der Luft = Fassrolle, dazu ↑/↓ = Schraube; Handy: Trick-Knopf 🌀). Der Server rechnet mit, alle sehen die Tricks der anderen, die Computer machen auch welche. Landest du mitten im Trick, wackelt es und du wirst langsamer. Im Motorrad-Raum kannst du immer Tricks machen; mit **An** machen zusätzlich die Computer welche.
 - **🌀 Loopings online** (Zeile in der Online-Lobby, nur der Host, nur Autorennen, braucht Spaß-Elemente + Fahr-Zauber, Standard Klassisch): Mit **Magnet-Röhre** werden die Loopings der Fantasie-Strecke zu Magnet-Röhren (kopfüber an der Decke) – für alle im Raum gleich. Die Spaß-Zeilen stehen in der Host-Spalte oben: Spielart · Spaß-Elemente · Fahr-Zauber · Loopings · Tricks; in kleinen Fenstern scrollt die Spalte mit dem Mausrad, ↑/↓ holen die Zeile ins Bild.
 - **🎬 Zeitlupe** (Menü-Schalter, Standard An): bei großen Sprüngen (Trampolin, Kanone) läuft die Anzeige etwa 1 Sekunde mit 0,4× und die Kamera schwenkt seitlich. Die Physik bleibt gleich. Online gibt es nur den Kamera-Schwenk (keine Zeitlupe).
+
+## Neuen Stand auf den Mac holen: `MINI_HOLEN.command`
+Doppelklick auf `MINI_HOLEN.command` (im Repo-Ordner, auf dem Mac nach dem Herunterladen einmal `chmod +x MINI_HOLEN.command`). Das Skript
+holt bzw. aktualisiert das Repo in `~/Desktop/Spiele/Motorrad-Projekt` (fehlt der Ordner: `git clone`; sonst `git fetch`, Zweig `motorrad`, `git pull --ff-only`)
+und zeigt am Ende den Commit. **Es löscht nichts:** lokale Änderungen werden vorher mit `git stash push -m sicherung-<Datum>` gesichert
+(zurückholen: `git stash list`, `git stash apply`). Anderer Zweig: `./MINI_HOLEN.command integration`. Danach
+`~/Desktop/Spiele/ALLES_AUF_DEN_MINI.command` starten.

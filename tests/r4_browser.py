@@ -13,7 +13,7 @@ import os, sys, json, base64
 from playwright.sync_api import sync_playwright
 
 BASIS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = os.path.join(BASIS, 'tests', 'bilder_r4'); os.makedirs(OUT, exist_ok=True)
+OUT = os.environ.get('BILD_ORDNER') or os.path.join(BASIS, 'tests', 'bilder_r4'); os.makedirs(OUT, exist_ok=True)
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
 nur = sys.argv[sys.argv.index('--nur') + 1] if '--nur' in sys.argv else None
 ok = fehl = 0

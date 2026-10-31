@@ -4,7 +4,7 @@ Strecken wiese + alpen, Grafik Normal + Ultra. Bilder nach tests/bilder_r5/. Auf
 import os, sys
 from playwright.sync_api import sync_playwright
 basis = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-bild = os.path.join(basis, 'tests', 'bilder_r5'); os.makedirs(bild, exist_ok=True)
+bild = os.environ.get('BILD_ORDNER') or os.path.join(basis, 'tests', 'bilder_r5'); os.makedirs(bild, exist_ok=True)
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
 # (Strecke, Art, Zonen-Start s0) – Schild steht 12 m vor s0
 ZIELE = [z for z in [('wiese', 'stoppie', 110), ('wiese', 'wheelie', 1655), ('alpen', 'stoppie', 1005), ('alpen', 'wheelie', 795)] if len(sys.argv) < 2 or z[1] in sys.argv[1:]]
