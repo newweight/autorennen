@@ -14,13 +14,14 @@
 #             --matrix-schnell    bei --voll: matrix_alle.py mit --schnell (kleine Teilmenge, ca. 10 Min je Spiel) statt der vollen Matrix
 #             --ohne-browser      Rauchtest/Matrix überspringen (nur Node)
 #             --trocken           nur den Plan zeigen
+#             --limit <Sek>       Zeitlimit je Schritt (Standard 1200 s; 0 = aus; Matrix-Läufe nur mit ausdrücklichem --limit begrenzt). Portabel über werkzeuge/zeitlimit.pl
 # Ausgabe: tests/ALLE_ERGEBNIS.md (Datum, Stand, je Schritt und je Spiel grün/rot, Laufzeiten); Einzelprotokolle in tests/out/alle/. Exit-Code 0 nur bei „grün“.
 # ============================================================
 set -u
 WURZEL="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$WURZEL" || exit 2
 
-VOLL=0; MATRIX_SCHNELL=0; ALLES=0; NODE_ALLE=0; OHNE_BROWSER=0; TROCKEN=0; BASIS=""; SPIEL=""
+LIMIT=1200; LIMIT_GESETZT=0; VOLL=0; MATRIX_SCHNELL=0; ALLES=0; NODE_ALLE=0; OHNE_BROWSER=0; TROCKEN=0; BASIS=""; SPIEL=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --voll) VOLL=1 ;;
@@ -29,9 +30,10 @@ while [ $# -gt 0 ]; do
     --node-alle) NODE_ALLE=1 ;;
     --ohne-browser) OHNE_BROWSER=1 ;;
     --trocken) TROCKEN=1 ;;
+    --limit) LIMIT="$2"; LIMIT_GESETZT=1; shift ;;
     --basis) BASIS="$2"; shift ;;
     --spiel) SPIEL="$2"; shift ;;
-    -h|--help) sed -n 2,20p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,21p "$0"; exit 0 ;;
     *) echo "Unbekannte Option: $1"; exit 2 ;;
   esac
   shift
@@ -61,17 +63,36 @@ echo "   betroffene Spiele: ${BETROFFEN:-keine}"
 echo "   Radwelt: $RADWELT"
 [ "$KERNGETEILT" != 0 ] && echo "   Hinweis: $KERNGETEILT geteilte Kern-Dateien (Strecke/Grafik/Welt/Config/main) geändert – Radwelt-Golden bei der Grafik-Übernahme gegenprüfen: node tests/test_kern_golden.js --radwelt-pruefen /home/claude/radwelt"
 if [ "$TROCKEN" = 1 ]; then
-  echo "   Pflicht: html_bauen --pruefen, ${NODE_IMMER[*]}, Node: ${NODE_SPIELE[*]}, Rauchtest: ${RAUCH[*]}"
-  [ "$VOLL" = 1 ] && echo "   Voll: matrix_alle ${MATRIX[*]}"
+  echo "   Pflicht: html_bauen --pruefen, ${NODE_IMMER[*]-}, Node: ${NODE_SPIELE[*]-}, Rauchtest: ${RAUCH[*]-}"
+  [ "$VOLL" = 1 ] && echo "   Voll: matrix_alle ${MATRIX[*]-}"
   exit 0
 fi
 
 LOGDIR="tests/out/alle"; mkdir -p "$LOGDIR"; rm -f "$LOGDIR"/*.log
 ERG="tests/ALLE_ERGEBNIS.md"
+FERTIG=0; T_START=$(date +%s); N=0
+# Ergebnisdatei sofort überschreiben: ein alter „GRÜN“-Stand darf nie stehen bleiben, wenn der Lauf hängt oder abgebrochen wird
+{
+  echo "# Ergebnis alle_pruefen.sh – LÄUFT …"
+  echo
+  echo "- Gestartet: $(date '+%d.%m.%Y %H:%M')"
+  echo "- Stand: $STAND (HEAD-Commit, Zweig $(git rev-parse --abbrev-ref HEAD 2>/dev/null)), Basis: $BASIS_ECHT"
+  echo "- Betroffene Spiele: ${BETROFFEN:-keine}"
+  echo "- Dieses Ergebnis ist NICHT gültig, solange hier „LÄUFT“ steht."
+} > "$ERG"
+abbruch() {
+  local sig="$1"
+  if [ "$FERTIG" != 1 ]; then
+    { echo "# Ergebnis alle_pruefen.sh – ABGEBROCHEN"; echo; echo "- Abgebrochen: $(date '+%d.%m.%Y %H:%M') (Signal/Fehler: $sig, nach $(( $(date +%s) - T_START )) s, $N Schritt(e) begonnen)"; echo "- Stand: $STAND (HEAD-Commit)"; echo "- Das ist KEIN grünes Ergebnis."; } > "$ERG"
+  fi
+  [ "$sig" = EXIT ] || exit 130
+}
+trap 'abbruch EXIT' EXIT
+trap 'abbruch INT' INT
+trap 'abbruch TERM' TERM
 SCHRITTE=()      # "Name|Ergebnis|Sekunden|OK|FEHL|Log"
 ROT=0
-T_START=$(date +%s)
-N=0
+if [ "$LIMIT_GESETZT" = 1 ]; then MLIM="$LIMIT"; else MLIM=0; fi
 
 # schritt "Name" befehl…  – führt aus, misst Zeit, zählt OK/FEHL-Zeilen, merkt das Ergebnis
 schritt() {
@@ -79,7 +100,9 @@ schritt() {
   N=$((N+1)); local log; log="$LOGDIR/$(printf '%02d' $N)_$(echo "$name" | tr -c 'A-Za-z0-9._-' '_').log"
   local t0 t1 rc ok fehl erg
   t0=$(date +%s)
-  "$@" > "$log" 2>&1; rc=$?
+  local lim="${SL:-$LIMIT}"
+  if [ "$lim" -gt 0 ] 2>/dev/null; then perl werkzeuge/zeitlimit.pl "$lim" "$@" > "$log" 2>&1; rc=$?; else "$@" > "$log" 2>&1; rc=$?; fi
+  [ $rc -eq 124 ] && echo "FEHL Zeitlimit ${lim} s überschritten – Schritt abgebrochen" >> "$log"
   t1=$(date +%s)
   ok=$(grep -c '^OK ' "$log"); fehl=$(grep -c '^FEHL' "$log")
   if [ $rc -eq 0 ] && [ "$fehl" -eq 0 ]; then erg="grün"; else erg="ROT"; ROT=1; fi
@@ -90,28 +113,28 @@ schritt() {
 
 # ---------------- Pflicht-Stufe ----------------
 schritt "html_bauen --pruefen" node werkzeuge/html_bauen.js --pruefen
-for t in "${NODE_IMMER[@]}"; do schritt "node $t" node "tests/$t"; done
-for t in "${NODE_SPIELE[@]}"; do
-  case " ${NODE_IMMER[*]} " in *" $t "*) continue ;; esac
+for t in ${NODE_IMMER[@]+"${NODE_IMMER[@]}"}; do schritt "node $t" node "tests/$t"; done
+for t in ${NODE_SPIELE[@]+"${NODE_SPIELE[@]}"}; do
+  case " ${NODE_IMMER[*]-} " in *" $t "*) continue ;; esac
   schritt "node $t" node "tests/$t"
 done
 T_PFLICHT=$(( $(date +%s) - T_START ))
 if [ "$OHNE_BROWSER" = 0 ] && [ "${#RAUCH[@]}" -gt 0 ]; then
-  schritt "Rauchtest ${RAUCH[*]} (kern_rauch.py)" python3 tests/kern_rauch.py --spiel "$(IFS=,; echo "${RAUCH[*]}")"
+  schritt "Rauchtest ${RAUCH[*]-} (kern_rauch.py)" python3 tests/kern_rauch.py --spiel "$(IFS=,; echo "${RAUCH[*]-}")"
 fi
 T_PFLICHT=$(( $(date +%s) - T_START ))
 
 # ---------------- Voll-Stufe ----------------
 if [ "$VOLL" = 1 ]; then
-  for t in "${NODE_VOLL[@]}"; do
-    case " ${NODE_IMMER[*]} ${NODE_SPIELE[*]} " in *" $t "*) continue ;; esac
+  for t in ${NODE_VOLL[@]+"${NODE_VOLL[@]}"}; do
+    case " ${NODE_IMMER[*]-} ${NODE_SPIELE[*]-} " in *" $t "*) continue ;; esac
     schritt "node $t" node "tests/$t"
   done
 fi
 if [ "$VOLL" = 1 ] && [ "$OHNE_BROWSER" = 0 ]; then
-  for m in "${MATRIX[@]}"; do
-    if [ "$MATRIX_SCHNELL" = 1 ]; then schritt "matrix_alle.py --spiel $m --schnell" python3 tests/matrix_alle.py --spiel "$m" --schnell
-    else schritt "matrix_alle.py --spiel $m" python3 tests/matrix_alle.py --spiel "$m"; fi
+  for m in ${MATRIX[@]+"${MATRIX[@]}"}; do
+    if [ "$MATRIX_SCHNELL" = 1 ]; then SL=$MLIM schritt "matrix_alle.py --spiel $m --schnell" python3 tests/matrix_alle.py --spiel "$m" --schnell
+    else SL=$MLIM schritt "matrix_alle.py --spiel $m" python3 tests/matrix_alle.py --spiel "$m"; fi
   done
 fi
 T_GESAMT=$(( $(date +%s) - T_START ))
@@ -122,7 +145,7 @@ T_GESAMT=$(( $(date +%s) - T_START ))
   echo "# Ergebnis alle_pruefen.sh – $URTEIL"
   echo
   echo "- Datum: $(date '+%d.%m.%Y %H:%M')"
-  echo "- Stand: $STAND (Zweig $(git rev-parse --abbrev-ref HEAD 2>/dev/null)), Basis: $BASIS_ECHT, $GEAENDERT_N geänderte Dateien"
+  echo "- Stand: $STAND (HEAD-Commit, Zweig $(git rev-parse --abbrev-ref HEAD 2>/dev/null)), Basis: $BASIS_ECHT, $GEAENDERT_N geänderte Dateien"
   echo "- Stufe: $([ "$VOLL" = 1 ] && echo "Voll (Pflicht + Matrix$([ "$MATRIX_SCHNELL" = 1 ] && echo ' --schnell'))" || echo 'Pflicht')$([ "$NODE_ALLE" = 1 ] && echo ', alle Node-Tests')$([ "$ALLES" = 1 ] && echo ', Gesamtlauf (--alles)')"
   echo "- Laufzeit: Pflicht-Stufe ${T_PFLICHT} s ($((T_PFLICHT/60)) min $((T_PFLICHT%60)) s), gesamt ${T_GESAMT} s"
   echo "- Betroffene Spiele: ${BETROFFEN:-keine}"
@@ -136,8 +159,9 @@ T_GESAMT=$(( $(date +%s) - T_START ))
   echo
   echo "| Schritt | Ergebnis | Sekunden | OK | FEHL |"
   echo "|---|---|---:|---:|---:|"
-  for z in "${SCHRITTE[@]}"; do IFS='|' read -r a b c d e f <<< "$z"; echo "| $a | $b | $c | $d | $e |"; done
+  for z in ${SCHRITTE[@]+"${SCHRITTE[@]}"}; do IFS='|' read -r a b c d e f <<< "$z"; echo "| $a | $b | $c | $d | $e |"; done
 } > "$ERG"
+FERTIG=1
 echo
 echo "== $URTEIL – Pflicht-Stufe ${T_PFLICHT} s, gesamt ${T_GESAMT} s – Ergebnis: $ERG"
 exit $ROT
