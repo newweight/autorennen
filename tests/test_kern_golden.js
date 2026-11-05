@@ -128,7 +128,12 @@ if (nurTeil('physik')) {
     console.log('      (' + ((Date.now() - t0) / 1000).toFixed(1) + ' s)');
   }
 }
-if (flag('--radwelt')) {
+// Radwelt immer in eigenem Prozess rechnen: im selben Prozess nach Auto/Motorrad geladen weicht der Alpen-Bau ab
+// (gemeinsamer Zustand im Lader, 05.11. nachgewiesen: allein OK, nach den anderen Teilen anders) – Radwelt selbst ist bitgleich.
+if ((flag('--radwelt') || flag('--radwelt-pruefen')) && !process.env.KERN_GOLDEN_RAD_ALLEIN && (nurTeil('strecken') || nurTeil('physik'))) {
+  const r = require('child_process').spawnSync(process.execPath, [__filename, '--nur', 'radwelt'].concat(flag('--radwelt') ? ['--radwelt', wert('--radwelt') || '/home/claude/radwelt'] : ['--radwelt-pruefen', wert('--radwelt-pruefen') || '.']), { stdio: 'inherit', env: Object.assign({}, process.env, { KERN_GOLDEN_RAD_ALLEIN: '1' }) });
+  pruefe('Radwelt-Teil im eigenen Prozess grün', r.status === 0, 'Exit ' + r.status);
+} else if (flag('--radwelt')) {
   const pfad = path.resolve(wert('--radwelt') || '/home/claude/radwelt');
   const ist = radweltFingerabdruecke(pfad);
   let commit = '';
