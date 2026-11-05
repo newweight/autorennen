@@ -1,9 +1,21 @@
 {
  "_hinweis": "Einzige Quelle für die Modulliste (Ladereihenfolge) und das Profil je Spiel. HTML-Dateien erzeugt werkzeuge/html_bauen.js; Änderungen NUR hier, dann: node werkzeuge/html_bauen.js",
+ "pruefung": {
+  "_hinweis": "Für werkzeuge/alle_pruefen.sh. basis = Vergleichsstand für den git diff; immer = Tests, die bei JEDER Änderung laufen; betrifftAlle = Pfad-Anfänge, die alle Spiele betreffen (Standard siehe werkzeuge/alle_plan.js).",
+  "basis": "origin/motorrad",
+  "immer": { "node": ["test_kern_profil.js", "test_kern_golden.js"] }
+ },
  "spiele": {
   "autorennen": {
    "html": "Autorennen.html",
    "profil": { "erlaubt": ["*"] },
+   "tests": {
+    "_hinweis": "node = Pflicht-Stufe (schnell, zusammen mit den Kern-Tests Ziel < 10 Min); voll = zusätzlich bei --voll; rauch/matrix = Spielname für tests/kern_rauch.py bzw. matrix_alle.py. Alle übrigen tests/test_*.js: alle_pruefen.sh --node-alle.",
+    "node": ["test_physik.js", "test_strecke.js", "test_autos.js", "test_kollisionen.js", "test_wetter.js", "test_hindernisse.js", "test_pickups.js", "test_schanze.js", "test_startboost.js", "test_schaden.js", "test_pokal.js", "test_looping.js", "test_megastrecke.js", "test_zufall.js", "test_tribuenen.js", "test_spass_s1.js", "test_spass_s2.js", "test_spass_s3.js", "test_spass_s4.js", "test_spass_s8.js", "test_r4.js", "test_netz.js"],
+    "voll": ["test_spass_s5.js", "test_spass_s6.js", "test_spass_s7.js", "test_r2_online.js", "test_r3_tricks.js", "test_schalter_v26.js"],
+    "rauch": "auto",
+    "matrix": "auto"
+   },
    "module": [
     "vendor/three.min.js",
     {"kommentar":"Spielmodule – Reihenfolge wichtig"},
@@ -116,6 +128,12 @@
   "motorrad": {
    "html": "Motorrad.html",
    "profil": { "erlaubt": ["*"] },
+   "tests": {
+    "node": ["test_moto.js", "test_moto_stunts.js", "test_moto_unfall.js", "test_moto_m3.js", "test_moto_cockpit.js", "test_moto_netz.js", "test_spass_s1.js"],
+    "voll": ["test_r2_online.js", "test_r3_tricks.js"],
+    "rauch": "moto",
+    "matrix": "moto"
+   },
    "module": [
     {"roh":"<script>window.MOTORRAD = true;</script>"},
     {"kommentar":"Motorrad M4 (online): Soll Motorrad.html NICHT vom Spielserver kommen (z. B. im Portal, Port 10002), hier die Adresse des Spielservers eintragen,\n     z. B. window.MOTORRAD_SERVER = 'mac-mini.tailnet.ts.net';  oder 'wss://mac-mini.tailnet.ts.net'  (leer = gleiche Adresse wie diese Seite).\n     window.MOTORRAD_PORTAL = Basis-Adresse des Portals für die Stunt-Bestenliste (leer = gleiche Adresse); window.MOTORRAD_ONLINE = false schaltet Online ab."},

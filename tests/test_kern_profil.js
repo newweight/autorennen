@@ -49,12 +49,17 @@ function pruefeSpiel(id, flags, erwartetAn) {
   const daten = R.trackCatalog.find((t) => t.id === 'wiese');
   // Strecken-Optionen (streckeSzeneBauen)
   R.SpassZauber.erzwingen(false);
-  const fake = { _zufallSeed: 12345, zufallSeed: null, einstellungen: {} };
-  const o = R.streckenOptionen(fake, daten, ALLES_AN, '', '');
-  pruefe(tag + 'streckenOptionen: spass', (o.spass === true) === E, o.spass);
-  pruefe(tag + 'streckenOptionen: zauber', (o.zauber === true) === E, o.zauber);
-  pruefe(tag + 'streckenOptionen: loopingMagnet', (o.loopingMagnet === true) === E, o.loopingMagnet);
-  pruefe(tag + 'streckenOptionen: zufall', (!!o.zufall) === E, JSON.stringify(o.zufall));
+  // streckeSzeneBauen ECHT aufrufen: new R.Strecke wird abgefangen (Optionen merken, dann abbrechen) – so prüfen wir genau den Code des Spiels
+  const fake = { _zufallSeed: 12345, zufallSeed: null, einstellungen: Object.assign({}, ALLES_AN) };
+  const StreckeEcht = R.Strecke;
+  let o = null;
+  R.Strecke = Object.assign(function (d, opt) { o = opt; throw new Error('STOP-NACH-OPTIONEN'); }, { weltName: StreckeEcht.weltName });
+  try { R.Spiel.prototype.streckeSzeneBauen.call(fake, 'wiese'); } catch (e) { if (!/STOP-NACH-OPTIONEN/.test(e.message)) throw e; } finally { R.Strecke = StreckeEcht; }
+  pruefe(tag + 'streckeSzeneBauen erreicht new R.Strecke (Optionen abgefangen)', !!o);
+  pruefe(tag + 'streckeSzeneBauen-Option: spass', (o.spass === true) === E, o.spass);
+  pruefe(tag + 'streckeSzeneBauen-Option: zauber', (o.zauber === true) === E, o.zauber);
+  pruefe(tag + 'streckeSzeneBauen-Option: loopingMagnet', (o.loopingMagnet === true) === E, o.loopingMagnet);
+  pruefe(tag + 'streckeSzeneBauen-Option: zufall', (!!o.zufall) === E, JSON.stringify(o.zufall));
   // einstellungenPruefen (Menü/Speicher) + Standard
   const std = R.standardEinstellungen(), pr = R.einstellungenPruefen({ spass: true, zufall: true, geist: true });
   pruefe(tag + 'Standard-Einstellungen: spass/zufall/geist', [std.spass, std.zufall, std.geist].every((x) => x === E), [std.spass, std.zufall, std.geist].join(','));

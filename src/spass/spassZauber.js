@@ -74,7 +74,7 @@
   }
   /** PRUEF-FIX 1: Fahr-Zauber für den STRECKENBAU. Online (e.raumOnline, setzt online.js rennenAufbauen) zählt nur die vom Server bestätigte Raum-Einstellung e.zauber –
    *  nie der lokale Menü-Schalter (sonst baut ein Gast mit Zauber aus eine andere Strecke als der Server). Offline: der lokale Schalter wie bisher. */
-  function zauberFuer(e) { return !!e && e.raumOnline === true ? e.zauber === true : an(); }
+  function zauberFuer(e) { if (R.Profil && !R.Profil.erlaubt('zauber')) return false; return !!e && e.raumOnline === true ? e.zauber === true : an(); }      // Kern (K1): Spiel-Profil (auch online)
   function anSetzen(b) { AN.an = !!b; try { if (typeof localStorage !== 'undefined') localStorage.setItem('rennspiel.spass.zauber.an', b ? '1' : '0'); } catch (e) { /* egal */ } }
 
   /** Neuer Zustand (fz.z). */

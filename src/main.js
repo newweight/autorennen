@@ -115,19 +115,6 @@
     return standardEinstellungen();
   }
 
-  /**
-   * Strecken-Optionen für new R.Strecke(daten, sOpt) aus den Einstellungen (rein, ohne Szene; ausgelagert aus streckeSzeneBauen, Verhalten unverändert).
-   * Kern (K1): Spaß-/Zusatzoptionen (spass, zauber, loopingMagnet, zufall) gelten nur, wenn das Spiel-Profil sie erlaubt (R.Profil) – Test: tests/test_kern_profil.js.
-   */
-  function streckenOptionen(spiel, daten, e, welt, variante) {
-    // Z1: Zufällige Strecke – Seed nur im Rennen (streckeAufbauen/online setzt _zufallSeed; Menühintergrund: keiner), wird hier verbraucht
-    const zufallOpt = R.ZufallSpiel ? R.ZufallSpiel.opt(spiel, daten) : undefined    /* Profil 'zufall': prüft R.ZufallSpiel.opt selbst */;
-    const sOpt = zufallOpt ? { welt, variante, hindernisMenge: e.hindernisMenge, zufall: zufallOpt } : { welt, variante, hindernisMenge: e.hindernisMenge };
-    if (e.spass !== false && R.Spass && profilOk('spass')) { sOpt.spass = true; if (R.SpassZauber && R.SpassZauber.zauberFuer(e) && profilOk('zauber')) sOpt.zauber = true; }   // S6: Fahr-Zauber (Menü „✨ Fahr-Zauber“, Standard an); PRUEF-FIX 1: online nur die Raum-Einstellung (e.raumOnline), nie der lokale Schalter
-    if (sOpt.zauber === true && e.loopMag === true && profilOk('loopMag')) sOpt.loopingMagnet = true;      // R4 P5: nur online (Raum-Einstellung vom Server); offline setzt die Hülle um streckeAufbauen die Option, e.loopMag fehlt dort
-    return sOpt;
-  }
-  R.streckenOptionen = streckenOptionen;
   R.einstellungenPruefen = einstellungenPruefen; R.standardEinstellungen = standardEinstellungen;      // Kern (K1): für tests/test_kern_profil.js
 
   class Spiel {
@@ -359,7 +346,11 @@
       const e = this.einstellungen || {};
       const welt = R.Strecke.weltName ? R.Strecke.weltName(daten, e.welt) : (daten.weltStandard || undefined);
       const variante = e.variante && daten.varianten && daten.varianten[e.variante] ? e.variante : '';   // Runde 6: ungültig → Normal
-      const sOpt = streckenOptionen(this, daten, e, welt, variante);
+      // Z1: Zufällige Strecke – Seed nur im Rennen (streckeAufbauen/online setzt _zufallSeed; Menühintergrund: keiner), wird hier verbraucht
+      const zufallOpt = R.ZufallSpiel ? R.ZufallSpiel.opt(this, daten) : undefined;      // Kern (K1): Profil 'zufall' prüft R.ZufallSpiel.opt selbst; Profil 'zauber' prüft R.SpassZauber.zauberFuer selbst
+      const sOpt = zufallOpt ? { welt, variante, hindernisMenge: e.hindernisMenge, zufall: zufallOpt } : { welt, variante, hindernisMenge: e.hindernisMenge };
+      if (e.spass !== false && R.Spass && profilOk('spass')) { sOpt.spass = true; if (R.SpassZauber && R.SpassZauber.zauberFuer(e)) sOpt.zauber = true; }   // S6: Fahr-Zauber (Menü „✨ Fahr-Zauber“, Standard an); PRUEF-FIX 1: online nur die Raum-Einstellung (e.raumOnline), nie der lokale Schalter
+      if (sOpt.zauber === true && profilOk('loopMag') && e.loopMag === true) sOpt.loopingMagnet = true;      // R4 P5: nur online (Raum-Einstellung vom Server); offline setzt die Hülle um streckeAufbauen die Option, e.loopMag fehlt dort
       // S1: Trampolin/Kanone (Menü „Spaß-Elemente“, Standard an; aus = keine Option = bitgleich wie vorher)
       const strecke = new R.Strecke(daten, sOpt);
       this.strecke = strecke;
