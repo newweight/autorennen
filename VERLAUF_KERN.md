@@ -1,0 +1,2 @@
+# Verlauf – gemeinsamer Kern (Autorennen, Motorrad, Radwelt)
+- 05.11. Bestandsaufnahme beider Repos, Plan Fassung 1, Gegenprüfung, Fassung 2 (Variante D). Sebastian: „ja machen wir so“; Radwelt = Erwachsene auf der Rolle, Spaß-Elemente gern, nicht kindlich → Spiel-Profil mit Erlaubt-Liste statt Kinder-Schalter. Sicherungen: autorennen stand-vor-grafik-gemeinsam-2026-11-05, radwelt stand-vor-grafik-2026-11-05. Start K1 (Zweig grafik-gemeinsam).

@@ -1,4 +1,4 @@
-# Plan: Gemeinsamer Kern für Autorennen, Motorrad und Radwelt – Fassung 2 (05.11.2026)
+# Plan: Gemeinsamer Kern für Autorennen, Motorrad und Radwelt – Fassung 2 (05.11.2026), FREIGEGEBEN 05.11.
 
 Auftrag Sebastian: Verbesserungen an EINER Stelle, alle drei greifen darauf zu – aber: „die 3 Programme sind schon unterschiedlich“.
 Ablauf bisher: anschauen (2 Repos verglichen, Probe-Zusammenführung) → Entwurf 1 → Gegenprüfung durch eigenen Agenten → diese Fassung 2. Noch NICHTS gebaut. Sicherungen: `stand-vor-grafik-2026-11-05` (Radwelt), `stand-vor-grafik-gemeinsam-2026-11-05` (Autorennen).
@@ -22,7 +22,7 @@ Ablauf bisher: anschauen (2 Repos verglichen, Probe-Zusammenführung) → Entwur
 Verworfen: B (eigenes Kern-Repo + Abgleich in zwei Richtungen – zu fehleranfällig, genau das Auseinanderlaufen von heute), C (nur Grafik – löst Wetter/Server/Landschaft nicht).
 
 ## 3. Schutzregeln (aus der Gegenprüfung)
-1. **Opt-in statt Opt-out**: Kinder-Funktionen im Kern hängen an einem Schalter `kinderspiel` (Auto/Motorrad setzen ihn, Radwelt nie). Neue Funktion = in der Radwelt automatisch AUS. Test prüft: in der Radwelt sind nach dem Streckenbau alle Kinder-Schalter aus.
+1. **Spiel-Profil mit Erlaubt-Liste (Opt-in)** – Entscheidung Sebastian 05.11.: Radwelt = Training für Erwachsene auf der Rolle, Spaß-Elemente gern, aber nicht kindlich. Jede Spaß-/Zusatzfunktion im Kern fragt `R.Profil.erlaubt('<name>')`. Profile in `spiele.json`: Autorennen/Motorrad erlauben alle; Radwelt zunächst keine. Später gezielt freigeben (z. B. Regenbogenspur, Teleport-Tore), jeweils erwachsenengerecht angepasst. Neue Funktion = in der Radwelt automatisch AUS. Test prüft: im Radwelt-Profil ist nach dem Streckenbau nichts Nicht-Erlaubtes an.
 2. **Kern-Vertrag**: kleine Datei `src/kern/szene.js` mit den Funktionen, die die Radwelt vom Szenen-Host braucht (Strecke bauen/abbauen, Wetter, Tageszeit, Tribünen, Kamera übergeben, zeichnen). Die Radwelt ruft NUR diese; Menü/Menü-Kamera des Kinderspiels darf sich frei ändern.
 3. **Dateilisten aus einer Quelle**: `spiele.json` (je Spiel die Modul-Liste); ein Skript erzeugt daraus die `<script>`-Zeilen der drei HTML-Dateien → keine Datei wird mehr vergessen, keine falsche Reihenfolge.
 4. **Golden-Tests**: Fingerabdruck der Radwelt-Strecken (Alpen, Wiese, Wald, Mega, Baukasten-Beispiel), Radphysik-Fingerabdruck, Auto-/Motorrad-Fingerabdrücke wie bisher. Rot = nicht einspielen.
@@ -37,7 +37,7 @@ Verworfen: B (eigenes Kern-Repo + Abgleich in zwei Richtungen – zu fehleranfä
 - Regel in ERWEITERN.md: „Kern geändert → `alle_pruefen.sh` grün, sonst nicht einspielen.“ Das Skript prüft – nicht Sebastian.
 
 ## 5. Reihenfolge (jede Stufe mit Sicherung, Prüfplan, Bildprüfung)
-1. **K1 Schutz zuerst** (im Autorennen, Radwelt noch getrennt): Schalter `kinderspiel` (Opt-in), `spiele.json` + HTML-Erzeugung, Golden-Tests, `alle_pruefen.sh` (Pflicht-Stufe), Zeit messen.
+1. **K1 Schutz zuerst** (im Autorennen, Radwelt noch getrennt): Spiel-Profil mit Erlaubt-Liste, `spiele.json` + HTML-Erzeugung, Golden-Tests, `alle_pruefen.sh` (Pflicht-Stufe), Zeit messen.
 2. **K2 Kern-Vertrag** `src/kern/szene.js`; Radwelt-Zugriffe auf Host-Interna darauf umstellen (zuerst in der Radwelt-Kopie testen).
 3. **K3 Umzug**: Radwelt ins Autorennen-Repo (Zweig `kern-gemeinsam`), 5 Radwelt-Zusätze einpflegen, alle Tests beider Seiten grün, Radwelt-Strecken bitgleich.
 4. **K4 Grafik für die Radwelt** (PLAN_RADWELT_GRAFIK.md): `radGrafik.js`, Leistung am Mini messen.
