@@ -138,5 +138,50 @@ pruefeSpiel('autorennen', { MOTORRAD: true }, true);
   pruefe('D2 jeder Name in NAMEN hängt irgendwo im Quelltext', !unbenutzt.length, unbenutzt.join(','));
 }
 
+// ------------------------------------------------------------------ D3) Wächter: jede Spaß-Datei hängt am Profil – oder steht begründet in der Ausnahmeliste
+//   Regel: jede Datei unter src/spass/ (und src/track/zufallSpiel.js) enthält mindestens eine Profil-Abfrage (R.Profil / profilOk / erlaubt('…')) ODER steht hier mit Begründung.
+//   Wer eine neue Spaß-Datei anlegt, muss sie also entweder ans Profil hängen oder hier begründet eintragen – sonst ist der Test rot (Radwelt bekäme die Funktion sonst unbemerkt).
+//   Ausnahmen sind keine Einzelbeweise: ihre Wirkung (Radwelt-Profil = nichts an) deckt der Verhaltenstest B ab; die Begründung nennt die Stelle, an der die Datei stillgelegt wird.
+{
+  const OHNE_ABFRAGE = {
+    'src/spass/editorKern.js': 'Strecken-Editor, Rechenteil: reine Funktionen (Linie → Runde), nur von editorUI.js aufgerufen; keine eigene Spielwirkung („Profil“ im Quelltext = Höhenprofil, nicht Spiel-Profil)',
+    'src/spass/spassWelten.js': 'Neue Welten, Rechenteil: Tore/Zonen rechnen nur aus strecke.spass (Radwelt-Profil baut keins, B); Schwerkraft je Strecke ist Strecken-Eigenschaft (katalog), kein Spaß-Schalter („Profil“ im Quelltext = Cache-Name)',
+    'src/spass/spassZauberUI.js': 'Fahr-Zauber, Optik/Bedienung: alle Pillen und Szene hängen an SZ.an()/zauberFuer (spassZauber.js, dort Profil-Abfrage); „Profil“ im Quelltext = Röhrenprofil',
+    'src/spass/editorUI.js': 'Strecken-Editor-Oberfläche: nur über Menükarte im Modus-Schritt erreichbar (spassMenue.js/Menü, dort Profil-Filter der Modus-Arten)',
+    'src/spass/spassArena.js': 'Arena-Strecke: nur als Modus „arena“ wählbar, Modus-Karte wird in spassMenue.js (R.Profil.erlaubt) gefiltert',
+    'src/spass/spassFoto.js': 'Fotomodus: reine Hilfsfunktion der Anzeige, keine Spielwirkung; im Spiel nur über spassModi.js eingehängt',
+    'src/spass/spassFrei.js': 'Modus Freie Fahrt (Rechenteil/Umhüllung): Modus-Karte in spassMenue.js gefiltert, im Raum über profilOk in spassR2Kern.js',
+    'src/spass/spassGeist.js': 'Geist: Standard/Schalter über einstellungenPruefen (profilOk-Bündel in Spiel-Einstellungen, getestet in B: „Standard-Einstellungen spass/zufall/geist“)',
+    'src/spass/spassKO.js': 'Modus K.-o.-Rallye (Rechenteil): Modus-Karte in spassMenue.js gefiltert, im Raum über profilOk in spassR2Kern.js',
+    'src/spass/spassKern.js': 'Rechenkern Trampolin/Kanone: rechnet nur über strecke.spass; das wird bei Radwelt-Profil nie gebaut (streckeSzeneBauen-Option spass, getestet in B)',
+    'src/spass/spassKurz.js': 'Modus Kurz-Level (Rechenteil): Modus-Karte in spassMenue.js gefiltert, im Raum über profilOk in spassR2Kern.js',
+    'src/spass/spassModi.js': 'gemeinsamer Modus-Kern: wirkt nur, wenn ein Modus gewählt ist; Modi werden in spassMenue.js/spassR2Kern.js gefiltert (getestet in B: Modus-Karten, R2-Einstellungen)',
+    'src/spass/spassOnlineR2.js': 'Online-Lobby-Anzeige der Modi: Anzeige folgt dem Server (hallo.r2) – Server-Einstellungen filtert spassR2Kern.js (getestet in B2)',
+    'src/spass/spassOnlineR3.js': 'Online-Lobby Tricks: Anzeige folgt dem Server (hallo.r3); Server filtert über SpassTricks.an (spassTricks.js)',
+    'src/spass/spassOnlineS8.js': 'Online-Lobby Spaß-Elemente: nutzt SpassZauber.an (spassZauber.js, dort Profil-Abfrage)',
+    'src/spass/spassPhysik.js': 'Physik-Umhüllung: tut nichts ohne strecke.spass (Radwelt-Profil baut keins, getestet in B)',
+    'src/spass/spassStart.js': 'Verdrahtung im Rennen: hängt nur Dinge an, die aus strecke.spass/SpassZauber.an kommen (beide profilgesteuert)',
+    'src/spass/spassSticker.js': 'Sticker-Album: reine Datenhaltung/Anzeige (localStorage), keine Spielwirkung im Rennen',
+    'src/spass/spassStimme.js': 'Stimmen-Hupe: Garage-Zusatz ohne Wirkung auf Strecke/Physik/Ergebnis (Aufnahme/Wiedergabe), Hupe nur im Spaß-Teil des Spiels',
+    'src/spass/spassTricksFahrer.js': 'rein optisch: Fahrer-Animation der Tricks; ohne Tricks (SpassTricks.an, profilgesteuert) wird sie nie ausgelöst',
+    'src/spass/spassTricksUI.js': 'Oberfläche/Zeitlupe/Kamera der Tricks: Pillen und Wirkung hängen an SpassTricks.an (spassTricks.js, profilgesteuert)',
+    'src/spass/spassTuningOnline.js': 'Tuning online: sendet Stufen; wirksam nur über SpassTuning.stufen/an (spassTuning.js, profilgesteuert), Server klemmt',
+    'src/spass/spassTuningUI.js': 'Oberfläche Tuning: Pille/Wirkung hängen an SpassTuning.an (spassTuning.js, profilgesteuert)',
+    'src/spass/spassUI.js': 'Oberfläche Spaß-Elemente/Geist/Sticker-Album: Schalter laufen über einstellungenPruefen/standardEinstellungen (getestet in B)',
+    'src/spass/spassWelt.js': 'rein optisch: baut Trampolin/Kanone nur aus strecke.spass (bei Radwelt-Profil leer)',
+  };
+  const ziele = fs.readdirSync(path.join(WURZEL, 'src', 'spass')).filter((f) => f.endsWith('.js')).map((f) => 'src/spass/' + f).concat(['src/track/zufallSpiel.js']);
+  const ohne = [], veraltet = [];
+  for (const rel of ziele) {
+    const t = fs.readFileSync(path.join(WURZEL, rel), 'utf8');
+    const hat = /R\.Profil\b|profilOk\s*\(|\berlaubt\s*\(\s*'/.test(t);
+    if (!hat && !OHNE_ABFRAGE[rel]) ohne.push(rel);
+    if (hat && OHNE_ABFRAGE[rel]) veraltet.push(rel + ' (hat jetzt eine Profil-Abfrage – aus der Ausnahmeliste streichen)');
+  }
+  for (const rel of Object.keys(OHNE_ABFRAGE)) if (!ziele.includes(rel)) veraltet.push(rel + ' (Datei gibt es nicht mehr – aus der Ausnahmeliste streichen)');
+  pruefe('D3 jede Datei unter src/spass/ + zufallSpiel.js hat eine Profil-Abfrage oder steht begründet in der Ausnahmeliste (' + ziele.length + ' Dateien, ' + Object.keys(OHNE_ABFRAGE).length + ' Ausnahmen)', !ohne.length, ohne.join(' | '));
+  pruefe('D4 Ausnahmeliste enthält nur Dateien, die wirklich keine Profil-Abfrage haben', !veraltet.length, veraltet.join(' | '));
+}
+
 console.log(fehler ? '\n' + fehler + ' FEHL, ' + ok + ' OK' : '\nalle ' + ok + ' OK, 0 FEHL');
 process.exit(fehler ? 1 : 0);
