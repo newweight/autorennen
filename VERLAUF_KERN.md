@@ -1,2 +1,3 @@
 # Verlauf – gemeinsamer Kern (Autorennen, Motorrad, Radwelt)
 - 05.11. Bestandsaufnahme beider Repos, Plan Fassung 1, Gegenprüfung, Fassung 2 (Variante D). Sebastian: „ja machen wir so“; Radwelt = Erwachsene auf der Rolle, Spaß-Elemente gern, nicht kindlich → Spiel-Profil mit Erlaubt-Liste statt Kinder-Schalter. Sicherungen: autorennen stand-vor-grafik-gemeinsam-2026-11-05, radwelt stand-vor-grafik-2026-11-05. Start K1 (Zweig grafik-gemeinsam).
+- 05.11. K1 5 %: spiele.json (Modulliste + Profil je Spiel, Radwelt nur als Eintrag), werkzeuge/html_bauen.js (+ --pruefen), Marker in Autorennen.html/Motorrad.html. Erster Lauf: HTML bitgleich (nur 2 Markerzeilen je Datei neu). Erzeugt src/kern/profilDaten.js (noch nicht geladen).
