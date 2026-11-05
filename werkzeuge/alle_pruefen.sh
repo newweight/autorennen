@@ -123,7 +123,7 @@ T_GESAMT=$(( $(date +%s) - T_START ))
   echo
   echo "- Datum: $(date '+%d.%m.%Y %H:%M')"
   echo "- Stand: $STAND (Zweig $(git rev-parse --abbrev-ref HEAD 2>/dev/null)), Basis: $BASIS_ECHT, $GEAENDERT_N geänderte Dateien"
-  echo "- Stufe: $([ "$VOLL" = 1 ] && echo "Voll (Pflicht + Matrix$([ "$MATRIX_SCHNELL" = 1 ] && echo ' --schnell')" || echo 'Pflicht')$([ "$NODE_ALLE" = 1 ] && echo ', alle Node-Tests')$([ "$ALLES" = 1 ] && echo ', Gesamtlauf (--alles)')"
+  echo "- Stufe: $([ "$VOLL" = 1 ] && echo "Voll (Pflicht + Matrix$([ "$MATRIX_SCHNELL" = 1 ] && echo ' --schnell'))" || echo 'Pflicht')$([ "$NODE_ALLE" = 1 ] && echo ', alle Node-Tests')$([ "$ALLES" = 1 ] && echo ', Gesamtlauf (--alles)')"
   echo "- Laufzeit: Pflicht-Stufe ${T_PFLICHT} s ($((T_PFLICHT/60)) min $((T_PFLICHT%60)) s), gesamt ${T_GESAMT} s"
   echo "- Betroffene Spiele: ${BETROFFEN:-keine}"
   echo "- Radwelt: $RADWELT"
