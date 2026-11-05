@@ -73,6 +73,7 @@
   const ramAn = {};
   const KEY = (a) => 'rennspiel.spass.tricks.' + a + '.' + (moto() ? 'motorrad' : 'auto');
   function an(art) {
+    if (R.Profil && !R.Profil.erlaubt(art === 'ki' ? 'kiTricks' : 'tricks')) return false;     // Kern (K1): Spiel-Profil (Auto-Tricks und Zeitlupe = 'tricks')
     try { const ls = typeof localStorage !== 'undefined' ? localStorage : null; if (ls) { const v = ls.getItem(KEY(art)); if (v === '1') return true; if (v === '0') return false; } } catch (e) { /* ohne Speicher */ }
     const r = ramAn[KEY(art)];
     return r === undefined ? true : r;

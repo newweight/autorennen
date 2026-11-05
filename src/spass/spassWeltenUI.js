@@ -33,7 +33,12 @@
     return STAND;
   }
   function sichern() { try { window.localStorage.setItem(KEY(), JSON.stringify({ spur: STAND.spur, dino: STAND.dino })); } catch (e) { /* egal */ } }
-  const einst = () => laden();
+  // Kern (K1): Spiel-Profil – Regenbogenspur und Dino-Begleiter nur, wenn erlaubt (sonst immer aus, egal was gespeichert ist)
+  const einst = () => {
+    const s = laden();
+    if (R.Profil) { if (!R.Profil.erlaubt('regenbogenspur')) s.spur = false; if (!R.Profil.erlaubt('dino')) s.dino = 'aus'; }
+    return s;
+  };
   function sticker(name, d) {
     try { if (typeof R.Spass.sticker === 'function') return R.Spass.sticker(name, d); } catch (e) { /* egal */ }
     return R.SpassSticker ? R.SpassSticker.ereignis(spielName(), name, d) : [];

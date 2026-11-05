@@ -56,7 +56,7 @@
   function setzen(name, feld, wert) {
     const o = laden(), e = eintrag(o, name); e[feld] = wert; sichern(o); return wahl(name);
   }
-  const an = () => laden().an !== false;
+  const an = () => (!R.Profil || R.Profil.erlaubt('zauber')) && laden().an !== false;      // Kern (K1): Haustier/Kostüm gehören zum Fahr-Zauber
   function anSetzen(b) { const o = laden(); o.an = !!b; sichern(o); }
   function stickerHat(id) { try { return !!(R.SpassSticker && R.SpassSticker.hat(spielName(), id)); } catch (e) { return false; } }
   /** → { frei, grund: 'gratis'|'sticker'|'gekauft'|'preis', preis } */

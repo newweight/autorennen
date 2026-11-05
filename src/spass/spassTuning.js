@@ -136,6 +136,7 @@
   // ---------- Schalter ----------
   const schalterKey = () => schluessel() + '.schalter';
   function an() {
+    if (R.Profil && !R.Profil.erlaubt('tuning')) return false;     // Kern (K1): Spiel-Profil
     const s = speicher();
     if (s) { try { const v = s.getItem(schalterKey()); if (v === 'aus') return false; if (v === 'an') return true; } catch (e) { /* egal */ } }
     else if (_ramAn !== null) return _ramAn;

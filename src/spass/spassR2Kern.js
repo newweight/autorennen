@@ -47,8 +47,11 @@
 
   function einstellungen(erg, roh, art, spieler) {
     const r0 = roh || {};
-    const modus = MODI.indexOf(r0.modus) > 0 ? r0.modus : 'rennen';
-    const geist = r0.geist === true, dino = DINO.indexOf(r0.dino) > 0 ? r0.dino : 'aus';
+    // Kern (K1): Spiel-Profil mit Erlaubt-Liste – nicht erlaubte Modi/Geist/Dino fallen weg (Autorennen/Motorrad erlauben alles = bitgleich)
+    const profilOk = (was) => !R.Profil || R.Profil.erlaubt(was);
+    const MODUS_PROFIL = { kurz: 'modiKurz', frei: 'modiFrei', ko: 'modiKO' };
+    const modus = MODI.indexOf(r0.modus) > 0 && profilOk(MODUS_PROFIL[r0.modus]) ? r0.modus : 'rennen';
+    const geist = r0.geist === true && profilOk('geist'), dino = DINO.indexOf(r0.dino) > 0 && profilOk('dino') ? r0.dino : 'aus';
     if (modus === 'rennen') {
       if (!geist && dino === 'aus') return erg;                    // keine R2-Wahl → bitgleich wie vorher
       const o = Object.assign({}, erg);

@@ -87,7 +87,9 @@
     ko: { emoji: '🏁', name: 'K.-o.-Rallye', sub: 'An jeder Wertung fliegt der Letzte raus' },
     arena: { emoji: '🎪', name: 'Stunt-Arena', sub: 'Halfpipe und Schanzen, ohne Gegner' },      // R4: nur Autorennen (Motorrad hat den Stunt-Park)
   };
-  const ARTEN = window.MOTORRAD === true ? ['kurz', 'frei', 'ko'] : ['kurz', 'frei', 'ko', 'arena'];
+  // Kern (K1): nur Modi, die das Spiel-Profil erlaubt (Autorennen/Motorrad: alle = bitgleich; Radwelt: keine → keine Karten, keine ↓-Taste in die Reihe)
+  const MODUS_PROFIL = { kurz: 'modiKurz', frei: 'modiFrei', ko: 'modiKO', arena: 'modiArena' };
+  const ARTEN = (window.MOTORRAD === true ? ['kurz', 'frei', 'ko'] : ['kurz', 'frei', 'ko', 'arena']).filter((k) => !R.Profil || R.Profil.erlaubt(MODUS_PROFIL[k]));
   function stilB() {
     if (document.getElementById('spass-menue-stil-b')) return;
     const s = document.createElement('style'); s.id = 'spass-menue-stil-b';
@@ -115,7 +117,7 @@
       if (art && !this.onlineGewaehlt) h = h.split(' gewaehlt').join('');
       const kk = ARTEN.map((k) => `<div class="karte s4-karte${art === k && !this.onlineGewaehlt ? ' gewaehlt' : ''}" data-a="spassmodus:${k}" title="${INFO[k].sub}">` +
         `<div class="emoji">${INFO[k].emoji}</div><div><div class="karten-name">${INFO[k].name}</div><div class="karten-sub">${INFO[k].sub}</div></div></div>`).join('');
-      h += `<div class="s4-reihe">${kk}</div>`;
+      if (ARTEN.length) h += `<div class="s4-reihe">${kk}</div>`;
     } catch (err) { console.error('Spaß S4 (Modus-Karten):', err); }
     return h;
   };
@@ -166,7 +168,7 @@
           modusSetzen(this, ARTEN[(ARTEN.indexOf(art) + (rechts ? 1 : ARTEN.length - 1)) % ARTEN.length]); this.aenderung(); return true;
         }
         if (art && hoch) { this.modusKarte('solo'); this.aenderung(); return true; }      // ↑ zurück zu den normalen Karten
-        if (!art && runter) { modusSetzen(this, 'kurz'); this.aenderung(); return true; } // ↓ in die Spaß-Reihe
+        if (!art && runter && ARTEN.length) { modusSetzen(this, ARTEN[0]); this.aenderung(); return true; } // ↓ in die Spaß-Reihe (ARTEN[0] = 'kurz', wenn alles erlaubt)
       }
     } catch (err) { console.error('Spaß S4 (Modus-Tasten):', err); }
     return taste.apply(this, arguments);

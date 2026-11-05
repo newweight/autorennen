@@ -10,6 +10,8 @@
 // ============================================================
 (function () {
   const R = window.Rennspiel;
+  // Kern (K1): Spiel-Profil mit Erlaubt-Liste (src/kern/profil.js) – ohne geladenes Profil ist alles erlaubt (bitgleich wie vorher)
+  const profilOk = (was) => !R.Profil || R.Profil.erlaubt(was);
 
   // --- Einstellungen: Standardwerte, Prüfen, Speichern (localStorage) ---
   function standardEinstellungen() {
@@ -47,9 +49,9 @@
       // (an bei der Formel-1-Strecke, sonst aus) | true | false; autoVorFormel = Autowahl vor dem Vorschlag „Formel-Renner“ (Wiederherstellen beim Streckenwechsel)
       nurRennautos: null, autoVorFormel: null,
       // Z1: Zufällige Strecke (Münzen/Hindernisse jede Runde und jedes Rennen neu), Standard AN, abschaltbar (track/zufall.js)
-      zufall: !(c.zufall && c.zufall.standardAn === false),
+      zufall: profilOk('zufall') && !(c.zufall && c.zufall.standardAn === false),
       // S1 (Spaß-Paket, src/spass): Spaß-Elemente (Trampolin/Kanone) und Geist vom besten Lauf, Standard AN
-      spass: !(c.spass && c.spass.standardAn === false), geist: !(c.spass && c.spass.geistStandardAn === false),
+      spass: profilOk('spass') && !(c.spass && c.spass.standardAn === false), geist: profilOk('geist') && !(c.spass && c.spass.geistStandardAn === false),
     };
   }
 
@@ -100,8 +102,8 @@
       pokalGroesse: ((c.pokal && c.pokal.groessen) || [3, 4, 5]).includes(+r.pokalGroesse) ? +r.pokalGroesse : std.pokalGroesse,
       nurRennautos: typeof r.nurRennautos === 'boolean' ? r.nurRennautos : null,      // v29 F3
       autoVorFormel: Array.isArray(r.autoVorFormel) && r.autoVorFormel.length === 2 && r.autoVorFormel.every(x => autoOk(x, null)) ? r.autoVorFormel.slice() : null,
-      zufall: typeof r.zufall === 'boolean' ? r.zufall : std.zufall,      // Z1: alte Speicherstände ohne das Feld → Standard (an)
-      spass: typeof r.spass === 'boolean' ? r.spass : std.spass, geist: typeof r.geist === 'boolean' ? r.geist : std.geist,      // S1
+      zufall: profilOk('zufall') && (typeof r.zufall === 'boolean' ? r.zufall : std.zufall),      // Z1: alte Speicherstände ohne das Feld → Standard (an)
+      spass: profilOk('spass') && (typeof r.spass === 'boolean' ? r.spass : std.spass), geist: profilOk('geist') && (typeof r.geist === 'boolean' ? r.geist : std.geist),      // S1
     };
   }
 
@@ -112,6 +114,21 @@
     } catch (e) { /* kein localStorage oder kaputt: Standard */ }
     return standardEinstellungen();
   }
+
+  /**
+   * Strecken-Optionen für new R.Strecke(daten, sOpt) aus den Einstellungen (rein, ohne Szene; ausgelagert aus streckeSzeneBauen, Verhalten unverändert).
+   * Kern (K1): Spaß-/Zusatzoptionen (spass, zauber, loopingMagnet, zufall) gelten nur, wenn das Spiel-Profil sie erlaubt (R.Profil) – Test: tests/test_kern_profil.js.
+   */
+  function streckenOptionen(spiel, daten, e, welt, variante) {
+    // Z1: Zufällige Strecke – Seed nur im Rennen (streckeAufbauen/online setzt _zufallSeed; Menühintergrund: keiner), wird hier verbraucht
+    const zufallOpt = R.ZufallSpiel ? R.ZufallSpiel.opt(spiel, daten) : undefined    /* Profil 'zufall': prüft R.ZufallSpiel.opt selbst */;
+    const sOpt = zufallOpt ? { welt, variante, hindernisMenge: e.hindernisMenge, zufall: zufallOpt } : { welt, variante, hindernisMenge: e.hindernisMenge };
+    if (e.spass !== false && R.Spass && profilOk('spass')) { sOpt.spass = true; if (R.SpassZauber && R.SpassZauber.zauberFuer(e) && profilOk('zauber')) sOpt.zauber = true; }   // S6: Fahr-Zauber (Menü „✨ Fahr-Zauber“, Standard an); PRUEF-FIX 1: online nur die Raum-Einstellung (e.raumOnline), nie der lokale Schalter
+    if (sOpt.zauber === true && e.loopMag === true && profilOk('loopMag')) sOpt.loopingMagnet = true;      // R4 P5: nur online (Raum-Einstellung vom Server); offline setzt die Hülle um streckeAufbauen die Option, e.loopMag fehlt dort
+    return sOpt;
+  }
+  R.streckenOptionen = streckenOptionen;
+  R.einstellungenPruefen = einstellungenPruefen; R.standardEinstellungen = standardEinstellungen;      // Kern (K1): für tests/test_kern_profil.js
 
   class Spiel {
     constructor(canvas) {
@@ -342,11 +359,7 @@
       const e = this.einstellungen || {};
       const welt = R.Strecke.weltName ? R.Strecke.weltName(daten, e.welt) : (daten.weltStandard || undefined);
       const variante = e.variante && daten.varianten && daten.varianten[e.variante] ? e.variante : '';   // Runde 6: ungültig → Normal
-      // Z1: Zufällige Strecke – Seed nur im Rennen (streckeAufbauen/online setzt _zufallSeed; Menühintergrund: keiner), wird hier verbraucht
-      const zufallOpt = R.ZufallSpiel ? R.ZufallSpiel.opt(this, daten) : undefined;
-      const sOpt = zufallOpt ? { welt, variante, hindernisMenge: e.hindernisMenge, zufall: zufallOpt } : { welt, variante, hindernisMenge: e.hindernisMenge };
-      if (e.spass !== false && R.Spass) { sOpt.spass = true; if (R.SpassZauber && R.SpassZauber.zauberFuer(e)) sOpt.zauber = true; }   // S6: Fahr-Zauber (Menü „✨ Fahr-Zauber“, Standard an); PRUEF-FIX 1: online nur die Raum-Einstellung (e.raumOnline), nie der lokale Schalter
-      if (sOpt.zauber === true && e.loopMag === true) sOpt.loopingMagnet = true;      // R4 P5: nur online (Raum-Einstellung vom Server); offline setzt die Hülle um streckeAufbauen die Option, e.loopMag fehlt dort
+      const sOpt = streckenOptionen(this, daten, e, welt, variante);
       // S1: Trampolin/Kanone (Menü „Spaß-Elemente“, Standard an; aus = keine Option = bitgleich wie vorher)
       const strecke = new R.Strecke(daten, sOpt);
       this.strecke = strecke;

@@ -22,7 +22,7 @@
   /** Rennseed für den nächsten streckeSzeneBauen-Aufruf merken (opt.zufall === true; opt.zufallSeed vorgegeben, sonst gewürfelt – nur beim Rennstart erlaubt). */
   ZS.seedWaehlen = function (spiel, opt) {
     spiel._zufallSeed = null;
-    if (!opt || opt.zufall !== true) return;
+    if (!opt || opt.zufall !== true || (R.Profil && !R.Profil.erlaubt('zufall'))) return;      // Kern (K1): Profil
     spiel._zufallSeed = opt.zufallSeed !== undefined && opt.zufallSeed !== null ? (opt.zufallSeed >>> 0) : (Math.floor(Math.random() * 4294967296) >>> 0);
   };
 
@@ -32,6 +32,7 @@
     spiel._zufallSeed = null;
     spiel.zufallSeed = null;
     if (s === null || s === undefined || istPark(daten, spiel)) return undefined;
+    if (R.Profil && !R.Profil.erlaubt('zufall')) return undefined;      // Kern (K1): Spiel-Profil erlaubt keine Zufalls-Strecke
     spiel.zufallSeed = s;
     return { seed: s };
   };

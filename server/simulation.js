@@ -26,7 +26,7 @@ const R2_MODULE = ['src/spass/spassKurz.js', 'src/spass/spassFrei.js', 'src/spas
 // Reihenfolge wie in Autorennen.html (ohne Ton, Eingabe, Autos-Grafik, Kameras, HUD, Menü)
 const MODULE = [
   'vendor/three.min.js',
-  'src/config.js', 'src/physics/vehicle.js', 'src/physics/collisions.js', 'src/physics/schaden.js', 'src/cars/carCatalog.js', 'src/cars/dachregel.js',
+  'src/config.js', 'src/kern/profilDaten.js', 'src/kern/profil.js', 'src/physics/vehicle.js', 'src/physics/collisions.js', 'src/physics/schaden.js', 'src/cars/carCatalog.js', 'src/cars/dachregel.js',
   'src/track/spline.js', 'src/track/trackCatalog.js', 'src/track/trackBuilder.js', 'src/track/zufall.js', 'src/track/looping.js', 'src/track/schanze.js',
   'src/track/trackWelten.js',   // S5: neue Strecken (Mond, Unterwasser, Regenbogenland)
   'src/track/anlauf.js', 'src/spass/spassKern.js', 'src/spass/spassTuning.js', 'src/world/themes.js', 'src/world/schilder.js', 'src/world/tribuenen.js', 'src/world/formel1.js', 'src/world/wetter.js', 'src/world/dynamik.js', 'src/world/pickups.js',
@@ -150,6 +150,7 @@ function eigenPruefen(code) { const R = laden(); if (!R.Editor || typeof code !=
 
 function einstellungenPruefen(roh, spielerAnzahl, moto) {
   const R = laden(), c = R.config, N = R.Netz;
+  const P = (was) => !R.Profil || R.Profil.erlaubt(was);      // Kern (K1): Spiel-Profil mit Erlaubt-Liste (Autorennen/Motorrad: alles = bitgleich)
   const r00 = roh || {}, r0 = R.SpassR2 ? R.SpassR2.rohVorher(r00) : r00;     // R2: Wechsel zurück auf „Rennen“ holt die gesicherten Werte zurück
   const eigenId = typeof r0.eigen === 'string' && r0.eigen ? eigenRegistrieren(r0.eigen, moto === true) : null;       // S8: eigene Strecke (fehlt/ungültig → normale Wahl)
   const r = eigenId ? Object.assign({}, r0, { streckeId: eigenId, welt: '', variante: '' }) : r0;
@@ -188,13 +189,13 @@ function einstellungenPruefen(roh, spielerAnzahl, moto) {
     nurRennautos: r.nurRennautos === true,
     // Z1 (additiv): Zufällige Strecke – Münzen/Hindernisse jede Runde neu (track/zufall.js); nur ein echtes true schaltet ein (ein alter Browser sendet das Feld nicht
     // und kennt das Ereignis `zufall` nicht → bekommt die feste Strecke); der neue Browser sendet `zufall` (Standard true) in raumErstellen/einstellungen
-    zufall: r.zufall === true,
+    zufall: P('zufall') && r.zufall === true,
     // S1 (additiv): Spaß-Elemente (Trampolin/Kanone, src/spass); nur ein echtes true schaltet ein (alter Browser sendet das Feld nicht → feste alte Strecke)
-    spass: r.spass === true,
+    spass: P('spass') && r.spass === true,
     // S6 (additiv): Fahr-Zauber (src/spass/spassZauber.js: Magnet-Röhre, Schlucht, Schienen/Wände, Halfpipe, Riese/Mini); nur ein echtes true schaltet ein (setzt spass voraus)
-    zauber: r.zauber === true,
+    zauber: P('spass') && P('zauber') && r.zauber === true,
     // S2 (additiv): Tuning mit Goldstücken (src/spass/spassTuning.js) wirkt nur, wenn der Raum es erlaubt (Lobby-Schalter, Standard AUS = fair); nur ein echtes true schaltet ein
-    tuning: r.tuning === true,
+    tuning: P('tuning') && r.tuning === true,
     // 12.10. Hindernis-Menge: nur 'normal' | 'viele' | 'sehrViele' (unbekannt, Zahl, null … → 'normal'); alle Browser bauen dieselbe Strecke
     hindernisMenge: c.hindernisMenge && c.hindernisMenge.stufen && typeof r.hindernisMenge === 'string' &&
       Object.prototype.hasOwnProperty.call(c.hindernisMenge.stufen, r.hindernisMenge) ? r.hindernisMenge : ((c.hindernisMenge && c.hindernisMenge.standard) || 'normal'),
@@ -205,9 +206,9 @@ function einstellungenPruefen(roh, spielerAnzahl, moto) {
       moto: true, unfall: MOTO_UNFALL.includes(r.unfall) ? r.unfall : 'sanft', stuntrennen: r.stuntrennen === true });
   }
   // R3 (additiv): Raum-Schalter Tricks (Auto: Fassrolle/Schraube der Menschen + Computer-Tricks, Motorrad: Computer-Tricks); nur ein echtes true trägt den Schlüssel ein (sonst bitgleich wie vorher)
-  if (r.tricks === true) erg.tricks = true;
+  if (r.tricks === true && P('tricks')) erg.tricks = true;
   // R4 P5 (additiv): Loopings als Magnet-Röhre (`loopMag`, nur Autorennen, braucht Spaß-Elemente + Fahr-Zauber); nur ein echtes true trägt den Schlüssel ein (sonst bitgleich wie vorher)
-  if (r.loopMag === true && moto !== true && erg.spass === true && erg.zauber === true) erg.loopMag = true;
+  if (r.loopMag === true && moto !== true && erg.spass === true && erg.zauber === true && P('loopMag')) erg.loopMag = true;
   // R2 (additiv): Modus-Wahl (Kurz-Level, K.-o., Freie Fahrt), Geist, Dino – ohne R2-Wahl kommt `erg` unverändert zurück (bitgleich wie vorher)
   return R.SpassR2 ? R.SpassR2.einstellungen(erg, R.SpassR2.rohVorher(r00), moto === true ? 'motorrad' : 'auto', spielerAnzahl) : erg;
 }

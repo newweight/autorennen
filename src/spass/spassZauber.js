@@ -48,6 +48,7 @@
   // ---------------------------------------------------------------- Schalter (Menü „✨ Fahr-Zauber“, Standard an)
   const AN = { an: null, erzwungen: false, loopMag: null, bau: false };
   function an() {
+    if (R.Profil && !R.Profil.erlaubt('zauber')) return false;     // Kern (K1): Spiel-Profil
     if (AN.erzwungen) return true;                        // R4: Stunt-Arena braucht die Halfpipe (nur während des Rennstarts gesetzt)
     if (AN.an === null) {
       AN.an = !(R.config.spass.zauber && R.config.spass.zauber.standardAn === false);
@@ -63,7 +64,7 @@
     }
     return AN.loopMag;
   }
-  const loopMag = () => loopMagRoh() && an();
+  const loopMag = () => loopMagRoh() && an() && (!R.Profil || R.Profil.erlaubt('loopMag'));
   function loopMagSetzen(b) { AN.loopMag = !!b; try { if (typeof localStorage !== 'undefined') localStorage.setItem('rennspiel.spass.zauber.loopMag', b ? '1' : '0'); } catch (e) { /* egal */ } }
   function erzwingen(b) { AN.erzwungen = !!b; }
   /** PRUEF-FIX 5: Streckentexte im Menü, wenn „🌀 Loopings: Magnet-Röhre“ an ist: alle Nennungen der Fantasie-Loopings (Karte „2 Loopings“, Beschreibung „zwei Loopings (Vollgas!)“, Welt-Text „Loopings, Bälle …“, Variante „gleiche Loopings“). */
