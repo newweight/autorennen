@@ -271,8 +271,7 @@
    ]
   },
   "radwelt": {
-   "html": "Radwelt.html",
-   "status": "NOCH NICHT UMGEZOGEN (Stufe K3) – eigenes Repo newweight/radwelt, lokal /home/claude/radwelt (Radwelt.html, src/rad/); hier nur das Profil, noch keine Modulliste und kein HTML-Bau",
+   "status": "KEIN baubares Spiel in diesem Repo: Radwelt bleibt eigenes Repo (newweight/radwelt, lokal /home/claude/radwelt); Grafik wird per Übernahme-Skript in die Radwelt kopiert. Hier nur das Profil (leere Erlaubt-Liste) für Kern-Dateien, die dorthin kopiert werden, und die Golden-Referenz tests/golden/radwelt.json.",
    "pfad": "/home/claude/radwelt",
    "profil": { "erlaubt": [] },
    "module": []

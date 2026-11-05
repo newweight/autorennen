@@ -42,7 +42,7 @@ else {
   }
 }
 // Radwelt: solange spiele.json keine Modulliste hat, wird sie hier NICHT geprüft (liegt noch im eigenen Repo)
-const radwelt = spiele.radwelt && !modulDateien('radwelt').length ? { noch_nicht_umgezogen: true, pfad: spiele.radwelt.pfad } : null;
+const radwelt = spiele.radwelt && !modulDateien('radwelt').length ? { eigenes_repo: true, pfad: spiele.radwelt.pfad } : null;
 // Geteilte Kern-Dateien (Strecke/Grafik/Welt/Konfiguration): Radwelt-Golden bewusst gegenprüfen
 const kernGeteilt = (geaendert || []).filter((f) => /^(src\/track\/|src\/grafik\/|src\/world\/|src\/config\.js|src\/main\.js)/.test(f));
 

@@ -52,14 +52,14 @@ if [ "$NODE_ALLE" = 1 ]; then read -r -a NODE_SPIELE <<< "$(plan 'p.nodeAlle')";
 read -r -a NODE_VOLL <<< "$(plan 'p.voll')"
 read -r -a RAUCH <<< "$(plan 'p.rauch')"
 read -r -a MATRIX <<< "$(plan 'p.matrix')"
-RADWELT="$(plan 'p.radwelt?"noch nicht umgezogen (Eintrag in spiele.json, Radwelt-Repo: "+p.radwelt.pfad+") – hier NICHT geprüft":"geprüft"')"
+RADWELT="$(plan 'p.radwelt?"bleibt eigenes Repo ("+p.radwelt.pfad+") – hier nicht geprüft":"geprüft"')"
 KERNGETEILT="$(plan 'p.kernGeteilt.length')"
 STAND="$(git rev-parse --short HEAD 2>/dev/null)$( [ -n "$(git status --porcelain 2>/dev/null)" ] && echo '+Änderungen')"
 
 echo "== alle_pruefen: Stand $STAND, Basis $BASIS_ECHT, $GEAENDERT_N geänderte Dateien"
 echo "   betroffene Spiele: ${BETROFFEN:-keine}"
 echo "   Radwelt: $RADWELT"
-[ "$KERNGETEILT" != 0 ] && echo "   Hinweis: $KERNGETEILT geteilte Kern-Dateien (Strecke/Grafik/Welt/Config/main) geändert – Radwelt-Golden beim Umzug (K3) gegenprüfen: node tests/test_kern_golden.js --radwelt-pruefen ."
+[ "$KERNGETEILT" != 0 ] && echo "   Hinweis: $KERNGETEILT geteilte Kern-Dateien (Strecke/Grafik/Welt/Config/main) geändert – Radwelt-Golden bei der Grafik-Übernahme gegenprüfen: node tests/test_kern_golden.js --radwelt-pruefen /home/claude/radwelt"
 if [ "$TROCKEN" = 1 ]; then
   echo "   Pflicht: html_bauen --pruefen, ${NODE_IMMER[*]}, Node: ${NODE_SPIELE[*]}, Rauchtest: ${RAUCH[*]}"
   [ "$VOLL" = 1 ] && echo "   Voll: matrix_alle ${MATRIX[*]}"

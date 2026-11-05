@@ -60,7 +60,7 @@ function main() {
 
   for (const id of Object.keys(spiele)) {
     const s = spiele[id];
-    if (!s.html || !Array.isArray(s.module) || !s.module.length) continue;       // z. B. radwelt: noch nicht umgezogen
+    if (!s.html || !Array.isArray(s.module) || !s.module.length) continue;       // z. B. radwelt: nur Profil-Eintrag
     // 1) Dateien vorhanden, keine doppelten
     const gesehen = new Set();
     for (const m of s.module) {

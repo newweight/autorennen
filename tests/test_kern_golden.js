@@ -2,8 +2,8 @@
 //   node tests/test_kern_golden.js                      prüft Strecken-Geometrie (Autorennen + Motorrad, je Strecke + Welt), Fahrphysik (Auto + Motorrad) und die Radwelt-Referenz (nur Aufbau)
 //   node tests/test_kern_golden.js --neu                schreibt die Referenzen für Autorennen/Motorrad NEU (nur nach bewusster Änderung! Begründung ins VERLAUF_KERN.md)
 //   node tests/test_kern_golden.js --radwelt <pfad>     berechnet die Radwelt-Strecken (Alpen, Wiese, Wald, Mega + 2 Baukasten-Beispiele, window.RADWELT) aus dem Radwelt-Repo <pfad>
-//                                                       und speichert sie als Referenz tests/golden/radwelt.json (Ziel K3: nach dem Umzug müssen sie gleich bleiben)
-//   node tests/test_kern_golden.js --radwelt-pruefen <pfad>   rechnet die Radwelt-Strecken aus <pfad> (oder, nach K3, aus diesem Repo: Pfad „.“) und vergleicht mit radwelt.json
+//                                                       und speichert sie als Referenz tests/golden/radwelt.json (Referenz, falls die Radwelt-Strecken je angefasst werden)
+//   node tests/test_kern_golden.js --radwelt-pruefen <pfad>   rechnet die Radwelt-Strecken aus <pfad> und vergleicht mit radwelt.json
 //   Optionen: --nur strecken|physik|radwelt   nur diesen Teil
 // Fingerabdruck = SHA-1 über alle Zahlen mit voller Genauigkeit; Rot = die Geometrie/Physik hat sich verändert: nicht einspielen, bis geklärt (Plan Schutzregel 4).
 'use strict';
@@ -71,7 +71,7 @@ const RAD_BAUKASTEN = [
   { name: 'baukasten-rund-wiese', p: { km: 12, anstiege: 3, hm: 250, maxSteig: 8, art: 'rund', seed: 4242, thema: 'wiese' } },
   { name: 'baukasten-ab-wald', p: { km: 8, anstiege: 2, hm: 120, maxSteig: 6, art: 'ab', seed: 777, thema: 'wald' } },
 ];
-/** Radwelt-Strecken aus einem Ordner mit Radwelt.html (Radwelt-Repo) – oder nach K3 aus diesem Repo (spiele.json radwelt.module, Pfad „.“). */
+/** Radwelt-Strecken aus einem Ordner mit Radwelt.html (Radwelt-Repo). */
 function radweltFingerabdruecke(basis) {
   let liste;
   if (fs.existsSync(path.join(basis, 'Radwelt.html'))) liste = listeAusHtml(path.join(basis, 'Radwelt.html'));
@@ -133,7 +133,7 @@ if (flag('--radwelt')) {
   const ist = radweltFingerabdruecke(pfad);
   let commit = '';
   try { commit = require('child_process').execSync('git -C "' + pfad + '" rev-parse --short HEAD', { encoding: 'utf8' }).trim(); } catch (e) { /* kein git */ }
-  schreiben('radwelt.json', { _quelle: { pfad, commit, erzeugt: new Date().toISOString().slice(0, 10), hinweis: 'Referenz für K3: nach dem Umzug der Radwelt ins Autorennen-Repo müssen diese Werte gleich bleiben (node tests/test_kern_golden.js --radwelt-pruefen .)' }, strecken: ist });
+  schreiben('radwelt.json', { _quelle: { pfad, commit, erzeugt: new Date().toISOString().slice(0, 10), hinweis: 'Referenz der Radwelt-Strecken (Radwelt bleibt eigenes Repo); prüfen: node tests/test_kern_golden.js --radwelt-pruefen <pfad>' }, strecken: ist });
   pruefe('Radwelt-Referenz erzeugt (' + Object.keys(ist).length + ' Strecken: ' + Object.keys(ist).join(', ') + ')', true);
 } else if (flag('--radwelt-pruefen')) {
   const pfad = path.resolve(wert('--radwelt-pruefen') || '.');

@@ -48,3 +48,6 @@ Verworfen: B (eigenes Kern-Repo + Abgleich in zwei Richtungen – zu fehleranfä
 - Wie lange die Pflicht-Prüfung wirklich dauert (wird in K1 gemessen; Ziel < 10 min).
 - Ob die Radwelt auf dem Mini mit „Schön“ flüssig läuft (K4).
 - Zweignamen: `motorrad` bleibt Hauptzweig; Arbeit in `kinder-…` bzw. `rad-…`. Später evtl. in `main` umbenennen.
+
+## 7. Kursänderung 05.11. (Sebastian)
+Der Umzug der Radwelt ins Autorennen-Repo (K3) ist GESTRICHEN: **Radwelt bleibt eigenes Repo; Grafik wird per Übernahme-Skript in die Radwelt kopiert.** K1 gilt nur für Auto/Motorrad (Profil, spiele.json/html_bauen, Golden-Tests, alle_pruefen.sh); die Radwelt-Golden-Referenz bleibt als Zusatz. K2/K3/K5 entfallen bzw. werden neu geplant.
