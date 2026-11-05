@@ -15,7 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const WURZEL = path.join(__dirname, '..');
+const WURZEL = process.env.HTML_BAUEN_WURZEL ? path.resolve(process.env.HTML_BAUEN_WURZEL) : path.join(__dirname, '..');   // Umgebungsvariable nur für Tests (Kopie des Repos)
 const ANFANG = '<!-- MODULE:ANFANG -->';
 const ENDE = '<!-- MODULE:ENDE -->';
 const PROFIL_DATEI = 'src/kern/profilDaten.js';
@@ -45,6 +45,7 @@ function profilDatenErzeugen(spiele) {
     if (id.startsWith('_')) continue;
     const pr = spiele[id].profil;
     if (!pr) continue;
+    if (!Array.isArray(pr.erlaubt)) throw new Error('spiele.json: Spiel „' + id + '“: Profil ohne Liste „erlaubt“ (erwartet z. B. ["*"] oder [])');
     p[id] = { erlaubt: pr.erlaubt.slice() };
   }
   return '// ERZEUGT von werkzeuge/html_bauen.js aus spiele.json (Abschnitt „profil“ je Spiel) – NICHT von Hand ändern.\n' +
@@ -54,9 +55,12 @@ function profilDatenErzeugen(spiele) {
 
 function main() {
   const nurPruefen = process.argv.includes('--pruefen');
-  const spiele = JSON.parse(lesen('spiele.json')).spiele;
+  let spiele;
+  try { spiele = JSON.parse(lesen('spiele.json')).spiele; if (!spiele || typeof spiele !== 'object') throw new Error('Abschnitt „spiele“ fehlt'); } catch (e) { console.log('FEHL spiele.json nicht lesbar: ' + e.message); process.exit(1); }
   const abweichungen = [];
+  const fehler = [];                 // echte Fehler (kaputte spiele.json, fehlende Dateien/Marker …): führen IMMER zu Exit 1, auch im Schreibmodus
   const schreiben = [];
+  const meldeFehler = (text) => { abweichungen.push(text); fehler.push(text); };
 
   for (const id of Object.keys(spiele)) {
     const s = spiele[id];
@@ -65,29 +69,29 @@ function main() {
     const gesehen = new Set();
     for (const m of s.module) {
       if (typeof m !== 'string') continue;
-      if (gesehen.has(m)) abweichungen.push(id + ': Datei doppelt in der Modulliste: ' + m);
+      if (gesehen.has(m)) meldeFehler(id + ': Datei doppelt in der Modulliste: ' + m);
       gesehen.add(m);
-      if (!fs.existsSync(path.join(WURZEL, m))) abweichungen.push(id + ': Datei fehlt auf der Platte: ' + m);
+      if (!fs.existsSync(path.join(WURZEL, m))) meldeFehler(id + ': Datei fehlt auf der Platte: ' + m);
     }
     // 2) HTML
     let alt;
-    try { alt = lesen(s.html); } catch (e) { abweichungen.push(id + ': ' + s.html + ' nicht lesbar'); continue; }
+    try { alt = lesen(s.html); } catch (e) { meldeFehler(id + ': ' + s.html + ' nicht lesbar'); continue; }
     let neu;
-    try { neu = htmlErzeugen(alt, s); } catch (e) { abweichungen.push(String(e.message)); continue; }
+    try { neu = htmlErzeugen(alt, s); } catch (e) { meldeFehler(String(e.message)); continue; }
     if (neu !== alt) { abweichungen.push(s.html + ' weicht von spiele.json ab' + (nurPruefen ? '' : ' → wird neu geschrieben')); schreiben.push([s.html, neu]); }
   }
   // 3) profilDaten.js
-  const pd = profilDatenErzeugen(spiele);
+  let pd = null;
+  try { pd = profilDatenErzeugen(spiele); } catch (e) { meldeFehler(String(e.message)); }
   let pdAlt = null;
   try { pdAlt = lesen(PROFIL_DATEI); } catch (e) { /* neu */ }
-  if (pdAlt !== pd) { abweichungen.push(PROFIL_DATEI + (pdAlt === null ? ' fehlt' : ' weicht von spiele.json ab')); schreiben.push([PROFIL_DATEI, pd]); }
+  if (pd !== null && pdAlt !== pd) { abweichungen.push(PROFIL_DATEI + (pdAlt === null ? ' fehlt' : ' weicht von spiele.json ab')); schreiben.push([PROFIL_DATEI, pd]); }
 
   if (nurPruefen) {
     if (abweichungen.length) { abweichungen.forEach((a) => console.log('FEHL ' + a)); console.log('html_bauen --pruefen: ' + abweichungen.length + ' Abweichung(en)'); process.exit(1); }
     console.log('OK   html_bauen --pruefen: HTML-Dateien und ' + PROFIL_DATEI + ' stimmen mit spiele.json überein'); return;
   }
-  const echteFehler = abweichungen.filter((a) => /fehlt auf der Platte|doppelt|nicht lesbar|Marker/.test(a));
-  if (echteFehler.length) { echteFehler.forEach((a) => console.log('FEHL ' + a)); process.exit(1); }
+  if (fehler.length) { fehler.forEach((a) => console.log('FEHL ' + a)); console.log('html_bauen: ' + fehler.length + ' Fehler – nichts geschrieben'); process.exit(1); }
   for (const [rel, text] of schreiben) { fs.mkdirSync(path.dirname(path.join(WURZEL, rel)), { recursive: true }); fs.writeFileSync(path.join(WURZEL, rel), text); console.log('geschrieben: ' + rel); }
   if (!schreiben.length) console.log('nichts zu tun – alles gleich');
 }

@@ -3,7 +3,7 @@
  "pruefung": {
   "_hinweis": "Für werkzeuge/alle_pruefen.sh. basis = Vergleichsstand für den git diff; immer = Tests, die bei JEDER Änderung laufen; betrifftAlle = Pfad-Anfänge, die alle Spiele betreffen (Standard siehe werkzeuge/alle_plan.js).",
   "basis": "origin/motorrad",
-  "immer": { "node": ["test_kern_profil.js", "test_kern_golden.js"] }
+  "immer": { "node": ["test_kern_profil.js", "test_kern_golden.js", "test_html_bauen.js"] }
  },
  "spiele": {
   "autorennen": {
