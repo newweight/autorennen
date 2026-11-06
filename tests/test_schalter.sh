@@ -29,13 +29,12 @@ grep -c '#TEST' "$T/h.sh" >/dev/null
 # 1 gültiger Wunsch AN
 NOW=1760000000; wunsch "{\"funnel\":\"an\",\"seit\":${NOW}000}"; lauf
 grep -qx 'funnel --bg --https=10000 http://127.0.0.1:8444' "$T/log"; ok "AN: Funnel-Befehl exakt" $?
-grep -qx 'funnel --bg --https=8443 http://127.0.0.1:8447' "$T/log"; ok "AN: Portal-Funnel 8443 exakt" $?
 grep -q '"funnel":"an","bis":1760014400000,"zeit":1760000000000' "$T/steu/status.json"; ok "AN: status.json an, bis = +4 h" $?
 # 2 gleicher Wunsch nochmal → nichts
 n=$(zeilen); echo 1760000005 > "$T/zeit"; lauf; lauf; [ "$(zeilen)" = "$n" ]; ok "gleicher Wunsch wird nur einmal bearbeitet" $?
 # 3 AUS
 echo 1760000100 > "$T/zeit"; wunsch '{"funnel":"aus","seit":1760000100000}'; lauf
-tail -3 "$T/log" | tr '\n' '|' | grep -q 'funnel --https=10000 off|serve --bg --https=10000 http://127.0.0.1:8444|funnel --https=8443 off|'; ok "AUS: funnel off + serve + Portal off" $?
+tail -2 "$T/log" | tr '\n' '|' | grep -q 'funnel --https=10000 off|serve --bg --https=10000 http://127.0.0.1:8444|'; ok "AUS: funnel off + serve" $?
 grep -q '"funnel":"aus","bis":null' "$T/steu/status.json"; ok "AUS: status.json aus, bis null" $?
 # 4 bösartige Inhalte
 : > "$T/log"; B=("{\"funnel\":\"an; touch $T/pwn\",\"seit\":1760000200000}" "{\"funnel\":\"an\",\"seit\":1760000201000}\$(touch $T/pwn)"

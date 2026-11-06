@@ -64,13 +64,8 @@ fi
 
 # Tailscale-CLI mit Zeitlimit (20 s), feste Argumente
 ts() { /usr/bin/perl -e 'alarm 20; exec @ARGV or exit 127' "$TS" "$@" >/dev/null 2>&1; }
-# 06.11.: Spieleportal (Schach, Dame, 4 gewinnt, Mühle …) mit an den Schalter. Funnel erlaubt nur 443/8443/10000 →
-# Portal für Freunde unter :8443 (im Tailnet bleibt es zusätzlich unter :10002). Portal-Teil ist „beste Mühe“:
-# schlägt er fehl, bleibt das Autorennen-Ergebnis maßgeblich. Feste Argumente, nichts aus der Wunsch-Datei.
-PORTAL_HTTPS="8443"
-PORTAL_LOKAL="http://127.0.0.1:8447"
-funnel_an()  { ts funnel --bg --https="$PORT_HTTPS" "$LOKAL" || return 1; ts funnel --bg --https="$PORTAL_HTTPS" "$PORTAL_LOKAL" || protokoll "Portal-Funnel AN fehlgeschlagen"; return 0; }
-funnel_aus() { ts funnel --https="$PORT_HTTPS" off; local a=$?; ts serve --bg --https="$PORT_HTTPS" "$LOKAL" || a=1; ts funnel --https="$PORTAL_HTTPS" off || protokoll "Portal-Funnel AUS fehlgeschlagen"; return $a; }
+funnel_an()  { ts funnel --bg --https="$PORT_HTTPS" "$LOKAL"; }
+funnel_aus() { ts funnel --https="$PORT_HTTPS" off; local a=$?; ts serve --bg --https="$PORT_HTTPS" "$LOKAL" || a=1; return $a; }
 
 # --- Zustand (root-eigene Dateien, nur feste Wörter/Ziffern) ---
 mkdir -p "$STATE" 2>/dev/null; chmod 700 "$STATE" 2>/dev/null
