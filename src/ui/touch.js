@@ -217,8 +217,8 @@ html.t-rennen #s4-hud { top: calc(env(safe-area-inset-top) + var(--b1)) !importa
 html.t-rennen #s4-hud small { display: inline !important; margin-left: .4em; }
 
 /* Knöpfe: Pause + Neigung links unter dem Spieler-Chip (Mitte oben frei); Kamera-Foto am rechten Rand; Trick über der Bremse, nicht darauf */
-html.t-rennen #touch .t-pause { left: var(--rand); margin-left: 0; top: 112px; width: 42px; height: 42px; font-size: 20px; border-radius: 14px; }
-html.t-rennen #touch .t-neigen { left: calc(var(--rand) + 50px); margin-left: 0; top: 112px; width: 42px; height: 42px; font-size: 20px; border-radius: 14px; }
+html.t-rennen #touch .t-pause { left: var(--rand); margin-left: 0; top: 110px; width: 64px; height: 64px; font-size: 26px; }
+html.t-rennen #touch .t-neigen { left: calc(var(--rand) + 72px); margin-left: 0; top: 110px; width: 64px; height: 64px; font-size: 28px; }
 html.t-rennen #s4-foto-knopf { top: 142px !important; right: 8px !important; width: 40px !important; height: 40px !important; line-height: 34px !important; font-size: 20px !important; }
 html.t-rennen #touch .tricks-touch { right: calc(var(--rand) * 2 + var(--tb) * 1.15 + var(--tb) * .025) !important; bottom: calc(var(--rand) + var(--tb) + 8px) !important; width: calc(var(--tb) * .85); height: calc(var(--tb) * .85); }
 @media (orientation: portrait) {
