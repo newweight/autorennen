@@ -104,8 +104,9 @@
           if (unten > 0) d.style.top = Math.ceil(unten + 8) + 'px';
         }
         d.classList.add('an');
-        setTimeout(() => d.classList.remove('an'), 2670);
-        setTimeout(() => { d.remove(); weiter(); }, 3070);
+        const handy = document.documentElement.classList.contains('t-rennen');     // HANDY-HUD: kleine Leiste oben, kürzer sichtbar
+        setTimeout(() => d.classList.remove('an'), handy ? 1700 : 2670);
+        setTimeout(() => { d.remove(); weiter(); }, handy ? 2100 : 3070);
       }, 30);
     };
     weiter();

@@ -157,6 +157,8 @@
   }
 
   /** Element zeigen/verstecken – style nur bei Änderung anfassen (sonst Style-Neuberechnung). */
+  /** HANDY-HUD: Touch-Rennen (Handy) → Einblendungen kürzer. Am Desktop immer false. */
+  function handyKurz() { try { return document.documentElement.classList.contains('t-rennen'); } catch (e) { return false; } }
   function setzeAnzeige(el, an) {
     if (el._an !== an) { el._an = an; el.style.display = an ? '' : 'none'; }
   }
@@ -248,8 +250,9 @@
         b.firstChild.textContent = name;
         b.appendChild(document.createTextNode(text));
       } else b.textContent = text;
-      b.className = 'hud-banner an' + (klasse ? ' ' + klasse : '');
+      b.className = 'hud-banner an' + (klasse ? ' ' + klasse : '') + (ms ? '' : ' fest');   // 'fest' = Zieleinlauf (HANDY-HUD: nur dann bleibt es groß in der Mitte)
       this.bannerFest = !ms;
+      if (ms && handyKurz()) ms = Math.min(ms, 1300);       // HANDY-HUD: Leiste oben, kürzer sichtbar
       if (ms) this.bannerTimer = setTimeout(() => { b.className = 'hud-banner'; }, ms);
     }
 
@@ -265,7 +268,9 @@
       m.textContent = text;
       m.style.opacity = '1'; m.style.transform = 'translateX(-50%) scale(1)';
       this.meldungText = text;
-      this.meldungTimer = setTimeout(() => { m.style.opacity = '0'; m.style.transform = 'translateX(-50%) scale(.6)'; this.meldungText = ''; }, ms || 1800);
+      let dauer = ms || 1800;
+      if (dauer < 20000 && handyKurz()) dauer = Math.max(900, Math.round(dauer * 0.7));    // HANDY-HUD: kürzer sichtbar (Fehlermeldungen mit langer Dauer bleiben)
+      this.meldungTimer = setTimeout(() => { m.style.opacity = '0'; m.style.transform = 'translateX(-50%) scale(.6)'; this.meldungText = ''; }, dauer);
     }
 
     /** Runde 4: Wetter-Objekt (R.Wetter) für Symbol + Windpfeil setzen; null = nichts anzeigen. */
