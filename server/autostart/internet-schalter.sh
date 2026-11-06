@@ -64,8 +64,13 @@ fi
 
 # Tailscale-CLI mit Zeitlimit (20 s), feste Argumente
 ts() { /usr/bin/perl -e 'alarm 20; exec @ARGV or exit 127' "$TS" "$@" >/dev/null 2>&1; }
-funnel_an()  { ts funnel --bg --https="$PORT_HTTPS" "$LOKAL"; }
-funnel_aus() { ts funnel --https="$PORT_HTTPS" off; local a=$?; ts serve --bg --https="$PORT_HTTPS" "$LOKAL" || a=1; return $a; }
+# 06.11.: Spieleportal (Schach, Dame, …) für Freunde unter …:10000/portal/ (eigene Ports 443/8443 sind auf dem Mini belegt).
+# Portal-API liegt absolut unter /api/raum und /api/bestenliste → diese zwei Pfade mit zum Portal (/api/rad bleibt Radwelt). Beste Mühe.
+PORTAL_LOKAL="http://127.0.0.1:8447"
+funnel_an()  { ts funnel --bg --https="$PORT_HTTPS" "$LOKAL" || return 1
+  ts funnel --bg --https="$PORT_HTTPS" --set-path=/portal "$PORTAL_LOKAL" && ts funnel --bg --https="$PORT_HTTPS" --set-path=/api/raum "$PORTAL_LOKAL/api/raum" \
+    && ts funnel --bg --https="$PORT_HTTPS" --set-path=/api/bestenliste "$PORTAL_LOKAL/api/bestenliste" || protokoll "Portal-Pfade AN fehlgeschlagen"; return 0; }
+funnel_aus() { for _p in /api/bestenliste /api/raum /portal; do ts funnel --https="$PORT_HTTPS" --set-path="$_p" off; done; ts funnel --https="$PORT_HTTPS" off; local a=$?; ts serve --bg --https="$PORT_HTTPS" "$LOKAL" || a=1; return $a; }
 
 # --- Zustand (root-eigene Dateien, nur feste Wörter/Ziffern) ---
 mkdir -p "$STATE" 2>/dev/null; chmod 700 "$STATE" 2>/dev/null
