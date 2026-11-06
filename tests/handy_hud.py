@@ -61,7 +61,7 @@ JS_SZENEN = {
   'banner_letzte': "() => { const h = Rennspiel.spiel.huds[0]; h.banner('Letzte Runde!', 6000, '', h.t.name); }",
   'meldung_kurz': "() => { Rennspiel.spiel.huds[0].meldung('🌀 Looping geschafft!', 8000); }",
   'meldung_lang': "() => { Rennspiel.spiel.huds[0].meldung('Anlauf nehmen!\\nGas geben und Schwung holen', 8000); }",
-  'sticker': "() => { Rennspiel.SpassStart.toastZeigen({ emoji: '🏆', name: 'Erster Sieg' }); }",
+  'sticker': "() => { Rennspiel.SpassStart.toastStil(); Rennspiel.SpassStart.toastZeigen({ emoji: '🏆', name: 'Erster Sieg' }); }",
   'stunt': "() => { const s = Rennspiel.spiel, h = s.huds[0]; h.meldung('Salto! +400 ×2', 8000, 'linear-gradient(90deg, rgba(255,122,0,.95), rgba(255,176,0,.95))'); }",
   'hinweis': "() => { const f = Rennspiel.spiel.fahrzeuge[0]; Object.defineProperty(f, 'falschHerum', { get: () => true, set: () => {}, configurable: true }); }",
   'polizei': "() => { const h = Rennspiel.spiel.huds[0]; h.polizeiSetzen({ anzeige: () => ({ art: 'stopp', rest: 8, kosten: 5 }), minimapPunkte: () => [] }, 0); h._polizeiAnzeigen(); }",
@@ -112,6 +112,8 @@ def aufnehmen(p, browser, phase, spiel, quer):
     bericht['szenen']['fahrt'] = pg.evaluate(MESS, EINBLENDUNGEN)
     szenen = ['banner', 'banner_letzte', 'meldung_kurz', 'meldung_lang', 'sticker', 'hinweis', 'polizei', 'geisterfahrer', 'werkstatt', 'dino_sieg', 'dino_wett', 'mission']
     if moto: szenen += ['stunt', 'moto_mitte']
+    nur = os.environ.get('HANDY_NUR')      # z. B. HANDY_NUR=alles → nur diese Szenen (plus Countdown/Fahrt)
+    if nur: szenen = [z for z in szenen if z in nur.split(',')]
     for sz in szenen:
         pg.evaluate(AUFRAEUMEN)
         try:
