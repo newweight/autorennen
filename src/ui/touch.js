@@ -174,9 +174,9 @@ html.touch-an:not(.t-rennen) #t-voll.geht { display: flex; }
    Gilt nur bei Touch-Bedienung im Rennen (html.touch-an.t-rennen) – Desktop/Tablet mit Tastatur bleibt unverändert.
    Bahnen (Leisten oben, Mitte): --b1/--b2/--b3 = Oberkante; im Querformat ganz oben (zwischen den Ecken-Chips), im Hochformat unter der Chip-Zeile.
    ============================================================ */
-html.t-rennen { --b1: 3px; --b2: 29px; --b3: 55px; --mm: 70px; --toast-max: 50vw; }
+html.t-rennen { --b1: 3px; --b2: 29px; --b3: 55px; --mm: 104px; --toast-max: 50vw; }
 @media (orientation: portrait) {
-  html.t-rennen { --tb: min(24vh, 19vw, 124px); --b1: 100px; --b2: 128px; --b3: 156px; --mm: 78px; --toast-max: 52vw; }
+  html.t-rennen { --tb: min(24vh, 19vw, 124px); --b1: 112px; --b2: 140px; --b3: 168px; --mm: 90px; --toast-max: 48vw; }
 }
 /* Kopfzeile: Spieler links, Platz daneben, Zeiten rechts – die Mitte bleibt frei */
 html.t-rennen .hud .hud-oben { justify-content: flex-start; padding: 4px 6px; gap: 5px; }
@@ -185,9 +185,11 @@ html.t-rennen .hud .hud-zeiten .z-aktuell { font-size: 1.15em; }
 html.t-rennen .hud .hud-runde { font-size: 1.2em; }
 html.t-rennen .hud .hud-platz b { font-size: 2.2em; }
 html.t-rennen .hud .chip { padding: .25em .6em; }
-html.t-rennen .hud .hud-minimap { top: 60px !important; right: 4px !important; width: var(--mm) !important; height: var(--mm) !important; }
+html.t-rennen .hud .hud-minimap { top: 4px !important; right: 4px !important; width: var(--mm) !important; height: var(--mm) !important; background: rgba(14, 24, 58, .14) !important; opacity: .92 !important; border-color: rgba(255,255,255,.5) !important; }
+html.t-rennen .hud .hud-zeiten { margin-right: calc(var(--mm) + 6px); }   /* Querformat: Zeit-Chip links neben der Minikarte */
+html.t-rennen .hud .hud-links { min-width: 10.6em; }                     /* feste Breite, damit die Positions-Kachel immer an derselben Stelle sitzt (Extra-Knopf darunter) */
 /* Tacho links neben der Hupe, nicht darunter */
-html.t-rennen .hud .hud-tacho { left: calc(var(--tb) * .85 + var(--rand) * 2 + 4px) !important; }
+html.t-rennen .hud .hud-tacho { left: calc(var(--rand) + 64px + 8px) !important; }
 html.t-rennen .hud .hud-tacho .kmh b { font-size: 2.2em !important; min-width: 1.8em !important; }
 @media (orientation: portrait) { html.t-rennen .hud .hud-tacho { left: .5em !important; bottom: calc(var(--rand) * 3 + var(--tb) + 64px + 8px) !important; } }
 
@@ -220,21 +222,30 @@ html.t-rennen #s4-hud small { display: inline !important; margin-left: .4em; }
    Rechts: Trick am äußersten Rand direkt über Gas; links davon Kamera, Zurücksetzen, darüber Extra – alle ≥ 64 px (Trick 0,78·tb), Abstand 8 px.
    Querformat: eine Reihe über Gas/Bremse (+ Extra darüber); Hochformat: senkrechte Spalte am rechten Rand über Gas.   --rb = Unterkante über Gas */
 html.t-rennen { --ks: 64px; --kg: 8px; --ts: max(58px, calc(var(--tb) * .78)); --rb: calc(var(--rand) + var(--tb) * 1.15 + 10px); }
-html.t-rennen #touch .t-pause { left: var(--rand); margin-left: 0; top: 110px; width: 64px; height: 64px; font-size: 26px; }
-html.t-rennen #touch .t-neigen { left: calc(var(--rand) + 72px); margin-left: 0; top: 110px; width: 64px; height: 64px; font-size: 28px; }
-html.t-rennen #s4-foto-knopf { top: 134px !important; right: 8px !important; width: 40px !important; height: 40px !important; line-height: 34px !important; font-size: 20px !important; }
+html.t-rennen #touch .t-pause { left: var(--rand); margin-left: 0; top: 126px; width: 64px; height: 64px; font-size: 26px; }
+html.t-rennen #touch .t-neigen { left: calc(var(--rand) + 72px); margin-left: 0; top: 126px; width: 64px; height: 64px; font-size: 28px; }
+html.t-rennen #s4-foto-knopf { top: calc(var(--mm) + 12px) !important; right: 8px !important; width: 40px !important; height: 40px !important; line-height: 34px !important; font-size: 20px !important; }
 html.t-rennen #touch .moto-touch, html.t-rennen #touch .tricks-touch { left: auto !important; margin: 0 !important; right: var(--rand) !important; bottom: var(--rb) !important; width: var(--ts) !important; height: var(--ts) !important; }
 html.t-rennen #touch .t-kamera, html.t-rennen #touch .t-reset, html.t-rennen #touch .t-item { left: auto; margin-left: 0; width: var(--ks); height: var(--ks); min-width: 0; min-height: 0; }
 html.t-rennen #touch .t-kamera { right: calc(var(--rand) + var(--ts) + var(--kg)); bottom: var(--rb); }
 html.t-rennen #touch .t-reset { right: calc(var(--rand) + var(--ts) + var(--kg) * 2 + var(--ks)); bottom: var(--rb); }
-html.t-rennen #touch .t-item { right: calc(var(--rand) + var(--ts) + var(--kg) * 2 + var(--ks)); bottom: calc(var(--rb) + var(--ts) + var(--kg)); }
+html.t-rennen #touch .t-item { left: var(--ex-links); top: 54px; right: auto; bottom: auto; }
+html.t-rennen #touch .t-kamera, html.t-rennen #touch .t-reset { flex-direction: column; font-size: 24px; gap: 0; }
+html.t-rennen #touch .t-kamera::after { content: 'Ansicht'; font: 900 11px/1.1 Arial, sans-serif; }
+html.t-rennen #touch .t-reset::after { content: 'zurück'; font: 900 11px/1.1 Arial, sans-serif; }
+html.t-rennen #touch .spass-touch { width: 64px; height: 64px; font-size: 26px; background: rgba(20,30,70,.45); }
+html.t-rennen { --ex-links: 142px; }
+html.t-rennen #touch .t-item { text-align: center; justify-content: center; }
 @media (orientation: portrait) {
-  html.t-rennen #touch .t-neigen { left: var(--rand); top: 182px; }
+  html.t-rennen #touch .t-pause { top: 120px; }
+  html.t-rennen #touch .t-neigen { left: var(--rand); top: 192px; }
   html.t-rennen #touch .t-kamera { right: var(--rand); bottom: calc(var(--rb) + var(--ts) + var(--kg)); }
   html.t-rennen #touch .t-reset { right: var(--rand); bottom: calc(var(--rb) + var(--ts) + var(--kg) * 2 + var(--ks)); }
-  html.t-rennen #touch .t-item { right: var(--rand); bottom: calc(var(--rb) + var(--ts) + var(--kg) * 3 + var(--ks) * 2); }
+  html.t-rennen #touch .t-item { top: 50px; width: 60px; height: 60px; }
   html.t-rennen #touch .spass-touch { left: var(--rand); bottom: calc(var(--rand) * 2 + var(--tb)); }
-  html.t-rennen #s4-foto-knopf { top: 170px !important; }
+  html.t-rennen .hud .hud-zeiten { margin-right: 0; }
+  html.t-rennen .hud .hud-minimap { top: 62px !important; }
+  html.t-rennen #s4-foto-knopf { top: calc(var(--mm) + 70px) !important; }
   html.t-rennen #dino-wett { transform: translateX(-50%) scale(.72) !important; transform-origin: 50% 0; }
 }
 /* Hochformat: Im Rennen kein Sperr-Schild mehr (Rennen ist auch hochkant spielbar); das Menü bleibt querformatig (Schild wie bisher) */
@@ -258,7 +269,7 @@ html.t-rennen #touch .t-item { right: calc(var(--rand) + var(--ts) + var(--kg) *
       '<div class="t-knopf t-links" data-t="links">◀</div><div class="t-knopf t-rechts" data-t="rechts">▶</div>' +
       '<div class="t-knopf gas t-gas" data-t="gas">▲</div><div class="t-knopf bremse t-bremse" data-t="bremse">▼</div>' +
       '<div class="t-knopf klein item t-item" data-t="item">⭐</div><div class="t-knopf klein t-reset" data-t="reset">↺</div>' +
-      '<div class="t-knopf klein t-kamera" data-t="kamera">📷</div><div class="t-knopf klein t-pause" data-t="pause">⏸</div>' +
+      '<div class="t-knopf klein t-kamera" data-t="kamera">🎥</div><div class="t-knopf klein t-pause" data-t="pause">⏸</div>' +
       '<div class="t-knopf klein neigen t-neigen" data-t="neigen" title="Neigungssteuerung">📱</div>';
     document.body.appendChild(wurzel);
     wurzel.querySelectorAll('[data-t]').forEach((e) => { knoepfe[e.dataset.t] = e; });

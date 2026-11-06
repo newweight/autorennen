@@ -100,7 +100,7 @@ def geraet(p, browser, name, bildname):
           return i.wurdeGedrueckt(code); }''', [taste, code])
         pruefe(f'[{name}] Tipp „{taste}“ → wurdeGedrueckt({code})', ok)
     k0 = page.evaluate('Rennspiel.spiel.kameras[0].modus'); kx, ky = mitte(rr, 'kamera'); page.touchscreen.tap(kx, ky); page.wait_for_timeout(300)
-    k1 = page.evaluate('Rennspiel.spiel.kameras[0].modus'); pruefe(f'[{name}] echter Tipp 📷 wechselt die Kamera', k0 != k1, (k0, k1))
+    k1 = page.evaluate('Rennspiel.spiel.kameras[0].modus'); pruefe(f'[{name}] echter Tipp 🎥 (Ansicht) wechselt die Kamera', k0 != k1, (k0, k1))
     ix, iy = mitte(rr, 'item')
     page.evaluate("window.__t = []; Rennspiel.spiel.input.beiTaste(c => window.__t.push(c))"); page.touchscreen.tap(ix, iy); page.wait_for_timeout(200)
     pruefe(f'[{name}] echter Tipp ⭐ sendet {T["item1"]}', T['item1'] in page.evaluate('window.__t'))
